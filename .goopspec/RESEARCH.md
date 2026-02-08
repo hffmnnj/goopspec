@@ -185,3 +185,224 @@ To reproduce this Baseline audit, rerun file-size and string-literal extraction 
 - Tool descriptions: extract only `description` literals/templates from each `src/tools/*/index.ts` tool definition.
 - Agents/references/skills: raw file character count.
 - Auto-injected sections: explicit injected template blocks in `src/agents/agent-factory.ts` and `src/hooks/system-transform.ts`.
+
+---
+
+# RESEARCH: Plugin Architecture (Wave 1, Task 1.2)
+
+**Domain:** OpenCode plugin + tool + agent architecture (selective tool loading)
+**Date:** 2026-02-08
+**Sources:** OpenCode official docs, OpenCode OSS source (sst/opencode @ 4086a9ae), GoopSpec source
+
+## A2 Answer
+
+**Assumption A2 ("OpenCode loads all tool definitions on launch"): VALIDATED.**
+
+OpenCode constructs the LLM `tools` object by iterating over the full tool registry (built-ins + plugins + MCP) and passes those tool definitions into the provider call. Agent/session permissions are enforced at execution time via `PermissionNext.ask()`, but they do **not** filter which tool definitions are included in the model request.
+
+**Therefore:** OpenCode does **not** support selective tool *definition* loading per agent (as a context-size optimization) without upstream changes.
+
+## Tool Registration Flow (Plugin → OpenCode → LLM)
+
+### 1) Plugin tools are declared in the SDK as { description, args, execute }
+
+Evidence:
+- `@opencode-ai/plugin` tool helper + ToolDefinition shape: https://raw.githubusercontent.com/sst/opencode/4086a9ae/packages/plugin/src/tool.ts
+
+### 2) OpenCode loads plugin hooks and converts ToolDefinition → Tool.Info
+
+Tool definitions from plugin hooks are collected by `Plugin.list()`, and each tool is converted via `fromPlugin()`.
+
+Evidence:
+- Plugin loading + `Plugin.list()`: https://raw.githubusercontent.com/sst/opencode/4086a9ae/packages/opencode/src/plugin/index.ts
+- Tool registry ingestion + `fromPlugin()`: https://raw.githubusercontent.com/sst/opencode/4086a9ae/packages/opencode/src/tool/registry.ts
+
+### 3) OpenCode passes tool definitions to the LLM every prompt iteration
+
+`SessionPrompt.resolveTools()` builds a Vercel AI SDK `tools` object by looping all tools returned by `ToolRegistry.tools(...)` and registering each one with `ai.tool({ id, description, inputSchema, execute })`. This `tools` object is passed into the model call (`processor.process(...)`).
+
+Evidence:
+- `resolveTools()` implementation: https://raw.githubusercontent.com/sst/opencode/4086a9ae/packages/opencode/src/session/prompt.ts
+
+## How Tool Descriptions/Schemas Reach the LLM
+
+At OpenCode layer, each tool definition sent to the model consists of:
+- `description: item.description`
+- `inputSchema`: JSON Schema derived from the tool's Zod schema (`z.toJSONSchema(item.parameters)`), then normalized by `ProviderTransform.schema(...)`, then wrapped with `ai.jsonSchema(...)`.
+
+Evidence:
+- Tool schema + description wiring: https://raw.githubusercontent.com/sst/opencode/4086a9ae/packages/opencode/src/session/prompt.ts
+- Provider schema normalization rules: https://deepwiki.com/sst/opencode/4.3-provider-transformations
+
+## Agent Prompt Assembly (GoopSpec)
+
+GoopSpec assembles each agent prompt at config time by concatenating:
+- agent markdown body
+- injected skills (`skills/`)
+- injected references/templates (`references/`, `templates/`)
+- memory boilerplate (if enabled)
+- question tool boilerplate (always)
+
+Evidence:
+- Prompt composition + tool permission mapping: `src/agents/agent-factory.ts`
+- Agent registration via config hook: `src/plugin-handlers/config-handler.ts`
+
+## Optimization Opportunities
+
+### Plugin-level (available now)
+
+- Compress tool `description` strings (these are always shipped to the LLM via tool definitions).
+- If allowed by spec later: shrink/normalize `args` schemas (JSON Schema also contributes to tool payload).
+- Reduce agent prompt size by changing GoopSpec prompt composition (skills/references/boilerplate injection).
+- Reduce runtime system prompt injection via `experimental.chat.system.transform` (already used by GoopSpec).
+
+### Requires OpenCode upstream change
+
+- Implement permission-based filtering of the tool list before building the LLM `tools` object in `resolveTools()`. Today, OpenCode always registers every tool returned from `ToolRegistry.tools(...)` into the model request.
+
+Evidence:
+- No tool-list filtering in `resolveTools()`: https://raw.githubusercontent.com/sst/opencode/4086a9ae/packages/opencode/src/session/prompt.ts
+
+## Constraints / Gaps
+
+- `.references/` directory does not exist in this repo.
+- `node_modules/` is not present in this worktree, so SDK/source evidence was obtained from upstream OSS source instead.
+- The plugin hook surface does not include a hook to modify/filter the `tools` object passed to the LLM (hooks cover message/system transforms, params/headers, and tool lifecycle, but not tool list selection).
+
+Evidence:
+- Hooks surface: https://raw.githubusercontent.com/sst/opencode/4086a9ae/packages/plugin/src/index.ts
+
+---
+
+# RESEARCH: Optimization Strategy (Wave 1, Task 1.3)
+
+**Date:** 2026-02-08
+**Goal:** Prioritize optimization work for Waves 2-4 using composed prompt impact (not raw file size alone).
+
+## Current Composed Prompt Sizes (Top 3 Agents)
+
+Method: `composeAgentPrompt()` output size estimate = `chars / 4`.
+
+| Agent | Composed Chars | Est. Tokens | Skills Injected | References Injected |
+|---|---:|---:|---:|---:|
+| `goop-orchestrator` | 136,648 | 34,162.00 | 5 | 12 |
+| `goop-planner` | 112,802 | 28,200.50 | 5 | 11 |
+| `goop-executor` | 103,568 | 25,892.00 | 5 | 9 |
+
+Key read: the largest agents are already in the 26K-34K range each after composition, and reference/skill injection dominates more than raw base agent markdown.
+
+## Worth-It Threshold
+
+**Success threshold:** minimum **20% reduction** in overall launch overhead baseline.
+
+- Baseline total: `100,213.50` estimated tokens.
+- Threshold savings target: **>= 20,042.70 tokens**.
+- Stretch target: **25-30%** if high-frequency injected references/skills can be compressed without behavior drift.
+
+Rationale: below 20%, optimization risk (quality regression + maintenance complexity) likely outweighs practical context-window gains.
+
+## Prioritized Optimization Targets (Impact vs Effort)
+
+Ranking uses:
+1) composed prompt impact on largest agents,
+2) number of agents affected,
+3) implementation effort/risk.
+
+### P1 - Agent Prompt Composition (GO)
+
+**Estimated impact:** Very High (primary driver for top 3 agents)  
+**Effort:** Medium  
+**Why first:** Directly reduces every high-cost composed prompt by trimming verbose base prompt sections and redundant guidance.
+
+Approach:
+- Compress the 13 agent markdown bodies, starting with orchestrator/planner/executor.
+- Preserve behavioral instructions, gates, and role boundaries; remove duplication/redundant examples first.
+- Keep structure stable to protect test and behavior compatibility.
+
+Risks:
+- Loss of role fidelity if imperative constraints are over-trimmed.
+- Mitigation: per-agent before/after diff review + role behavior verification in Wave 3.3.
+
+### P2 - Injected References (Injected-Only First) (GO)
+
+**Estimated impact:** Very High (largest shared payload in composed prompts)  
+**Effort:** Medium-High  
+**Why second:** Repeatedly injected references multiply cost across many agents.
+
+Approach:
+- Prioritize references by `size x injection frequency`.
+- Compress references that are actually injected in frontmatter first (not all 36 blindly).
+- De-duplicate overlapping protocol content across heavily used references while preserving canonical instructions.
+
+Risks:
+- Protocol drift/inconsistency if overlapping docs diverge.
+- Mitigation: maintain one canonical statement for each critical protocol (XML envelope, handoff, deviation rules), then cross-reference.
+
+### P3 - Shared Skills (GO, targeted)
+
+**Estimated impact:** High (shared across major agents, especially `goop-core`)  
+**Effort:** Medium  
+**Why third:** Skills are injected into many agents; trimming common skills has broad payoff.
+
+Approach:
+- Compress high-frequency shared skills first (`goop-core`, `memory-usage` where injected).
+- Remove repeated explanatory prose that agents already receive in base prompts/references.
+- Keep actionable checklists and constraints intact.
+
+Risks:
+- Losing workflow sequencing clarity.
+- Mitigation: keep phase contracts and gate language verbatim; trim narrative, not rules.
+
+### P4 - Auto-Injected Boilerplate (Conditional + Compression) (GO)
+
+**Estimated impact:** Medium (small per-agent, broad fan-out to all agents)  
+**Effort:** Low-Medium  
+**Why fourth:** Memory/question sections are small individually but guaranteed overhead everywhere.
+
+Approach:
+- Shorten memory and question boilerplate language without changing required behavior.
+- Add conditional injection where safe (memory section only when memory enabled/needed; question section only for agents that may ask user-facing questions).
+
+Risks:
+- Agents forget to use required interaction pattern.
+- Mitigation: keep a concise mandatory rule line even in compressed form; validate with agent behavior tests.
+
+### P5 - Tool Descriptions (GO, conservative)
+
+**Estimated impact:** Low (~1% baseline) but global  
+**Effort:** Low  
+**Why still do it:** Easy win and universally applied, but should not consume disproportionate effort.
+
+Approach:
+- Conservative compression only (remove redundancy, keep action and constraints).
+- Do not change tool schemas or behavior semantics.
+- Treat as cleanup/efficiency pass rather than main savings driver.
+
+Risks:
+- Tool misuse if descriptions become ambiguous.
+- Mitigation: enforce clarity floor and verify tool-selection behavior.
+
+## Go / No-Go Matrix by Category
+
+| Category | Recommendation | Why |
+|---|---|---|
+| Tools | **GO (Conservative)** | Low impact but low risk and global; quick pass only. |
+| Agents | **GO (Aggressive but safe)** | Highest direct leverage on composed size for biggest agents. |
+| References | **GO (Injected-first)** | Largest repeated payload; prioritize by frequency x size. |
+| Auto-injected | **GO (Conditional + concise)** | Small per-agent, large aggregate fan-out; low-medium effort. |
+
+## Wave 2-4 Execution Guidance
+
+- **Wave 2 (Tools):** Keep scope strict and time-boxed; finish quickly unless unexpected regressions.
+- **Wave 3 (Agents + Skills):** Primary optimization wave; allocate most review/verification budget here.
+- **Wave 4 (References + Auto-injected):** Focus on high-frequency injected references, then conditional injection logic.
+
+## Strategy Risks Summary
+
+| Strategy | Risk Level | Main Failure Mode | Mitigation |
+|---|---|---|---|
+| Agent compression | High | Behavior/role drift | Preserve imperative constraints; role-by-role verification |
+| Reference compression | Medium-High | Protocol inconsistency | Canonical source + dedupe with cross-reference |
+| Skill compression | Medium | Loss of workflow clarity | Keep phase/gate checklist language intact |
+| Auto-injected optimization | Medium | Missing required user interaction behavior | Keep minimal mandatory instruction; test user-facing agents |
+| Tool description compression | Low-Medium | Ambiguous tool selection | Keep action verbs + constraints; verify tool behavior |
