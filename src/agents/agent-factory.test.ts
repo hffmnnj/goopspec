@@ -16,6 +16,9 @@ import {
   TEST_SKILL_RESOURCE,
   type ResolvedResource,
 } from "../test-utils.js";
+import { createResourceResolver } from "../core/resolver.js";
+
+const PROJECT_ROOT = process.cwd();
 
 describe("agent-factory", () => {
   let cleanup: () => void;
@@ -315,6 +318,26 @@ describe("agent-factory", () => {
         });
 
         // Should have no permission entry
+        expect(config.permission).toBeUndefined();
+      });
+
+      it("normalizes stringified tools list in frontmatter", () => {
+        const resource = createMockResource({
+          name: "string-tools-agent",
+          type: "agent",
+          frontmatter: {
+            mode: "subagent",
+            tools: "[]" as unknown as string[],
+            description: "String tools",
+          },
+          body: "Prompt",
+        });
+
+        const resolver = createMockResourceResolver();
+        const config = createAgentFromMarkdown(resource, resolver, {
+          enableMemoryTools: false,
+        });
+
         expect(config.permission).toBeUndefined();
       });
     });
@@ -717,6 +740,35 @@ describe("agent-factory", () => {
 
       const issues = validateAgentResource(resource);
       expect(issues.length).toBeGreaterThan(1);
+    });
+  });
+
+  describe("bundled agent composition", () => {
+    it("composes all 13 bundled agents without failures", () => {
+      const resolver = createResourceResolver(PROJECT_ROOT);
+      const agentResources = resolver.resolveAll("agent");
+
+      expect(agentResources.length).toBe(13);
+
+      const failures: string[] = [];
+      const composed = new Map<string, AgentConfig>();
+
+      for (const agent of agentResources) {
+        try {
+          const config = createAgentFromMarkdown(agent, resolver);
+          composed.set(agent.name, config);
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          failures.push(`${agent.name}: ${message}`);
+        }
+      }
+
+      expect(failures).toEqual([]);
+      expect(composed.has("memory-distiller")).toBe(true);
+
+      const memoryDistillerConfig = composed.get("memory-distiller");
+      expect(memoryDistillerConfig).toBeDefined();
+      expect(memoryDistillerConfig?.prompt.length).toBeGreaterThan(0);
     });
   });
 });

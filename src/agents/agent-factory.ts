@@ -79,8 +79,8 @@ export function createAgentFromMarkdown(
   log(`Creating agent config for: ${agentName}`, { enableMemory });
   
   // Build permission map from tools list
-  let tools = (fm.tools as string[]) ?? [];
-  let skills = (fm.skills as string[]) ?? [];
+  let tools = normalizeStringListField(fm.tools);
+  let skills = normalizeStringListField(fm.skills);
   const shouldEnableMemory = enableMemory && hasMemoryCapability(skills, tools);
   const includeQuestionToolInstructions = shouldInjectQuestionToolInstructions(
     resourceName,
@@ -110,7 +110,7 @@ export function createAgentFromMarkdown(
     skills = [...skills, ...MEMORY_SKILLS];
   }
   
-  const references = (fm.references as string[]) ?? [];
+  const references = normalizeStringListField(fm.references);
   const composedPrompt = composeAgentPrompt(
     resource.body, 
     skills, 
@@ -270,6 +270,35 @@ function hasMemoryCapability(skills: string[], tools: string[]): boolean {
 
   const normalizedTools = new Set(tools.map(tool => tool.toLowerCase()));
   return MEMORY_TOOLS.some(tool => normalizedTools.has(tool.toLowerCase()));
+}
+
+function normalizeStringListField(value: unknown): string[] {
+  if (Array.isArray(value)) {
+    return value
+      .filter((item): item is string => typeof item === "string")
+      .map(item => item.trim())
+      .filter(item => item.length > 0);
+  }
+
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (trimmed.length === 0) {
+      return [];
+    }
+
+    if (trimmed.startsWith("[") && trimmed.endsWith("]")) {
+      try {
+        const parsed = JSON.parse(trimmed);
+        return normalizeStringListField(parsed);
+      } catch {
+        return [];
+      }
+    }
+
+    return [trimmed];
+  }
+
+  return [];
 }
 
 function shouldInjectQuestionToolInstructions(
