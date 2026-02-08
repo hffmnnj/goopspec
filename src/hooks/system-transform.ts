@@ -10,6 +10,7 @@ import { log, logError } from "../shared/logger.js";
 import { createMemoryContextBuilder } from "../features/memory/context-builder.js";
 import { buildEnforcementContext } from "../features/enforcement/index.js";
 import { getSessionGoopspecPath } from "../shared/paths.js";
+import { ensurePosixPath } from "../shared/platform.js";
 
 type SystemTransformInput = {
   sessionID: string;
@@ -25,7 +26,7 @@ type SystemTransformOutput = {
 };
 
 function normalizePromptPath(path: string): string {
-  return path.replace(/\\/g, "/");
+  return ensurePosixPath(path);
 }
 
 function buildSessionContextBlock(sessionId: string): string {

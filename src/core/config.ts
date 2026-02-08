@@ -181,6 +181,32 @@ function mergeConfigs(base: GoopSpecConfig, override: GoopSpecConfig): GoopSpecC
   return deepMerge(base, override) as GoopSpecConfig;
 }
 
+function collectOverriddenKeys(
+  base: Record<string, unknown>,
+  override: Record<string, unknown>,
+  prefix = ""
+): string[] {
+  const keys: string[] = [];
+
+  for (const [key, value] of Object.entries(override)) {
+    if (value === undefined) {
+      continue;
+    }
+
+    const fullKey = prefix ? `${prefix}.${key}` : key;
+    const baseValue = base[key];
+
+    if (isPlainObject(value) && isPlainObject(baseValue)) {
+      keys.push(...collectOverriddenKeys(baseValue, value, fullKey));
+      continue;
+    }
+
+    keys.push(fullKey);
+  }
+
+  return keys;
+}
+
 /**
  * Load plugin configuration
  * 
@@ -196,20 +222,94 @@ export function loadPluginConfig(projectDir: string): GoopSpecConfig {
 
   // Load global config
   const globalPath = getGlobalConfigPath();
-  const globalConfig = loadConfigFile(globalPath);
+  const hasGlobalConfig = existsSync(globalPath);
+  log(`Loading global config from ${globalPath} (${hasGlobalConfig ? "found" : "not found"})`);
+  const globalConfig = hasGlobalConfig ? loadConfigFile(globalPath) : null;
   if (globalConfig) {
+    const overriddenKeys = collectOverriddenKeys(
+      config as Record<string, unknown>,
+      globalConfig as Record<string, unknown>
+    );
+    for (const overriddenKey of overriddenKeys) {
+      log(`Merged: ${overriddenKey} overridden by global config`);
+    }
     config = mergeConfigs(config, globalConfig);
   }
 
   // Load project config
   const projectPath = joinPath(getProjectGoopspecDir(projectDir), "config.json");
-  const projectConfig = loadConfigFile(projectPath);
+  const hasProjectConfig = existsSync(projectPath);
+  log(`Loading project config from ${projectPath} (${hasProjectConfig ? "found" : "not found"})`);
+  const projectConfig = hasProjectConfig ? loadConfigFile(projectPath) : null;
   if (projectConfig) {
+    const overriddenKeys = collectOverriddenKeys(
+      config as Record<string, unknown>,
+      projectConfig as Record<string, unknown>
+    );
+    for (const overriddenKey of overriddenKeys) {
+      log(`Merged: ${overriddenKey} overridden by project config`);
+    }
     config = mergeConfigs(config, projectConfig);
   }
 
+  log("Final merged config summary", {
+    loadedSources: {
+      global: hasGlobalConfig,
+      project: hasProjectConfig,
+    },
+    topLevelKeyCount: Object.keys(config).length,
+    agentCount: Object.keys(config.agents ?? {}).length,
+    hasOrchestratorConfig: Boolean(config.orchestrator),
+    hasMemoryConfig: Boolean(config.memory),
+    defaultModel: config.defaultModel,
+    enforcement: config.enforcement,
+  });
   log("Final merged config", { config });
   return config;
+}
+
+function getSuggestedAgentName(unknownKey: string, knownNames: string[]): string | null {
+  const normalizedUnknown = unknownKey.toLowerCase();
+
+  const prefixMatch = knownNames.find((knownName) =>
+    knownName.toLowerCase().startsWith(normalizedUnknown)
+  );
+  if (prefixMatch) {
+    return prefixMatch;
+  }
+
+  const substringMatch = knownNames.find((knownName) => {
+    const normalizedKnown = knownName.toLowerCase();
+    return normalizedKnown.includes(normalizedUnknown) || normalizedUnknown.includes(normalizedKnown);
+  });
+
+  return substringMatch ?? null;
+}
+
+export function validateAgentKeys(
+  config: GoopSpecConfig,
+  knownNames: string[],
+  warn: (message: string) => void = logError
+): void {
+  if (!config.agents) {
+    return;
+  }
+
+  const knownAgentNames = new Set(knownNames);
+
+  for (const agentKey of Object.keys(config.agents)) {
+    if (knownAgentNames.has(agentKey)) {
+      continue;
+    }
+
+    const suggestion = getSuggestedAgentName(agentKey, knownNames);
+    if (suggestion) {
+      warn(`Config warning: unknown agent key '${agentKey}' - did you mean '${suggestion}'?`);
+      continue;
+    }
+
+    warn(`Config warning: unknown agent key '${agentKey}'`);
+  }
 }
 
 /**

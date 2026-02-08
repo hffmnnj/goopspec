@@ -6,10 +6,17 @@
  */
 
 import { existsSync } from "fs";
-import { dirname, join, resolve } from "path";
+import { basename, dirname, join, resolve } from "path";
 import { fileURLToPath } from "url";
 
+import { getHomeDir } from "./platform.js";
+
 const SHARED_RESOURCE_NAMES = ["memory.db", "config.json", "archive"] as const;
+
+type PathLike = {
+  basename(value: string): string;
+  resolve(...paths: string[]): string;
+};
 
 function hasSessionId(sessionId?: string): sessionId is string {
   return typeof sessionId === "string" && sessionId.trim().length > 0;
@@ -19,6 +26,10 @@ function isSharedResource(filename: string): boolean {
   return SHARED_RESOURCE_NAMES.some(
     (resource) => filename === resource || filename.startsWith(`${resource}/`),
   );
+}
+
+export function isDistDirectory(currentDir: string, pathImpl: PathLike = { basename, resolve }): boolean {
+  return pathImpl.basename(pathImpl.resolve(currentDir)) === "dist";
 }
 
 /**
@@ -33,7 +44,7 @@ export function getPackageRoot(): string {
   // After bundling, we're in dist/index.js (single file)
   // In development, we're in src/shared/paths.ts
   // Check if we're in dist/ (bundled) or src/shared/ (dev)
-  if (currentDir.endsWith("/dist") || currentDir.endsWith("\\dist")) {
+  if (isDistDirectory(currentDir)) {
     // Bundled: go up 1 level from dist/
     return resolve(currentDir, "..");
   }
@@ -62,8 +73,7 @@ export function getProjectGoopspecDir(projectDir: string): string {
  * Get the global goopspec config directory
  */
 export function getGlobalConfigDir(): string {
-  const home = process.env.HOME || process.env.USERPROFILE || "";
-  return join(home, ".config", "opencode");
+  return join(getHomeDir(), ".config", "opencode");
 }
 
 /**

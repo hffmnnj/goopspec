@@ -38,6 +38,7 @@
       "model": "openai/gpt-5.3-codex",
       "temperature": 0.2
     },
+    "_goop-orchestrator_comment": "agents.goop-orchestrator.model takes precedence over orchestrator.model below",
     "goop-orchestrator": {
       "model": "anthropic/claude-opus-4-6",
       "temperature": 0.1

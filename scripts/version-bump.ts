@@ -1,5 +1,7 @@
 /// <reference types="bun-types" />
 
+import { ensurePosixPath } from "../src/shared/platform.js";
+
 type CliOptions = {
   version?: string;
   dryRun: boolean;
@@ -117,7 +119,7 @@ function printUsageError(message: string): void {
 }
 
 function normalizePath(path: string): string {
-  return path.replace(/\\/g, "/");
+  return ensurePosixPath(path);
 }
 
 function shouldExclude(path: string): boolean {

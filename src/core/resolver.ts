@@ -15,6 +15,7 @@ import {
   pathExists 
 } from "../shared/paths.js";
 import { log } from "../shared/logger.js";
+import { ensurePosixPath } from "../shared/platform.js";
 
 /**
  * Get file extension for resource type
@@ -33,7 +34,7 @@ function normalizeResourceName(type: ResourceType, name: string): string {
     return trimmed;
   }
 
-  const normalized = trimmed.replace(/\\/g, "/").replace(/^\.\/?/, "");
+  const normalized = ensurePosixPath(trimmed).replace(/^\.\/?/, "");
   const prefix = `${type}s/`;
 
   if (normalized.startsWith(prefix)) {

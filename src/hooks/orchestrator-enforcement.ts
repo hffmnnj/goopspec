@@ -12,6 +12,7 @@
 import type { Part } from "@opencode-ai/sdk";
 import type { PluginContext } from "../core/types.js";
 import { log } from "../shared/logger.js";
+import { basename, ensurePosixPath } from "../shared/platform.js";
 
 // ============================================================================
 // Types
@@ -266,11 +267,11 @@ const NUDGE_COOLDOWN_MS = 120000;
 function isAllowedPath(filePath: string, config: EnforcementConfig): boolean {
   if (!filePath) return true;
   
-  const normalizedPath = filePath.replace(/\\/g, "/").toLowerCase();
+  const normalizedPath = ensurePosixPath(filePath).toLowerCase();
   
   // Check if path contains any allowed patterns
   for (const allowed of config.allowedPaths) {
-    const normalizedAllowed = allowed.replace(/\\/g, "/").toLowerCase();
+    const normalizedAllowed = ensurePosixPath(allowed).toLowerCase();
     if (normalizedPath.includes(normalizedAllowed)) {
       return true;
     }
@@ -295,9 +296,9 @@ function isCodeFile(filePath: string, config: EnforcementConfig): boolean {
 function isInProtectedDir(filePath: string, config: EnforcementConfig): boolean {
   if (!filePath) return false;
   
-  const normalizedPath = filePath.replace(/\\/g, "/").toLowerCase();
+  const normalizedPath = ensurePosixPath(filePath).toLowerCase();
   return config.protectedDirs.some(dir => {
-    const normalizedDir = dir.replace(/\\/g, "/").toLowerCase();
+    const normalizedDir = ensurePosixPath(dir).toLowerCase();
     return normalizedPath.includes(normalizedDir);
   });
 }
@@ -428,7 +429,7 @@ As the orchestrator, delegate implementation work to **goop-executor**:
 \`\`\`
 task({
   subagent_type: "goop-executor",
-  description: "Implement changes to ${filePath.split("/").pop()}",
+  description: "Implement changes to ${basename(filePath)}",
   prompt: \`
     Modify file: ${filePath}
     

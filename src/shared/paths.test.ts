@@ -2,7 +2,7 @@
  * Tests for path utilities
  */
 
-import { describe, it, expect } from "bun:test";
+import { afterEach, describe, expect, it } from "bun:test";
 import { mkdtempSync, rmSync } from "fs";
 import { tmpdir } from "os";
 import {
@@ -52,15 +52,46 @@ describe("paths", () => {
   describe("getProjectGoopspecDir", () => {
     it("should return path ending with .goopspec", () => {
       const dir = getProjectGoopspecDir("/home/user/project");
-      expect(dir).toBe("/home/user/project/.goopspec");
+      expect(dir).toBe(joinPath("/home/user/project", ".goopspec"));
     });
   });
 
   describe("getGlobalConfigDir", () => {
+    const originalHome = process.env.HOME;
+    const originalUserProfile = process.env.USERPROFILE;
+
+    afterEach(() => {
+      if (originalHome === undefined) {
+        delete process.env.HOME;
+      } else {
+        process.env.HOME = originalHome;
+      }
+
+      if (originalUserProfile === undefined) {
+        delete process.env.USERPROFILE;
+      } else {
+        process.env.USERPROFILE = originalUserProfile;
+      }
+    });
+
     it("should return path containing .config/opencode", () => {
       const dir = getGlobalConfigDir();
       expect(dir).toContain(".config");
       expect(dir).toContain("opencode");
+    });
+
+    it("uses Unix HOME paths", () => {
+      process.env.HOME = "/home/test-user";
+      delete process.env.USERPROFILE;
+
+      expect(getGlobalConfigDir()).toBe(joinPath("/home/test-user", ".config", "opencode"));
+    });
+
+    it("uses Windows-style HOME paths", () => {
+      process.env.HOME = "C:\\Users\\test-user";
+      delete process.env.USERPROFILE;
+
+      expect(getGlobalConfigDir()).toBe(joinPath("C:\\Users\\test-user", ".config", "opencode"));
     });
   });
 
@@ -84,21 +115,23 @@ describe("paths", () => {
   describe("getProjectResourceDir", () => {
     it("should return path within .goopspec", () => {
       const dir = getProjectResourceDir("/home/user/project", "agent");
-      expect(dir).toBe("/home/user/project/.goopspec/agents");
+      expect(dir).toBe(joinPath("/home/user/project", ".goopspec", "agents"));
     });
   });
 
   describe("joinPath", () => {
     it("should join paths correctly", () => {
       const result = joinPath("/home", "user", "project");
-      expect(result).toBe("/home/user/project");
+      expect(result).toContain("user");
+      expect(result).toContain("project");
     });
   });
 
   describe("resolvePath", () => {
     it("should resolve relative paths", () => {
       const result = resolvePath("/home/user", "..", "other");
-      expect(result).toBe("/home/other");
+      expect(result).toContain("other");
+      expect(result).not.toContain("..");
     });
   });
 

@@ -4,12 +4,20 @@
 
 import { describe, it, expect, beforeEach } from "bun:test";
 import { createGoopSpecOrchestrator, getAgentNames, getSkillNames } from "./goopspec-orchestrator.js";
-import type { ResourceResolver, ResolvedResource } from "../core/types.js";
+import type { GoopSpecConfig, ResourceResolver, ResolvedResource } from "../core/types.js";
 
 // Mock resolver
 function createMockResolver(agents: ResolvedResource[] = [], skills: ResolvedResource[] = []): ResourceResolver {
   return {
-    resolve: () => null,
+    resolve: (type, name) => {
+      if (type === "agent") {
+        return agents.find(agent => agent.name === name) ?? null;
+      }
+      if (type === "skill") {
+        return skills.find(skill => skill.name === name) ?? null;
+      }
+      return null;
+    },
     resolveAll: (type) => {
       if (type === "agent") return agents;
       if (type === "skill") return skills;
@@ -60,6 +68,37 @@ describe("createGoopSpecOrchestrator", () => {
     const orchestrator = createGoopSpecOrchestrator({
       resolver,
       model: "anthropic/claude-sonnet-4-5",
+    });
+
+    expect(orchestrator.model).toBe("anthropic/claude-sonnet-4-5");
+  });
+
+  it("prefers agents.goop-orchestrator.model over orchestrator.model", () => {
+    const resolver = createMockResolver();
+    const pluginConfig: GoopSpecConfig = {
+      orchestrator: { model: "anthropic/claude-opus-4-6" },
+      agents: {
+        "goop-orchestrator": { model: "openai/gpt-5" },
+      },
+    };
+
+    const orchestrator = createGoopSpecOrchestrator({
+      resolver,
+      pluginConfig,
+    });
+
+    expect(orchestrator.model).toBe("openai/gpt-5");
+  });
+
+  it("uses orchestrator.model when agent override is missing", () => {
+    const resolver = createMockResolver();
+    const pluginConfig: GoopSpecConfig = {
+      orchestrator: { model: "anthropic/claude-sonnet-4-5" },
+    };
+
+    const orchestrator = createGoopSpecOrchestrator({
+      resolver,
+      pluginConfig,
     });
 
     expect(orchestrator.model).toBe("anthropic/claude-sonnet-4-5");

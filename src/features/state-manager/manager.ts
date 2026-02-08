@@ -6,7 +6,7 @@
  */
 
 import { existsSync, readFileSync, writeFileSync, readdirSync, renameSync, mkdirSync } from "fs";
-import { join, dirname } from "path";
+import { join, dirname, basename } from "path";
 import type { 
   GoopState, 
   StateManager, 
@@ -90,7 +90,9 @@ function migrateOldState(oldState: Record<string, unknown>, projectName?: string
     projectName || 
     (existingProject?.name as string) ||
     (projectState?.name as string) || 
-    (projectState?.project_path as string)?.split('/').pop() ||
+    (projectState?.project_path
+      ? basename(projectState.project_path as string)
+      : undefined) ||
     "unnamed";
   
   // Determine initialized date

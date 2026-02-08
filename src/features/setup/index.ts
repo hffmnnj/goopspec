@@ -7,6 +7,7 @@
 
 import { existsSync, readFileSync } from "fs";
 import { getGlobalConfigPath, getProjectGoopspecDir, joinPath } from "../../shared/paths.js";
+import { safeDirname } from "../../shared/platform.js";
 import { hasOpenCodeConfig, getOpenCodeConfigPath, readOpenCodeConfig, getExistingMcps } from "../../core/opencode-config.js";
 import { DEFAULT_CONFIG, validateConfig } from "../../core/config.js";
 import { installMcps } from "./mcp-installer.js";
@@ -367,7 +368,7 @@ export async function applySetup(plan: SetupPlan): Promise<SetupResult> {
     // Write all config files
     for (const configWrite of plan.configsToWrite) {
       try {
-        const dir = configWrite.path.substring(0, configWrite.path.lastIndexOf("/"));
+        const dir = safeDirname(configWrite.path);
         if (!existsSync(dir)) {
           mkdirSync(dir, { recursive: true });
         }

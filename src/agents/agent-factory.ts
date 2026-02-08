@@ -8,6 +8,7 @@
 
 import type { ResolvedResource, ResourceResolver, GoopSpecConfig } from "../core/types.js";
 import { log } from "../shared/logger.js";
+import { ensurePosixPath } from "../shared/platform.js";
 
 /**
  * Memory tools that should be added to agents
@@ -70,11 +71,10 @@ export function createAgentFromMarkdown(
   const fm = resource.frontmatter;
   const resourceName = resource.name;
   const agentName = (fm.name as string) || resourceName;
-  const model = options?.pluginConfig?.agents?.[resourceName]?.model
-    ?? (fm.model as string | undefined)
-    ?? options?.pluginConfig?.defaultModel
-    ?? "anthropic/claude-sonnet-4-5";
+  const { model, source } = resolveAgentModel(resourceName, fm, options);
   const enableMemory = options?.enableMemoryTools ?? (options?.pluginConfig?.memory?.enabled !== false);
+
+  log(`Model for ${agentName}: ${model} (from: ${source})`);
   
   log(`Creating agent config for: ${agentName}`, { enableMemory });
   
@@ -154,6 +154,41 @@ export function createAgentFromMarkdown(
   });
   
   return config;
+}
+
+function resolveAgentModel(
+  resourceName: string,
+  frontmatter: ResolvedResource["frontmatter"],
+  options?: AgentFactoryOptions
+): { model: string; source: string } {
+  const projectAgentModel = options?.pluginConfig?.agents?.[resourceName]?.model;
+  if (projectAgentModel) {
+    return {
+      model: projectAgentModel,
+      source: `project config agents.${resourceName}.model`,
+    };
+  }
+
+  const frontmatterModel = frontmatter.model;
+  if (typeof frontmatterModel === "string" && frontmatterModel.trim().length > 0) {
+    return {
+      model: frontmatterModel,
+      source: "frontmatter default",
+    };
+  }
+
+  const defaultModel = options?.pluginConfig?.defaultModel;
+  if (defaultModel) {
+    return {
+      model: defaultModel,
+      source: "project config defaultModel",
+    };
+  }
+
+  return {
+    model: "anthropic/claude-sonnet-4-5",
+    source: "hardcoded fallback",
+  };
 }
 
 /**
@@ -322,7 +357,7 @@ function shouldInjectQuestionToolInstructions(
 }
 
 function normalizeReferencePath(name: string): string {
-  return name.trim().replace(/\\/g, "/").replace(/^\.\/?/, "");
+  return ensurePosixPath(name.trim()).replace(/^\.\/?/, "");
 }
 
 function extractTemplateName(name: string): string | null {

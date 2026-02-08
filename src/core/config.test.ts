@@ -2,19 +2,71 @@
  * Tests for configuration system
  */
 
-import { describe, it, expect } from "bun:test";
+import { afterEach, beforeAll, beforeEach, describe, expect, it, mock } from "bun:test";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
-import { join } from "path";
-import { 
-  loadPluginConfig, 
-  validateConfig, 
-  getDefaultConfig,
-  GoopSpecConfigSchema,
-  DEFAULT_CONFIG,
-} from "./config";
+import { dirname, join } from "path";
+
+import type { GoopSpecConfig } from "./types";
 import { getPackageRoot } from "../shared/paths";
 
+const warnMock = mock(() => {});
+
+let loadPluginConfig: (projectDir: string) => GoopSpecConfig;
+let validateConfig: (config: unknown) => { valid: boolean; errors?: string[] };
+let getDefaultConfig: () => GoopSpecConfig;
+let validateAgentKeys: (
+  config: GoopSpecConfig,
+  knownNames: string[],
+  warn?: (message: string) => void
+) => void;
+let GoopSpecConfigSchema: {
+  safeParse: (config: unknown) => { success: boolean };
+};
+let DEFAULT_CONFIG: GoopSpecConfig;
+
+let originalHome: string | undefined;
+let originalUserProfile: string | undefined;
+
+function writeJsonFile(path: string, content: unknown): void {
+  const directory = dirname(path);
+  mkdirSync(directory, { recursive: true });
+  writeFileSync(path, `${JSON.stringify(content, null, 2)}\n`, "utf-8");
+}
+
 describe("config", () => {
+  beforeAll(async () => {
+    const configModule = await import("./config.js");
+    ({
+      loadPluginConfig,
+      validateConfig,
+      getDefaultConfig,
+      validateAgentKeys,
+      GoopSpecConfigSchema,
+      DEFAULT_CONFIG,
+    } = configModule);
+  });
+
+  beforeEach(() => {
+    originalHome = process.env.HOME;
+    originalUserProfile = process.env.USERPROFILE;
+    warnMock.mockReset();
+  });
+
+  afterEach(() => {
+    if (originalHome === undefined) {
+      delete process.env.HOME;
+    } else {
+      process.env.HOME = originalHome;
+    }
+
+    if (originalUserProfile === undefined) {
+      delete process.env.USERPROFILE;
+    } else {
+      process.env.USERPROFILE = originalUserProfile;
+    }
+  });
+
   describe("DEFAULT_CONFIG", () => {
     it("should have required defaults", () => {
       expect(DEFAULT_CONFIG.enforcement).toBe("assist");
@@ -105,6 +157,144 @@ describe("config", () => {
       // Should at least have defaults
       expect(config).toBeTruthy();
       expect(config.enforcement).toBeTruthy();
+    });
+
+    it("should let project config override global and global override defaults", () => {
+      const tempRoot = mkdtempSync(join(tmpdir(), "config-cascade-"));
+      const projectDir = join(tempRoot, "project");
+      const homeDir = join(tempRoot, "home");
+
+      try {
+        mkdirSync(projectDir, { recursive: true });
+        process.env.HOME = homeDir;
+        delete process.env.USERPROFILE;
+
+        const globalConfigPath = join(homeDir, ".config", "opencode", "goopspec.json");
+        const projectConfigPath = join(projectDir, ".goopspec", "config.json");
+
+        writeJsonFile(globalConfigPath, {
+          defaultModel: "openai/gpt-4.1",
+          adlEnabled: false,
+        });
+
+        writeJsonFile(projectConfigPath, {
+          defaultModel: "anthropic/claude-3-7-sonnet",
+        });
+
+        const config = loadPluginConfig(projectDir);
+
+        expect(config.defaultModel).toBe("anthropic/claude-3-7-sonnet");
+        expect(config.adlEnabled).toBe(false);
+      } finally {
+        rmSync(tempRoot, { recursive: true, force: true });
+      }
+    });
+
+    it("should load orchestrator model from agents config", () => {
+      const tempRoot = mkdtempSync(join(tmpdir(), "config-agents-model-"));
+      const projectDir = join(tempRoot, "project");
+      const homeDir = join(tempRoot, "home");
+
+      try {
+        mkdirSync(projectDir, { recursive: true });
+        process.env.HOME = homeDir;
+        delete process.env.USERPROFILE;
+
+        const projectConfigPath = join(projectDir, ".goopspec", "config.json");
+        writeJsonFile(projectConfigPath, {
+          agents: {
+            "goop-orchestrator": {
+              model: "openai/o3-mini",
+            },
+          },
+        });
+
+        const config = loadPluginConfig(projectDir);
+
+        expect(config.agents?.["goop-orchestrator"]?.model).toBe("openai/o3-mini");
+      } finally {
+        rmSync(tempRoot, { recursive: true, force: true });
+      }
+    });
+
+    it("should keep orchestrator.model backwards compatibility", () => {
+      const tempRoot = mkdtempSync(join(tmpdir(), "config-orchestrator-compat-"));
+      const projectDir = join(tempRoot, "project");
+      const homeDir = join(tempRoot, "home");
+
+      try {
+        mkdirSync(projectDir, { recursive: true });
+        process.env.HOME = homeDir;
+        delete process.env.USERPROFILE;
+
+        const projectConfigPath = join(projectDir, ".goopspec", "config.json");
+        writeJsonFile(projectConfigPath, {
+          orchestrator: {
+            model: "anthropic/claude-sonnet-4-5",
+          },
+        });
+
+        const config = loadPluginConfig(projectDir);
+
+        expect(config.orchestrator?.model).toBe("anthropic/claude-sonnet-4-5");
+      } finally {
+        rmSync(tempRoot, { recursive: true, force: true });
+      }
+    });
+  });
+
+  describe("validateAgentKeys", () => {
+    it("should pass silently for valid keys", () => {
+      validateAgentKeys(
+        {
+          agents: {
+            "goop-orchestrator": { model: "model-a" },
+            "goop-executor": { model: "model-b" },
+          },
+        },
+        ["goop-orchestrator", "goop-executor"],
+        warnMock,
+      );
+
+      expect(warnMock).not.toHaveBeenCalled();
+    });
+
+    it("should warn on unknown keys", () => {
+      validateAgentKeys(
+        {
+          agents: {
+            "goop-unknown": { model: "model-x" },
+          },
+        },
+        ["goop-orchestrator", "goop-executor"],
+        warnMock,
+      );
+
+      expect(warnMock).toHaveBeenCalledTimes(1);
+      expect(warnMock).toHaveBeenCalledWith("Config warning: unknown agent key 'goop-unknown'");
+    });
+
+    it("should include typo suggestion when close key exists", () => {
+      validateAgentKeys(
+        {
+          agents: {
+            "goop-orchestr": { model: "model-x" },
+          },
+        },
+        ["goop-orchestrator", "goop-executor"],
+        warnMock,
+      );
+
+      expect(warnMock).toHaveBeenCalledTimes(1);
+      expect(warnMock).toHaveBeenCalledWith(
+        "Config warning: unknown agent key 'goop-orchestr' - did you mean 'goop-orchestrator'?",
+      );
+    });
+
+    it("should not warn for empty agents config", () => {
+      validateAgentKeys({}, ["goop-orchestrator", "goop-executor"], warnMock);
+
+      expect(warnMock).not.toHaveBeenCalled();
     });
   });
 

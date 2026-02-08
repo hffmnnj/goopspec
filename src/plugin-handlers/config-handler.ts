@@ -6,6 +6,7 @@
  */
 
 import type { GoopSpecConfig, ResourceResolver } from "../core/types.js";
+import { validateAgentKeys } from "../core/config.js";
 import { createGoopSpecOrchestrator } from "../agents/goopspec-orchestrator.js";
 import { createAgentFromMarkdown, validateAgentResource, type AgentFactoryOptions } from "../agents/agent-factory.js";
 import { log } from "../shared/logger.js";
@@ -40,6 +41,13 @@ export function createConfigHandler(deps: ConfigHandlerDeps) {
   const { pluginConfig, resolver, directory } = deps;
 
   return async (config: Record<string, unknown>) => {
+    try {
+      const knownAgentNames = resolver.resolveAll("agent").map((resource) => resource.name);
+      validateAgentKeys(pluginConfig, knownAgentNames);
+    } catch (error) {
+      log("Failed to validate config agent keys", { error, level: "warn" });
+    }
+
     log("GoopSpec config handler running", { 
       enableAsDefault: pluginConfig.orchestrator?.enableAsDefault,
       directory,
@@ -48,7 +56,7 @@ export function createConfigHandler(deps: ConfigHandlerDeps) {
     try {
       // Build the orchestrator agent configuration
       const orchestrator = createGoopSpecOrchestrator({
-        model: pluginConfig.orchestrator?.model,
+        pluginConfig,
         thinkingBudget: pluginConfig.orchestrator?.thinkingBudget,
         phaseGates: pluginConfig.orchestrator?.phaseGates,
         waveExecution: pluginConfig.orchestrator?.waveExecution,
