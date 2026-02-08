@@ -602,3 +602,190 @@ Notes:
 3. **Shared skills also have high fan-out**, especially `goop-core` and `memory-usage`.
 4. **Boilerplate is modest per-agent but non-trivial in aggregate** (7,039.50 estimated tokens across 13 agents).
 5. **Best Wave 3.2/4.2 compression path:** start with high-impact shared references + shared skills before trimming individual agent markdown.
+
+---
+
+# RESEARCH: Wave 4 - Reference Audit (Task 4.1)
+
+**Date:** 2026-02-08  
+**Scope:** all `references/*.md` (36 files), all `agents/*.md` frontmatter `references:` lists, and `templates/*.md` injection usage.  
+**Methodology:** estimated tokens = `chars / 4` (same baseline method as Wave 1/3).  
+
+## Summary
+
+- **Total references:** `36`
+- **Total reference chars/tokens:** `222,407` chars / `55,601.75` est. tokens
+- **Injected references:** `15`
+- **On-demand-only references:** `21`
+- **Highest impact references (size x injection frequency):**
+  1. `references/subagent-protocol.md` -> `30,105.00`
+  2. `references/plugin-architecture.md` -> `27,432.00`
+  3. `references/response-format.md` -> `27,378.00`
+  4. `references/xml-response-schema.md` -> `23,582.00`
+  5. `references/handoff-protocol.md` -> `12,022.50`
+
+## Per-Reference Token Count + Classification (All 36)
+
+| Reference | Chars | Est. Tokens | Class | Injection Count | Impact (tokens x count) |
+|---|---:|---:|---|---:|---:|
+| `references/plan-process.md` | 14,772 | 3,693.00 | on-demand-only | 0 | 0.00 |
+| `references/discuss-process.md` | 13,020 | 3,255.00 | on-demand-only | 0 | 0.00 |
+| `references/subagent-protocol.md` | 10,035 | 2,508.75 | injected | 12 | 30,105.00 |
+| `references/plugin-architecture.md` | 9,144 | 2,286.00 | injected | 12 | 27,432.00 |
+| `references/response-format.md` | 9,126 | 2,281.50 | injected | 12 | 27,378.00 |
+| `references/phase-gates.md` | 8,732 | 2,183.00 | injected | 3 | 6,549.00 |
+| `references/agent-patterns.md` | 8,324 | 2,081.00 | on-demand-only | 0 | 0.00 |
+| `references/git-workflow.md` | 7,645 | 1,911.25 | injected | 2 | 3,822.50 |
+| `references/xml-response-schema.md` | 7,256 | 1,814.00 | injected | 13 | 23,582.00 |
+| `references/context-injection.md` | 6,922 | 1,730.50 | injected | 6 | 10,383.00 |
+| `references/handoff-protocol.md` | 6,870 | 1,717.50 | injected | 7 | 12,022.50 |
+| `references/map-codebase-process.md` | 6,706 | 1,676.50 | on-demand-only | 0 | 0.00 |
+| `references/discovery-interview.md` | 6,635 | 1,658.75 | injected | 2 | 3,317.50 |
+| `references/accept-process.md` | 6,631 | 1,657.75 | on-demand-only | 0 | 0.00 |
+| `references/ui-brand.md` | 6,520 | 1,630.00 | on-demand-only | 0 | 0.00 |
+| `references/execute-process.md` | 6,223 | 1,555.75 | on-demand-only | 0 | 0.00 |
+| `references/orchestrator-philosophy.md` | 6,202 | 1,550.50 | injected | 1 | 1,550.50 |
+| `references/quick-process.md` | 6,005 | 1,501.25 | on-demand-only | 0 | 0.00 |
+| `references/team-coordination.md` | 5,849 | 1,462.25 | on-demand-only | 0 | 0.00 |
+| `references/dispatch-patterns.md` | 5,775 | 1,443.75 | on-demand-only | 0 | 0.00 |
+| `references/enforcement-system.md` | 5,748 | 1,437.00 | on-demand-only | 0 | 0.00 |
+| `references/model-profiles.md` | 5,114 | 1,278.50 | on-demand-only | 0 | 0.00 |
+| `references/tdd.md` | 4,913 | 1,228.25 | injected | 3 | 3,684.75 |
+| `references/security-checklist.md` | 4,573 | 1,143.25 | injected | 1 | 1,143.25 |
+| `references/status-process.md` | 4,538 | 1,134.50 | on-demand-only | 0 | 0.00 |
+| `references/specify-process.md` | 4,111 | 1,027.75 | on-demand-only | 0 | 0.00 |
+| `references/workflow-plan.md` | 3,910 | 977.50 | on-demand-only | 0 | 0.00 |
+| `references/interactive-questioning.md` | 3,887 | 971.75 | on-demand-only | 0 | 0.00 |
+| `references/workflow-specify.md` | 3,752 | 938.00 | injected | 1 | 938.00 |
+| `references/workflow-research.md` | 3,710 | 927.50 | on-demand-only | 0 | 0.00 |
+| `references/ui-interaction-patterns.md` | 3,591 | 897.75 | on-demand-only | 0 | 0.00 |
+| `references/visual-style.md` | 3,580 | 895.00 | on-demand-only | 0 | 0.00 |
+| `references/workflow-accept.md` | 3,377 | 844.25 | on-demand-only | 0 | 0.00 |
+| `references/boundary-system.md` | 3,275 | 818.75 | injected | 2 | 1,637.50 |
+| `references/workflow-execute.md` | 3,091 | 772.75 | on-demand-only | 0 | 0.00 |
+| `references/deviation-rules.md` | 2,845 | 711.25 | injected | 3 | 2,133.75 |
+
+## Reference Injection Map (Reference -> Agents)
+
+Only references with `injection_count > 0` are listed.
+
+| Reference | Injection Count | Injected Into Agents |
+|---|---:|---|
+| `references/subagent-protocol.md` | 12 | `goop-creative`, `goop-debugger`, `goop-designer`, `goop-executor`, `goop-explorer`, `goop-librarian`, `goop-orchestrator`, `goop-planner`, `goop-researcher`, `goop-tester`, `goop-verifier`, `goop-writer` |
+| `references/plugin-architecture.md` | 12 | `goop-debugger`, `goop-designer`, `goop-executor`, `goop-explorer`, `goop-librarian`, `goop-orchestrator`, `goop-planner`, `goop-researcher`, `goop-tester`, `goop-verifier`, `goop-writer`, `memory-distiller` |
+| `references/response-format.md` | 12 | `goop-creative`, `goop-debugger`, `goop-designer`, `goop-executor`, `goop-explorer`, `goop-librarian`, `goop-orchestrator`, `goop-planner`, `goop-researcher`, `goop-tester`, `goop-verifier`, `goop-writer` |
+| `references/xml-response-schema.md` | 13 | `goop-creative`, `goop-debugger`, `goop-designer`, `goop-executor`, `goop-explorer`, `goop-librarian`, `goop-orchestrator`, `goop-planner`, `goop-researcher`, `goop-tester`, `goop-verifier`, `goop-writer`, `memory-distiller` |
+| `references/handoff-protocol.md` | 7 | `goop-debugger`, `goop-designer`, `goop-executor`, `goop-orchestrator`, `goop-researcher`, `goop-writer`, `memory-distiller` |
+| `references/context-injection.md` | 6 | `goop-executor`, `goop-explorer`, `goop-librarian`, `goop-orchestrator`, `goop-researcher`, `memory-distiller` |
+| `references/phase-gates.md` | 3 | `goop-orchestrator`, `goop-planner`, `goop-verifier` |
+| `references/tdd.md` | 3 | `goop-executor`, `goop-planner`, `goop-tester` |
+| `references/deviation-rules.md` | 3 | `goop-debugger`, `goop-executor`, `goop-orchestrator` |
+| `references/git-workflow.md` | 2 | `goop-executor`, `goop-orchestrator` |
+| `references/discovery-interview.md` | 2 | `goop-orchestrator`, `goop-planner` |
+| `references/boundary-system.md` | 2 | `goop-orchestrator`, `goop-verifier` |
+| `references/orchestrator-philosophy.md` | 1 | `goop-orchestrator` |
+| `references/security-checklist.md` | 1 | `goop-verifier` |
+| `references/workflow-specify.md` | 1 | `goop-planner` |
+
+### Templates Also Injected (for completeness)
+
+The following are injected via agent frontmatter `references:` but are templates, not references:
+
+| Template | Injected By |
+|---|---|
+| `templates/spec.md` | `goop-planner` |
+| `templates/blueprint.md` | `goop-planner` |
+| `templates/requirements.md` | `goop-planner` |
+| `templates/summary.md` | `goop-writer` |
+| `templates/retrospective.md` | `goop-writer` |
+| `templates/milestone.md` | `goop-writer` |
+
+## Top 10 References by Total Impact (size x injection frequency)
+
+| Rank | Reference | Est. Tokens | Injection Count | Total Impact |
+|---:|---|---:|---:|---:|
+| 1 | `references/subagent-protocol.md` | 2,508.75 | 12 | 30,105.00 |
+| 2 | `references/plugin-architecture.md` | 2,286.00 | 12 | 27,432.00 |
+| 3 | `references/response-format.md` | 2,281.50 | 12 | 27,378.00 |
+| 4 | `references/xml-response-schema.md` | 1,814.00 | 13 | 23,582.00 |
+| 5 | `references/handoff-protocol.md` | 1,717.50 | 7 | 12,022.50 |
+| 6 | `references/context-injection.md` | 1,730.50 | 6 | 10,383.00 |
+| 7 | `references/phase-gates.md` | 2,183.00 | 3 | 6,549.00 |
+| 8 | `references/git-workflow.md` | 1,911.25 | 2 | 3,822.50 |
+| 9 | `references/tdd.md` | 1,228.25 | 3 | 3,684.75 |
+| 10 | `references/discovery-interview.md` | 1,658.75 | 2 | 3,317.50 |
+
+## Overlapping / Duplicated Content Identified
+
+Major overlap clusters discovered during reference scan:
+
+1. **XML envelope duplication (high overlap):**
+   - `references/xml-response-schema.md` (canonical full schema + examples)
+   - `references/subagent-protocol.md` (duplicate "XML Response Envelope" section)
+   - `references/response-format.md` (duplicate "XML Envelope Requirement" section)
+
+2. **Handoff guidance duplication (high overlap):**
+   - `references/handoff-protocol.md` (full protocol)
+   - repeated "generate `HANDOFF.md`" instructions in `plan-process.md`, `execute-process.md`, `accept-process.md`, `specify-process.md`, plus XML-handoff guidance in `response-format.md`/`xml-response-schema.md`.
+
+3. **Commit guidance duplication (medium overlap):**
+   - `references/git-workflow.md` (canonical commit message standard)
+   - repeated commit-message constraints in `deviation-rules.md`, `context-injection.md`, and process docs.
+
+4. **Workflow stage diagrams duplicated (low-medium overlap):**
+   - near-identical phase diagrams and gate language across `workflow-plan.md`, `workflow-research.md`, `workflow-specify.md`, `workflow-execute.md`, `workflow-accept.md`, and `phase-gates.md`.
+
+## Compression Opportunities Per Reference
+
+`Priority` is based on `impact` first, then absolute size.
+
+| Reference | Priority | Specific Compression Opportunity |
+|---|---|---|
+| `references/subagent-protocol.md` | High | Replace duplicate XML envelope + response examples with links to `xml-response-schema.md` and `response-format.md`; keep only protocol deltas. |
+| `references/plugin-architecture.md` | High | Trim repeated tool tables and role quick-reference prose; keep architecture primitives and one concise lookup table. |
+| `references/response-format.md` | High | Remove duplicate full XML minimal/expanded examples and point to canonical schema document; keep only human-facing formatting guidance. |
+| `references/xml-response-schema.md` | High | Keep as canonical; reduce repeated full examples (executor/planner/blocked) to one full + one compact variant. |
+| `references/handoff-protocol.md` | High | Compress repeated "when to handoff" and anti-pattern sections; keep mandatory rules + one template. |
+| `references/context-injection.md` | High | Shorten long examples of injected context and bootstrap narrative; keep required fields and injection points. |
+| `references/phase-gates.md` | Medium | Collapse repeated gate checklists into compact matrix; link to process docs for full details. |
+| `references/git-workflow.md` | Medium | Reduce duplicate good/bad examples and recovery command sections; keep commit/PR contract + checklist. |
+| `references/tdd.md` | Medium | Trim repeated sample code blocks (unit/integration/e2e) and keep one concise RED-GREEN-REFACTOR template. |
+| `references/discovery-interview.md` | Medium | Compress duplicate interview prompt variants and long optional examples. |
+| `references/deviation-rules.md` | Medium | Keep rules 1-4 and one concise example each; remove overlap with git/response docs. |
+| `references/boundary-system.md` | Medium | Condense repeated orchestrator/executor boundary examples into one canonical table. |
+| `references/orchestrator-philosophy.md` | Medium | Reduce narrative repetition; preserve principles and delegation rules only. |
+| `references/security-checklist.md` | Medium | Collapse checklist duplication into a compact severity-based matrix. |
+| `references/workflow-specify.md` | Medium | Replace repeated workflow framing with pointers to `phase-gates.md` and `specify-process.md`. |
+| `references/plan-process.md` | Medium | On-demand only: prune repeated handoff and status boilerplate; keep planning steps and outputs. |
+| `references/discuss-process.md` | Medium | On-demand only: reduce repeated clarification and interview meta-guidance. |
+| `references/agent-patterns.md` | Medium | Compress redundant agent examples into one reusable pattern matrix. |
+| `references/map-codebase-process.md` | Low | Tighten exploratory examples; preserve mapping checklist. |
+| `references/accept-process.md` | Low | Remove repeated handoff scaffolding and keep acceptance gate logic. |
+| `references/ui-brand.md` | Low | Condense descriptive style prose; keep concrete token/design rules. |
+| `references/execute-process.md` | Low | Compress repeated execution/handoff reminders; keep task loop and verification contract. |
+| `references/quick-process.md` | Low | Reduce repeated commit/status text duplicated elsewhere. |
+| `references/team-coordination.md` | Low | Shorten illustrative coordination scenarios to one canonical flow. |
+| `references/dispatch-patterns.md` | Low | Collapse similar dispatch examples into one table of patterns. |
+| `references/enforcement-system.md` | Low | Condense repeated enforcement rationale; keep rule matrix and hooks. |
+| `references/model-profiles.md` | Low | Reduce verbose model descriptions; preserve decisive selection criteria. |
+| `references/status-process.md` | Low | Keep status command behavior; trim repeated workflow context exposition. |
+| `references/specify-process.md` | Low | Tighten repeated spec lock and handoff language. |
+| `references/workflow-plan.md` | Low | Merge duplicated process diagrams with shared workflow docs. |
+| `references/interactive-questioning.md` | Low | Cut duplicate prompt examples; keep structured question protocol. |
+| `references/workflow-research.md` | Low | Remove repeated workflow framing also present in other workflow docs. |
+| `references/ui-interaction-patterns.md` | Low | Compress repetitive UI examples; keep actionable checklist. |
+| `references/visual-style.md` | Low | Trim prose-heavy style explanation; retain concrete directives. |
+| `references/workflow-accept.md` | Low | Collapse repetitive acceptance narration and keep final gate requirements. |
+| `references/workflow-execute.md` | Low | Compact repeated execution process explanation and pointers. |
+
+## On-Demand-Only References (21)
+
+`accept-process`, `agent-patterns`, `discuss-process`, `dispatch-patterns`, `enforcement-system`, `execute-process`, `interactive-questioning`, `map-codebase-process`, `model-profiles`, `plan-process`, `quick-process`, `specify-process`, `status-process`, `team-coordination`, `ui-brand`, `ui-interaction-patterns`, `visual-style`, `workflow-accept`, `workflow-execute`, `workflow-plan`, `workflow-research`.
+
+## Reproducibility
+
+Audit was generated by parsing:
+
+1. `references/*.md` for size (`chars`) and token estimate (`chars / 4`)
+2. `agents/*.md` frontmatter `references:` list for reference/template injection map
+3. ranking impact = `estimated_tokens x injection_count`
