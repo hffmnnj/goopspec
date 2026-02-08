@@ -8,6 +8,7 @@
 
 import type { ResolvedResource, ResourceResolver, GoopSpecConfig } from "../core/types.js";
 import { log } from "../shared/logger.js";
+import { ensurePosixPath } from "../shared/platform.js";
 
 /**
  * Memory tools that should be added to agents
@@ -356,7 +357,7 @@ function shouldInjectQuestionToolInstructions(
 }
 
 function normalizeReferencePath(name: string): string {
-  return name.trim().replace(/\\/g, "/").replace(/^\.\/?/, "");
+  return ensurePosixPath(name.trim()).replace(/^\.\/?/, "");
 }
 
 function extractTemplateName(name: string): string | null {

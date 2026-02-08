@@ -29,9 +29,10 @@ import {
 } from "../../features/team/conflict.js";
 import type { AgentRegistration } from "../../features/team/types.js";
 import { getSessionGoopspecPath } from "../../shared/paths.js";
+import { ensurePosixPath } from "../../shared/platform.js";
 
 function normalizeReferencePath(name: string): string {
-  return name.trim().replace(/\\/g, "/").replace(/^\.\/?/, "");
+  return ensurePosixPath(name.trim()).replace(/^\.\/?/, "");
 }
 
 function extractTemplateName(name: string): string | null {
@@ -270,10 +271,10 @@ function buildAgentPrompt(
   const scopedSessionId = typeof sessionId === "string" && sessionId.trim().length > 0
     ? sessionId.trim()
     : undefined;
-  const specPath = getSessionGoopspecPath("", "SPEC.md", scopedSessionId).replace(/\\/g, "/");
-  const blueprintPath = getSessionGoopspecPath("", "BLUEPRINT.md", scopedSessionId).replace(/\\/g, "/");
-  const chroniclePath = getSessionGoopspecPath("", "CHRONICLE.md", scopedSessionId).replace(/\\/g, "/");
-  const researchPath = getSessionGoopspecPath("", "RESEARCH.md", scopedSessionId).replace(/\\/g, "/");
+  const specPath = ensurePosixPath(getSessionGoopspecPath("", "SPEC.md", scopedSessionId));
+  const blueprintPath = ensurePosixPath(getSessionGoopspecPath("", "BLUEPRINT.md", scopedSessionId));
+  const chroniclePath = ensurePosixPath(getSessionGoopspecPath("", "CHRONICLE.md", scopedSessionId));
+  const researchPath = ensurePosixPath(getSessionGoopspecPath("", "RESEARCH.md", scopedSessionId));
   
   // Agent identity
   sections.push(`# Agent: ${agentDef.name}`);
@@ -291,7 +292,7 @@ function buildAgentPrompt(
     sections.push("");
     sections.push("## Session Context\n");
     sections.push(`- sessionId: \`${scopedSessionId}\``);
-    sections.push(`- Session root: \`${getSessionGoopspecPath("", "", scopedSessionId).replace(/\\/g, "/")}\``);
+    sections.push(`- Session root: \`${ensurePosixPath(getSessionGoopspecPath("", "", scopedSessionId))}\``);
   }
   sections.push("");
   

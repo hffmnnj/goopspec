@@ -15,6 +15,7 @@ import { createTools } from "./tools/index.js";
 import { createHooks } from "./hooks/index.js";
 import { createConfigHandler } from "./plugin-handlers/config-handler.js";
 import { log, logError, setDebug } from "./shared/logger.js";
+import { basename } from "./shared/platform.js";
 
 /**
  * Create a minimal hooks object for error/degraded mode
@@ -51,8 +52,8 @@ const GoopSpecPlugin: Plugin = async (input) => {
 
     // Extract project name - prefer directory name as it's human-readable
     // input.project?.id is often a hash/UUID which isn't useful for display
-    const directoryName = input.directory.split("/").pop() || "unnamed";
-    const projectIdName = input.project?.id?.split("/").pop();
+    const directoryName = basename(input.directory) || "unnamed";
+    const projectIdName = input.project?.id ? basename(input.project.id) : undefined;
     
     // Use directory name unless projectId looks like a path (contains meaningful name)
     // Hashes (40+ chars, alphanumeric only) are not useful project names

@@ -7,7 +7,7 @@
 
 import { tool, type ToolDefinition } from "@opencode-ai/plugin/tool";
 import { existsSync, readdirSync, readFileSync } from "fs";
-import { join } from "path";
+import { join, basename } from "path";
 import { exec } from "child_process";
 import { promisify } from "util";
 import type { PluginContext, ToolContext } from "../../core/types.js";
@@ -94,7 +94,7 @@ async function searchHistory(
   // If ripgrep found matches, only process those files
   if (matchingFilePaths.size > 0) {
     const matchingFileNames = new Set(
-      Array.from(matchingFilePaths).map(p => p.split("/").pop() || "")
+      Array.from(matchingFilePaths).map(p => basename(p))
     );
     files = files.filter(f => matchingFileNames.has(f));
   }

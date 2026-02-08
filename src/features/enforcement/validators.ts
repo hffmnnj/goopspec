@@ -9,6 +9,7 @@ import { extname } from "path";
 import type { PluginContext, WorkflowPhase } from "../../core/types.js";
 import { isOperationAllowed } from "./phase-context.js";
 import { checkPhaseDocuments } from "./scaffolder.js";
+import { ensurePosixPath } from "../../shared/platform.js";
 
 export interface ValidationResult {
   valid: boolean;
@@ -35,7 +36,7 @@ const REQUIRED_DOCUMENTS: Record<WorkflowPhase, readonly string[]> = {
 };
 
 function normalizePath(filePath: string): string {
-  return filePath.replace(/\\/g, "/");
+  return ensurePosixPath(filePath);
 }
 
 /**

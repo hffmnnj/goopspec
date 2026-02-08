@@ -6,7 +6,7 @@
  */
 
 import { existsSync } from "fs";
-import { dirname, join, resolve } from "path";
+import { basename, dirname, join, resolve } from "path";
 import { fileURLToPath } from "url";
 
 import { getHomeDir } from "./platform.js";
@@ -35,7 +35,7 @@ export function getPackageRoot(): string {
   // After bundling, we're in dist/index.js (single file)
   // In development, we're in src/shared/paths.ts
   // Check if we're in dist/ (bundled) or src/shared/ (dev)
-  if (currentDir.endsWith("/dist") || currentDir.endsWith("\\dist")) {
+  if (basename(resolve(currentDir)) === "dist") {
     // Bundled: go up 1 level from dist/
     return resolve(currentDir, "..");
   }
