@@ -10,18 +10,16 @@ import { dirname, join } from "path";
 import type { GoopSpecConfig } from "./types";
 import { getPackageRoot } from "../shared/paths";
 
-const logMock = mock(() => {});
-const logErrorMock = mock(() => {});
-
-mock.module("../shared/logger.js", () => ({
-  log: logMock,
-  logError: logErrorMock,
-}));
+const warnMock = mock(() => {});
 
 let loadPluginConfig: (projectDir: string) => GoopSpecConfig;
 let validateConfig: (config: unknown) => { valid: boolean; errors?: string[] };
 let getDefaultConfig: () => GoopSpecConfig;
-let validateAgentKeys: (config: GoopSpecConfig, knownNames: string[]) => void;
+let validateAgentKeys: (
+  config: GoopSpecConfig,
+  knownNames: string[],
+  warn?: (message: string) => void
+) => void;
 let GoopSpecConfigSchema: {
   safeParse: (config: unknown) => { success: boolean };
 };
@@ -52,8 +50,7 @@ describe("config", () => {
   beforeEach(() => {
     originalHome = process.env.HOME;
     originalUserProfile = process.env.USERPROFILE;
-    logMock.mockReset();
-    logErrorMock.mockReset();
+    warnMock.mockReset();
   });
 
   afterEach(() => {
@@ -256,9 +253,10 @@ describe("config", () => {
           },
         },
         ["goop-orchestrator", "goop-executor"],
+        warnMock,
       );
 
-      expect(logErrorMock).not.toHaveBeenCalled();
+      expect(warnMock).not.toHaveBeenCalled();
     });
 
     it("should warn on unknown keys", () => {
@@ -269,10 +267,11 @@ describe("config", () => {
           },
         },
         ["goop-orchestrator", "goop-executor"],
+        warnMock,
       );
 
-      expect(logErrorMock).toHaveBeenCalledTimes(1);
-      expect(logErrorMock).toHaveBeenCalledWith("Config warning: unknown agent key 'goop-unknown'");
+      expect(warnMock).toHaveBeenCalledTimes(1);
+      expect(warnMock).toHaveBeenCalledWith("Config warning: unknown agent key 'goop-unknown'");
     });
 
     it("should include typo suggestion when close key exists", () => {
@@ -283,18 +282,19 @@ describe("config", () => {
           },
         },
         ["goop-orchestrator", "goop-executor"],
+        warnMock,
       );
 
-      expect(logErrorMock).toHaveBeenCalledTimes(1);
-      expect(logErrorMock).toHaveBeenCalledWith(
+      expect(warnMock).toHaveBeenCalledTimes(1);
+      expect(warnMock).toHaveBeenCalledWith(
         "Config warning: unknown agent key 'goop-orchestr' - did you mean 'goop-orchestrator'?",
       );
     });
 
     it("should not warn for empty agents config", () => {
-      validateAgentKeys({}, ["goop-orchestrator", "goop-executor"]);
+      validateAgentKeys({}, ["goop-orchestrator", "goop-executor"], warnMock);
 
-      expect(logErrorMock).not.toHaveBeenCalled();
+      expect(warnMock).not.toHaveBeenCalled();
     });
   });
 

@@ -41,8 +41,12 @@ export function createConfigHandler(deps: ConfigHandlerDeps) {
   const { pluginConfig, resolver, directory } = deps;
 
   return async (config: Record<string, unknown>) => {
-    const knownAgentNames = resolver.resolveAll("agent").map((resource) => resource.name);
-    validateAgentKeys(pluginConfig, knownAgentNames);
+    try {
+      const knownAgentNames = resolver.resolveAll("agent").map((resource) => resource.name);
+      validateAgentKeys(pluginConfig, knownAgentNames);
+    } catch (error) {
+      log("Failed to validate config agent keys", { error, level: "warn" });
+    }
 
     log("GoopSpec config handler running", { 
       enableAsDefault: pluginConfig.orchestrator?.enableAsDefault,

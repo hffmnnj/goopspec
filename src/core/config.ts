@@ -286,7 +286,11 @@ function getSuggestedAgentName(unknownKey: string, knownNames: string[]): string
   return substringMatch ?? null;
 }
 
-export function validateAgentKeys(config: GoopSpecConfig, knownNames: string[]): void {
+export function validateAgentKeys(
+  config: GoopSpecConfig,
+  knownNames: string[],
+  warn: (message: string) => void = logError
+): void {
   if (!config.agents) {
     return;
   }
@@ -300,11 +304,11 @@ export function validateAgentKeys(config: GoopSpecConfig, knownNames: string[]):
 
     const suggestion = getSuggestedAgentName(agentKey, knownNames);
     if (suggestion) {
-      logError(`Config warning: unknown agent key '${agentKey}' - did you mean '${suggestion}'?`);
+      warn(`Config warning: unknown agent key '${agentKey}' - did you mean '${suggestion}'?`);
       continue;
     }
 
-    logError(`Config warning: unknown agent key '${agentKey}'`);
+    warn(`Config warning: unknown agent key '${agentKey}'`);
   }
 }
 
