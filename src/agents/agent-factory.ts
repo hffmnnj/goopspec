@@ -225,19 +225,14 @@ function composeAgentPrompt(
     sections.push(`
 ## Memory System
 
-You have access to a persistent memory system that stores knowledge across sessions. Use it to:
+Use memory to preserve continuity across sessions:
+- Search first: \`memory_search\`
+- Save findings/patterns: \`memory_save\`
+- Save architecture choices with rationale: \`memory_decision\`
+- Capture quick notes: \`memory_note\`
+- Remove stale/incorrect records when needed: \`memory_forget\`
 
-- **Remember decisions**: Use \`memory_decision\` to log architectural decisions with reasoning
-- **Store observations**: Use \`memory_save\` to save important findings and patterns
-- **Quick notes**: Use \`memory_note\` for quick context notes
-- **Search context**: Use \`memory_search\` to find relevant past context
-- **Clean up**: Use \`memory_forget\` to remove outdated or incorrect memories
-
-**Best practices:**
-- Search memory before making decisions that might repeat past mistakes
-- Log all significant architectural decisions for future reference
-- Store patterns, conventions, and project-specific knowledge
-- Reference memory IDs when building on previous work
+Best practice: search before decisions, then persist key outcomes.
 `);
   }
 
@@ -245,47 +240,12 @@ You have access to a persistent memory system that stores knowledge across sessi
   sections.push(`
 ## Question Tool (User Interaction)
 
-When you need user input, **always use the \`mcp_question\` tool** instead of plain text prompts.
+When user input is required, use **\`mcp_question\`** (not plain-text prompts).
 
-### When to Use
-- Asking for confirmation (e.g., "Ready to proceed?", "Lock the spec?")
-- Offering choices (e.g., "Which approach?", "Select files to include")
-- Gathering preferences or decisions
-- Any time you expect the user to choose from options
+Use it for confirmations, choices, and preference decisions.
+Provide concise prompts with structured options (\`header\`, \`question\`, \`options\`, optional \`multiple\`).
 
-### How to Use
-\`\`\`
-mcp_question({
-  questions: [{
-    header: "Confirm Action",           // Max 30 chars
-    question: "Ready to lock the specification and proceed to execution?",
-    options: [
-      { label: "Confirm", description: "Lock spec and start execution" },
-      { label: "Amend", description: "Modify requirements first" },
-      { label: "Cancel", description: "Return to planning" }
-    ],
-    multiple: false                      // true for multi-select
-  }]
-})
-\`\`\`
-
-### Key Parameters
-- **header**: Short label (max 30 chars) shown above the question
-- **question**: Full question text
-- **options**: Array of choices with label + description
-- **multiple**: Set true to allow selecting multiple options
-
-### Anti-Pattern (Don't Do This)
-\`\`\`
-❌ "Type 'confirm' to proceed, 'amend' to modify, or 'cancel' to abort"
-\`\`\`
-
-### Correct Pattern
-\`\`\`
-✅ Use mcp_question with structured options
-\`\`\`
-
-The question tool provides a better UX with clickable options instead of requiring users to type exact keywords.
+Do not ask users to type free-form command words like "confirm/amend/cancel".
 `);
   
   return sections.join("\n");
