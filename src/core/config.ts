@@ -212,6 +212,46 @@ export function loadPluginConfig(projectDir: string): GoopSpecConfig {
   return config;
 }
 
+function getSuggestedAgentName(unknownKey: string, knownNames: string[]): string | null {
+  const normalizedUnknown = unknownKey.toLowerCase();
+
+  const prefixMatch = knownNames.find((knownName) =>
+    knownName.toLowerCase().startsWith(normalizedUnknown)
+  );
+  if (prefixMatch) {
+    return prefixMatch;
+  }
+
+  const substringMatch = knownNames.find((knownName) => {
+    const normalizedKnown = knownName.toLowerCase();
+    return normalizedKnown.includes(normalizedUnknown) || normalizedUnknown.includes(normalizedKnown);
+  });
+
+  return substringMatch ?? null;
+}
+
+export function validateAgentKeys(config: GoopSpecConfig, knownNames: string[]): void {
+  if (!config.agents) {
+    return;
+  }
+
+  const knownAgentNames = new Set(knownNames);
+
+  for (const agentKey of Object.keys(config.agents)) {
+    if (knownAgentNames.has(agentKey)) {
+      continue;
+    }
+
+    const suggestion = getSuggestedAgentName(agentKey, knownNames);
+    if (suggestion) {
+      logError(`Config warning: unknown agent key '${agentKey}' - did you mean '${suggestion}'?`);
+      continue;
+    }
+
+    logError(`Config warning: unknown agent key '${agentKey}'`);
+  }
+}
+
 /**
  * Validate a config object
  */

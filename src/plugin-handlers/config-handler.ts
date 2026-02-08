@@ -6,6 +6,7 @@
  */
 
 import type { GoopSpecConfig, ResourceResolver } from "../core/types.js";
+import { validateAgentKeys } from "../core/config.js";
 import { createGoopSpecOrchestrator } from "../agents/goopspec-orchestrator.js";
 import { createAgentFromMarkdown, validateAgentResource, type AgentFactoryOptions } from "../agents/agent-factory.js";
 import { log } from "../shared/logger.js";
@@ -40,6 +41,9 @@ export function createConfigHandler(deps: ConfigHandlerDeps) {
   const { pluginConfig, resolver, directory } = deps;
 
   return async (config: Record<string, unknown>) => {
+    const knownAgentNames = resolver.resolveAll("agent").map((resource) => resource.name);
+    validateAgentKeys(pluginConfig, knownAgentNames);
+
     log("GoopSpec config handler running", { 
       enableAsDefault: pluginConfig.orchestrator?.enableAsDefault,
       directory,
