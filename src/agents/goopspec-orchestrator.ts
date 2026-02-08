@@ -53,7 +53,9 @@ export interface OrchestratorAgentConfig {
  */
 export function createGoopSpecOrchestrator(options: OrchestratorOptions): OrchestratorAgentConfig {
   const { resolver } = options;
-  const model = resolveOrchestratorModel(options);
+  const { model, source } = resolveOrchestratorModel(options);
+
+  log(`Model for goop-orchestrator: ${model} (from: ${source})`);
   
   // Get available sub-agents and skills for dynamic prompt generation
   const availableAgents = resolver.resolveAll("agent");
@@ -110,12 +112,35 @@ export function createGoopSpecOrchestrator(options: OrchestratorOptions): Orches
   };
 }
 
-function resolveOrchestratorModel(options: OrchestratorOptions): string {
+function resolveOrchestratorModel(options: OrchestratorOptions): { model: string; source: string } {
   const agentsModel = options.pluginConfig?.agents?.["goop-orchestrator"]?.model;
-  const orchestratorModel = options.pluginConfig?.orchestrator?.model ?? options.model;
-  const frontmatterModel = getOrchestratorFrontmatterModel(options.resolver);
+  if (agentsModel) {
+    return {
+      model: agentsModel,
+      source: "project config agents.goop-orchestrator.model",
+    };
+  }
 
-  return agentsModel ?? orchestratorModel ?? frontmatterModel ?? "anthropic/claude-opus-4-6";
+  const orchestratorModel = options.pluginConfig?.orchestrator?.model ?? options.model;
+  if (orchestratorModel) {
+    return {
+      model: orchestratorModel,
+      source: options.pluginConfig?.orchestrator?.model ? "project config orchestrator.model" : "runtime options model",
+    };
+  }
+
+  const frontmatterModel = getOrchestratorFrontmatterModel(options.resolver);
+  if (frontmatterModel) {
+    return {
+      model: frontmatterModel,
+      source: "frontmatter default",
+    };
+  }
+
+  return {
+    model: "anthropic/claude-opus-4-6",
+    source: "hardcoded fallback",
+  };
 }
 
 function getOrchestratorFrontmatterModel(resolver: ResourceResolver): string | undefined {
