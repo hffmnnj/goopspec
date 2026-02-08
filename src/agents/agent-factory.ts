@@ -25,6 +25,9 @@ const MEMORY_TOOLS = [
  */
 const MEMORY_SKILLS = ["memory-usage"];
 
+const QUESTION_TOOLS = ["question", "mcp_question"];
+const USER_FACING_AGENTS = ["goop-orchestrator"];
+
 /**
  * OpenCode AgentConfig interface
  * This matches the structure expected by OpenCode's config.agent
@@ -76,10 +79,18 @@ export function createAgentFromMarkdown(
   log(`Creating agent config for: ${agentName}`, { enableMemory });
   
   // Build permission map from tools list
-  let tools = (fm.tools as string[]) ?? [];
+  let tools = normalizeStringListField(fm.tools);
+  let skills = normalizeStringListField(fm.skills);
+  const shouldEnableMemory = enableMemory && hasMemoryCapability(skills, tools);
+  const includeQuestionToolInstructions = shouldInjectQuestionToolInstructions(
+    resourceName,
+    agentName,
+    fm,
+    tools
+  );
   
   // Add memory tools if enabled and not already present
-  if (enableMemory) {
+  if (shouldEnableMemory) {
     const existingTools = new Set(tools.map(t => t.toLowerCase()));
     const memoryToolsToAdd = MEMORY_TOOLS.filter(t => !existingTools.has(t.toLowerCase()));
     if (memoryToolsToAdd.length > 0) {
@@ -94,21 +105,20 @@ export function createAgentFromMarkdown(
   }
   
   // Load and inject skills/references into prompt
-  let skills = (fm.skills as string[]) ?? [];
-  
   // Add memory-usage skill if memory is enabled
-  if (enableMemory && !skills.includes("memory-usage")) {
+  if (shouldEnableMemory && !skills.includes("memory-usage")) {
     skills = [...skills, ...MEMORY_SKILLS];
   }
   
-  const references = (fm.references as string[]) ?? [];
+  const references = normalizeStringListField(fm.references);
   const composedPrompt = composeAgentPrompt(
     resource.body, 
     skills, 
     references, 
     resolver,
     agentName,
-    enableMemory
+    shouldEnableMemory,
+    includeQuestionToolInstructions
   );
   
   // Build the agent configuration
@@ -161,7 +171,8 @@ function composeAgentPrompt(
   referenceNames: string[],
   resolver: ResourceResolver,
   agentName: string,
-  enableMemory: boolean = true
+  enableMemory: boolean = true,
+  includeQuestionToolInstructions: boolean = false
 ): string {
   const sections: string[] = [basePrompt];
   
@@ -221,74 +232,93 @@ function composeAgentPrompt(
   }
   
   // Add memory system instructions if enabled
-  if (enableMemory) {
+  if (enableMemory && skillNames.includes("memory-usage")) {
     sections.push(`
 ## Memory System
 
-You have access to a persistent memory system that stores knowledge across sessions. Use it to:
+Use memory to preserve continuity across sessions:
+- Search first: \`memory_search\`
+- Save findings/patterns: \`memory_save\`
+- Save architecture choices with rationale: \`memory_decision\`
+- Capture quick notes: \`memory_note\`
+- Remove stale/incorrect records when needed: \`memory_forget\`
 
-- **Remember decisions**: Use \`memory_decision\` to log architectural decisions with reasoning
-- **Store observations**: Use \`memory_save\` to save important findings and patterns
-- **Quick notes**: Use \`memory_note\` for quick context notes
-- **Search context**: Use \`memory_search\` to find relevant past context
-- **Clean up**: Use \`memory_forget\` to remove outdated or incorrect memories
-
-**Best practices:**
-- Search memory before making decisions that might repeat past mistakes
-- Log all significant architectural decisions for future reference
-- Store patterns, conventions, and project-specific knowledge
-- Reference memory IDs when building on previous work
+Best practice: search before decisions, then persist key outcomes.
 `);
   }
 
-  // Add question tool instructions (always injected)
-  sections.push(`
+  if (includeQuestionToolInstructions) {
+    sections.push(`
 ## Question Tool (User Interaction)
 
-When you need user input, **always use the \`mcp_question\` tool** instead of plain text prompts.
+When user input is required, use **\`mcp_question\`** (not plain-text prompts).
 
-### When to Use
-- Asking for confirmation (e.g., "Ready to proceed?", "Lock the spec?")
-- Offering choices (e.g., "Which approach?", "Select files to include")
-- Gathering preferences or decisions
-- Any time you expect the user to choose from options
+Use it for confirmations, choices, and preference decisions.
+Provide concise prompts with structured options (\`header\`, \`question\`, \`options\`, optional \`multiple\`).
 
-### How to Use
-\`\`\`
-mcp_question({
-  questions: [{
-    header: "Confirm Action",           // Max 30 chars
-    question: "Ready to lock the specification and proceed to execution?",
-    options: [
-      { label: "Confirm", description: "Lock spec and start execution" },
-      { label: "Amend", description: "Modify requirements first" },
-      { label: "Cancel", description: "Return to planning" }
-    ],
-    multiple: false                      // true for multi-select
-  }]
-})
-\`\`\`
-
-### Key Parameters
-- **header**: Short label (max 30 chars) shown above the question
-- **question**: Full question text
-- **options**: Array of choices with label + description
-- **multiple**: Set true to allow selecting multiple options
-
-### Anti-Pattern (Don't Do This)
-\`\`\`
-❌ "Type 'confirm' to proceed, 'amend' to modify, or 'cancel' to abort"
-\`\`\`
-
-### Correct Pattern
-\`\`\`
-✅ Use mcp_question with structured options
-\`\`\`
-
-The question tool provides a better UX with clickable options instead of requiring users to type exact keywords.
+Do not ask users to type free-form command words like "confirm/amend/cancel".
 `);
+  }
   
   return sections.join("\n");
+}
+
+function hasMemoryCapability(skills: string[], tools: string[]): boolean {
+  if (skills.includes("memory-usage")) {
+    return true;
+  }
+
+  const normalizedTools = new Set(tools.map(tool => tool.toLowerCase()));
+  return MEMORY_TOOLS.some(tool => normalizedTools.has(tool.toLowerCase()));
+}
+
+function normalizeStringListField(value: unknown): string[] {
+  if (Array.isArray(value)) {
+    return value
+      .filter((item): item is string => typeof item === "string")
+      .map(item => item.trim())
+      .filter(item => item.length > 0);
+  }
+
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (trimmed.length === 0) {
+      return [];
+    }
+
+    if (trimmed.startsWith("[") && trimmed.endsWith("]")) {
+      try {
+        const parsed = JSON.parse(trimmed);
+        return normalizeStringListField(parsed);
+      } catch {
+        return [];
+      }
+    }
+
+    return [trimmed];
+  }
+
+  return [];
+}
+
+function shouldInjectQuestionToolInstructions(
+  resourceName: string,
+  agentName: string,
+  frontmatter: ResolvedResource["frontmatter"],
+  tools: string[]
+): boolean {
+  if (frontmatter.user_facing === true || frontmatter.mode === "orchestrator") {
+    return true;
+  }
+
+  const normalizedName = resourceName.toLowerCase();
+  const normalizedAgentName = agentName.toLowerCase();
+  if (USER_FACING_AGENTS.includes(normalizedName) || USER_FACING_AGENTS.includes(normalizedAgentName)) {
+    return true;
+  }
+
+  const normalizedTools = new Set(tools.map(tool => tool.toLowerCase()));
+  return QUESTION_TOOLS.some(tool => normalizedTools.has(tool.toLowerCase()));
 }
 
 function normalizeReferencePath(name: string): string {

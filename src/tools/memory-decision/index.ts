@@ -12,16 +12,7 @@ import type { PluginContext, ToolContext } from "../../core/types.js";
  */
 export function createMemoryDecisionTool(ctx: PluginContext): ToolDefinition {
   return tool({
-    description: `Record an important decision with its reasoning.
-
-Use this to document:
-- Architecture decisions
-- Technology choices
-- Design trade-offs
-- User preference decisions
-- Implementation approaches
-
-Decisions are stored with high importance for future reference.`,
+    description: "Record a decision with its reasoning and optional alternatives; saved as high-importance memory for future reference.",
     args: {
       decision: tool.schema
         .string()

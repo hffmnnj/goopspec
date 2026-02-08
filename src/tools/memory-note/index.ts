@@ -12,14 +12,7 @@ import type { PluginContext, ToolContext } from "../../core/types.js";
  */
 export function createMemoryNoteTool(ctx: PluginContext): ToolDefinition {
   return tool({
-    description: `Quickly save a brief note to memory.
-
-This is a simplified version of memory_save for quick captures.
-Use this for:
-- Quick observations
-- Temporary reminders
-- Brief insights
-- Things to remember later`,
+    description: "Quickly save a short note to persistent memory using a simplified memory_save-style interface.",
     args: {
       note: tool.schema
         .string()

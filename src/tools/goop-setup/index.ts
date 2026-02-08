@@ -535,15 +535,7 @@ function formatStatus(status: SetupStatus): string {
  */
 export function createGoopSetupTool(_ctx: PluginContext): ToolDefinition {
   return tool({
-    description: `GoopSpec configuration tool. Actions:
-- 'detect': Check current setup state
-- 'init': Full first-time initialization wizard
-- 'plan': Preview changes before applying
-- 'apply': Write configuration changes
-- 'verify': Check if setup is complete and working
-- 'reset': Reset configuration to defaults
-- 'models': Show agent model suggestions
-- 'status': Show current configuration summary`,
+    description: "GoopSpec configuration and setup tool for detect/init/plan/apply/verify/reset/models/status actions.",
     args: {
       action: tool.schema.enum(["detect", "init", "plan", "apply", "verify", "reset", "models", "status"]),
       // Scope options

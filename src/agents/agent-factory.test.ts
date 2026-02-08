@@ -16,6 +16,9 @@ import {
   TEST_SKILL_RESOURCE,
   type ResolvedResource,
 } from "../test-utils.js";
+import { createResourceResolver } from "../core/resolver.js";
+
+const PROJECT_ROOT = process.cwd();
 
 describe("agent-factory", () => {
   let cleanup: () => void;
@@ -317,16 +320,37 @@ describe("agent-factory", () => {
         // Should have no permission entry
         expect(config.permission).toBeUndefined();
       });
+
+      it("normalizes stringified tools list in frontmatter", () => {
+        const resource = createMockResource({
+          name: "string-tools-agent",
+          type: "agent",
+          frontmatter: {
+            mode: "subagent",
+            tools: "[]" as unknown as string[],
+            description: "String tools",
+          },
+          body: "Prompt",
+        });
+
+        const resolver = createMockResourceResolver();
+        const config = createAgentFromMarkdown(resource, resolver, {
+          enableMemoryTools: false,
+        });
+
+        expect(config.permission).toBeUndefined();
+      });
     });
 
     describe("memory tools integration", () => {
-      it("adds memory tools by default", () => {
+      it("adds memory tools for memory-capable agents", () => {
         const resource = createMockResource({
           name: "memory-agent",
           type: "agent",
           frontmatter: {
             mode: "subagent",
             tools: ["read"],
+            skills: ["memory-usage"],
             description: "Memory test",
           },
           body: "Prompt",
@@ -337,6 +361,25 @@ describe("agent-factory", () => {
 
         expect(config.permission?.memory_save).toBe("allow");
         expect(config.permission?.memory_search).toBe("allow");
+      });
+
+      it("skips memory tools when agent has no memory capability", () => {
+        const resource = createMockResource({
+          name: "no-memory-capability-agent",
+          type: "agent",
+          frontmatter: {
+            mode: "subagent",
+            tools: ["read"],
+            description: "No memory capability",
+          },
+          body: "Prompt",
+        });
+
+        const resolver = createMockResourceResolver();
+        const config = createAgentFromMarkdown(resource, resolver);
+
+        expect(config.permission?.memory_save).toBeUndefined();
+        expect(config.permission?.memory_search).toBeUndefined();
       });
 
       it("respects enableMemoryTools option", () => {
@@ -385,6 +428,7 @@ describe("agent-factory", () => {
           type: "agent",
           frontmatter: {
             mode: "subagent",
+            skills: ["memory-usage"],
             description: "Memory prompt",
           },
           body: "Base prompt",
@@ -395,6 +439,64 @@ describe("agent-factory", () => {
 
         expect(config.prompt).toContain("Memory System");
         expect(config.prompt).toContain("memory_decision");
+      });
+
+      it("omits memory instructions for non-memory agents", () => {
+        const resource = createMockResource({
+          name: "stateless-agent",
+          type: "agent",
+          frontmatter: {
+            mode: "subagent",
+            description: "No memory prompt",
+          },
+          body: "Base prompt",
+        });
+
+        const resolver = createMockResourceResolver();
+        const config = createAgentFromMarkdown(resource, resolver);
+
+        expect(config.prompt).not.toContain("Memory System");
+      });
+    });
+
+    describe("question tool instructions", () => {
+      it("injects question instructions for orchestrator agents", () => {
+        const resource = createMockResource({
+          name: "goop-orchestrator",
+          type: "agent",
+          frontmatter: {
+            name: "goop-orchestrator",
+            mode: "orchestrator",
+            tools: ["question"],
+            description: "Orchestrator",
+          },
+          body: "Base prompt",
+        });
+
+        const resolver = createMockResourceResolver();
+        const config = createAgentFromMarkdown(resource, resolver);
+
+        expect(config.prompt).toContain("Question Tool (User Interaction)");
+      });
+
+      it("omits question instructions for subagents", () => {
+        const resource = createMockResource({
+          name: "goop-executor",
+          type: "agent",
+          frontmatter: {
+            mode: "subagent",
+            tools: ["read", "bash"],
+            description: "Executor",
+          },
+          body: "Base prompt",
+        });
+
+        const resolver = createMockResourceResolver();
+        const config = createAgentFromMarkdown(resource, resolver, {
+          enableMemoryTools: false,
+        });
+
+        expect(config.prompt).not.toContain("Question Tool (User Interaction)");
       });
     });
 
@@ -638,6 +740,35 @@ describe("agent-factory", () => {
 
       const issues = validateAgentResource(resource);
       expect(issues.length).toBeGreaterThan(1);
+    });
+  });
+
+  describe("bundled agent composition", () => {
+    it("composes all 13 bundled agents without failures", () => {
+      const resolver = createResourceResolver(PROJECT_ROOT);
+      const agentResources = resolver.resolveAll("agent");
+
+      expect(agentResources.length).toBe(13);
+
+      const failures: string[] = [];
+      const composed = new Map<string, AgentConfig>();
+
+      for (const agent of agentResources) {
+        try {
+          const config = createAgentFromMarkdown(agent, resolver);
+          composed.set(agent.name, config);
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          failures.push(`${agent.name}: ${message}`);
+        }
+      }
+
+      expect(failures).toEqual([]);
+      expect(composed.has("memory-distiller")).toBe(true);
+
+      const memoryDistillerConfig = composed.get("memory-distiller");
+      expect(memoryDistillerConfig).toBeDefined();
+      expect(memoryDistillerConfig?.prompt.length).toBeGreaterThan(0);
     });
   });
 });

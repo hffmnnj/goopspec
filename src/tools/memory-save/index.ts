@@ -25,16 +25,7 @@ function normalizeImportance(value: number | undefined): number {
  */
 export function createMemorySaveTool(ctx: PluginContext): ToolDefinition {
   return tool({
-    description: `Save important information to persistent memory.
-
-Use this to remember:
-- Decisions made and their reasoning
-- User preferences and patterns discovered
-- Important observations about the codebase
-- Facts that should persist across sessions
-- Code patterns and architectural decisions
-
-The memory will be searchable and can be retrieved in future sessions.`,
+    description: "Save structured information to persistent memory for retrieval across sessions.",
     args: {
       title: tool.schema
         .string()

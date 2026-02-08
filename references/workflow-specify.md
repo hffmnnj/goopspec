@@ -1,121 +1,41 @@
 # Workflow: Specify Phase
 
-**GoopSpec Voice:** Contractual, Precise, Binding.
+Specify defines the contract before execution.
 
-The Specify phase answers: **What exactly will we deliver?** This is the **CONTRACT**.
+## Objective
 
-## Position in Workflow
+Produce and confirm a binding contract in `SPEC.md` with an executable `BLUEPRINT.md`.
 
-```
-┌─────────────┐     ┌─────────────┐     ┌─────────────┐
-│    PLAN     │ ──▶ │  RESEARCH   │ ──▶ │   SPECIFY   │
-│  (Intent)   │     │  (Explore)  │     │ (Contract)  │
-└─────────────┘     └─────────────┘     └─────────────┘
-                                              ↑
-                                        (You are here)
+## Required Outputs
 
-       ╔══════════════════════════════════════════════╗
-       ║          CONTRACT GATE                       ║
-       ║   User MUST confirm before execution begins  ║
-       ╚══════════════════════════════════════════════╝
-```
+- `SPEC.md`: must-haves, nice-to-haves, out-of-scope, traceability
+- `BLUEPRINT.md`: waves and atomic tasks aligned to must-haves
 
-## The Contract Philosophy
+## Contract Gate
 
-*   **No Surprises:** Everything implemented must be in the spec.
-*   **Must vs. Nice:** Ruthless prioritization.
-*   **Explicit Scope:** "Out of Scope" is as important as "Must Have".
+Before execution, present:
+- must-haves (committed delivery)
+- out-of-scope (explicit exclusions)
+- wave summary and task coverage
 
-## Activities
+User chooses:
+- `confirm` -> lock spec and proceed to execute
+- `amend` -> revise contract then re-present gate
+- `cancel` -> return to planning
 
-### 1. Synthesize & Draft
-Combine Intent (Plan) + Approach (Research) into `SPEC.md`.
+## Amendment Rule
 
-*   **Must Haves:** Non-negotiable deliverables.
-*   **Nice to Haves:** Best effort, time permitting.
-*   **Out of Scope:** Explicitly excluded to prevent creep.
-
-### 2. The Blueprinting
-Create `BLUEPRINT.md` - the execution plan.
-*   Break down into **Waves**.
-*   Define **Atomic Tasks**.
-
-## The Contract Gate
-
-This is the most critical interaction in the GoopSpec workflow.
-
-```text
-╭─ ⬢ GoopSpec ───────────────────────────────────────╮
-│                                                    │
-│  🔒 CONTRACT GATE                                  │
-│                                                    │
-│  I'm ready to lock the specification.              │
-│                                                    │
-│  MUST HAVES (I commit to delivering):              │
-│  • User Login (Email/Pass)                         │
-│  • "Forgot Password" Flow                          │
-│                                                    │
-│  NICE TO HAVES (Best effort):                      │
-│  • Social Login (Google)                           │
-│                                                    │
-│  OUT OF SCOPE:                                     │
-│  • Admin Dashboard                                 │
-│                                                    │
-│  ─────────────────────────────────────────────     │
-│  ► Type "confirm" to Lock Spec and Execute.        │
-│  ► Type "amend" to request changes.                │
-│                                                    │
-╰────────────────────────────────────────────────────╯
-```
-
-## Amendments
-
-If the user rejects the contract or needs changes later:
-
-1.  **Command:** `/goop-amend "Add Social Login to Must Haves"`
-2.  **Action:** Agent updates `SPEC.md` and `BLUEPRINT.md`.
-3.  **Gate:** Re-present the Contract Gate.
-
-**Note:** Amending a locked spec during execution triggers a "Scope Change" warning.
-
-## Output: SPEC.md & BLUEPRINT.md
-
-### SPEC.md
-The "What".
-```markdown
-# Specification: Auth Feature
-**Status:** LOCKED
-
-## Must Haves
-- [ ] Login Form
-- [ ] API Integration
-```
-
-### BLUEPRINT.md
-The "How".
-```markdown
-# Blueprint
-## Wave 1: Foundation
-- [ ] Task 1.1: Setup Auth0 Provider
-```
+After lock, any scope change must go through `/goop-amend` with impact analysis and re-confirmation.
 
 ## Commands
 
-| Command | Effect |
-| :--- | :--- |
-| `/goop-specify` | Generate spec and trigger Contract Gate. |
-| `/goop-amend` | Modify a draft or locked spec. |
-| `/goop-status` | View current spec status. |
+- `/goop-specify` - run contract gate
+- `/goop-amend` - request contract change
+- `/goop-status` - inspect lock state
 
 ## Memory Triggers
 
-*   **Save:** The Locked Contract (High Importance).
-*   **Decision:** Scope exclusions (Why did we exclude X?).
+- save lock decision at high importance
+- save rationale for major exclusions
 
-```javascript
-memory_decision({
-  decision: "Excluded Admin Dashboard",
-  reasoning: "User wants to focus on consumer-facing features first.",
-  impact: "high"
-})
-```
+*Workflow: Specify*

@@ -1,473 +1,61 @@
 # Discovery Interview Process
 
-Detailed process for conducting the `/goop-discuss` discovery interview.
+Process for `/goop-discuss`.
 
-## Phase 1: Setup
+## 1) Setup
 
-**Execute these checks BEFORE any user interaction:**
+Run before questions:
 
-### 1.1 Check current state
-
-```
+```text
 goop_status()
-goop_state({ action: "get" })        # NEVER read state.json directly
+goop_state({ action: "get" })
 ```
 
-**CRITICAL: Never read or edit .goopspec/state.json directly. Always use `goop_state` tool.**
+Then check:
+- existing `SPEC.md`/`BLUEPRINT.md` (archive/continue/overwrite flow)
+- existing `REQUIREMENTS.md` (fresh/update/reuse)
+- memory context with `memory_search`
 
-### 1.2 Git branch check (Session Start)
+Optional: branch hygiene at session start.
 
-Check current branch and offer to create a new one for this work:
+## 2) Depth Selection
 
-```bash
-git branch --show-current
-git status
+Ask user to choose: Light (`shallow`), Standard (`standard`), Deep (`deep`).
+
+Persist with:
+
+```text
+goop_state({ action: "set-depth", depth: "shallow|standard|deep" })
 ```
 
-Use `question` tool:
-- header: "Git Branch"
-- question: "You're on branch `[current-branch]`. How would you like to proceed?"
-- options:
-  - "Create new feature branch (Recommended)" — Create a clean branch for this work
-  - "Stay on current branch" — Continue on [current-branch]
+## 3) Interview
 
-**On "Create new feature branch":**
+Collect six items:
+- vision
+- must-haves
+- constraints
+- out of scope
+- assumptions
+- risks + mitigations
 
-Ask for branch name context (or infer from topic):
-```
-Branch name will be: feat/[short-description]
-```
+Use memory-first prompting: recall known preferences first, then ask.
 
-Then create branch:
-```bash
-git checkout -b feat/[short-description]
-```
+Optional creative brainstorming is opt-in only.
 
-**Branch naming rules:**
-- Format: `type/short-description`
-- Types: `feat/`, `fix/`, `refactor/`, `chore/`
-- Keep descriptions short and kebab-case
-- Check existing branches first: `git branch --list`
+## 4) Confirm and Save
 
-### 1.3 Check for existing project documents
+Present summary, ask for confirmation, then write `REQUIREMENTS.md`.
 
-```
-Read(".goopspec/SPEC.md")
-Read(".goopspec/BLUEPRINT.md")
-```
+Mark complete:
 
-**If SPEC.md or BLUEPRINT.md exist**, the user may have completed work that needs archiving.
-
-Use `question` tool:
-- header: "Existing Project"
-- question: "I found existing project documents. How would you like to proceed?"
-- options:
-  - "Archive and start fresh (Recommended)" — Move current docs to archive, create new
-  - "Continue existing project" — Resume work (exit, run /goop-status)
-  - "Overwrite without archiving" — Replace documents (loses history)
-
-**On "Archive":** 
-```
-task({
-  subagent_type: "goop-writer",
-  description: "Archive milestone",
-  prompt: "Archive the current milestone. Move SPEC.md, BLUEPRINT.md, CHRONICLE.md to .goopspec/archive/[milestone-slug]/"
-})
-```
-Then continue with discovery.
-
-**On "Continue":** Exit and suggest `/goop-status`.
-**On "Overwrite":** Warn about losing history, then continue.
-
-### 1.4 Check for existing REQUIREMENTS.md
-
-```
-Read(".goopspec/REQUIREMENTS.md")    # If exists, interview was done
-```
-
-### 1.5 If REQUIREMENTS.md exists
-
-Use `question` tool:
-- header: "Existing Discovery"
-- question: "I found an existing discovery interview. How would you like to proceed?"
-- options:
-  - "Start fresh (Recommended)" — Clear previous discovery, start new interview
-  - "Review and update" — Load previous answers, modify as needed
-  - "Use existing" — Skip interview, go straight to /goop-plan
-
-### 1.6 Initialize if needed
-
-```bash
-mkdir -p .goopspec
-```
-
-### 1.7 Search memory for context
-
-```
-memory_search({ query: "project preferences architecture [user's topic]", limit: 5 })
-```
-
-Store relevant findings - use them to skip questions you already know answers to.
-
-### 1.8 Research Depth Selection
-
-Before starting the six-question interview, ask the user which research depth they want.
-
-Use `question` tool:
-- header: "Research Depth"
-- question: "How thorough should planning and research be for this work?"
-- options:
-  - "Light" — Fastest path with minimal agents and focused coverage (~1x baseline token/cost)
-  - "Standard" — Balanced depth with moderate exploration (~2x baseline token/cost)
-  - "Deep" — Most thorough with multiple parallel agents and expanded analysis (~3-5x baseline token/cost)
-
-Map the selected label to workflow depth:
-- Light -> `shallow`
-- Standard -> `standard`
-- Deep -> `deep`
-
-Persist selection in workflow state:
-```
-goop_state({ action: "set-depth", depth: "[shallow|standard|deep]" })
-```
-
-Confirm selection to the user before moving on:
-```
-Research depth selected: [Light|Standard|Deep] ([shallow|standard|deep], [~1x|~2x|~3-5x] baseline)
-```
-
-### Depth Tier Behavior Reference
-
-Use this table as the authoritative behavior contract across discuss, plan, and research phases.
-
-| Tier | Discuss | Plan | Research | Agents | Token Impact |
-|------|---------|------|----------|--------|--------------|
-| **Shallow (Light)** | Minimal clarification; accept requirements largely as-given and only resolve blockers. | Lean blueprint with fewer waves and minimal research gates. | Quick lookup from a single source; no deep exploration. | 1 agent at a time (sequential only). | ~1x baseline |
-| **Standard** | Balanced clarification; probe ambiguities and confirm key assumptions. | Full blueprint with wave decomposition and 3-4 contextual questions per wave. | Targeted exploration across 2-3 sources to resolve known unknowns. | 1-2 agents concurrently when tasks are independent. | ~2x baseline |
-| **Deep** | Thorough discovery; challenge assumptions and explicitly explore edge cases and failure modes. | Detailed blueprint with comprehensive research and 5-6 contextual questions per wave. | Thorough multi-source investigation with parallel sub-research and deeper synthesis. | Multiple parallel agents (researcher + explorer + librarian). | ~3-5x baseline |
-
----
-
-## Phase 2: Discovery Interview
-
-**Display stage banner:**
-```
-## 🔮 GoopSpec · Discovery Interview
-
-Let's nail down the requirements before planning.
-I'll ask six key questions to understand your needs.
-
----
-```
-
-### 2.1 Open the conversation
-
-If `$ARGUMENTS` provided:
-> "You want to **[argument]**. Let me understand this better."
-
-Otherwise:
-> "What do you want to build?"
-
-### 2.1.1 Creative Agent Opt-In (Optional)
-
-After the user states their vision, offer creative brainstorming with The Visionary.
-
-**This is the sole exception to the "no agents during interview" guideline.** The creative agent is opt-in only and focused on ideation, not conversation.
-
-Use `question` tool:
-- header: "Creative Input"
-- question: "Would you like to brainstorm architecture and design ideas with The Visionary before continuing?"
-- options:
-  - "Yes, brainstorm with The Visionary" — Delegate to goop-creative for creative exploration
-  - "No, continue with standard interview" — Skip creative input, proceed to questions
-
-**On "Yes, brainstorm with The Visionary":**
-
-1. Delegate to goop-creative with the user's vision statement and memory context:
-```
-goop_delegate({
-  agent: "goop-creative",
-  prompt: "Explore architecture and design possibilities for this vision: [user's vision statement]",
-  context: "[user's vision statement + relevant memory context from Phase 1.7]"
-})
-```
-
-2. After creative session completes, integrate the output:
-   - Store the creative output for REQUIREMENTS.md integration (see Phase 3.1)
-   - Display a brief summary: "Creative session explored: [key themes from output]"
-   - Resume the remaining discovery questions with enriched context
-
-3. When resuming questions (Phase 2.2), reference the creative output:
-   - "Based on the architecture exploration, what are your must-haves?"
-   - "The creative session suggested [X]. Does that affect your constraints?"
-
-**On "No, continue with standard interview":**
-
-Continue to Phase 2.2 unchanged. The standard interview path is fully preserved.
-
-### 2.2 Work through the six questions
-
-Ask naturally, not as a checklist. Weave questions based on their responses.
-
-**Memory-first protocol:**
-Before asking ANYTHING:
-1. Check memory: `memory_search({ query: "[topic] preference" })`
-2. If found: "I recall you prefer X for this. Still true? [Y/n]"
-3. If not found: Ask, then SAVE the answer with `memory_note`
-
-### 2.3 Probe for specifics
-
-| Vague Answer | Follow-up |
-|--------------|-----------|
-| "It should be fast" | "What's the target? Sub-100ms? Sub-1s?" |
-| "Standard auth" | "JWT? Sessions? OAuth? What's the token TTL?" |
-| "Good UX" | "What does that mean for this feature? Animations? Accessibility level?" |
-
-### 2.4 Checklist tracker (internal)
-
-Track progress through the six questions:
-- [ ] Vision defined (goal, problem, users)
-- [ ] Must-haves listed (at least 1)
-- [ ] Constraints documented (stack, performance)
-- [ ] Out of scope defined (at least 1 item)
-- [ ] Assumptions listed
-- [ ] Risks identified (at least 1 with mitigation)
-
-### 2.5 Completion check
-
-When all six questions are answered:
-
-1. **Output the summary as a regular message first:**
-   Present the vision, must-haves, constraints, out-of-scope, assumptions, and risks as formatted text.
-
-2. **Then ask a short question:**
-
-Use `question` tool:
-- header: "Discovery Check"
-- question: "Does this capture your requirements?"
-- options:
-  - "Looks good, proceed" — Generate REQUIREMENTS.md
-  - "I want to add more" — Continue discussion
-  - "Start over" — Clear and restart interview
-
----
-
-## Phase 3: Generate REQUIREMENTS.md
-
-**Display stage banner:**
-```
-## 🔮 GoopSpec · Saving Discovery
-
-⏳ Generating REQUIREMENTS.md...
-
----
-```
-
-### 3.1 Create REQUIREMENTS.md
-
-Write directly (orchestrator can write planning docs):
-
-```markdown
-# REQUIREMENTS: [Feature Name]
-
-**Generated:** [timestamp]
-**Interview Status:** Complete
-**Ready for Planning:** Yes
-
----
-
-## Vision
-
-[Vision statement from interview]
-
-**Problem Solved:** [From interview]
-
-**Why Now:** [From interview]
-
----
-
-## Creative Design
-*Generated by goop-creative*
-
-[Creative agent output - structured markdown with architecture proposals, system design ideas, alternative approaches, etc.]
-
-> **Note:** This section captures creative exploration from The Visionary agent. Ideas here inform but do not replace must-haves defined below.
-
----
-
-## Must-Haves (The Contract)
-
-- [ ] **MH1**: [Title]
-  - [Description]
-  - **Acceptance:** [Criteria]
-
-- [ ] **MH2**: [Title]
-  - [Description]
-  - **Acceptance:** [Criteria]
-
----
-
-## Out of Scope
-
-- **[Item]** — [Reason]
-- **[Item]** — [Reason]
-
----
-
-## Constraints
-
-### Technical Constraints
-- [Stack, frameworks, versions]
-
-### Practical Constraints
-- [Timeline, resources]
-
----
-
-## Assumptions
-
-- **[Assumption]** — If false: [Impact]
-
----
-
-## Risks & Mitigations
-
-| Risk | Impact | Likelihood | Mitigation |
-|------|--------|------------|------------|
-| [Risk] | [H/M/L] | [H/M/L] | [Plan] |
-
----
-
-*Discovery interview completed. Ready for /goop-plan.*
-```
-
-**Note:** The "Creative Design" section is only included if the user opted into creative brainstorming in Phase 2.1.1. If declined, omit this section entirely.
-
-### 3.2 Mark interview complete
-
-```
+```text
 goop_state({ action: "complete-interview" })
 ```
 
-This atomically updates the workflow state. **NEVER edit state.json directly.**
+Persist summary with `memory_save`.
 
-### 3.3 Save to memory
+## 5) Completion
 
-```
-memory_save({
-  type: "note",
-  title: "Discovery: [Feature Name]",
-  content: "[Summary of key requirements and constraints]",
-  concepts: ["discovery", "requirements", "[domain]"],
-  importance: 0.7
-})
-```
-
----
-
-## Phase 4: Completion
-
-**Display completion banner:**
-
-```
-## 🔮 GoopSpec · Discovery Complete
-
-✨ Requirements captured successfully
-
-**Feature:** [Name]
-
-| Question | Status |
-|----------|--------|
-| Vision | ✓ Defined |
-| Must-Haves | ✓ [N] items |
-| Constraints | ✓ Documented |
-| Out of Scope | ✓ [M] items |
-| Assumptions | ✓ Listed |
-| Risks | ✓ [P] identified |
-
-### Next Step
-
-**Create the blueprint** — Transform requirements into an execution plan
-
-→ `/goop-plan`
-
----
-
-**Also available:**
-- `cat .goopspec/REQUIREMENTS.md` — Review discovery output
-- `/goop-research [topic]` — Investigate unknowns first
-```
-
----
-
-## Examples
-
-### Simple Feature
-
-```
-User: /goop-discuss add dark mode toggle
-
-Orchestrator: "Dark mode toggle. Let me understand what you need.
-
-**Vision:** What's the goal here?
-- Toggle in settings that switches the app theme
-- Persist preference across sessions
-- Respect system preference as default
-
-**Must-haves:** What MUST work?
-- Toggle UI in settings
-- Theme actually changes
-- Persists to localStorage
-
-**Out of scope?**
-- Per-component theme overrides
-- Multiple theme options beyond light/dark
-
-**Constraints?**
-- Using existing Tailwind dark: classes
-- No new dependencies
-
-**Assumptions?**
-- CSS already has dark variants (will verify)
-
-**Risks?**
-- Some components may not have dark styles → will audit first
-
-Great, I have what I need. Creating REQUIREMENTS.md..."
-```
-
-### Complex Feature
-
-```
-User: /goop-discuss rebuild the payment system
-
-Orchestrator: "Payment system rebuild - that's significant. 
-Let me understand the scope.
-
-**Vision:** What's driving this?
-- Current system uses deprecated Stripe API
-- Need to add PayPal as alternative
-- Improve error handling and retry logic
-
-**Must-haves:**
-- Migrate to Stripe v2 API
-- Add PayPal integration
-- Unified payment interface
-- Retry with exponential backoff
-- Webhook handling for async payments
-
-**Out of scope:**
-- Cryptocurrency payments (future)
-- Subscription management (separate project)
-
-**Risks:**
-- Stripe migration may have breaking changes → research first
-- PayPal integration complexity unknown → estimate 2x buffer
-
-I'd recommend running `/goop-research stripe v2 migration` before 
-planning. Want to do that first?"
-```
-
----
+Provide next command: `/goop-plan`.
 
 *Discovery Interview Process*

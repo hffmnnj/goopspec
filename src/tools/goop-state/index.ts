@@ -22,23 +22,7 @@ const VALID_DEPTHS: WorkflowDepth[] = ["shallow", "standard", "deep"];
  */
 export function createGoopStateTool(ctx: PluginContext): ToolDefinition {
   return tool({
-    description: `Safe atomic state operations for GoopSpec workflow. Use this instead of directly editing state.json.
-
-Actions:
-- 'get': Read current state (returns full state object)
-- 'transition': Change workflow phase (validates transitions)
-- 'complete-interview': Mark discovery interview as complete
-- 'reset-interview': Reset interview status (for starting fresh)
-- 'lock-spec': Lock the specification contract
-- 'unlock-spec': Unlock the specification (use with caution)
-- 'confirm-acceptance': Confirm work acceptance
-- 'reset-acceptance': Reset acceptance status
-- 'set-mode': Set task mode (quick/standard/comprehensive/milestone)
-- 'set-depth': Set workflow depth (shallow/standard/deep)
-- 'update-wave': Update wave progress
-- 'reset': Reset entire workflow to idle state
-
-IMPORTANT: Always use this tool instead of Read/Edit on state.json to avoid conflicts.`,
+    description: "Perform safe, atomic GoopSpec workflow state operations including transitions, spec/interview/acceptance flags, mode/depth, wave progress, and reset. NEVER edit .goopspec/state.json directly; use this tool to avoid state conflicts.",
     args: {
       action: tool.schema.enum([
         "get",

@@ -12,15 +12,7 @@ import type { PluginContext, ToolContext } from "../../core/types.js";
  */
 export function createMemoryForgetTool(ctx: PluginContext): ToolDefinition {
   return tool({
-    description: `Delete memories from persistent storage.
-
-Use this to:
-- Remove outdated information
-- Delete incorrect memories
-- Clean up temporary notes
-- Remove sensitive data that was accidentally stored
-
-WARNING: Deleted memories cannot be recovered.`,
+    description: "Delete memories from persistent storage by ID or query (query deletes require confirmation). WARNING: deletions are irreversible.",
     args: {
       id: tool.schema
         .number()

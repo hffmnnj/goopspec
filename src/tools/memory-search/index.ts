@@ -43,16 +43,7 @@ function formatResult(result: SearchResult, index: number): string {
  */
 export function createMemorySearchTool(ctx: PluginContext): ToolDefinition {
   return tool({
-    description: `Search your persistent memory for relevant information.
-
-Use this to recall:
-- Previous decisions and their context
-- User preferences you've learned
-- Past observations about the codebase
-- Historical context for current work
-- Code patterns and architectural decisions
-
-Searches use both keyword matching and semantic similarity.`,
+    description: "Search persistent memory for relevant context using keyword and semantic matching with optional filters.",
     args: {
       query: tool.schema
         .string()

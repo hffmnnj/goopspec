@@ -76,22 +76,7 @@ function getSection(resource: ResolvedResource, section?: string): string | null
  */
 export function createGoopReferenceTool(ctx: PluginContext): ToolDefinition {
   return tool({
-    description: `Load reference documents or templates for specialized knowledge.
-
-**References** provide protocols, checklists, and patterns:
-- subagent-protocol: How subagents communicate with orchestrator
-- deviation-rules: When to auto-fix vs ask user
-- security-checklist: Security verification checklist
-- response-format: Standardized agent response formats
-
-**Templates** provide document structures:
-- spec: SPEC.md template for requirements
-- blueprint: BLUEPRINT.md template for execution plans
-- chronicle: CHRONICLE.md template for progress tracking
-
-Use \`list: true\` to see all available resources.
-Use \`type\` to filter: "reference" or "template" or "all".
-Use \`section\` to extract a specific section from the document.`,
+    description: "Load GoopSpec references or templates, list available resources, or extract a specific section from a resource.",
     args: {
       name: tool.schema.string().optional(),
       type: tool.schema.enum(["reference", "template", "all"]).optional(),
