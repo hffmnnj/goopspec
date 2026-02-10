@@ -80,26 +80,31 @@ IMPORTANT: Always use this tool instead of Read/Edit on state.json to avoid conf
             accept: "✅",
           };
           const phaseIcon = phaseIcons[workflow.phase] || "🔮";
+          const initializedDate = state.project.initialized.includes("T")
+            ? state.project.initialized.split("T")[0]
+            : state.project.initialized;
+          const interviewDate = workflow.interviewCompletedAt
+            ? (workflow.interviewCompletedAt.includes("T")
+              ? workflow.interviewCompletedAt.split("T")[0]
+              : workflow.interviewCompletedAt)
+            : null;
+          const phases = state.execution.completedPhases;
+          const phaseCount = phases.length;
+          let phaseSummary = "None";
+          if (phaseCount > 0) {
+            const lastThree = phases.slice(-3).join(" → ");
+            phaseSummary = phaseCount <= 3
+              ? `${phaseCount} ${phaseCount === 1 ? "phase" : "phases"} (${lastThree})`
+              : `${phaseCount} phases (... → ${lastThree})`;
+          }
           
           return `## 🔮 GoopSpec · State
-
-### Project
-- **Name:** ${state.project.name}
-- **Initialized:** ${state.project.initialized}
-
-### Workflow
-- **Phase:** ${phaseIcon} ${workflow.phase}
-- **Mode:** ${workflow.mode}
-- **Depth:** ${workflow.depth}
-- **Interview:** ${workflow.interviewComplete ? "✓ Complete" : "⏳ Pending"}${workflow.interviewCompletedAt ? ` (${workflow.interviewCompletedAt})` : ""}
-- **Spec:** ${workflow.specLocked ? "🔒 Locked" : "🔓 Unlocked"}
-- **Acceptance:** ${workflow.acceptanceConfirmed ? "✓ Confirmed" : "⏳ Pending"}
-- **Wave:** ${workflow.currentWave}/${workflow.totalWaves}
-- **Last Activity:** ${workflow.lastActivity}
-
-### Execution
+- **Project:** ${state.project.name} | **Initialized:** ${initializedDate}
+- **Phase:** ${phaseIcon} ${workflow.phase} | **Mode:** ${workflow.mode} | **Depth:** ${workflow.depth}
+- **Interview:** ${workflow.interviewComplete ? "✓ Complete" : "⏳ Pending"}${interviewDate ? ` (${interviewDate})` : ""} | **Spec:** ${workflow.specLocked ? "🔒 Locked" : "🔓 Unlocked"}
+- **Acceptance:** ${workflow.acceptanceConfirmed ? "✓ Confirmed" : "⏳ Pending"} | **Wave:** ${workflow.currentWave}/${workflow.totalWaves}
 - **Checkpoint:** ${state.execution.activeCheckpointId || "None"}
-- **Completed:** ${state.execution.completedPhases.length > 0 ? state.execution.completedPhases.join(" → ") : "None"}
+- **Phases:** ${phaseSummary}
 - **Pending Tasks:** ${state.execution.pendingTasks.length}
 
 ---`;

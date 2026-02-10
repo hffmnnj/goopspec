@@ -223,8 +223,8 @@ describe("Tools", () => {
       
       expect(result).toContain("GoopSpec · Status");
       expect(result).toContain("**Project:**");
-      expect(result).toContain("## Workflow");
-      expect(result).toContain("## Execution");
+      expect(result).toContain("**Phase:**");
+      expect(result).toContain("**Spec:**");
     });
     
     it("shows verbose output with pending tasks", async () => {
@@ -245,7 +245,7 @@ describe("Tools", () => {
       const tool = createGoopStatusTool(ctx);
       const result = await tool.execute({ verbose: true }, mockToolContext);
       
-      expect(result).toContain("### Pending Tasks");
+      expect(result).toContain("Pending Tasks");
       expect(result).toContain("Task 1");
       expect(result).toContain("Task 2");
     });

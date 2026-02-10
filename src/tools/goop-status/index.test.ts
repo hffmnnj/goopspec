@@ -70,15 +70,15 @@ describe("goop_status tool", () => {
       const tool = createGoopStatusTool(ctx);
       const result = await tool.execute({}, toolContext);
 
-      expect(result).toContain("**Spec Locked:**");
-      expect(result).toContain("No");
+      expect(result).toContain("**Spec:**");
+      expect(result).toContain("🔓");
     });
 
     it("shows idle phase next steps", async () => {
       const tool = createGoopStatusTool(ctx);
       const result = await tool.execute({}, toolContext);
 
-      expect(result).toContain("Next Steps");
+      expect(result).toContain("→ Next:");
       expect(result).toContain("goop-plan");
     });
 
@@ -106,7 +106,7 @@ describe("goop_status tool", () => {
       expect(result).toContain("## Active Agents");
       expect(result).toContain("goop-executor");
       expect(result).toContain("Handle status display");
-      expect(result).toContain("Claimed Files");
+      expect(result).toContain("[1 file]");
     });
   });
 
@@ -126,7 +126,7 @@ describe("goop_status tool", () => {
       const tool = createGoopStatusTool(ctx);
       const result = await tool.execute({}, toolContext);
 
-      expect(result).toContain("goop-research");
+      expect(result).toContain("goop-specify");
     });
   });
 
@@ -143,7 +143,7 @@ describe("goop_status tool", () => {
       const tool = createGoopStatusTool(ctx);
       const result = await tool.execute({}, toolContext);
 
-      expect(result).toContain("Wave Progress");
+      expect(result).toContain("**Wave:**");
       expect(result).toContain("2/5");
     });
 
@@ -166,7 +166,7 @@ describe("goop_status tool", () => {
       const tool = createGoopStatusTool(ctx);
       const result = await tool.execute({}, toolContext);
 
-      expect(result).toContain("Yes");
+      expect(result).toContain("🔒");
     });
   });
 
@@ -179,7 +179,7 @@ describe("goop_status tool", () => {
       const tool = createGoopStatusTool(ctx);
       const result = await tool.execute({}, toolContext);
 
-      expect(result).toContain("Yes");
+      expect(result).toContain("**Accepted:** ✅");
     });
   });
 
@@ -228,17 +228,17 @@ describe("goop_status tool", () => {
       ctx.stateManager.transitionPhase("research");
 
       const tool = createGoopStatusTool(ctx);
-      const result = await tool.execute({}, toolContext);
+      const result = await tool.execute({ verbose: true }, toolContext);
 
-      expect(result).toContain("Completed Phases");
+      expect(result).toContain("Phases");
       expect(result).toContain("plan");
     });
 
     it("shows None when no completed phases", async () => {
       const tool = createGoopStatusTool(ctx);
-      const result = await tool.execute({}, toolContext);
+      const result = await tool.execute({ verbose: true }, toolContext);
 
-      expect(result).toContain("None");
+      expect(result).toContain("**Phases:** None");
     });
   });
 
@@ -253,17 +253,47 @@ describe("goop_status tool", () => {
       });
 
       const tool = createGoopStatusTool(ctx);
-      const result = await tool.execute({}, toolContext);
+      const result = await tool.execute({ verbose: true }, toolContext);
 
       expect(result).toContain("checkpoint-123");
     });
 
     it("shows None when no active checkpoint", async () => {
       const tool = createGoopStatusTool(ctx);
-      const result = await tool.execute({}, toolContext);
+      const result = await tool.execute({ verbose: true }, toolContext);
 
-      expect(result).toContain("Active Checkpoint");
-      expect(result).toContain("None");
+      expect(result).toContain("**Checkpoint:** None");
+    });
+  });
+
+  describe("output size limits", () => {
+    it("non-verbose output is ≤15 lines", async () => {
+      const tool = createGoopStatusTool(ctx);
+      const result = await tool.execute({ verbose: false }, toolContext);
+      const lines = result.split("\n").filter((l: string) => l.trim().length > 0);
+      expect(lines.length).toBeLessThanOrEqual(15);
+    });
+
+    it("verbose output is ≤30 lines", async () => {
+      ctx.stateManager.setState({
+        execution: {
+          activeCheckpointId: "test-checkpoint",
+          completedPhases: ["plan", "execute", "accept"],
+          pendingTasks: [
+            { id: "1", name: "Task A", phase: "1", plan: "1.1", status: "pending" },
+          ],
+        },
+      });
+      ctx.stateManager.updateWorkflow({
+        phase: "execute",
+        currentWave: 2,
+        totalWaves: 5,
+      });
+
+      const tool = createGoopStatusTool(ctx);
+      const result = await tool.execute({ verbose: true }, toolContext);
+      const lines = result.split("\n").filter((l: string) => l.trim().length > 0);
+      expect(lines.length).toBeLessThanOrEqual(30);
     });
   });
 
@@ -306,7 +336,7 @@ describe("goop_status tool", () => {
   describe("last activity", () => {
     it("shows last activity timestamp", async () => {
       const tool = createGoopStatusTool(ctx);
-      const result = await tool.execute({}, toolContext);
+      const result = await tool.execute({ verbose: true }, toolContext);
 
       expect(result).toContain("Last Activity");
       // Should contain an ISO timestamp

@@ -117,6 +117,7 @@ function formatNextSteps(guidance: PhaseGuidance): string[] {
  */
 async function formatStatus(state: GoopState | null, verbose: boolean, ctx: PluginContext): Promise<string> {
   const lines: string[] = [];
+  void ctx;
   
   // Handle missing or incomplete state
   if (!state) {
@@ -134,12 +135,6 @@ async function formatStatus(state: GoopState | null, verbose: boolean, ctx: Plug
   const projectName = state.project?.name || "Unknown";
   const initialized = state.project?.initialized || "Not set";
   
-  lines.push("## 🔮 GoopSpec · Status");
-  lines.push("");
-  lines.push(`**Project:** ${projectName}`);
-  lines.push(`**Initialized:** ${initialized}`);
-  lines.push("");
-  
   // Workflow status with new fields
   const workflow = state.workflow || { 
     phase: "idle", 
@@ -152,9 +147,7 @@ async function formatStatus(state: GoopState | null, verbose: boolean, ctx: Plug
     totalWaves: 0,
     lastActivity: "Never" 
   };
-  
-  lines.push("## Workflow");
-  
+
   // Phase display with visual indicator
   const phaseIcons: Record<string, string> = {
     idle: "⚪",
@@ -164,59 +157,99 @@ async function formatStatus(state: GoopState | null, verbose: boolean, ctx: Plug
     execute: "🔨",
     accept: "✅",
   };
-  const phaseIcon = phaseIcons[workflow.phase] || "⚪";
-  lines.push(`- **Phase:** ${phaseIcon} ${workflow.phase || "idle"}`);
-  
-  // Mode
+
+  // Mode display with icon
   const modeIcons: Record<string, string> = {
     quick: "⚡",
     standard: "📦",
     comprehensive: "🏗️",
     milestone: "🎯",
   };
+
+  if (!verbose) {
+    lines.push("## 🔮 GoopSpec · Status");
+    lines.push(`**Project:** ${projectName}`);
+
+    const phaseIcon = phaseIcons[workflow.phase] || "⚪";
+    const modeIcon = modeIcons[workflow.mode] || "📦";
+    lines.push(`- **Phase:** ${phaseIcon} ${workflow.phase || "idle"} | **Mode:** ${modeIcon} ${workflow.mode || "standard"}`);
+
+    const interviewComplete = (workflow as Record<string, unknown>).interviewComplete as boolean | undefined;
+    const interviewStatus = interviewComplete ? "✅" : "⏳";
+    const specStatus = workflow.specLocked ? "🔒" : "🔓";
+    const acceptedStatus = workflow.acceptanceConfirmed ? "✅" : "⏳";
+    lines.push(`- **Interview:** ${interviewStatus} | **Spec:** ${specStatus} | **Accepted:** ${acceptedStatus}`);
+
+    if (workflow.totalWaves > 0) {
+      const progress = workflow.currentWave / workflow.totalWaves;
+      const progressBar = generateProgressBar(progress);
+      lines.push(`- **Wave:** ${workflow.currentWave}/${workflow.totalWaves} ${progressBar}`);
+    }
+
+    const activeAgents = await getActiveAgents();
+    if (activeAgents.length > 0) {
+      lines.push("");
+      lines.push("## Active Agents");
+      for (const agent of activeAgents) {
+        const rawTaskSummary = agent.task?.trim() || "No task specified";
+        const taskSummary = rawTaskSummary.length > 80
+          ? `${rawTaskSummary.slice(0, 77)}...`
+          : rawTaskSummary;
+        const fileCount = agent.claimedFiles.length;
+        const fileLabel = fileCount === 1 ? "file" : "files";
+        lines.push(`- **${agent.type}** — ${taskSummary} [${fileCount} ${fileLabel}]`);
+      }
+    }
+
+    const guidance = getPhaseGuidance(workflow.phase, workflow.specLocked);
+    lines.push("");
+    lines.push(`→ Next: \`${guidance.next.command}\` — ${guidance.next.description}`);
+
+    return lines.join("\n");
+  }
+
+  lines.push("## 🔮 GoopSpec · Status");
+  lines.push(`**Project:** ${projectName} | **Initialized:** ${initialized}`);
+
+  const phaseIcon = phaseIcons[workflow.phase] || "⚪";
   const modeIcon = modeIcons[workflow.mode] || "📦";
-  lines.push(`- **Mode:** ${modeIcon} ${workflow.mode || "standard"}`);
-  
-  // Contract gates
+  lines.push(`- **Phase:** ${phaseIcon} ${workflow.phase || "idle"} | **Mode:** ${modeIcon} ${workflow.mode || "standard"}`);
+
   const interviewComplete = (workflow as Record<string, unknown>).interviewComplete as boolean | undefined;
-  lines.push(`- **Interview Complete:** ${interviewComplete ? "✅ Yes" : "⏳ No"}`);
-  lines.push(`- **Spec Locked:** ${workflow.specLocked ? "🔒 Yes" : "🔓 No"}`);
-  lines.push(`- **Accepted:** ${workflow.acceptanceConfirmed ? "✅ Yes" : "⏳ Pending"}`);
-  
-  // Wave progress (only show if in execute phase or has waves)
+  const interviewStatus = interviewComplete ? "✅" : "⏳";
+  const specStatus = workflow.specLocked ? "🔒" : "🔓";
+  const acceptedStatus = workflow.acceptanceConfirmed ? "✅" : "⏳";
+  lines.push(`- **Interview:** ${interviewStatus} | **Spec:** ${specStatus} | **Accepted:** ${acceptedStatus}`);
+
   if (workflow.totalWaves > 0) {
     const progress = workflow.currentWave / workflow.totalWaves;
     const progressBar = generateProgressBar(progress);
-    lines.push(`- **Wave Progress:** ${workflow.currentWave}/${workflow.totalWaves} ${progressBar}`);
+    lines.push(`- **Wave:** ${workflow.currentWave}/${workflow.totalWaves} ${progressBar}`);
   }
-  
-  lines.push(`- **Last Activity:** ${workflow.lastActivity || "Never"}\n`);
-  
-  // Execution state
-  const execution = state.execution || { 
-    completedPhases: [], 
-    activeCheckpointId: null, 
+
+  const execution = state.execution || {
+    completedPhases: [],
+    activeCheckpointId: null,
     pendingTasks: [],
-    currentMilestone: undefined
+    currentMilestone: undefined,
   };
-  
-  lines.push("## Execution");
-  
-  if (execution.currentMilestone) {
-    lines.push(`- **Current Milestone:** ${execution.currentMilestone}`);
+
+  lines.push(`- **Last Activity:** ${workflow.lastActivity || "Never"}`);
+  lines.push(`- **Checkpoint:** ${execution.activeCheckpointId || "None"}`);
+
+  const phases = execution.completedPhases || [];
+  const phaseCount = phases.length;
+  let phaseSummary = "None";
+  if (phaseCount > 0) {
+    const lastThree = phases.slice(-3).join(" → ");
+    phaseSummary = phaseCount <= 3
+      ? `${phaseCount} ${phaseCount === 1 ? "phase" : "phases"} (${lastThree})`
+      : `${phaseCount} phases (... → ${lastThree})`;
   }
-  
-  lines.push(`- **Completed Phases:** ${
-    execution.completedPhases?.length > 0 
-      ? execution.completedPhases.join(" → ") 
-      : "None"
-  }`);
-  lines.push(`- **Active Checkpoint:** ${execution.activeCheckpointId || "None"}`);
+  lines.push(`- **Phases:** ${phaseSummary}`);
   lines.push(`- **Pending Tasks:** ${execution.pendingTasks?.length || 0}`);
-  
-  // Verbose: show pending tasks
-  if (verbose && execution.pendingTasks?.length > 0) {
-    lines.push("\n### Pending Tasks");
+
+  if (execution.pendingTasks?.length > 0) {
     for (const task of execution.pendingTasks) {
       const statusIcon = {
         pending: "⏳",
@@ -224,38 +257,37 @@ async function formatStatus(state: GoopState | null, verbose: boolean, ctx: Plug
         completed: "✅",
         failed: "❌",
       }[task.status] || "⏳";
-      lines.push(`- ${statusIcon} ${task.name} (${task.phase}/${task.plan})`);
-    }
-  }
-  
-  const activeAgents = await getActiveAgents();
-  if (activeAgents.length > 0) {
-    lines.push("\n## Active Agents");
-    for (const agent of activeAgents) {
-      const taskSummary = agent.task?.trim() || "No task specified";
-      const claimedFiles = agent.claimedFiles.length > 0
-        ? agent.claimedFiles.join(", ")
-        : "None";
-      lines.push(`- **${agent.type}** — ${taskSummary}`);
-      lines.push(`  **Claimed Files:** ${claimedFiles}`);
+      lines.push(`  - ${statusIcon} ${task.name} (${task.status})`);
     }
   }
 
-  // Recent memory (if available and verbose)
-  if (verbose && ctx.memoryManager) {
-    lines.push("\n## Recent Memory");
-    // Would fetch recent memories here
-    lines.push("- Use `memory_search` to find relevant context");
+  const activeAgents = await getActiveAgents();
+  if (activeAgents.length > 0) {
+    lines.push("");
+    lines.push("## Active Agents");
+    for (const agent of activeAgents) {
+      const rawTaskSummary = agent.task?.trim() || "No task specified";
+      const taskSummary = rawTaskSummary.length > 80
+        ? `${rawTaskSummary.slice(0, 77)}...`
+        : rawTaskSummary;
+      const fileCount = agent.claimedFiles.length;
+      const fileLabel = fileCount === 1 ? "file" : "files";
+      lines.push(`- **${agent.type}** — ${taskSummary} [${fileCount} ${fileLabel}]`);
+    }
   }
-  
-  // Next steps guidance based on current phase
-  lines.push("\n═══ Next Steps ═════════════════════════════════════════════════════");
+
   const guidance = getPhaseGuidance(workflow.phase, workflow.specLocked);
-  const nextSteps = formatNextSteps(guidance);
-  for (const step of nextSteps) {
-    lines.push(step);
+  void formatNextSteps(guidance);
+  lines.push("");
+  lines.push(`→ Next: \`${guidance.next.command}\` — ${guidance.next.description}`);
+  if (guidance.alternatives.length > 0) {
+    const altSummary = guidance.alternatives
+      .slice(0, 2)
+      .map((alt) => `\`${alt.command}\` ${alt.when}`)
+      .join(", ");
+    lines.push(`**Also:** ${altSummary}`);
   }
-  
+
   return lines.join("\n");
 }
 
