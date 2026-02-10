@@ -178,10 +178,10 @@ Future configuration options (planned):
 ## Troubleshooting
 
 ### "Cannot write to file" errors
-The orchestrator is blocked from writing code files. Delegate to goop-executor:
+The orchestrator is blocked from writing code files. Delegate to goop-executor-{tier}:
 ```
 task({
-  subagent_type: "goop-executor",
+  subagent_type: "goop-executor-high",
   description: "Implement feature X",
   prompt: "..."
 })

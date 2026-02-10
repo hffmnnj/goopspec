@@ -8,7 +8,10 @@ Model profiles control which model each GoopSpec agent uses. This enables optima
 |-------|-------|-----------|
 | goop-debugger | openai/gpt-5.3-codex | Best for code-heavy debugging, hypothesis testing, evidence-based analysis |
 | goop-designer | anthropic/claude-opus-4-6 | Best for visual design, UI/UX reasoning, component architecture decisions |
-| goop-executor | openai/gpt-5.3-codex | Best for code implementation, atomic commits, clean patterns |
+| goop-executor-low | anthropic/claude-sonnet-4-5 | Best for simple mechanical edits, config updates, and low-risk scaffolding |
+| goop-executor-medium | kimi-for-coding/k2p5 | Best for business logic, refactors, utility work, and balanced implementation tasks |
+| goop-executor-high | openai/gpt-5.3-codex | Best for complex implementation, architecture-sensitive changes, and critical code paths |
+| goop-executor-frontend | anthropic/claude-opus-4-6 | Best for UI/UX implementation, responsive design, and frontend polish |
 | goop-explorer | google/antigravity-gemini-3-flash | Fast codebase mapping, pattern detection, lightweight exploration |
 | goop-librarian | openai/gpt-5.2 | Best for information retrieval, documentation search, code search |
 | goop-orchestrator | anthropic/claude-opus-4-6 | Complex orchestration, task delegation, context management |

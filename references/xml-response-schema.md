@@ -102,7 +102,7 @@ Every agent response MUST include this XML block at the END of their response:
 ```xml
 <goop_report version="0.2.5">
   <status>COMPLETE</status>
-  <agent>goop-executor</agent>
+  <agent>goop-executor-high</agent>
   <task_id>W2.T3</task_id>
   <task_name>Implement user authentication</task_name>
   
@@ -137,7 +137,7 @@ Every agent response MUST include this XML block at the END of their response:
   
   <handoff>
     <ready>true</ready>
-    <next_action agent="goop-executor">W2.T4: Implement session management</next_action>
+    <next_action agent="goop-executor-medium">W2.T4: Implement session management</next_action>
     <files_to_read>
       <file>src/auth/service.ts</file>
     </files_to_read>
@@ -190,7 +190,7 @@ Every agent response MUST include this XML block at the END of their response:
 ```xml
 <goop_report version="0.2.5">
   <status>BLOCKED</status>
-  <agent>goop-executor</agent>
+  <agent>goop-executor-high</agent>
   <task_id>W2.T2</task_id>
   <task_name>Implement payment integration</task_name>
   

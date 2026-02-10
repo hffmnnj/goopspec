@@ -424,7 +424,7 @@ function generateDelegationGuidance(toolName: string, filePath: string): string 
 
 You attempted to use \`${toolName}\` on \`${filePath}\`.
 
-As the orchestrator, delegate implementation work to **the appropriate goop-executor tier** (low/medium/high/frontend):
+As the orchestrator, delegate implementation work to **the appropriate goop-executor-{tier}** (low/medium/high/frontend):
 
 \`\`\`
 task({

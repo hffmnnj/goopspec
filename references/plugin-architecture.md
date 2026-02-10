@@ -136,7 +136,7 @@ Hooks automatically enforce what's allowed in each phase:
 How orchestrator delegates to specialized agents:
 
 ```
-1. goop_delegate({ agent: "goop-executor", prompt: "...", context: "..." })
+1. goop_delegate({ agent: "goop-executor-{tier}", prompt: "...", context: "..." })
 2. Returns <goop_delegation> with prepared payload
 3. Orchestrator uses task() tool with the delegation
 4. Subagent executes, returns XML envelope response

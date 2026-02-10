@@ -130,7 +130,7 @@ When orchestrator delegates via `task()`:
 
 ```typescript
 task({
-  subagent_type: "goop-executor",
+  subagent_type: "goop-executor-high",
   description: "Implement feature X",
   prompt: `
     ## PROJECT CONTEXT

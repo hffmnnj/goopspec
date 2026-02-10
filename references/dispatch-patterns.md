@@ -18,7 +18,7 @@ For complex tasks that benefit from skills, references, and team awareness:
 ```typescript
 // Step 1: Engineer the prompt
 goop_delegate({
-  agent: "goop-executor",
+  agent: "goop-executor-high",
   prompt: "Implement user authentication",
   context: "Stack: Next.js + NextAuth, Wave 2 Task 3"
 })
@@ -26,7 +26,7 @@ goop_delegate({
 
 // Step 2: Execute (REQUIRED - copy from goop_delegate output)
 task({
-  subagent_type: "goop-executor",
+  subagent_type: "goop-executor-high",
   description: "Implement auth",
   prompt: `[The composedPrompt from goop_delegate output]`
 })
@@ -38,7 +38,7 @@ For simple, well-defined tasks:
 
 ```typescript
 task({
-  subagent_type: "goop-executor",
+  subagent_type: "goop-executor-high",
   description: "Implement auth",
   prompt: `[Your own prompt with context]`
 })
@@ -155,12 +155,12 @@ Main Flow ───────────────────────�
 | Task Type | Primary Agent | Fallback |
 |-----------|--------------|----------|
 | Planning | goop-planner | goop-orchestrator |
-| Implementation | goop-executor | goop-orchestrator |
+| Implementation | goop-executor-{tier} | goop-orchestrator |
 | Verification | goop-verifier | goop-tester |
 | Research | goop-researcher | goop-explorer |
 | Documentation | goop-writer | goop-orchestrator |
-| Debugging | goop-debugger | goop-executor |
-| UI/UX | goop-designer | goop-executor |
+| Debugging | goop-debugger | goop-executor-high |
+| UI/UX | goop-designer | goop-executor-frontend |
 | Testing | goop-tester | goop-verifier |
 
 ### By Complexity

@@ -261,7 +261,7 @@ return {
 
 ## Agent-Specific Protocols
 
-### goop-executor
+### goop-executor-{tier}
 
 Primary implementation agent.
 

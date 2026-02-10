@@ -45,7 +45,7 @@ goop_reference({ name: "execute-process" })
 
 1. **Gate Check** — Verify `specLocked` and BLUEPRINT.md exist
 2. **Load Context** — Read SPEC, BLUEPRINT, CHRONICLE, PROJECT_KNOWLEDGE_BASE
-3. **Wave Loop** — Execute tasks, delegate to goop-executor
+3. **Wave Loop** — Execute tasks, delegate to goop-executor-{tier}
 4. **Deviation Handling** — Apply rules (auto-fix or checkpoint for decisions)
 5. **Wave Completion** — Save checkpoint, generate HANDOFF.md
 6. **Execution Complete** — Transition to accept phase

@@ -25,7 +25,7 @@ Key artifacts live under `.goopspec/team/`.
   "agents": {
     "agent-id": {
       "id": "agent-id",
-      "type": "goop-executor",
+      "type": "goop-executor-medium",
       "task": "Implement registry",
       "claimedFiles": ["src/features/team/registry.ts"],
       "parentId": "parent-agent-id",
@@ -91,7 +91,7 @@ Per-agent naming works for any shared output file. Common base files by agent ty
 | `goop-planner` | `BLUEPRINT.md` | `BLUEPRINT-plan42.md` |
 | `goop-verifier` | `CHRONICLE.md` | `CHRONICLE-ver789.md` |
 | `goop-writer` | `RESEARCH.md` or `SPEC.md` | `SPEC-wrt555.md` |
-| `goop-executor` | Shared docs when needed | `CHRONICLE-exe321.md` |
+| `goop-executor-{tier}` | Shared docs when needed | `CHRONICLE-exe321.md` |
 | `goop-debugger` | `RESEARCH.md` | `RESEARCH-bug007.md` |
 
 These examples are illustrative; the pattern applies to any base file (e.g., `SPEC.md`, `BLUEPRINT.md`, `CHRONICLE.md`, `RESEARCH.md`, `HANDOFF.md`).
@@ -157,7 +157,7 @@ await mergeAgentOutputs({
 WARNING: File Conflict Detected
 
 The file you're trying to write is claimed by another agent:
-- Agent: exec-001 (goop-executor)
+- Agent: exec-001 (goop-executor-high)
 - Task: Modify index
 
 Suggested action: Write to your per-agent file instead:

@@ -115,7 +115,7 @@ Identify:
 
 ```
 task({
-  subagent_type: "goop-executor",
+  subagent_type: "goop-executor-{tier}",
   description: "Execute Task [N.M]",
   prompt: `
 ## TASK
@@ -396,11 +396,11 @@ Orchestrator:
 
 [Delegating Task 1.1...]
 
-goop-executor: Task 1.1 COMPLETE (commit: abc123)
+goop-executor-high: Task 1.1 COMPLETE (commit: abc123)
 
 [Delegating Task 1.2...]
 
-goop-executor: Task 1.2 COMPLETE (commit: def456)
+goop-executor-medium: Task 1.2 COMPLETE (commit: def456)
 
 ## 🔮 GoopSpec · Wave 1 Complete
 
@@ -409,7 +409,7 @@ Continue to Wave 2 in the current session, or pause and resume later.
 
 ### Checkpoint Reached
 ```
-goop-executor: BLOCKED - Rule 4 deviation
+goop-executor-high: BLOCKED - Rule 4 deviation
 
 ## 🔮 GoopSpec · Decision Required
 
