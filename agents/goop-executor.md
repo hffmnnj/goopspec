@@ -212,11 +212,15 @@ memory_search (patterns) → implement → memory_save (discoveries)
 
 5. COMMIT
    - Stage relevant files
-   - Write meaningful message
+   - MUST commit before reporting task completion
+   - Each task must produce at least one atomic commit
+   - Use `type(scope): description` commit format
    - Verify commit
+   - Follow full conventions in `references/git-workflow.md`
 
 6. REPORT
    - Update CHRONICLE.md
+   - Include commit SHA(s) in the XML response envelope
    - Return summary with XML envelope
 ```
 
