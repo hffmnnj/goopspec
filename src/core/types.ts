@@ -128,6 +128,12 @@ export interface GoopState {
     currentWave: number;
     totalWaves: number;
     lastActivity: string; // ISO timestamp
+
+    /**
+     * Persists the user's one-time choice for adding `.goopspec/` to `.gitignore`.
+     * Undefined means the preference has not been set yet.
+     */
+    gitignoreGoopspec?: boolean;
     
     /**
      * @deprecated Use `phase` instead. Kept for backward compatibility with existing state files.
