@@ -217,8 +217,11 @@ describe("goop_setup tool", () => {
       const result = await tool.execute({ action: "models" }, toolContext);
 
       expect(result).toContain("## Usage");
-      expect(result).toContain("goop_setup");
-      expect(result).toContain("agentModels");
+      expect(result).toContain('"agents"');
+      expect(result).toContain('"goop-executor-low": { "model"');
+      expect(result).toContain('"goop-executor-medium": { "model"');
+      expect(result).toContain('"goop-executor-high": { "model"');
+      expect(result).toContain('"goop-executor-frontend": { "model"');
     });
   });
 
