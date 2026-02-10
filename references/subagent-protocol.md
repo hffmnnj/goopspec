@@ -2,6 +2,22 @@
 
 All GoopSpec subagents follow a standardized protocol for memory usage, planning file access, and communication with the orchestrator.
 
+## ⚠️ MANDATORY FIRST STEP
+
+**DO NOT proceed past this section until all steps are complete.**
+
+1. `goop_state({ action: "get" })` - Load workflow state
+2. `Read(".goopspec/SPEC.md")` - Read specification
+3. `Read(".goopspec/BLUEPRINT.md")` - Read execution plan
+4. `memory_search({ query: "[task context]", limit: 5 })` - Search relevant memory
+5. `Read(".goopspec/PROJECT_KNOWLEDGE_BASE.md")` - If present
+
+Load references: `goop_reference({ name: "executor-core" })`
+
+**Then acknowledge:** current phase, spec lock status, active task.
+
+**STOP and return `BLOCKED` if any required step fails. DO NOT CONTINUE past this section.**
+
 ## Core Principles
 
 ```
@@ -32,7 +48,7 @@ Every subagent MUST:
 
 ```typescript
 // 1. Read project state
-Read(".goopspec/state.json")
+goop_state({ action: "get" })
 
 // 2. Read project knowledge base
 Read(".goopspec/PROJECT_KNOWLEDGE_BASE.md")  // If exists
@@ -251,6 +267,7 @@ memory_note({ note: "Fixed: [issue] using [approach]" })
 // Continue working
 
 // Architectural issues (Rule 4: ask)
+// STOP and return BLOCKED. Do not continue until resolved.
 return {
   status: "blocked",
   summary: "Encountered architectural decision",
@@ -430,7 +447,7 @@ memory_save({
 
 Every subagent execution:
 
-- [ ] Read state.json for current phase
+- [ ] Run `goop_state({ action: "get" })` for current phase
 - [ ] Read PROJECT_KNOWLEDGE_BASE.md for conventions
 - [ ] Searched memory for relevant context
 - [ ] Read SPEC.md for requirements

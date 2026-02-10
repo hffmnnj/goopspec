@@ -13,7 +13,9 @@ This reference does not define:
 - Tier-specific emphasis or heuristics
 - Model-specific guidance
 
-## Required First Steps
+## ⚠️ MANDATORY FIRST STEP
+
+**DO NOT proceed past this section until all steps are complete.**
 
 Before any implementation:
 
@@ -23,7 +25,8 @@ Before any implementation:
    - `.goopspec/BLUEPRINT.md`
    - `.goopspec/PROJECT_KNOWLEDGE_BASE.md` (if present)
 3. Validate spec lock:
-   - If `specLocked` is `false`, stop and return `CHECKPOINT`
+   - If `specLocked` is `false`, STOP and return `CHECKPOINT`.
+   - DO NOT CONTINUE when spec is unlocked.
 4. Search memory:
    - `memory_search({ query: "[task description]", limit: 5 })`
 5. Load core references:
@@ -39,6 +42,8 @@ Before any implementation:
    - current task
    - key must-haves
    - project conventions
+
+**STOP and return `BLOCKED` if any required bootstrap step fails. DO NOT CONTINUE past this section.**
 
 ## Plugin Context Awareness
 
@@ -71,7 +76,7 @@ Before any implementation:
 
 ## Spec Alignment (Non-Negotiable)
 
-Every change must map to a spec must-have. If a requested change cannot be mapped, stop and return `CHECKPOINT`.
+Every change must map to a spec must-have. If a requested change cannot be mapped, STOP and return `CHECKPOINT`. DO NOT CONTINUE with implementation.
 
 Include a mapping in executor reports:
 
@@ -202,7 +207,7 @@ Canonical handoff guidance: `references/handoff-protocol.md`.
 
 Never:
 - Start implementation without loading state/spec/task context
-- Continue when spec lock is false
+- Continue when spec lock is false (STOP and return `CHECKPOINT`)
 - Implement changes that cannot map to a must-have
 - Return vague completion reports without evidence
 - Omit commit SHA or verification outcomes
