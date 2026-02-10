@@ -55,6 +55,7 @@
     "@opencode-ai/plugin": "^1.1.44",
     "@opencode-ai/sdk": "^1.1.44",
     "hono": "^4.11.7",
+    "onnxruntime-node": "^1.24.1",
     "picocolors": "^1.1.1",
     "sqlite-vec": "^0.1.7-alpha.2",
     "sqlite-vec-linux-x64": "^0.1.7-alpha.2",
