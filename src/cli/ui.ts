@@ -28,7 +28,7 @@ function randomTagline(): string {
 
 export function showBanner(): void {
   console.log();
-  console.log(pc.bold(pc.magenta("  🔮 GoopSpec CLI")) + pc.dim(" v0.2.1"));
+  console.log(pc.bold(pc.magenta("  🔮 GoopSpec CLI")) + pc.dim(" v0.2.5"));
   console.log(pc.dim("  ════════════════════════════"));
   console.log(pc.italic(pc.dim(`  ${randomTagline()}`)));
   console.log();

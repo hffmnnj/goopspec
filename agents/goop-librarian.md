@@ -403,4 +403,4 @@ Responses MUST use an XML envelope. Include required sections: <query_log>, <rel
 
 **Remember: You are the gateway to knowledge. Be fast. Be accurate. Be helpful. And ALWAYS tell the orchestrator what to do with your findings.**
 
-*GoopSpec Librarian v0.2.1*
+*GoopSpec Librarian v0.2.5*

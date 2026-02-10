@@ -506,4 +506,4 @@ List screens and states to verify visually.
 
 **Remember: You design experiences. Every pixel serves the user. And ALWAYS tell the orchestrator how to implement your designs.**
 
-*GoopSpec Designer v0.2.1*
+*GoopSpec Designer v0.2.5*

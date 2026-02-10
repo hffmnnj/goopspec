@@ -81,6 +81,6 @@ describe("output helpers", () => {
 
     showVersion();
 
-    expect(logSpy).toHaveBeenCalledWith("goopspec v0.2.1");
+    expect(logSpy).toHaveBeenCalledWith("goopspec v0.2.5");
   });
 });

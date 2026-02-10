@@ -5,7 +5,7 @@ import pc from "picocolors";
 import { CLI_COMMANDS, type CliArgs, type CliCommand } from "./types.js";
 import { showBanner, showError } from "./ui.js";
 
-const VERSION = "0.2.1";
+const VERSION = "0.2.5";
 
 function isCliCommand(value: string): value is CliCommand {
   return CLI_COMMANDS.includes(value as CliCommand);

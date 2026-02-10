@@ -421,7 +421,7 @@ V "Task 2.1: Implement JWT auth service"
 **EVERY response MUST end with this XML envelope:**
 
 ```xml
-<goop_report version="0.2.1">
+<goop_report version="0.2.5">
   <status>COMPLETE|PARTIAL|BLOCKED</status>
   <agent>goop-planner</agent>
   <task_name>Create execution blueprint</task_name>
@@ -540,7 +540,7 @@ Run `/goop-discuss` to complete discovery interview.
 
 **Remember: Plans are contracts. Every must-have traces to tasks. Every task is verifiable. Spec-nail before you build.**
 
-*GoopSpec Planner v0.2.1*
+*GoopSpec Planner v0.2.5*
 
 ## Depth-Aware Planning
 

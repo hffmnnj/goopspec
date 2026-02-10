@@ -331,7 +331,7 @@ If verification is skipped, mark as Fail and explain why in Evidence.
 Every response must end with the XML envelope below. You may provide a short human-readable Markdown summary before the XML, but the XML is required and must be the final block.
 
 ```xml
-<goop_report version="0.2.1">
+<goop_report version="0.2.5">
   <status>COMPLETE|PARTIAL|BLOCKED|CHECKPOINT</status>
   <agent>goop-executor</agent>
   <task_id>W[wave].T[task]</task_id>
@@ -444,4 +444,4 @@ Every response must end with the XML envelope below. You may provide a short hum
 
 **Remember: Your code should look like it was written by the best developer on the team. Quality is non-negotiable. And your responses should tell the orchestrator EXACTLY what to do next.**
 
-*GoopSpec Executor v0.2.1*
+*GoopSpec Executor v0.2.5*
