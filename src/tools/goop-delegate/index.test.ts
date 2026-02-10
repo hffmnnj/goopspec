@@ -193,3 +193,115 @@ describe("goop_delegate session context injection", () => {
     expect(composedPrompt).not.toContain(".goopspec/sessions/");
   });
 });
+
+describe("bootstrap enforcement", () => {
+  let cleanup: () => void;
+  let toolContext: ReturnType<typeof createMockToolContext>;
+  let testDir: string;
+
+  beforeEach(() => {
+    const env = setupTestEnvironment("goop-delegate-bootstrap-test");
+    testDir = env.testDir;
+    cleanup = env.cleanup;
+    toolContext = createMockToolContext({ directory: testDir, worktree: testDir });
+  });
+
+  afterEach(() => {
+    cleanup();
+  });
+
+  function createContext(): PluginContext {
+    return createMockPluginContext({
+      testDir,
+      resources: [
+        createMockResource({
+          name: "goop-executor",
+          type: "agent",
+          frontmatter: {
+            name: "goop-executor",
+            description: "Executor agent",
+            model: "anthropic/claude-sonnet-4-5",
+            tools: ["read"],
+            skills: [],
+            references: [],
+          },
+          body: "You are the executor.",
+        }),
+      ],
+    });
+  }
+
+  it("includes mandatory bootstrap block in agent prompt", async () => {
+    const ctx = createContext();
+    const tool = createGoopDelegateTool(ctx);
+
+    const result = await tool.execute(
+      {
+        agent: "goop-executor",
+        prompt: "Implement auth endpoint",
+      },
+      toolContext,
+    );
+
+    const payload = extractDelegationPayload(result);
+    const composedPrompt = String(payload.composedPrompt ?? "");
+
+    expect(composedPrompt).toContain("MANDATORY FIRST STEP");
+  });
+
+  it("bootstrap block appears before user task content", async () => {
+    const userTask = "Implement auth endpoint";
+    const ctx = createContext();
+    const tool = createGoopDelegateTool(ctx);
+
+    const result = await tool.execute(
+      {
+        agent: "goop-executor",
+        prompt: userTask,
+      },
+      toolContext,
+    );
+
+    const payload = extractDelegationPayload(result);
+    const composedPrompt = String(payload.composedPrompt ?? "");
+    const bootstrapIndex = composedPrompt.indexOf("## ⚠️ MANDATORY FIRST STEP");
+    const userTaskIndex = composedPrompt.indexOf(userTask);
+
+    expect(bootstrapIndex).toBeGreaterThan(-1);
+    expect(userTaskIndex).toBeGreaterThan(-1);
+    expect(bootstrapIndex).toBeLessThan(userTaskIndex);
+  });
+
+  it("delegation includes bootstrap boundary text", async () => {
+    const ctx = createContext();
+    const tool = createGoopDelegateTool(ctx);
+
+    const result = await tool.execute(
+      {
+        agent: "goop-executor",
+        prompt: "Implement auth endpoint",
+      },
+      toolContext,
+    );
+
+    expect(result).toContain("DO NOT skip bootstrap");
+  });
+
+  it("includes goop_state bootstrap step in agent prompt", async () => {
+    const ctx = createContext();
+    const tool = createGoopDelegateTool(ctx);
+
+    const result = await tool.execute(
+      {
+        agent: "goop-executor",
+        prompt: "Implement auth endpoint",
+      },
+      toolContext,
+    );
+
+    const payload = extractDelegationPayload(result);
+    const composedPrompt = String(payload.composedPrompt ?? "");
+
+    expect(composedPrompt).toContain('goop_state({ action: "get" })');
+  });
+});
