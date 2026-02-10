@@ -4,7 +4,7 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach } from "bun:test";
-import { readFileSync } from "fs";
+import { existsSync, readFileSync, writeFileSync } from "fs";
 import { join } from "path";
 import {
   createGoopSetupTool,
@@ -55,6 +55,76 @@ describe("goop_setup tool", () => {
       expect(tool.args).toHaveProperty("mcpPreset");
       expect(tool.args).toHaveProperty("enableOrchestrator");
       expect(tool.args).toHaveProperty("agentModels");
+      expect(tool.args).toHaveProperty("gitignoreGoopspec");
+    });
+  });
+
+  describe("gitignoreGoopspec configuration", () => {
+    it("persists gitignore preference in workflow state", async () => {
+      const tool = createGoopSetupTool(ctx);
+
+      await tool.execute(
+        {
+          action: "status",
+          gitignoreGoopspec: true,
+        },
+        toolContext,
+      );
+
+      expect(ctx.stateManager.getState().workflow.gitignoreGoopspec).toBe(true);
+    });
+
+    it("creates .gitignore and appends .goopspec when enabled", async () => {
+      const tool = createGoopSetupTool(ctx);
+      const gitignorePath = join(toolContext.directory, ".gitignore");
+
+      await tool.execute(
+        {
+          action: "status",
+          gitignoreGoopspec: true,
+        },
+        toolContext,
+      );
+
+      expect(existsSync(gitignorePath)).toBe(true);
+      expect(readFileSync(gitignorePath, "utf-8")).toContain(".goopspec/");
+    });
+
+    it("does not duplicate .goopspec entry in .gitignore", async () => {
+      const tool = createGoopSetupTool(ctx);
+      const gitignorePath = join(toolContext.directory, ".gitignore");
+      writeFileSync(gitignorePath, "node_modules/\n.goopspec/\n", "utf-8");
+
+      await tool.execute(
+        {
+          action: "status",
+          gitignoreGoopspec: true,
+        },
+        toolContext,
+      );
+
+      const entries = readFileSync(gitignorePath, "utf-8")
+        .split(/\r?\n/)
+        .filter((line) => line.trim() === ".goopspec/");
+      expect(entries).toHaveLength(1);
+    });
+
+    it("does not modify .gitignore when disabled", async () => {
+      const tool = createGoopSetupTool(ctx);
+      const gitignorePath = join(toolContext.directory, ".gitignore");
+      const originalContent = "node_modules/\n";
+      writeFileSync(gitignorePath, originalContent, "utf-8");
+
+      await tool.execute(
+        {
+          action: "status",
+          gitignoreGoopspec: false,
+        },
+        toolContext,
+      );
+
+      expect(ctx.stateManager.getState().workflow.gitignoreGoopspec).toBe(false);
+      expect(readFileSync(gitignorePath, "utf-8")).toBe(originalContent);
     });
   });
 

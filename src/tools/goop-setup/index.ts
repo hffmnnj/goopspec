@@ -6,6 +6,8 @@
  */
 
 import { tool, type ToolDefinition } from "@opencode-ai/plugin/tool";
+import { appendFileSync, existsSync, readFileSync, writeFileSync } from "fs";
+import { join } from "path";
 import type { PluginContext, ToolContext } from "../../core/types.js";
 import {
   detectEnvironment, 
@@ -35,6 +37,28 @@ import type {
 // ============================================================================
 // Formatting Functions
 // ============================================================================
+
+function ensureGoopspecGitignoreEntry(projectDir: string): void {
+  const gitignorePath = join(projectDir, ".gitignore");
+  const gitignoreEntry = ".goopspec/";
+
+  if (!existsSync(gitignorePath)) {
+    writeFileSync(gitignorePath, `${gitignoreEntry}\n`, "utf-8");
+    return;
+  }
+
+  const content = readFileSync(gitignorePath, "utf-8");
+  const hasGoopspecEntry = content
+    .split(/\r?\n/)
+    .some((line) => line.trim().replace(/\/+$/, "") === ".goopspec");
+
+  if (hasGoopspecEntry) {
+    return;
+  }
+
+  const separator = content.length > 0 && !content.endsWith("\n") ? "\n" : "";
+  appendFileSync(gitignorePath, `${separator}${gitignoreEntry}\n`, "utf-8");
+}
 
 /**
  * Format environment detection for display
@@ -533,7 +557,7 @@ function formatStatus(status: SetupStatus): string {
 /**
  * Create the goop-setup tool
  */
-export function createGoopSetupTool(_ctx: PluginContext): ToolDefinition {
+export function createGoopSetupTool(ctx: PluginContext): ToolDefinition {
   return tool({
     description: "GoopSpec configuration and setup tool for detect/init/plan/apply/verify/reset/models/status actions.",
     args: {
@@ -555,6 +579,7 @@ export function createGoopSetupTool(_ctx: PluginContext): ToolDefinition {
       memoryEnabled: tool.schema.boolean().optional(),
       memoryProvider: tool.schema.enum(["local", "openai", "ollama"]).optional(),
       memoryWorkerPort: tool.schema.number().optional(),
+      gitignoreGoopspec: tool.schema.boolean().optional(),
       // Reset options
       preserveData: tool.schema.boolean().optional(),
       confirmed: tool.schema.boolean().optional(),
@@ -564,6 +589,14 @@ export function createGoopSetupTool(_ctx: PluginContext): ToolDefinition {
     async execute(args, toolCtx: ToolContext): Promise<string> {
       try {
         const projectDir = toolCtx.directory;
+
+        if (args.gitignoreGoopspec !== undefined) {
+          ctx.stateManager.updateWorkflow({ gitignoreGoopspec: args.gitignoreGoopspec });
+
+          if (args.gitignoreGoopspec) {
+            ensureGoopspecGitignoreEntry(projectDir);
+          }
+        }
         
         // ====================================================================
         // Models action: show model suggestions for all agents
@@ -645,6 +678,7 @@ export function createGoopSetupTool(_ctx: PluginContext): ToolDefinition {
           agentModels: args.agentModels,
           memory: memoryConfig,
           quick: args.quick,
+          gitignoreGoopspec: args.gitignoreGoopspec,
         };
         
         // Detect environment
