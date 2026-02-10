@@ -16,14 +16,16 @@ alternatives:
 
 **Verify and accept work.** The final gate before completion.
 
-## Immediate Action
+### STOP-AND-RETURN
 
-**STOP. Execute this tool call NOW before reading anything else:**
+**Execute this tool call NOW before reading anything else:**
 ```
-goop_reference({ name: "accept-process" })
+goop_state({ action: "get" })
 ```
 
-**Then follow the process from that reference.** Do not process user messages until you have loaded and understood the protocol.
+**IF `allWavesComplete` is not `true`:** return **BLOCKED** immediately with: "Cannot accept. Complete all waves via /goop-execute first." Do not process further instructions.
+
+**Then load:** `goop_reference({ name: "accept-process" })`
 
 ## Quick Summary
 

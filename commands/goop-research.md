@@ -17,6 +17,17 @@ alternatives:
 
 **Start the Research Phase.** Explore unknowns, compare options, and gather technical context.
 
+### STOP-AND-RETURN
+
+**Execute this tool call NOW before reading anything else:**
+```
+goop_state({ action: "get" })
+```
+
+**IF current phase is not `discuss` or `plan`:** return **BLOCKED** immediately with: "Cannot research. Run /goop-discuss or /goop-plan first." Do not process further instructions.
+
+**Then load:** `goop_reference({ name: "research-process" })`
+
 ## Usage
 
 ```bash

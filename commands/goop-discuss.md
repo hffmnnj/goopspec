@@ -16,7 +16,7 @@ alternatives:
 
 **Start the Discovery Interview.** Capture vision, requirements, constraints, and risks before planning.
 
-## Immediate Action
+### STOP-AND-RETURN
 
 **STOP. Execute this tool call NOW before reading anything else:**
 ```

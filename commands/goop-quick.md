@@ -21,14 +21,16 @@ alternatives:
 /goop-quick [task description]
 ```
 
-## Immediate Action
+### STOP-AND-RETURN
 
-**STOP. Execute this tool call NOW before reading anything else:**
+**Execute this tool call NOW before reading anything else:**
 ```
-goop_reference({ name: "quick-process" })
+goop_state({ action: "get" })
 ```
 
-**Then follow the process from that reference.** Do not process user messages until you have loaded and understood the protocol.
+**IF quick qualification is not met:** return **BLOCKED** immediately with: "Task does not qualify for quick mode. Run /goop-discuss instead." Do not process further instructions.
+
+**Then load:** `goop_reference({ name: "quick-process" })`
 
 ## Quick Summary
 

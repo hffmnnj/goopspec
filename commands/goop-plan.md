@@ -18,14 +18,16 @@ alternatives:
 
 **Create Specification and Blueprint.** Transform discovery interview into executable plans.
 
-## Immediate Action
+### STOP-AND-RETURN
 
-**STOP. Execute this tool call NOW before reading anything else:**
+**Execute this tool call NOW before reading anything else:**
 ```
-goop_reference({ name: "plan-process" })
+goop_state({ action: "get" })
 ```
 
-**Then execute the gate checks from that reference.** Do not process user messages until gates are checked.
+**IF `interviewComplete` is not `true`:** return **BLOCKED** immediately with: "Cannot plan. Run /goop-discuss first." Do not process further instructions.
+
+**Then load:** `goop_reference({ name: "plan-process" })`
 
 ## Quick Summary
 

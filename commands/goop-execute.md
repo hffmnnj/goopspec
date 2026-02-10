@@ -16,14 +16,16 @@ alternatives:
 
 **Start the Execution Phase.** Implement the blueprint using wave-based orchestration.
 
-## Immediate Action
+### STOP-AND-RETURN
 
-**STOP. Execute this tool call NOW before reading anything else:**
+**Execute this tool call NOW before reading anything else:**
 ```
-goop_reference({ name: "execute-process" })
+goop_state({ action: "get" })
 ```
 
-**Then follow the process from that reference.** Do not process user messages until you have loaded and understood the protocol.
+**IF `specLocked` is not `true`:** return **BLOCKED** immediately with: "Cannot execute. Run /goop-plan and confirm spec first." Do not process further instructions.
+
+**Then load:** `goop_reference({ name: "execute-process" })`
 
 ## Quick Summary
 
