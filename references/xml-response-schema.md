@@ -175,13 +175,13 @@ Every agent response MUST include this XML block at the END of their response:
   
   <handoff>
     <ready>true</ready>
-    <next_action agent="orchestrator">Review blueprint with user, then /goop-specify</next_action>
+    <next_action agent="orchestrator">Review blueprint with user, confirm lock in /goop-plan, then /goop-execute</next_action>
     <files_to_read>
       <file>.goopspec/BLUEPRINT.md</file>
     </files_to_read>
     <blockers>None</blockers>
     <suggest_new_session>true</suggest_new_session>
-    <next_command>/goop-specify</next_command>
+    <next_command>/goop-execute</next_command>
   </handoff>
 </goop_report>
 ```

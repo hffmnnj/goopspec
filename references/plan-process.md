@@ -461,13 +461,13 @@ Display completion:
 
 ### Next Step
 
-**Lock the specification** — Confirm requirements before execution
+**Proceed to Contract Gate**
 
-→ `/goop-specify`
+→ Present contract summary and ask: Confirm / Amend / Cancel
 
 ---
 
-Start a **new session** for fresh context, then run the command.
+Continue to **Phase 5: Contract Gate** in the same session when possible.
 ```
 
 **Generate HANDOFF.md:**
@@ -485,12 +485,12 @@ Start a **new session** for fresh context, then run the command.
 - [x] 100% traceability achieved
 
 ## Current State
-- Phase: plan
+- Phase: execute-ready
 - Interview: complete
-- Spec: draft (not locked)
+- Spec: locked
 
 ## Next Session
-Run: /goop-specify
+Run: /goop-execute
 
 ## Files to Read
 1. .goopspec/SPEC.md — Requirements
@@ -498,7 +498,7 @@ Run: /goop-specify
 
 ## Context Summary
 Planning complete for [feature]. [N] must-haves mapped to [P] tasks
-across [M] waves. Ready to lock specification.
+across [M] waves. Contract confirmed and spec locked.
 ```
 
 **On `BLOCKED` status:**
@@ -521,7 +521,148 @@ Use `question` tool to get user choice.
 
 ---
 
-## Phase 5: Memory Persistence
+## Phase 5: Contract Gate
+
+Run this gate immediately after Phase 4 completes and both `.goopspec/SPEC.md` and `.goopspec/BLUEPRINT.md` are available.
+
+### 5.1 Present Contract Summary
+
+Show a concise summary pulled from the generated planning documents:
+
+- Must-haves (`MH1..MHn`)
+- Out-of-scope items
+- Wave summary (`[M] waves`, `[P] tasks`)
+- Traceability matrix (`must-have -> wave/task coverage`)
+
+Display format:
+
+```text
+## 🔒 Contract Gate
+
+Please review the contract before execution.
+
+### Must-Haves
+- MH1: ...
+- MH2: ...
+
+### Out of Scope
+- ...
+
+### Wave Summary
+- Waves: [M]
+- Tasks: [P]
+
+### Traceability
+| Must-Have | Covered By |
+|-----------|------------|
+| MH1 | Wave X, Task Y |
+| MH2 | Wave X, Task Z |
+
+✓ Coverage: 100%
+```
+
+### 5.2 Ask for Decision
+
+Use `question` tool with exactly three options:
+
+```ts
+question({
+  questions: [{
+    header: "Contract Gate",
+    question: "How would you like to proceed with this contract?",
+    options: [
+      { label: "Confirm and Lock", description: "Accept contract and lock spec" },
+      { label: "Amend", description: "Revise contract before locking" },
+      { label: "Cancel", description: "Stop now and keep spec unlocked" }
+    ],
+    multiple: false
+  }]
+})
+```
+
+### 5.3 On Confirm
+
+Lock the spec with state tool:
+
+```ts
+goop_state({ action: "lock-spec" })
+```
+
+Then display confirmation:
+
+```text
+## 🔮 GoopSpec · Contract Confirmed
+
+✓ Spec locked
+✓ Execution ready
+
+### Next Step
+→ `/goop-execute`
+```
+
+Generate/update `HANDOFF.md`:
+
+```markdown
+# Session Handoff
+
+**Generated:** [timestamp]
+**Phase:** plan
+
+## Accomplished
+- [x] Discovery interview completed
+- [x] SPEC.md created with [N] must-haves
+- [x] BLUEPRINT.md created with [M] waves, [P] tasks
+- [x] 100% traceability achieved
+- [x] Contract confirmed and spec locked
+
+## Current State
+- Phase: execute-ready
+- Interview: complete
+- Spec: locked
+
+## Next Session
+Run: /goop-execute
+
+## Files to Read
+1. .goopspec/SPEC.md — Locked contract
+2. .goopspec/BLUEPRINT.md — Execution plan
+
+## Context Summary
+Planning complete for [feature]. Contract confirmed and locked.
+Begin execution using the approved wave plan.
+```
+
+### 5.4 On Amend
+
+Enter amendment mode (same behavior as current specify-process amend flow):
+
+1. Ask what to change (must-have wording, scope boundary, traceability, wave decomposition).
+2. Apply updates to `.goopspec/SPEC.md` and/or `.goopspec/BLUEPRINT.md`.
+3. Re-validate traceability coverage.
+4. Re-present the full contract summary.
+5. Return to decision prompt (Confirm / Amend / Cancel).
+
+Spec remains unlocked until user explicitly confirms and lock succeeds.
+
+### 5.5 On Cancel
+
+- Do not call `lock-spec`
+- Keep spec unlocked
+- Inform user they can iterate and run `/goop-plan` again
+
+Display:
+
+```text
+## 🔮 GoopSpec · Contract Not Locked
+
+Spec remains unlocked.
+
+You can update requirements and run `/goop-plan` again.
+```
+
+---
+
+## Phase 6: Memory Persistence
 
 After successful planning:
 
@@ -532,6 +673,18 @@ memory_save({
   content: "Created [N]-wave blueprint. Key decisions: [list]. Must-haves: [summary].",
   concepts: ["planning", "blueprint", "[domain]"],
   importance: 0.7
+})
+
+memory_save({
+  type: "decision",
+  title: "Spec Lock Decision: [Feature Name]",
+  content: "User selected [confirm|amend|cancel] at Contract Gate. Lock state: [locked|unlocked].",
+  facts: [
+    "Contract Gate decision: [confirm|amend|cancel]",
+    "Spec lock state after planning: [locked|unlocked]"
+  ],
+  concepts: ["contract-gate", "spec-lock", "planning"],
+  importance: 0.8
 })
 ```
 
@@ -563,7 +716,7 @@ Orchestrator:
 
 **3 must-haves** | **2 waves** | **5 tasks**
 
-→ Next: `/goop-specify`
+→ Next: `/goop-execute`
 ```
 
 ### Gate Blocked

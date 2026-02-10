@@ -264,11 +264,22 @@ Use `question` tool:
 
 **On "Create PR" or "Create draft PR":**
 
+Detect default base branch:
+```bash
+DEFAULT_BASE_BRANCH=$(git remote show origin | grep 'HEAD branch' | sed 's/.*: //')
+if [ -z "$DEFAULT_BASE_BRANCH" ]; then DEFAULT_BASE_BRANCH="main"; fi
+```
+
+Ask user which base branch to target:
+- Use `question` tool: "Which base branch should this PR target?"
+- Default answer: `$DEFAULT_BASE_BRANCH`
+- Save response as `<selected-branch>`
+
 Check branch status:
 ```bash
 git branch --show-current
-git log main..HEAD --oneline
-git diff main...HEAD --stat
+git log <selected-branch>..HEAD --oneline
+git diff <selected-branch>...HEAD --stat
 ```
 
 Generate PR title and description following the git-workflow reference:
@@ -298,7 +309,7 @@ Generate PR title and description following the git-workflow reference:
 
 Create PR:
 ```bash
-gh pr create --title "type(scope): Title" --body "..." [--draft]
+gh pr create --base <selected-branch> --title "type(scope): Title" --body "..." [--draft]
 ```
 
 Display PR URL to user.

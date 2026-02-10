@@ -1,6 +1,8 @@
 # Specification Lock Process
 
-Detailed process for `/goop-specify` - locking the specification contract.
+This is an internal process reference for locking the specification contract.
+
+> Note: There is no standalone user command for this process. This contract gate is triggered internally at the end of `/goop-plan`.
 
 ## Phase 1: Gate Check
 
@@ -204,7 +206,7 @@ Once locked, changes require formal amendment:
 
 ### Successful Lock
 ```
-User: /goop-specify
+Internal trigger: end of /goop-plan
 
 Orchestrator:
 ## 🔮 GoopSpec · Contract Gate
@@ -236,7 +238,7 @@ Orchestrator:
 
 ### Gate Blocked
 ```
-User: /goop-specify
+Internal trigger: end of /goop-plan
 
 Orchestrator:
 ## 🔮 GoopSpec · Gate Blocked

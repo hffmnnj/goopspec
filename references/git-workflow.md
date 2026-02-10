@@ -254,6 +254,41 @@ What problem does it solve? What's the approach?]
 [Breaking changes, migration steps, follow-up work, deployment notes]
 ```
 
+### Target Branch Selection
+
+Before creating a PR, confirm which base branch the PR should target.
+
+1. Detect the repository default branch:
+
+```bash
+git remote show origin | grep 'HEAD branch' | sed 's/.*: //'
+```
+
+2. If detection fails or returns empty, default to `main`.
+3. Prompt the user for confirmation before creating the PR.
+
+Prompt pattern:
+
+```text
+Detected default branch: main
+"Which base branch should this PR target? [main]"
+```
+
+4. Use the selected branch with `gh pr create --base <branch>`.
+
+Common patterns:
+- `main` - Most common default branch
+- `develop` - Projects using Git Flow
+- `release/*` - Release-branch workflows
+
+Example:
+
+```text
+Detected default branch: main
+"Which base branch should this PR target? [main]"
+-> gh pr create --base main --title "..." --body "..."
+```
+
 ---
 
 ## Safety Rules

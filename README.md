@@ -23,7 +23,7 @@ It's a spec-driven workflow for [OpenCode](https://opencode.ai) that forces clar
 No more "that's not what I meant." No more scope creep. No more AI amnesia.
 
 ```
-Discuss → Plan → Specify (lock it) → Execute → Accept (verify it)
+Discuss → Plan (confirm+lock) → Execute → Accept (verify it)
 ```
 
 ---
@@ -178,7 +178,6 @@ All 20 commands, organized by what you're doing.
 |---------|-------------|
 | `/goop-discuss` | Start discussion — interview to gather requirements |
 | `/goop-plan` | Create SPEC.md and BLUEPRINT.md from requirements |
-| `/goop-specify` | Lock the specification (CONTRACT GATE) |
 | `/goop-execute` | Begin wave-based implementation |
 | `/goop-accept` | Verify and accept work (ACCEPTANCE GATE) |
 
@@ -360,7 +359,7 @@ When milestones complete:
 
 Two points where you must confirm. This is what makes GoopSpec different — the AI can't just declare itself done.
 
-### Specify Gate (Before Execution)
+### Contract Gate (End of Plan, Before Execution)
 
 ```
 +-------------------------------------------------------+
@@ -430,7 +429,7 @@ GoopSpec creates:
 - **SPEC.md** — Must-haves and out-of-scope
 - **BLUEPRINT.md** — Waves of tasks with acceptance criteria
 
-### Step 3: Specify (Contract Gate)
+### Step 3: Plan Contract Gate
 
 ```
 +--------------------------------------------------------+

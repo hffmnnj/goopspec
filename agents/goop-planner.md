@@ -452,14 +452,14 @@ V "Task 2.1: Implement JWT auth service"
   
   <handoff>
     <ready>true</ready>
-    <next_action agent="orchestrator">Review blueprint, then /goop-specify</next_action>
+    <next_action agent="orchestrator">Present Contract Gate (must-haves, out-of-scope, wave summary), ask Confirm and lock / Amend / Cancel, lock via goop_state on confirm, then proceed with /goop-execute</next_action>
     <files_to_read>
       <file>.goopspec/SPEC.md</file>
       <file>.goopspec/BLUEPRINT.md</file>
     </files_to_read>
     <blockers>None</blockers>
     <suggest_new_session>true</suggest_new_session>
-    <next_command>/goop-specify</next_command>
+    <next_command>/goop-execute</next_command>
   </handoff>
 </goop_report>
 ```

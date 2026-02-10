@@ -3,8 +3,8 @@
  * Automatically advances workflow phases when conditions are met
  * 
  * Progression Rules:
- * - plan → specify: Manual (user must run /goop-specify)
- * - specify → execute: Auto when spec is locked via /goop-specify
+ * - plan → execute: Manual after planning confirmation and spec lock
+ * - specify → execute: Auto for internal research paths once spec is locked
  * - execute → accept: Auto when all waves complete
  * - accept → idle: Auto when user accepts via /goop-accept
  * 

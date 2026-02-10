@@ -39,7 +39,7 @@ function getPhaseGuidance(phase: string, specLocked: boolean): PhaseGuidance {
     },
     plan: {
       current: "Gathering requirements and defining scope.",
-      next: { command: "/goop-specify", description: "Lock the specification when requirements are clear" },
+      next: { command: "/goop-execute", description: "Begin implementation after plan confirmation and spec lock" },
       alternatives: [
         { command: "/goop-research", when: "if there are unknowns to investigate" },
         { command: "/goop-pause", when: "to save progress and continue later" },
@@ -47,9 +47,9 @@ function getPhaseGuidance(phase: string, specLocked: boolean): PhaseGuidance {
     },
     research: {
       current: "Investigating unknowns and gathering technical context.",
-      next: { command: "/goop-specify", description: "Lock the spec with research findings applied" },
+      next: { command: "/goop-plan", description: "Integrate research findings and finalize the plan" },
       alternatives: [
-        { command: "/goop-plan", when: "to refine the plan with research insights" },
+        { command: "/goop-execute", when: "if planning is finalized and spec is already locked" },
         { command: "/goop-research", when: "for additional research on related topics" },
       ],
     },
@@ -61,7 +61,7 @@ function getPhaseGuidance(phase: string, specLocked: boolean): PhaseGuidance {
       ],
     } : {
       current: "Reviewing specification before locking.",
-      next: { command: "/goop-specify", description: "Confirm and lock the specification" },
+      next: { command: "/goop-plan", description: "Return to planning to confirm and lock the specification" },
       alternatives: [
         { command: "/goop-plan", when: "to revise requirements" },
       ],

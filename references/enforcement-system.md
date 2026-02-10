@@ -85,7 +85,6 @@ Processes `/goop-*` slash commands:
 | /goop-plan | plan |
 | /goop-discuss | plan |
 | /goop-research | research |
-| /goop-specify | specify |
 | /goop-execute | execute |
 | /goop-accept | accept |
 | /goop-complete | idle |

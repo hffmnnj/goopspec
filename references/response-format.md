@@ -224,7 +224,7 @@ Researched [topic]. Found [key insight]. Recommend [approach].
 
 **For Orchestrator:**
 1. Review RESEARCH.md with user
-2. Proceed to `/goop-specify` to lock specification
+2. Proceed to `/goop-plan` to confirm and lock the specification
 3. Or request additional research on [gap area]
 ```
 

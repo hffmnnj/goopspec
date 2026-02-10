@@ -17,7 +17,7 @@ Phase Gates are mandatory checkpoints that ensure quality and prevent premature 
 | Gate | Location | Purpose | Enforced By |
 |------|----------|---------|-------------|
 | **Discovery Gate** | Before /goop-plan | Ensure requirements understood | Orchestrator |
-| **Spec Gate** | Before /goop-execute | Lock contract with user | /goop-specify |
+| **Spec Gate** | Before /goop-execute | Lock contract with user | /goop-plan (end-of-flow contract gate) |
 | **Execution Gate** | Before /goop-accept | Verify all tasks complete | Orchestrator |
 | **Acceptance Gate** | Before /goop-complete | User accepts deliverable | /goop-accept |
 
@@ -102,7 +102,7 @@ Lock the specification contract with explicit user confirmation.
 ```
 /goop-execute invoked:
   IF state.spec_locked != true:
-    REFUSE: "Specification not locked. Run /goop-specify first."
+    REFUSE: "Specification not locked. Run /goop-plan to confirm and lock first."
   IF SPEC.md traceability incomplete:
     REFUSE: "Traceability incomplete. Every must-have needs mapped tasks."
   ELSE:
@@ -297,10 +297,7 @@ goop_adl({
    ▼                                ▼
 [plan] ────── SPEC GATE ───────────[done]
    │
-   │ (spec_locked + user confirm)
-   ▼
-/goop-specify
-   │
+   │ (spec_locked + user confirm in /goop-plan)
    ▼
 /goop-execute
    │

@@ -103,7 +103,7 @@ The "How".
 
 | Command | Effect |
 | :--- | :--- |
-| `/goop-specify` | Generate spec and trigger Contract Gate. |
+| `/goop-plan` | Finalize spec and trigger Contract Gate internally. |
 | `/goop-amend` | Modify a draft or locked spec. |
 | `/goop-status` | View current spec status. |
 

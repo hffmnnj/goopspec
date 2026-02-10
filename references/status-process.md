@@ -96,7 +96,7 @@ ELSE:
 IF SPEC.md exists AND spec_locked == true:
   PASSED
 ELSE:
-  BLOCKED - Run /goop-specify
+  BLOCKED - Run /goop-plan to confirm and lock
 ```
 
 ### Execution Gate
@@ -124,7 +124,7 @@ ELSE:
 | No project | `/goop-discuss` to start discovery |
 | Interview incomplete | `/goop-discuss` to complete interview |
 | Interview complete, no spec | `/goop-plan` to create blueprint |
-| Spec draft, not locked | `/goop-specify` to lock |
+| Spec draft, not locked | `/goop-plan` to confirm and lock |
 | Spec locked, not executing | `/goop-execute` to start |
 | Executing, tasks remaining | `/goop-execute` to continue |
 | Executing, all done | `/goop-accept` to verify |

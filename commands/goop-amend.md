@@ -28,7 +28,7 @@ description: Propose changes to a locked specification
 
 ## How It Works
 
-Once a spec is locked via `/goop-specify`, it cannot be silently changed. `/goop-amend` provides a formal process to alter the contract.
+Once a spec is locked at the end of `/goop-plan` (contract gate), it cannot be silently changed. `/goop-amend` provides a formal process to alter the contract.
 
 ### 1. Change Request
 User proposes a change (e.g., "Add password reset button").
