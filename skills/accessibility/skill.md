@@ -7,6 +7,7 @@ triggers:
   - wcag
   - a11y
   - inclusive
+version: 0.2.5
 ---
 
 # Accessibility Skill

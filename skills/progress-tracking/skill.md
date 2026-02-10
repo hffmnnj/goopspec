@@ -7,6 +7,7 @@ triggers:
   - status
   - track
   - todo
+version: 0.2.5
 requires:
   - goop-core
 ---

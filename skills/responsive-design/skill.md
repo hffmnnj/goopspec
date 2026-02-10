@@ -7,6 +7,7 @@ triggers:
   - mobile
   - breakpoints
   - layout
+version: 0.2.5
 ---
 
 # Responsive Design Skill

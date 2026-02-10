@@ -22,7 +22,23 @@ const VALID_DEPTHS: WorkflowDepth[] = ["shallow", "standard", "deep"];
  */
 export function createGoopStateTool(ctx: PluginContext): ToolDefinition {
   return tool({
-    description: "Perform safe, atomic GoopSpec workflow state operations including transitions, spec/interview/acceptance flags, mode/depth, wave progress, and reset. NEVER edit .goopspec/state.json directly; use this tool to avoid state conflicts.",
+    description: `Safe atomic state operations for GoopSpec workflow. Use this instead of directly editing state.json.
+
+Actions:
+- 'get': Read current state (returns full state object)
+- 'transition': Change workflow phase (validates transitions)
+- 'complete-interview': Mark discovery interview as complete
+- 'reset-interview': Reset interview status (for starting fresh)
+- 'lock-spec': Lock the specification contract
+- 'unlock-spec': Unlock the specification (use with caution)
+- 'confirm-acceptance': Confirm work acceptance
+- 'reset-acceptance': Reset acceptance status
+- 'set-mode': Set task mode (quick/standard/comprehensive/milestone)
+- 'set-depth': Set workflow depth (shallow/standard/deep)
+- 'update-wave': Update wave progress
+- 'reset': Reset entire workflow to idle state
+
+IMPORTANT: Always use this tool instead of Read/Edit on state.json to avoid conflicts.`,
     args: {
       action: tool.schema.enum([
         "get",
@@ -48,7 +64,7 @@ export function createGoopStateTool(ctx: PluginContext): ToolDefinition {
     async execute(args, _context: ToolContext): Promise<string> {
       const { action } = args;
       
-      log("goop_state action", { action, args, sessionId: ctx.sessionId });
+      log("goop_state action", { action, args });
 
       switch (action) {
         case "get": {
@@ -64,27 +80,31 @@ export function createGoopStateTool(ctx: PluginContext): ToolDefinition {
             accept: "✅",
           };
           const phaseIcon = phaseIcons[workflow.phase] || "🔮";
+          const initializedDate = state.project.initialized.includes("T")
+            ? state.project.initialized.split("T")[0]
+            : state.project.initialized;
+          const interviewDate = workflow.interviewCompletedAt
+            ? (workflow.interviewCompletedAt.includes("T")
+              ? workflow.interviewCompletedAt.split("T")[0]
+              : workflow.interviewCompletedAt)
+            : null;
+          const phases = state.execution.completedPhases;
+          const phaseCount = phases.length;
+          let phaseSummary = "None";
+          if (phaseCount > 0) {
+            const lastThree = phases.slice(-3).join(" → ");
+            phaseSummary = phaseCount <= 3
+              ? `${phaseCount} ${phaseCount === 1 ? "phase" : "phases"} (${lastThree})`
+              : `${phaseCount} phases (... → ${lastThree})`;
+          }
           
           return `## 🔮 GoopSpec · State
-
-### Project
-- **Name:** ${state.project.name}
-- **Initialized:** ${state.project.initialized}
-- **Session:** ${ctx.sessionId || "root"}
-
-### Workflow
-- **Phase:** ${phaseIcon} ${workflow.phase}
-- **Mode:** ${workflow.mode}
-- **Depth:** ${workflow.depth}
-- **Interview:** ${workflow.interviewComplete ? "✓ Complete" : "⏳ Pending"}${workflow.interviewCompletedAt ? ` (${workflow.interviewCompletedAt})` : ""}
-- **Spec:** ${workflow.specLocked ? "🔒 Locked" : "🔓 Unlocked"}
-- **Acceptance:** ${workflow.acceptanceConfirmed ? "✓ Confirmed" : "⏳ Pending"}
-- **Wave:** ${workflow.currentWave}/${workflow.totalWaves}
-- **Last Activity:** ${workflow.lastActivity}
-
-### Execution
+- **Project:** ${state.project.name} | **Initialized:** ${initializedDate}
+- **Phase:** ${phaseIcon} ${workflow.phase} | **Mode:** ${workflow.mode} | **Depth:** ${workflow.depth}
+- **Interview:** ${workflow.interviewComplete ? "✓ Complete" : "⏳ Pending"}${interviewDate ? ` (${interviewDate})` : ""} | **Spec:** ${workflow.specLocked ? "🔒 Locked" : "🔓 Unlocked"}
+- **Acceptance:** ${workflow.acceptanceConfirmed ? "✓ Confirmed" : "⏳ Pending"} | **Wave:** ${workflow.currentWave}/${workflow.totalWaves}
 - **Checkpoint:** ${state.execution.activeCheckpointId || "None"}
-- **Completed:** ${state.execution.completedPhases.length > 0 ? state.execution.completedPhases.join(" → ") : "None"}
+- **Phases:** ${phaseSummary}
 - **Pending Tasks:** ${state.execution.pendingTasks.length}
 
 ---`;

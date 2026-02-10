@@ -7,6 +7,7 @@ triggers:
   - documentation
   - docs
   - guide
+version: 0.2.5
 ---
 
 # Technical Writing Skill

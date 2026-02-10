@@ -67,6 +67,7 @@ If the command includes a session name (example: `/goop-discuss feat-auth`), cre
 ## Success Criteria
 
 - [ ] Existing project documents archived (if present)
+- [ ] Git branch check offered (create new branch or stay on current)
 - [ ] Research depth selected (Light/Standard/Deep) before interview begins
 - [ ] Depth persisted via `goop_state({ action: "set-depth", depth: "[shallow|standard|deep]" })`
 - [ ] Creative agent opt-in offered after vision question (accepted or declined)

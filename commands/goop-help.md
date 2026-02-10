@@ -38,7 +38,6 @@ Display help information and available commands.
 
 **Phase Workflow:**
 - `/goop-plan [description]` - Plan a feature or phase
-- `/goop-specify` - Lock the specification (CONTRACT GATE)
 - `/goop-execute` - Execute wave-based implementation
 - `/goop-accept` - Verify and accept completion (ACCEPTANCE GATE)
 - `/goop-amend [change]` - Propose changes to locked spec

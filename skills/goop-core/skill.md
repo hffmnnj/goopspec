@@ -1,6 +1,6 @@
 ---
 name: goop-core
-description: Core GoopSpec operations - the 5-phase spec-driven workflow
+description: Core GoopSpec 0.2.5 operations - the 5-phase spec-driven workflow
 category: core
 triggers:
   - goop
@@ -8,9 +8,10 @@ triggers:
   - workflow
   - plan
   - execute
+version: 0.2.5
 ---
 
-# GoopSpec Core Operations
+# GoopSpec 0.2.5 Core Operations
 
 ## The 5-Phase Workflow
 
@@ -124,7 +125,7 @@ GoopSpec scales to the task size:
 | **Milestone** | Major releases | Multiple cycles + archive |
 
 ### Quick Mode
-- Skip Research and Specify phases
+- Skip Research and contract-lock flow
 - For tasks under ~30 minutes
 - Still uses memory and atomic commits
 - Tracked in `.goopspec/quick/`
@@ -132,7 +133,7 @@ GoopSpec scales to the task size:
 ### Standard Mode
 - Full 5-phase workflow
 - For features taking hours to a day
-- Contract gate at Specify
+- Contract gate at end of Plan (confirm+lock)
 - Acceptance gate at end
 
 ### Comprehensive Mode
@@ -349,8 +350,10 @@ At session start, agents offer to create a feature branch:
 ### Pull Requests
 
 At end of phases, agents offer to create PRs:
+- **Ask which branch to target** (don't assume `main`)
 - Title: `type(scope): Descriptive summary`
 - Body: Summary, Changes, Testing, Notes
+- Use `--base $TARGET_BRANCH` flag with `gh pr create`
 - No internal terminology
 
 For complete guidance: `goop_reference({ name: "git-workflow" })`

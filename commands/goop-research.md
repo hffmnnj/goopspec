@@ -9,8 +9,8 @@ next-command: /goop-plan
 alternatives:
   - command: /goop-research
     when: "For additional research on related topics"
-  - command: /goop-specify
-    when: "If research confirms the plan is ready to lock"
+  - command: /goop-plan
+    when: "If research confirms planning can proceed to confirm+lock"
 ---
 
 # /goop-research

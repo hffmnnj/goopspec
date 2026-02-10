@@ -199,4 +199,4 @@ Learnings to persist from this task:
 **View chronicle:** `.goopspec/CHRONICLE.md`
 **Status:** Complete
 
-*GoopSpec*
+*GoopSpec v0.2.5*

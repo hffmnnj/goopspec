@@ -46,7 +46,7 @@ Read-only operation that shows current workflow state.
 | No project | `/goop-discuss` |
 | Interview incomplete | `/goop-discuss` |
 | Interview done, no spec | `/goop-plan` |
-| Spec draft | `/goop-specify` |
+| Spec draft | `/goop-plan` |
 | Spec locked | `/goop-execute` |
 | Executing | `/goop-execute` |
 | All tasks done | `/goop-accept` |

@@ -99,5 +99,5 @@ No pending decisions.
 
 ---
 
-*Human-readable state mirror - GoopSpec*
+*Human-readable state mirror - GoopSpec v0.2.5*
 *See also: state.json for machine-readable state*

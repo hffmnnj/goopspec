@@ -7,6 +7,7 @@ triggers:
   - git
   - atomic
   - history
+version: 0.2.5
 ---
 
 # Atomic Commits Skill

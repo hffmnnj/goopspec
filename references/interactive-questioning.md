@@ -69,7 +69,7 @@ Use formal Gates for high-impact questions. Stop the world.
 *Must resolve scope before work begins.*
 
 > **Question:** "Are these MUST-HAVES correct and complete?"
-> **Trigger:** `/goop-specify`
+> **Trigger:** End of `/goop-plan` (internal contract gate)
 > **Action:** Lock SPEC.md upon confirmation.
 
 ### Checkpoint Gate (Execution Phase)

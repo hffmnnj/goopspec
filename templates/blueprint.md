@@ -185,4 +185,4 @@ At wave boundaries:
 
 *Blueprint derived from SPEC.md*
 *Execute with confidence — the plan is the contract*
-*GoopSpec*
+*GoopSpec v0.2.5*

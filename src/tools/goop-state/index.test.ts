@@ -29,12 +29,12 @@ describe("goop_state tool", () => {
     cleanup();
   });
 
-  it("shows root session label when no session is bound", async () => {
+  it("shows state output when no session is bound", async () => {
     const tool = createGoopStateTool(ctx);
     const result = await tool.execute({ action: "get" }, createMockToolContext());
 
-    expect(result).toContain("Session");
-    expect(result).toContain("root");
+    expect(result).toContain("GoopSpec");
+    expect(result).toContain("Phase:");
   });
 
   it("uses session-bound state manager when a session is active", async () => {
@@ -48,8 +48,6 @@ describe("goop_state tool", () => {
     const sessionStatePath = join(ctx.input.directory, ".goopspec", "sessions", "feat-auth", "state.json");
     const rootStatePath = join(ctx.input.directory, ".goopspec", "state.json");
 
-    expect(result).toContain("Session");
-    expect(result).toContain("feat-auth");
     expect(result).toContain("Phase:");
     expect(result).toContain("plan");
     expect(existsSync(sessionStatePath)).toBe(true);

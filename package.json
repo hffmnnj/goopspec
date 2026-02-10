@@ -1,6 +1,6 @@
 {
   "name": "goopspec",
-  "version": "0.2.4",
+  "version": "0.2.5",
   "description": "A spec-driven development plugin for OpenCode with user-guided planning, wave execution, and verification",
   "type": "module",
   "main": "dist/index.js",
@@ -56,6 +56,7 @@
     "@opencode-ai/plugin": "^1.1.44",
     "@opencode-ai/sdk": "^1.1.44",
     "hono": "^4.11.7",
+    "onnxruntime-node": "^1.24.1",
     "picocolors": "^1.1.1",
     "sqlite-vec": "^0.1.7-alpha.2",
     "zod": "^4.1.8"

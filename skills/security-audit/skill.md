@@ -7,6 +7,7 @@ triggers:
   - vulnerability
   - audit
   - pentest
+version: 0.2.5
 requires:
   - goop-core
 ---

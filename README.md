@@ -6,10 +6,10 @@
 
 **Stop the AI chaos. Ship what you actually want.**
 
-[![Version](https://img.shields.io/badge/version-0.2.4-blue?style=for-the-badge)](https://github.com/hffmnnj/opencode-goopspec)
+[![Version](https://img.shields.io/badge/version-0.2.5-blue?style=for-the-badge)](https://github.com/hffmnnj/opencode-goopspec)
 [![Bun](https://img.shields.io/badge/Bun-1.0+-f97316?style=for-the-badge&logo=bun&logoColor=white)](https://bun.sh)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.8-3178c6?style=for-the-badge&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
-[![Tests](https://img.shields.io/badge/tests-1311%20passing-22c55e?style=for-the-badge)](./TEST-SUMMARY.md)
+[![Tests](https://img.shields.io/badge/tests-1312%20passing-22c55e?style=for-the-badge)](./TEST-SUMMARY.md)
 [![License](https://img.shields.io/badge/license-MIT-22c55e?style=for-the-badge)](./LICENSE)
 
 ---
@@ -23,7 +23,7 @@ It's a spec-driven workflow for [OpenCode](https://opencode.ai) that forces clar
 No more "that's not what I meant." No more scope creep. No more AI amnesia.
 
 ```
-Discuss → Plan → Specify (lock it) → Execute → Accept (verify it)
+Discuss → Plan (confirm+lock) → Execute → Accept (verify it)
 ```
 
 ---
@@ -178,7 +178,6 @@ All 20 commands, organized by what you're doing.
 |---------|-------------|
 | `/goop-discuss` | Start discussion — interview to gather requirements |
 | `/goop-plan` | Create SPEC.md and BLUEPRINT.md from requirements |
-| `/goop-specify` | Lock the specification (CONTRACT GATE) |
 | `/goop-execute` | Begin wave-based implementation |
 | `/goop-accept` | Verify and accept work (ACCEPTANCE GATE) |
 
@@ -361,7 +360,7 @@ When milestones complete:
 
 Two points where you must confirm. This is what makes GoopSpec different — the AI can't just declare itself done.
 
-### Specify Gate (Before Execution)
+### Contract Gate (End of Plan, Before Execution)
 
 ```
 +-------------------------------------------------------+
@@ -431,7 +430,7 @@ GoopSpec creates:
 - **SPEC.md** — Must-haves and out-of-scope
 - **BLUEPRINT.md** — Waves of tasks with acceptance criteria
 
-### Step 3: Specify (Contract Gate)
+### Step 3: Plan Contract Gate
 
 ```
 +--------------------------------------------------------+
