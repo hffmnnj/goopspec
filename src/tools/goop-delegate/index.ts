@@ -256,6 +256,17 @@ async function buildAutoTeamContext(currentAgentId: string): Promise<TeamAwarene
   return siblings.length > 0 ? { siblings } : {};
 }
 
+const MANDATORY_BOOTSTRAP_BLOCK = `## ⚠️ MANDATORY FIRST STEP
+
+**DO NOT proceed past this section until all steps are complete.**
+
+1. \`goop_state({ action: "get" })\` - Load workflow state
+2. \`Read(".goopspec/SPEC.md")\` - Read specification
+3. \`Read(".goopspec/BLUEPRINT.md")\` - Read execution plan
+4. \`memory_search({ query: "[task context]", limit: 5 })\` - Search relevant memory
+
+**Then acknowledge:** current phase, spec lock status, active task.`;
+
 /**
  * Build agent prompt with skills and references
  */
@@ -278,6 +289,8 @@ function buildAgentPrompt(
   
   // Agent identity
   sections.push(`# Agent: ${agentDef.name}`);
+  sections.push("");
+  sections.push(MANDATORY_BOOTSTRAP_BLOCK);
   sections.push("");
   sections.push(agentDef.prompt);
   sections.push("");
@@ -514,6 +527,8 @@ task({
 2. **\`task\`** (do this NOW) = Execution
    - Spawns the subagent with the engineered prompt
    - Returns results back to you
+
+**Complete all MANDATORY FIRST STEP actions before proceeding to task execution. DO NOT skip bootstrap.**
 
 **Do NOT skip the task invocation. The delegation is incomplete without it.**`;
 }
