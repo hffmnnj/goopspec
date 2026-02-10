@@ -22,6 +22,16 @@ Commits should:
 - Explain the "why" not just the "what"
 - Be atomic (one logical change per commit)
 
+### Commit After Task (Hard Rule)
+
+Agents MUST commit after completing each delegated task. Task completion without a commit is non-compliant.
+
+Required behavior:
+- Agents MUST create at least one atomic commit for every completed task
+- Each commit message MUST follow `type(scope): description`
+- Agents MUST announce what they committed in their task report (no silent commits)
+- If a task includes multiple logical changes, agents MUST create multiple focused commits instead of one mixed commit
+
 ---
 
 ## Commit Message Format
