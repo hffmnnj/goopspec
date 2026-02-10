@@ -3,8 +3,8 @@ name: goop-plan
 description: Create specification and blueprint from discovery interview
 phase: plan
 requires: interview_complete
-next-step: "When planning is complete, lock the specification"
-next-command: /goop-specify
+next-step: "When planning is complete and spec is confirmed, begin implementation"
+next-command: /goop-execute
 alternatives:
   - command: /goop-discuss
     when: "If discovery interview was not completed"
@@ -53,7 +53,8 @@ goop_reference({ name: "plan-process" })
 5. **Spawn goop-planner** — With full discovery context and current depth setting (`shallow`/`standard`/`deep`)
 6. **Per-Wave Dynamic Questioning** — Generate contextual wave-specific questions (typically 3-6 total, scaled by depth: shallow 1-2, standard 3-4, deep 5-6) and capture user answers before finalizing each wave
 7. **Post-Wave Review Gate** — After each wave draft, present review options (approve, request more research, clarify) before moving forward
-8. **Generate HANDOFF.md** — For session continuity
+8. **Contract Gate** — Present spec summary to user for confirmation. On confirm: lock spec via `goop_state({ action: 'lock-spec' })`. On decline: spec stays unlocked for iteration.
+9. **Generate HANDOFF.md** — For session continuity
 
 ## Output
 
@@ -71,7 +72,9 @@ goop_reference({ name: "plan-process" })
 - [ ] PROJECT_KNOWLEDGE_BASE.md created if missing
 - [ ] goop-planner spawned with full discovery context
 - [ ] 100% must-have coverage achieved
-- [ ] User knows next step is `/goop-specify`
+- [ ] User knows next step is `/goop-execute`
+- [ ] Spec confirmed and locked by user
+- [ ] User declined lock, spec remains draft
 - [ ] Per-wave dynamic questions are generated and answered for each planned wave
 - [ ] Post-wave review gate is presented with structured options per wave
 - [ ] Depth setting (`shallow`/`standard`/`deep`) changes planning detail and question volume

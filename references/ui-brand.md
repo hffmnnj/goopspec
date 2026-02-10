@@ -111,7 +111,7 @@ Findings saved to RESEARCH.md
 3 recommendations identified
 2 risks documented
 
-Ready for: /goop-specify
+Ready for: /goop-execute
 
 ──────────────────────────────────────────────────────
 ```

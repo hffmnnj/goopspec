@@ -26,7 +26,6 @@ const COMMAND_PHASES: Record<string, WorkflowPhase> = {
   "goop-plan": "plan",
   "goop-discuss": "plan",  // discuss also starts planning phase
   "goop-research": "research",
-  "goop-specify": "specify",
   "goop-execute": "execute",
   "goop-accept": "accept",
   "goop-complete": "idle",  // completing returns to idle

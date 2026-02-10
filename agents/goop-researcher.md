@@ -374,7 +374,7 @@ Research complete. Ready to inform [planning/specification/decision].
 
 **Recommended actions:**
 1. Review RESEARCH.md with user
-2. Proceed to `/goop-specify` to lock specification
+2. Proceed to `/goop-plan` to integrate findings and lock at the contract gate
 3. Or: Request additional research on [gap area]
 
 **Key decision enabled:**
@@ -429,14 +429,14 @@ Research complete. Ready to inform [planning/specification/decision].
 
   <handoff>
     <ready>true</ready>
-    <next_action agent="orchestrator">Review research and proceed to /goop-specify</next_action>
+    <next_action agent="orchestrator">Review research, then proceed to /goop-plan (or /goop-execute if already locked)</next_action>
     <files_to_read>
       <file>.goopspec/RESEARCH.md</file>
       <file>.goopspec/SPEC.md</file>
     </files_to_read>
     <blockers>None</blockers>
     <suggest_new_session>true</suggest_new_session>
-    <next_command>/goop-specify</next_command>
+    <next_command>/goop-plan</next_command>
   </handoff>
 </goop_report>
 ```
@@ -469,7 +469,7 @@ RESEARCH.md ready at `.goopspec/RESEARCH.md`
 
 **Recommendation:** [Option X] because [reason]
 
-**Ready for:** `/goop-specify` or `/goop-plan`
+**Ready for:** `/goop-plan` or `/goop-execute` (if spec is already locked)
 ```
 
 ### Partial Research (Need More Info)

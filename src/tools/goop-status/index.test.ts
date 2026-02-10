@@ -126,7 +126,7 @@ describe("goop_status tool", () => {
       const tool = createGoopStatusTool(ctx);
       const result = await tool.execute({}, toolContext);
 
-      expect(result).toContain("goop-specify");
+      expect(result).toContain("goop-execute");
     });
   });
 

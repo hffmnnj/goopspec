@@ -125,7 +125,7 @@ GoopSpec scales to the task size:
 | **Milestone** | Major releases | Multiple cycles + archive |
 
 ### Quick Mode
-- Skip Research and Specify phases
+- Skip Research and contract-lock flow
 - For tasks under ~30 minutes
 - Still uses memory and atomic commits
 - Tracked in `.goopspec/quick/`
@@ -133,7 +133,7 @@ GoopSpec scales to the task size:
 ### Standard Mode
 - Full 5-phase workflow
 - For features taking hours to a day
-- Contract gate at Specify
+- Contract gate at end of Plan (confirm+lock)
 - Acceptance gate at end
 
 ### Comprehensive Mode

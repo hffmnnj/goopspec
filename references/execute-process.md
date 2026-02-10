@@ -22,7 +22,7 @@ IF state.specLocked != true:
   
   ✗ Specification must be locked before execution.
   
-  → Run: `/goop-specify`
+  → Run: `/goop-plan` to confirm and lock, then `/goop-execute`
   
   ---
 ```
@@ -211,7 +211,7 @@ Run: /goop-execute
 Wave [N] complete. Starting Wave [N+1] next.
 ```
 
-### 5.5 Suggest new session
+### 5.5 Offer continuation options
 ```
 ## 🔮 GoopSpec · Wave [N] Complete
 
@@ -226,7 +226,7 @@ Wave [N] complete. Starting Wave [N+1] next.
 ### Next
 
 **Option A:** Continue to Wave [N+1] (current session)
-**Option B:** Start new session for fresh context (Recommended)
+**Option B:** Start new session for fresh context (optional)
 
 For Option B:
 1. Start a new session
@@ -234,6 +234,28 @@ For Option B:
 
 ---
 ```
+
+### 5.6 Session-Length Guidance (non-blocking)
+
+Show this guidance only after the current wave is fully complete (after 5.1-5.5). Never interrupt mid-wave.
+
+**Trigger condition:**
+```
+IF currentWave >= 2:
+  show session-length recommendation
+```
+
+**Recommendation text:**
+```
+You've completed [N] waves in this session. For optimal context quality, consider:
+1. Save checkpoint: `/goop-pause`
+2. Start a fresh session
+3. Resume with `/goop-resume` or `/goop-execute`
+
+This is a recommendation, not a requirement. Execution can continue in this session.
+```
+
+This guidance is advisory only and must not block execution.
 
 ---
 
@@ -344,7 +366,7 @@ goop-executor: Task 1.2 COMPLETE (commit: def456)
 
 ## 🔮 GoopSpec · Wave 1 Complete
 
-**Recommend:** Start new session for Wave 2
+Continue to Wave 2 in the current session, or pause and resume later.
 ```
 
 ### Checkpoint Reached

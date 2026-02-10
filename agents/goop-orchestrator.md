@@ -238,7 +238,7 @@ IF user requests execution:
     
     ✗ Specification not locked.
     
-    → Run: `/goop-specify`
+    → Run: `/goop-plan` to confirm+lock, then `/goop-execute`
     
     ---
     
@@ -539,16 +539,21 @@ task({
 1. Check discovery gate (interview_complete + REQUIREMENTS.md)
 2. Spawn `goop-planner` to create SPEC.md + BLUEPRINT.md
 3. Present documents to user
-4. Suggest `/goop-specify` to lock
-5. Generate HANDOFF.md, suggest new session
+4. Present Contract Gate summary: must-haves, out-of-scope, wave summary, and traceability coverage
+5. Ask user to choose: **Confirm and lock**, **Amend**, or **Cancel**
+6. On **Confirm and lock**: call `goop_state({ action: "lock-spec" })`, then proceed to `/goop-execute`
+7. On **Amend**: apply requested spec/blueprint changes, then re-present Contract Gate for confirmation
+8. On **Cancel**: keep spec unlocked and stop without transitioning
+9. Generate HANDOFF.md, suggest new session
 
-### Specify Phase (CONTRACT GATE)
-1. Display SPEC.md must-haves and out-of-scope
-2. Display BLUEPRINT.md wave summary
-3. Show traceability matrix
-4. **MUST GET USER CONFIRMATION** ("confirm" to lock)
-5. Lock the spec: `goop_state({ action: "lock-spec" })`
-6. Log to memory: "Spec locked"
+### Specify Phase (INTERNAL-ONLY, Research Path)
+1. Use only for internal `research → specify` transitions (not a user-triggered command)
+2. Display SPEC.md must-haves and out-of-scope
+3. Display BLUEPRINT.md wave summary
+4. Show traceability matrix
+5. **MUST GET USER CONFIRMATION** ("confirm" to lock)
+6. Lock the spec: `goop_state({ action: "lock-spec" })`
+7. Log to memory: "Spec locked" and route to `/goop-execute`
 
 ### Execute Phase
 **Gate: Spec must be locked.**
@@ -559,6 +564,8 @@ task({
    - Wait for all tasks in wave to complete
    - Update CHRONICLE.md with progress
    - Save checkpoint at wave boundary
+   - Read `currentWave`/`totalWaves` from `goop_state`; after completing wave 2 (or any wave where `currentWave >= 2`), recommend: "We've completed N waves. For optimal context quality, I recommend saving a checkpoint with `/goop-pause` and resuming in a fresh session."
+   - This is non-blocking guidance only; continue execution if the user does not act on it
    - Generate HANDOFF.md, suggest new session
 3. On task failure: Apply deviation rules
 4. Continue until all waves complete
@@ -750,8 +757,7 @@ All subagents return XML response envelopes. Parse them:
 ```bash
 # Core commands you orchestrate
 /goop-discuss   # Discovery interview
-/goop-plan      # Create blueprint (requires discovery)
-/goop-specify   # Lock specification
+/goop-plan      # Create blueprint + confirm/lock specification
 /goop-execute   # Execute waves (requires spec lock)
 /goop-accept    # Verify and accept
 /goop-complete  # Archive and learn
