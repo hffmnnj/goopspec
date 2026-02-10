@@ -350,8 +350,10 @@ At session start, agents offer to create a feature branch:
 ### Pull Requests
 
 At end of phases, agents offer to create PRs:
+- **Ask which branch to target** (don't assume `main`)
 - Title: `type(scope): Descriptive summary`
 - Body: Summary, Changes, Testing, Notes
+- Use `--base $TARGET_BRANCH` flag with `gh pr create`
 - No internal terminology
 
 For complete guidance: `goop_reference({ name: "git-workflow" })`

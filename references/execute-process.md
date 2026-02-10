@@ -291,34 +291,36 @@ Use `question` tool:
 
 Follow the PR creation process from git-workflow reference:
 
-1. Detect default base branch:
-```bash
-DEFAULT_BASE_BRANCH=$(git remote show origin | grep 'HEAD branch' | sed 's/.*: //')
-if [ -z "$DEFAULT_BASE_BRANCH" ]; then DEFAULT_BASE_BRANCH="main"; fi
-```
+1. **Ask which branch to target.**
 
-2. Ask user which base branch to target:
-- Use `question` tool: "Which base branch should this PR target?"
-- Default answer: `$DEFAULT_BASE_BRANCH`
-- Save response as `<selected-branch>`
+Use `question` tool:
+- header: "PR Target Branch"
+- question: "Which branch should this PR merge into?"
+- options:
+  - "main" — Merge into main branch
+  - "develop" — Merge into develop branch
 
-3. Check branch status against the selected base branch:
+The user can also type a custom branch name.
+
+Store the answer as `$TARGET_BRANCH`.
+
+2. Check branch status:
 ```bash
 git branch --show-current
-git log <selected-branch>..HEAD --oneline
-git diff <selected-branch>...HEAD --stat
+git log $TARGET_BRANCH..HEAD --oneline
+git diff $TARGET_BRANCH...HEAD --stat
 ```
 
-4. Generate PR title and description:
+3. Generate PR title and description:
 - **Title:** `type(scope): Descriptive summary` (no GoopSpec terminology)
 - **Body:** Summary, Changes, Testing (from CHRONICLE.md), Notes
 
-5. Create PR:
+4. Create PR:
 ```bash
-gh pr create --base <selected-branch> --title "type(scope): Title" --body "..." [--draft]
+gh pr create --base $TARGET_BRANCH --title "type(scope): Title" --body "..." [--draft]
 ```
 
-6. Display PR URL
+5. Display PR URL
 
 ### 6.2 Display next steps
 
