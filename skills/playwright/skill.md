@@ -7,7 +7,7 @@ triggers:
   - e2e
   - browser
   - testing
-version: 0.2.5
+version: 0.2.6
 ---
 
 # Playwright Skill

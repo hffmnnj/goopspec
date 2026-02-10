@@ -24,7 +24,7 @@ export type TaskCategory =
  * Category to agent mapping
  */
 export const CATEGORY_AGENTS: Record<TaskCategory, string> = {
-  code: "goop-executor",
+  code: "goop-executor-high",
   plan: "goop-planner",
   research: "goop-researcher",
   explore: "goop-explorer",
@@ -35,7 +35,7 @@ export const CATEGORY_AGENTS: Record<TaskCategory, string> = {
   test: "goop-tester",
   docs: "goop-writer",
   memory: "memory-distiller",
-  general: "goop-executor",
+  general: "goop-executor-high",
 };
 
 /**

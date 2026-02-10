@@ -424,11 +424,11 @@ function generateDelegationGuidance(toolName: string, filePath: string): string 
 
 You attempted to use \`${toolName}\` on \`${filePath}\`.
 
-As the orchestrator, delegate implementation work to **goop-executor**:
+As the orchestrator, delegate implementation work to **the appropriate goop-executor-{tier}** (low/medium/high/frontend):
 
 \`\`\`
 task({
-  subagent_type: "goop-executor",
+  subagent_type: "goop-executor-high",
   description: "Implement changes to ${basename(filePath)}",
   prompt: \`
     Modify file: ${filePath}
@@ -710,7 +710,7 @@ export function createOrchestratorEnforcementHooks(ctx: PluginContext) {
           timestamp: new Date().toISOString(),
           type: "deviation",
           description: "Orchestrator code modification blocked",
-          action: `Denied ${input.tool} on ${filePath}. Should delegate to goop-executor.`,
+          action: `Denied ${input.tool} on ${filePath}. Should delegate to the appropriate executor tier.`,
           rule: 4,
           files: [filePath],
         });

@@ -49,7 +49,38 @@ git checkout -b feat/[short-description]
 - Keep descriptions short and kebab-case
 - Check existing branches first: `git branch --list`
 
-### 1.3 Check for existing project documents
+### 1.3 Gitignore preference for `.goopspec/`
+
+Check workflow state before prompting:
+
+```
+goop_state({ action: "get" })
+```
+
+Inspect `workflow.gitignoreGoopspec`:
+- If `true` or `false`: preference already captured, skip this prompt entirely.
+- If `undefined`/`null`: ask once during discuss setup.
+
+Use `question` tool:
+- header: "Gitignore Preference"
+- question: "Do you want GoopSpec to add `.goopspec/` to this project's `.gitignore`?"
+- options:
+  - "Yes, ignore `.goopspec/` (Recommended)" — Keep planning artifacts out of git by default
+  - "No, keep `.goopspec/` tracked" — Leave `.gitignore` unchanged
+
+**On "Yes":**
+- Ensure project `.gitignore` exists (create if needed)
+- Add `.goopspec/` only if it is not already present (no duplicates)
+- Persist preference in state using `goop_state` (`workflow.gitignoreGoopspec = true`)
+
+**On "No":**
+- Do not modify `.gitignore`
+- Persist preference in state using `goop_state` (`workflow.gitignoreGoopspec = false`)
+
+**Reconfiguration:**
+- This preference can be changed later with `/goop-setup`.
+
+### 1.4 Check for existing project documents
 
 ```
 Read(".goopspec/SPEC.md")
@@ -79,13 +110,13 @@ Then continue with discovery.
 **On "Continue":** Exit and suggest `/goop-status`.
 **On "Overwrite":** Warn about losing history, then continue.
 
-### 1.4 Check for existing REQUIREMENTS.md
+### 1.5 Check for existing REQUIREMENTS.md
 
 ```
 Read(".goopspec/REQUIREMENTS.md")    # If exists, interview was done
 ```
 
-### 1.5 If REQUIREMENTS.md exists
+### 1.6 If REQUIREMENTS.md exists
 
 Use `question` tool:
 - header: "Existing Discovery"
@@ -95,13 +126,13 @@ Use `question` tool:
   - "Review and update" — Load previous answers, modify as needed
   - "Use existing" — Skip interview, go straight to /goop-plan
 
-### 1.6 Initialize if needed
+### 1.7 Initialize if needed
 
 ```bash
 mkdir -p .goopspec
 ```
 
-### 1.7 Search memory for context
+### 1.8 Search memory for context
 
 ```
 memory_search({ query: "project preferences architecture [user's topic]", limit: 5 })
@@ -109,7 +140,7 @@ memory_search({ query: "project preferences architecture [user's topic]", limit:
 
 Store relevant findings - use them to skip questions you already know answers to.
 
-### 1.8 Research Depth Selection
+### 1.9 Research Depth Selection
 
 Before starting the six-question interview, ask the user which research depth they want.
 
@@ -422,4 +453,4 @@ planning. Want to do that first?"
 
 ---
 
-*Discovery Interview Process v0.2.5*
+*Discovery Interview Process v0.2.6*

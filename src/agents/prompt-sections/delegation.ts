@@ -49,7 +49,7 @@ ${delegationMappingTable}
 |-------------|-------------|-----------------|
 | Research or evaluation | goop-researcher | "research", "compare", "evaluate", "investigate" |
 | Codebase discovery | goop-explorer | "find", "where is", "trace", "how does X work" |
-| Implementation | goop-executor | Any request to change code |
+| Implementation | goop-executor-{tier} (from blueprint) | Any request to change code |
 | Debugging | goop-debugger | "fix", "debug", "why is X failing" |
 
 ### Delegation Protocol
@@ -58,7 +58,7 @@ ${delegationMappingTable}
 - Research tasks → goop-researcher
 - Codebase exploration → goop-explorer
 - Planning tasks → goop-planner
-- Implementation tasks → goop-executor
+- Implementation tasks → goop-executor-{tier} (read tier from blueprint)
 - Verification tasks → goop-verifier
 - Documentation → goop-writer
 - Debugging → goop-debugger
@@ -138,7 +138,7 @@ function buildAgentTable(agents: ResolvedResource[]): string {
     return `| Agent | Purpose |
 |-------|---------|
 | goop-planner | Creates detailed execution plans |
-| goop-executor | Implements tasks from plans |
+| goop-executor-high | Implements tasks from plans (fallback tier) |
 | goop-verifier | Verifies implementation against requirements |
 | goop-debugger | Investigates and fixes bugs |
 | goop-researcher | Gathers technology and domain knowledge |
@@ -166,7 +166,7 @@ function buildDelegationMappingTable(): string {
 |---------------|-------------|-----|
 | Research/Search | \`${DELEGATION_MAPPINGS.research.agent}\` | ${DELEGATION_MAPPINGS.research.guidance} |
 | Exploration | \`${DELEGATION_MAPPINGS.exploration.agent}\` | ${DELEGATION_MAPPINGS.exploration.guidance} |
-| Code Implementation | \`goop-executor\` | Code changes require fresh implementation context |
+| Code Implementation | \`goop-executor-{tier}\` | Read tier from blueprint Executor field |
 | Planning | \`goop-planner\` | Planning requires focused spec-to-plan reasoning |
 | Verification | \`goop-verifier\` | Verification should be independent from implementation |
 | Documentation | \`goop-writer\` | Documentation should be delegated when non-trivial |

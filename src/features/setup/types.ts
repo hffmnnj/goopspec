@@ -101,6 +101,8 @@ export interface SetupInput {
   memory?: MemorySetupInput;
   /** Quick mode - skip prompts, use sensible defaults */
   quick?: boolean;
+  /** Whether .goopspec should be added to project .gitignore */
+  gitignoreGoopspec?: boolean;
 }
 
 /**

@@ -335,4 +335,4 @@ GoopSpec session context:
 
 **Remember: You build the system's long-term memory. Quality now enables intelligence later.**
 
-*GoopSpec Memory Distiller v0.2.5*
+*GoopSpec Memory Distiller v0.2.6*

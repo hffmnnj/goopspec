@@ -7,7 +7,7 @@ triggers:
   - spawn
   - subagent
   - task
-version: 0.2.5
+version: 0.2.6
 requires:
   - goop-core
 ---
@@ -72,7 +72,7 @@ Don't delegate when:
 | Task Type | Agent | Model Tier |
 |-----------|-------|------------|
 | Planning | goop-planner | quality |
-| Implementation | goop-executor | balanced |
+| Implementation | goop-executor-{tier} | balanced |
 | Verification | goop-verifier | quality |
 | Research | goop-researcher | balanced |
 | Documentation | goop-writer | budget |
@@ -108,7 +108,7 @@ This tool **prepares** a rich, production-ready prompt by:
 
 ```typescript
 goop_delegate({
-  agent: "goop-executor",
+  agent: "goop-executor-high",
   prompt: "Implement user authentication",
   context: "Stack: Next.js + NextAuth"
 })
@@ -122,7 +122,7 @@ This tool **spawns** the subagent with the engineered prompt:
 
 ```typescript
 task({
-  subagent_type: "goop-executor",
+  subagent_type: "goop-executor-high",
   description: "Implement auth",
   prompt: `[Copy composedPrompt from goop_delegate output]`
 })
@@ -141,7 +141,10 @@ task({
 
 | subagent_type | Use For |
 |---------------|---------|
-| `goop-executor` | Code implementation, features, fixes |
+| `goop-executor-low` | Simple implementation, config updates, mechanical fixes |
+| `goop-executor-medium` | Business logic, refactors, and standard implementation tasks |
+| `goop-executor-high` | Complex implementation, architecture-sensitive changes, critical code paths |
+| `goop-executor-frontend` | UI/UX implementation, styling, responsive frontend work |
 | `goop-explorer` | Fast codebase mapping, pattern detection |
 | `goop-researcher` | Deep domain research, technology evaluation |
 | `goop-planner` | Architecture design, blueprint creation |
@@ -166,7 +169,7 @@ task({
 ```typescript
 // Step 1: Engineer the prompt
 goop_delegate({
-  agent: "goop-executor",
+  agent: "goop-executor-high",
   prompt: "Implement password reset flow",
   context: `
     Stack: Next.js 14, Prisma, Resend
@@ -177,7 +180,7 @@ goop_delegate({
 
 // Step 2: Execute (copy the task call from goop_delegate output)
 task({
-  subagent_type: "goop-executor",
+  subagent_type: "goop-executor-high",
   description: "Implement password reset",
   prompt: `[The full composedPrompt from goop_delegate]`
 })

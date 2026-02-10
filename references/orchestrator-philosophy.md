@@ -43,10 +43,10 @@ These tools are blocked for code files in implementation directories:
 
 | Tool | Delegate To | Rationale |
 |------|-------------|-----------|
-| `edit` | goop-executor | Code changes need fresh context |
-| `mcp_edit` | goop-executor | Code changes need fresh context |
-| `write` | goop-executor | New file creation is implementation |
-| `mcp_write` | goop-executor | New file creation is implementation |
+| `edit` | goop-executor-{tier} | Code changes need fresh context |
+| `mcp_edit` | goop-executor-{tier} | Code changes need fresh context |
+| `write` | goop-executor-{tier} | New file creation is implementation |
+| `mcp_write` | goop-executor-{tier} | New file creation is implementation |
 
 **Note**: These tools are allowed for planning files (.goopspec/, markdown, config).
 
@@ -73,7 +73,7 @@ The orchestrator may use these for quick lookups, but extensive exploration shou
 |-----------|-------|-------------|
 | Research | `goop-researcher` | Any information gathering, comparison, evaluation |
 | Exploration | `goop-explorer` | Codebase navigation, finding files/functions |
-| Implementation | `goop-executor` | Any code changes, new features |
+| Implementation | `goop-executor-{tier}` | Any code changes, new features |
 | Debugging | `goop-debugger` | Bug investigation, root cause analysis |
 | Testing | `goop-tester` | Writing and running tests |
 | Documentation | `goop-writer` | README, API docs, guides |
@@ -166,7 +166,7 @@ mcp_edit({
 **Right:**
 ```
 task({
-  subagent_type: "goop-executor",
+  subagent_type: "goop-executor-high",
   description: "Update Button component",
   prompt: `
     Modify: src/components/Button.tsx
@@ -208,5 +208,5 @@ Enforcement can be configured in the plugin context:
 
 ---
 
-*Philosophy derived from GoopSpec v0.2.5*
+*Philosophy derived from GoopSpec v0.2.6*
 *"The conductor leads the orchestra but doesn't play the instruments."*

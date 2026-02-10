@@ -250,4 +250,4 @@ Orchestrator:
 
 ---
 
-*Specification Lock Process v0.2.5*
+*Specification Lock Process v0.2.6*

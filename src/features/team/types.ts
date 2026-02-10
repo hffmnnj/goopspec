@@ -11,7 +11,7 @@ export interface AgentRegistration {
   id: string;
 
   /**
-   * Agent type (e.g., goop-executor).
+   * Agent type (e.g., goop-executor-high).
    */
   type: string;
 

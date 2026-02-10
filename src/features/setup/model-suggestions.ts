@@ -37,16 +37,42 @@ export const AGENT_MODEL_SUGGESTIONS: Record<string, AgentModelSuggestion> = {
     ],
     description: "Visual design planning and UI/UX reasoning",
   },
-  "goop-executor": {
+  "goop-executor-low": {
+    suggestions: [
+      "anthropic/claude-sonnet-4-5",
+      "kimi-for-coding/k2p5",
+      "opencode/minimax-m2.1-free",
+      "zai-coding-plan/glm-4.7",
+    ],
+    description: "Simple mechanical tasks - config edits, renaming, scaffolding",
+  },
+  "goop-executor-medium": {
+    suggestions: [
+      "kimi-for-coding/k2p5",
+      "anthropic/claude-sonnet-4-5",
+      "openai/gpt-5.3-codex",
+      "opencode/minimax-m2.1-free",
+    ],
+    description: "Business logic, utilities, tests, refactoring, scripting",
+  },
+  "goop-executor-high": {
     suggestions: [
       "openai/gpt-5.3-codex",
       "anthropic/claude-opus-4-6",
-      "anthropic/claude-sonnet-4-5",
+      "kimi-for-coding/k2p5",
+      "opencode/minimax-m2.1-free",
+    ],
+    description:
+      "Architecture, complex algorithms, API design, security-sensitive work",
+  },
+  "goop-executor-frontend": {
+    suggestions: [
+      "anthropic/claude-opus-4-6",
       "kimi-for-coding/k2p5",
       "google/antigravity-gemini-3-pro-high",
-      "opencode/glm-4.7-free",
+      "openai/gpt-5.3-codex",
     ],
-    description: "Task execution with checkpoints and verification",
+    description: "UI components, styling, layouts, accessibility, UX patterns",
   },
   "goop-explorer": {
     suggestions: [

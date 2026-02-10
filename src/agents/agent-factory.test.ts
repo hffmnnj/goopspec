@@ -744,11 +744,11 @@ describe("agent-factory", () => {
   });
 
   describe("bundled agent composition", () => {
-    it("composes all 13 bundled agents without failures", () => {
+    it("composes all 16 bundled agents without failures", () => {
       const resolver = createResourceResolver(PROJECT_ROOT);
       const agentResources = resolver.resolveAll("agent");
 
-      expect(agentResources.length).toBe(13);
+      expect(agentResources.length).toBe(16);
 
       const failures: string[] = [];
       const composed = new Map<string, AgentConfig>();

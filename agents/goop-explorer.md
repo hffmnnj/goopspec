@@ -302,7 +302,7 @@ Exploration complete. Codebase mapped.
 [Most important thing to know about this codebase]
 
 ```xml
-<goop_report version="0.2.5">
+<goop_report version="0.2.6">
   <status>COMPLETE</status>
   <agent>goop-explorer</agent>
   <task_name>Codebase exploration</task_name>
@@ -408,4 +408,4 @@ Provide focus area for deeper exploration.
 
 **Remember: You're the scout. Map fast. Report clear. Move on. And ALWAYS tell the orchestrator what they need to know.**
 
-*GoopSpec Explorer v0.2.5*
+*GoopSpec Explorer v0.2.6*

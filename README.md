@@ -6,10 +6,10 @@
 
 **Stop the AI chaos. Ship what you actually want.**
 
-[![Version](https://img.shields.io/badge/version-0.2.5-blue?style=for-the-badge)](https://github.com/hffmnnj/opencode-goopspec)
+[![Version](https://img.shields.io/badge/version-0.2.6-blue?style=for-the-badge)](https://github.com/hffmnnj/opencode-goopspec)
 [![Bun](https://img.shields.io/badge/Bun-1.0+-f97316?style=for-the-badge&logo=bun&logoColor=white)](https://bun.sh)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.8-3178c6?style=for-the-badge&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
-[![Tests](https://img.shields.io/badge/tests-1312%20passing-22c55e?style=for-the-badge)](./TEST-SUMMARY.md)
+[![Tests](https://img.shields.io/badge/tests-1319%20passing-22c55e?style=for-the-badge)](./TEST-SUMMARY.md)
 [![License](https://img.shields.io/badge/license-MIT-22c55e?style=for-the-badge)](./LICENSE)
 
 ---
@@ -240,8 +240,11 @@ The Conductor never writes implementation code. It directs specialists.
 
 | Agent | Alias | Default Model | What They Do |
 |-------|-------|---------------|--------------|
-| `goop-executor` | The Builder | `openai/gpt-5.3-codex` | Writes implementation code |
-| `goop-planner` | The Architect | `anthropic/claude-opus-4-6` | Creates specs and blueprints |
+| `goop-executor-low` | The Builder (Low) | `anthropic/claude-sonnet-4-5` | Handles simple, mechanical implementation tasks |
+| `goop-executor-medium` | The Builder (Medium) | `kimi-for-coding/k2p5` | Handles business logic and test-oriented implementation |
+| `goop-executor-high` | The Builder (High) | `openai/gpt-5.3-codex` | Handles complex architecture and security-sensitive work |
+| `goop-executor-frontend` | The Builder (Frontend) | `anthropic/claude-opus-4-6` | Handles UI, styling, responsiveness, and accessibility work |
+| `goop-planner` | The Architect | `openai/gpt-5.3-codex` | Creates specs and blueprints |
 | `goop-researcher` | The Scholar | `openai/gpt-5.2` | Deep domain research |
 | `goop-explorer` | The Scout | `google/gemini-3-flash` | Fast codebase mapping |
 | `goop-verifier` | The Auditor | `openai/gpt-5.3-codex` | Verifies against spec |
@@ -252,6 +255,52 @@ The Conductor never writes implementation code. It directs specialists.
 | `goop-writer` | The Scribe | `google/gemini-3-pro-high` | Documentation |
 | `goop-librarian` | The Archivist | `openai/gpt-5.2` | Code and doc search |
 | `memory-distiller` | The Curator | `zai-coding-plan/glm-4.7` | Extracts learnings to memory |
+
+### Executor Tier System
+
+GoopSpec routes implementation work through four executor tiers so each task gets the right model for the job. This improves cost efficiency on simple tasks while preserving quality on complex and frontend-heavy work.
+
+#### Tier Overview
+
+| Tier | Default Model | Scope | Example Tasks |
+|------|---------------|-------|---------------|
+| `goop-executor-low` | `anthropic/claude-sonnet-4-5` | Config files, simple edits, renaming, dependency updates, markdown, boilerplate | Rename files, update config flags, scaffold command docs |
+| `goop-executor-medium` | `kimi-for-coding/k2p5` | Business logic, utilities, middleware, data transforms, tests, refactoring | Add service logic, write unit tests, refactor utilities |
+| `goop-executor-high` | `openai/gpt-5.3-codex` | Architecture, complex algorithms, DB schemas, API design, security | Design API contracts, implement auth flow, optimize core algorithms |
+| `goop-executor-frontend` | `anthropic/claude-opus-4-6` | UI components, styling, layouts, responsive design, accessibility, UX | Build responsive UI, improve a11y, implement design system components |
+
+#### Default and Recommended Models
+
+| Tier | Default Model | Recommended Models |
+|------|---------------|--------------------|
+| `goop-executor-low` | `anthropic/claude-sonnet-4-5` | `anthropic/claude-sonnet-4-5`, `kimi-for-coding/k2p5`, `opencode/minimax-m2.1-free`, `zai-coding-plan/glm-4.7` |
+| `goop-executor-medium` | `kimi-for-coding/k2p5` | `kimi-for-coding/k2p5`, `anthropic/claude-sonnet-4-5`, `openai/gpt-5.3-codex`, `opencode/minimax-m2.1-free` |
+| `goop-executor-high` | `openai/gpt-5.3-codex` | `openai/gpt-5.3-codex`, `anthropic/claude-opus-4-6`, `kimi-for-coding/k2p5`, `opencode/minimax-m2.1-free` |
+| `goop-executor-frontend` | `anthropic/claude-opus-4-6` | `anthropic/claude-opus-4-6`, `kimi-for-coding/k2p5`, `google/antigravity-gemini-3-pro-high`, `openai/gpt-5.3-codex` |
+
+#### Tier Classification Quick Reference
+
+| If the task is mostly... | Use this tier |
+|--------------------------|---------------|
+| Mechanical edits, setup, docs, and simple file changes | `goop-executor-low` |
+| Typical application logic, middleware, data processing, and tests | `goop-executor-medium` |
+| Architecture, security, schema/API design, or high-complexity logic | `goop-executor-high` |
+| UI components, styling, responsive behavior, and accessibility | `goop-executor-frontend` |
+
+#### Configuration via Setup
+
+Run `/goop-setup` (or `goopspec models`) to select models for each executor tier. The setup wizard shows recommended models and saves your selections to `.goopspec/config.json`.
+
+```json
+{
+  "agents": {
+    "goop-executor-low": { "model": "anthropic/claude-sonnet-4-5" },
+    "goop-executor-medium": { "model": "kimi-for-coding/k2p5" },
+    "goop-executor-high": { "model": "openai/gpt-5.3-codex" },
+    "goop-executor-frontend": { "model": "anthropic/claude-opus-4-6" }
+  }
+}
+```
 
 ---
 

@@ -26,7 +26,7 @@ const DELEGATION_EXAMPLE = `
 Use the task tool for delegation:
 \`\`\`
 task({
-  subagent_type: "goop-executor",  // or other agent type
+  subagent_type: "goop-executor-high",  // or appropriate goop-executor-{tier}
   description: "Brief task description",
   prompt: \`
     ## TASK

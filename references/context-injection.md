@@ -130,7 +130,7 @@ When orchestrator delegates via `task()`:
 
 ```typescript
 task({
-  subagent_type: "goop-executor",
+  subagent_type: "goop-executor-high",
   description: "Implement feature X",
   prompt: `
     ## PROJECT CONTEXT
@@ -303,5 +303,5 @@ Delegating to agent with 5000 tokens of context
 
 ---
 
-*Context Injection Protocol v0.2.5*
+*Context Injection Protocol v0.2.6*
 *"Shared knowledge, consistent decisions."*

@@ -18,7 +18,10 @@ describe("Resource Integration", () => {
     const EXPECTED_AGENTS = [
       "goop-orchestrator",
       "goop-planner",
-      "goop-executor",
+      "goop-executor-low",
+      "goop-executor-medium",
+      "goop-executor-high",
+      "goop-executor-frontend",
       "goop-researcher",
       "goop-explorer",
       "goop-librarian",

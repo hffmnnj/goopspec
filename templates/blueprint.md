@@ -74,6 +74,7 @@ Wave {{number}}: {{name}} {{#parallel}}[PARALLEL]{{/parallel}}{{^parallel}}[SEQU
 | Attribute | Value |
 |-----------|-------|
 | **Intent** | {{intent}} |
+| **Executor** | {{executor}} |
 | **Parallel** | {{#parallel}}Yes{{/parallel}}{{^parallel}}No{{/parallel}} |
 {{#depends_on}}| **Depends On** | Task {{depends_on}} |{{/depends_on}}
 {{#blocks}}| **Blocks** | Task {{blocks}} |{{/blocks}}
@@ -185,4 +186,4 @@ At wave boundaries:
 
 *Blueprint derived from SPEC.md*
 *Execute with confidence — the plan is the contract*
-*GoopSpec v0.2.5*
+*GoopSpec v0.2.6*

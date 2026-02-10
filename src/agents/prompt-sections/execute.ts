@@ -37,7 +37,7 @@ For each wave:
    \`\`\`
 
 2. **Execute Tasks**
-   - Delegate via \`goop_delegate\` to **goop-executor** for implementation
+   - Delegate via \`goop_delegate\` to the executor tier specified in the task's **Executor** metadata field (from BLUEPRINT.md) for implementation
    - Track progress with todo tools
    - Save checkpoints with \`goop_checkpoint\`
 
@@ -60,12 +60,16 @@ For each wave:
 When delegating tasks:
 \`\`\`
 goop_delegate({
-  agent: "goop-executor",
+  // Read the Executor field from BLUEPRINT task metadata
+  agent: "[Read Executor field from BLUEPRINT task metadata]",
   prompt: "Execute Task [X.Y]: [Name]",
   context: "\
 Context:\n- [Relevant context from plan]\n\nRequirements:\n- [Specific requirements]\n- [UI patterns or design system guidance, if applicable]\n\nFiles to modify:\n- [file paths]\n\nAcceptance criteria:\n- [How to verify completion]\n\nConstraints:\n- Follow existing code patterns\n- Write clean, tested code\n- Document decisions in ADL\n- Respect decision gates; do not bypass Specify/Accept\n"
 })
 \`\`\`
+
+**Tier Routing:** Each task in BLUEPRINT.md has an \`| **Executor** | goop-executor-{tier} |\` field.
+Always use the exact executor name from that field. Available tiers: \`goop-executor-low\`, \`goop-executor-medium\`, \`goop-executor-high\`, \`goop-executor-frontend\`.
 
 ### Handling Execution Issues
 

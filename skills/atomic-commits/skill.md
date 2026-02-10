@@ -7,7 +7,7 @@ triggers:
   - git
   - atomic
   - history
-version: 0.2.5
+version: 0.2.6
 ---
 
 # Atomic Commits Skill
@@ -83,7 +83,7 @@ Changes:
 feat(auth): Wave 2 Task 4 - OAuth implementation
 
 Completed W2.T4 from BLUEPRINT.md per MH-05 specification.
-goop-executor implemented this feature.
+The implementation agent completed this feature.
 
 Changes:
 - Implemented as specified in SPEC.md

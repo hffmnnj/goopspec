@@ -424,7 +424,7 @@ Restart if:
     <evidence>[proof]</evidence>
   </root_cause>
   <next_steps>
-    <for_orchestrator>Delegate fix to goop-executor with file and verification steps.</for_orchestrator>
+    <for_orchestrator>Delegate fix to goop-executor-{tier} with file and verification steps.</for_orchestrator>
   </next_steps>
 </debug_report>
 ```
@@ -453,4 +453,4 @@ Restart if:
 
 **Remember: You are a scientist, not a guesser. Hypothesize. Test. Prove. And ALWAYS tell the orchestrator the status and next steps.**
 
-*GoopSpec Debugger v0.2.5*
+*GoopSpec Debugger v0.2.6*

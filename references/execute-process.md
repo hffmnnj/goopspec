@@ -27,7 +27,45 @@ IF state.specLocked != true:
   ---
 ```
 
-### 1.2 Gate passed
+### 1.2 Feature branch guard
+
+Before starting wave delegation, ensure execution is not starting from the default branch.
+
+```bash
+git branch --show-current
+git remote show origin | grep 'HEAD branch' | sed 's/.*: //'
+```
+
+Set:
+- `currentBranch` = output of `git branch --show-current`
+- `defaultBranch` = detected HEAD branch from origin (fallback to `main` if detection is empty)
+
+Evaluate against default-branch set:
+- `main`
+- `master`
+- `defaultBranch`
+
+If `currentBranch` is in that set, use `question` tool:
+- header: "Git Branch Guard"
+- question: "You're on `[currentBranch]`, which is a default branch. Create a feature branch before execution?"
+- options:
+  - "Create feature branch (Recommended)" — Create and switch to a feature branch
+  - "Stay on current branch" — Continue on `[currentBranch]`
+
+Suggested branch name:
+- Derive from SPEC title in `.goopspec/SPEC.md`
+- Pattern: `feat/<spec-title-kebab-case>`
+- Example: `# SPEC: Git Workflow Improvements` -> `feat/git-workflow-improvements`
+
+**On "Create feature branch":**
+
+```bash
+git checkout -b feat/<spec-title-kebab-case>
+```
+
+If `currentBranch` is NOT in the default-branch set, proceed silently with no prompt.
+
+### 1.3 Gate passed
 
 ```
 ## 🔮 GoopSpec · Execution
@@ -77,7 +115,7 @@ Identify:
 
 ```
 task({
-  subagent_type: "goop-executor",
+  subagent_type: "goop-executor-{tier}",
   description: "Execute Task [N.M]",
   prompt: `
 ## TASK
@@ -358,11 +396,11 @@ Orchestrator:
 
 [Delegating Task 1.1...]
 
-goop-executor: Task 1.1 COMPLETE (commit: abc123)
+goop-executor-high: Task 1.1 COMPLETE (commit: abc123)
 
 [Delegating Task 1.2...]
 
-goop-executor: Task 1.2 COMPLETE (commit: def456)
+goop-executor-medium: Task 1.2 COMPLETE (commit: def456)
 
 ## 🔮 GoopSpec · Wave 1 Complete
 
@@ -371,7 +409,7 @@ Continue to Wave 2 in the current session, or pause and resume later.
 
 ### Checkpoint Reached
 ```
-goop-executor: BLOCKED - Rule 4 deviation
+goop-executor-high: BLOCKED - Rule 4 deviation
 
 ## 🔮 GoopSpec · Decision Required
 
@@ -390,4 +428,4 @@ Orchestrator: Resuming with Option A...
 
 ---
 
-*Execution Process v0.2.5*
+*Execution Process v0.2.6*

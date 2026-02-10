@@ -6,6 +6,8 @@
  */
 
 import { tool, type ToolDefinition } from "@opencode-ai/plugin/tool";
+import { appendFileSync, existsSync, readFileSync, writeFileSync } from "fs";
+import { join } from "path";
 import type { PluginContext, ToolContext } from "../../core/types.js";
 import {
   detectEnvironment, 
@@ -35,6 +37,28 @@ import type {
 // ============================================================================
 // Formatting Functions
 // ============================================================================
+
+function ensureGoopspecGitignoreEntry(projectDir: string): void {
+  const gitignorePath = join(projectDir, ".gitignore");
+  const gitignoreEntry = ".goopspec/";
+
+  if (!existsSync(gitignorePath)) {
+    writeFileSync(gitignorePath, `${gitignoreEntry}\n`, "utf-8");
+    return;
+  }
+
+  const content = readFileSync(gitignorePath, "utf-8");
+  const hasGoopspecEntry = content
+    .split(/\r?\n/)
+    .some((line) => line.trim().replace(/\/+$/, "") === ".goopspec");
+
+  if (hasGoopspecEntry) {
+    return;
+  }
+
+  const separator = content.length > 0 && !content.endsWith("\n") ? "\n" : "";
+  appendFileSync(gitignorePath, `${separator}${gitignoreEntry}\n`, "utf-8");
+}
 
 /**
  * Format environment detection for display
@@ -111,13 +135,17 @@ function formatModelSuggestions(): string {
   lines.push("");
   lines.push("## Usage");
   lines.push("");
-  lines.push("To configure agent models, use:");
-  lines.push("```");
-  lines.push('goop_setup(action: "apply", scope: "project", agentModels: {');
-  lines.push('  "goop-orchestrator": "anthropic/claude-opus-4-6",');
-  lines.push('  "goop-executor": "anthropic/claude-sonnet-4-5",');
-  lines.push('  "goop-explorer": "anthropic/claude-haiku-4-5"');
-  lines.push("})");
+  lines.push("To configure tiered executor models in project config:");
+  lines.push("```json");
+  lines.push("{");
+  lines.push('  "agents": {');
+  lines.push('    "goop-orchestrator": { "model": "openai/gpt-5.3-codex" },');
+  lines.push('    "goop-executor-low": { "model": "anthropic/claude-sonnet-4-5" },');
+  lines.push('    "goop-executor-medium": { "model": "kimi-for-coding/k2p5" },');
+  lines.push('    "goop-executor-high": { "model": "openai/gpt-5.3-codex" },');
+  lines.push('    "goop-executor-frontend": { "model": "anthropic/claude-opus-4-6" }');
+  lines.push("  }");
+  lines.push("}");
   lines.push("```");
   lines.push("");
   lines.push("You can also enter custom model names not in the suggestions list.");
@@ -533,7 +561,7 @@ function formatStatus(status: SetupStatus): string {
 /**
  * Create the goop-setup tool
  */
-export function createGoopSetupTool(_ctx: PluginContext): ToolDefinition {
+export function createGoopSetupTool(ctx: PluginContext): ToolDefinition {
   return tool({
     description: "GoopSpec configuration and setup tool for detect/init/plan/apply/verify/reset/models/status actions.",
     args: {
@@ -555,6 +583,7 @@ export function createGoopSetupTool(_ctx: PluginContext): ToolDefinition {
       memoryEnabled: tool.schema.boolean().optional(),
       memoryProvider: tool.schema.enum(["local", "openai", "ollama"]).optional(),
       memoryWorkerPort: tool.schema.number().optional(),
+      gitignoreGoopspec: tool.schema.boolean().optional(),
       // Reset options
       preserveData: tool.schema.boolean().optional(),
       confirmed: tool.schema.boolean().optional(),
@@ -564,6 +593,14 @@ export function createGoopSetupTool(_ctx: PluginContext): ToolDefinition {
     async execute(args, toolCtx: ToolContext): Promise<string> {
       try {
         const projectDir = toolCtx.directory;
+
+        if (args.gitignoreGoopspec !== undefined) {
+          ctx.stateManager.updateWorkflow({ gitignoreGoopspec: args.gitignoreGoopspec });
+
+          if (args.gitignoreGoopspec) {
+            ensureGoopspecGitignoreEntry(projectDir);
+          }
+        }
         
         // ====================================================================
         // Models action: show model suggestions for all agents
@@ -645,6 +682,7 @@ export function createGoopSetupTool(_ctx: PluginContext): ToolDefinition {
           agentModels: args.agentModels,
           memory: memoryConfig,
           quick: args.quick,
+          gitignoreGoopspec: args.gitignoreGoopspec,
         };
         
         // Detect environment

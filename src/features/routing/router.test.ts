@@ -8,23 +8,23 @@ import { routeTask, getAgentForCategory, getCategoryForAgent, listCategories } f
 
 describe("routeTask", () => {
   describe("code category routing", () => {
-    it("routes implementation tasks to goop-executor", () => {
+    it("routes implementation tasks to goop-executor-high", () => {
       const result = routeTask("Implement user authentication feature");
       expect(result.category).toBe("code");
-      expect(result.agent).toBe("goop-executor");
+      expect(result.agent).toBe("goop-executor-high");
       expect(result.confidence).toBeGreaterThan(0);
     });
 
-    it("routes build tasks to goop-executor", () => {
+    it("routes build tasks to goop-executor-high", () => {
       const result = routeTask("Build a new API endpoint for user profiles");
       expect(result.category).toBe("code");
-      expect(result.agent).toBe("goop-executor");
+      expect(result.agent).toBe("goop-executor-high");
     });
 
-    it("routes component implementation to goop-executor", () => {
+    it("routes component implementation to goop-executor-high", () => {
       const result = routeTask("Implement a new component for the dashboard");
       expect(result.category).toBe("code");
-      expect(result.agent).toBe("goop-executor");
+      expect(result.agent).toBe("goop-executor-high");
     });
 
     it("tracks matched keywords", () => {
@@ -244,13 +244,13 @@ describe("routeTask", () => {
     it("routes ambiguous tasks to general category", () => {
       const result = routeTask("Do something with the system");
       expect(result.category).toBe("general");
-      expect(result.agent).toBe("goop-executor");
+      expect(result.agent).toBe("goop-executor-high");
     });
 
     it("routes tasks with no keyword matches to default", () => {
       const result = routeTask("Handle this request");
       expect(result.category).toBe("general");
-      expect(result.agent).toBe("goop-executor");
+      expect(result.agent).toBe("goop-executor-high");
     });
 
     it("respects custom default category", () => {
@@ -290,7 +290,7 @@ describe("routeTask", () => {
 
 describe("getAgentForCategory", () => {
   it("returns correct agent for code category", () => {
-    expect(getAgentForCategory("code")).toBe("goop-executor");
+    expect(getAgentForCategory("code")).toBe("goop-executor-high");
   });
 
   it("returns correct agent for plan category", () => {
@@ -307,8 +307,8 @@ describe("getAgentForCategory", () => {
 });
 
 describe("getCategoryForAgent", () => {
-  it("returns correct category for goop-executor", () => {
-    expect(getCategoryForAgent("goop-executor")).toBe("code");
+  it("returns correct category for goop-executor-high", () => {
+    expect(getCategoryForAgent("goop-executor-high")).toBe("code");
   });
 
   it("returns correct category for goop-planner", () => {

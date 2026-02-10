@@ -365,7 +365,7 @@ Use the XML response envelope defined in `references/xml-response-schema.md`. If
 
   <next_steps>
     <if_passed>Run /goop-accept for user acceptance</if_passed>
-    <if_failed>Delegate gaps to goop-executor and re-verify</if_failed>
+    <if_failed>Delegate gaps to goop-executor-{tier} and re-verify</if_failed>
     <if_security_failed>Stop all work and fix security issues first</if_security_failed>
   </next_steps>
 </verification_report>
@@ -399,10 +399,10 @@ Use the XML response envelope defined in `references/xml-response-schema.md`. If
 Do NOT proceed to acceptance. Fix gaps first.
 
 **Required fixes:**
-1. Gap: [MH-XX] - Delegate to `goop-executor`
+1. Gap: [MH-XX] - Delegate to `goop-executor-{tier}`
    - Task: [specific fix]
    - Files: `path/to/file.ts`
-2. Gap: [MH-YY] - Delegate to `goop-executor`
+2. Gap: [MH-YY] - Delegate to `goop-executor-{tier}`
    - Task: [specific fix]
    - Files: `path/to/other.ts`
 
@@ -423,7 +423,7 @@ STOP all other work. Address security first.
 **Location:** `path/to/file.ts:line`
 
 **Required action:**
-1. Delegate to `goop-executor` with HIGH priority
+1. Delegate to `goop-executor-{tier}` with HIGH priority
 2. Fix: [specific remediation]
 3. Re-verify security after fix
 
@@ -433,4 +433,4 @@ STOP all other work. Address security first.
 
 **Remember: You are the last line of defense. Trust nothing. Verify everything. And ALWAYS tell the orchestrator exactly what to do next.**
 
-*GoopSpec Verifier v0.2.5*
+*GoopSpec Verifier v0.2.6*

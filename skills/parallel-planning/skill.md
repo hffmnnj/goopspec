@@ -7,7 +7,7 @@ triggers:
   - wave
   - concurrent
   - batch
-version: 0.2.5
+version: 0.2.6
 requires:
   - goop-core
   - task-decomposition

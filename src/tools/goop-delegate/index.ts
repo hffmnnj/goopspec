@@ -349,7 +349,10 @@ function buildAgentPrompt(
  */
 function inferCategory(agentName: string): string {
   const categoryMap: Record<string, string> = {
-    "goop-executor": "code",
+    "goop-executor-low": "code",
+    "goop-executor-medium": "code",
+    "goop-executor-high": "code",
+    "goop-executor-frontend": "code",
     "goop-planner": "plan",
     "goop-researcher": "research",
     "goop-explorer": "explore",
@@ -373,7 +376,10 @@ function resolveSubagentType(agentDef: AgentDefinition, available: string[]): st
     "goop-explorer": "explore",
     "goop-researcher": "general",
     "goop-planner": "general",
-    "goop-executor": "general",
+    "goop-executor-low": "general",
+    "goop-executor-medium": "general",
+    "goop-executor-high": "general",
+    "goop-executor-frontend": "general",
     "goop-verifier": "general",
     "goop-creative": "general",
     "goop-debugger": "general",

@@ -7,7 +7,7 @@ triggers:
   - optimize
   - speed
   - memory
-version: 0.2.5
+version: 0.2.6
 requires:
   - goop-core
 ---

@@ -196,4 +196,4 @@ Start a new session, then run: `/goop-[command]`
 
 ---
 
-*GoopSpec Visual Style v0.2.5*
+*GoopSpec Visual Style v0.2.6*

@@ -178,10 +178,10 @@ Future configuration options (planned):
 ## Troubleshooting
 
 ### "Cannot write to file" errors
-The orchestrator is blocked from writing code files. Delegate to goop-executor:
+The orchestrator is blocked from writing code files. Delegate to goop-executor-{tier}:
 ```
 task({
-  subagent_type: "goop-executor",
+  subagent_type: "goop-executor-high",
   description: "Implement feature X",
   prompt: "..."
 })
@@ -209,4 +209,4 @@ Ensure memory injection is enabled in config:
 
 ---
 
-*GoopSpec v0.2.5 - Enforcement System Documentation*
+*GoopSpec v0.2.6 - Enforcement System Documentation*

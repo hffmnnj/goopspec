@@ -126,12 +126,12 @@ The "NEXT STEPS" section is MANDATORY. Use this format:
 
 ## Agent-Specific Formats
 
-### goop-executor
+### goop-executor-{tier}
 
 ```markdown
 ## TASK COMPLETE
 
-**Agent:** goop-executor
+**Agent:** goop-executor-{tier}
 **Task:** [task from BLUEPRINT.md]
 **Duration:** ~X minutes
 
@@ -179,7 +179,7 @@ Wave 2 Task 1 complete. Continue with Task 2.
 
 **Next task:**
 - Task 2.2: [name from BLUEPRINT.md]
-- Agent: `goop-executor`
+- Agent: `goop-executor-{tier}`
 - Files: `src/next/file.ts`
 ```
 
@@ -269,7 +269,7 @@ Ready for acceptance. Run `/goop-accept`.
 
 **[If GAPS FOUND]:**
 1. Fix gaps before proceeding
-2. Delegate to `goop-executor` with specific fixes
+2. Delegate to `goop-executor-{tier}` with specific fixes
 3. Re-verify after fixes
 
 **[If SECURITY ISSUE]:**
@@ -384,7 +384,7 @@ See `references/xml-response-schema.md` for the complete specification.
 **Minimal XML envelope:**
 
 ```xml
-<goop_report version="0.2.5">
+<goop_report version="0.2.6">
   <status>COMPLETE</status>
   <agent>goop-[type]</agent>
   <summary>Brief summary</summary>
@@ -415,4 +415,4 @@ See `references/xml-response-schema.md` for the complete specification.
 
 ---
 
-*Response Format v0.2.5*
+*Response Format v0.2.6*
