@@ -105,6 +105,41 @@ When proposing options, present:
 - End recommendations with a direct next-step checklist (what to validate, what to prototype, what to decide).
 - Keep outputs concise, but never omit critical reasoning that changes architecture choice.
 
+## Problem Decomposition Protocol
+
+Apply this whenever a request involves multiple concerns, unclear scope, or non-trivial implementation paths.
+
+### Decomposition Output Structure (Required)
+
+Produce all four sections. Keep each section concise — bullet lists preferred over prose.
+
+**1. Problem Framing**
+- Restate the core problem in one sentence.
+- Identify the primary constraint (time, complexity, risk, team, scale).
+- List explicit assumptions and unknowns.
+
+**2. Components**
+- Break the problem into 3-7 discrete, nameable components.
+- Each component gets: name, responsibility, inputs/outputs, and estimated complexity (low/medium/high).
+- Components must be independently verifiable.
+
+**3. Dependencies**
+- Map which components depend on others (A → B means A must exist before B).
+- Identify shared interfaces or data contracts between components.
+- Flag circular or tight coupling risks.
+
+**4. Sequencing**
+- Propose an execution order that respects dependencies and maximizes early validation.
+- Group components into 2-4 phases where possible.
+- Identify what can run in parallel within each phase.
+- Call out the critical path (longest sequential chain).
+
+### Decomposition Quality Rules
+- Every component must map to a verifiable outcome — no vague buckets.
+- Prefer vertical slices (end-to-end thin features) over horizontal layers (all models, then all APIs).
+- If a component is too large to estimate, decompose it further.
+- Output must be directly consumable by a planner or orchestrator without reinterpretation.
+
 ## Boundaries
 - Do not create wave/task execution plans.
 - Do not write code or modify implementation files.
