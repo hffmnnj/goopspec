@@ -195,9 +195,9 @@ This command should NOT spawn an agent.
         createMockToolContext()
       );
       
-      // Should have MANDATORY section
+      // Should have MANDATORY section (extracted from STOP-AND-RETURN gate)
       expect(result).toContain("MANDATORY: Execute Immediately");
-      expect(result).toContain("goop_reference({ name: \"plan-process\" })");
+      expect(result).toContain("goop_state({ action: \"get\" })");
       expect(result).toContain("Do NOT process any user message");
       
       // MANDATORY should appear before Full Instructions
