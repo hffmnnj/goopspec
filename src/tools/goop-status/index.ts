@@ -76,7 +76,7 @@ function getPhaseGuidance(phase: string, specLocked: boolean): PhaseGuidance {
     },
     accept: {
       current: "Verifying implementation against specification.",
-      next: { command: "/goop-complete", description: "Archive and mark as complete" },
+      next: { command: "/goop-accept", description: "Complete acceptance and finalize archival after explicit user approval" },
       alternatives: [
         { command: "/goop-execute", when: "if issues need to be fixed" },
         { command: "/goop-milestone", when: "to start the next milestone" },
