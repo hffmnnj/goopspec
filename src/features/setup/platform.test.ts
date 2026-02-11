@@ -40,7 +40,8 @@ describe("platform detection", () => {
 
     it("packageSuffix matches os-arch format", () => {
       const platform = detectPlatform();
-      expect(platform.packageSuffix).toBe(`${platform.os}-${platform.arch}`);
+      const expectedOs = platform.os === "win32" ? "windows" : platform.os;
+      expect(platform.packageSuffix).toBe(`${expectedOs}-${platform.arch}`);
     });
   });
 

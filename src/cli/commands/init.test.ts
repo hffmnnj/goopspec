@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
-import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -182,9 +182,13 @@ describe("init wizard - setup pipeline", () => {
     };
 
     const plan = await planInit(testDir, input, env);
+
+    const blocker = join(testDir, "not-a-directory");
+    writeFileSync(blocker, "blocks directory creation");
+
     plan.configsToWrite = [
       {
-        path: "/proc/goopspec-test/config.json",
+        path: join(blocker, "subdir", "config.json"),
         scope: "project",
         content: { projectName: "broken-write" },
       },
