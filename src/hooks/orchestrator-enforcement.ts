@@ -4,7 +4,7 @@
  * 
  * Enforcement Mechanisms:
  * - permission.ask: Deny file modifications for orchestrator on code files
- * - tool.execute.after: Inject delegation instructions after goop_delegate
+ * - tool.execute.after: Inject direct task delegation guidance
  * 
  * @module hooks/orchestrator-enforcement
  */
@@ -67,14 +67,6 @@ interface EnforcementConfig {
   codeExtensions: string[];
   /** Implementation directories to protect */
   protectedDirs: string[];
-}
-
-interface DelegationState {
-  pending: boolean;
-  agent: string;
-  prompt: string;
-  callId: string;
-  timestamp: number;
 }
 
 export type BlockedToolCategory = "research" | "exploration";
@@ -234,9 +226,6 @@ export const EXPLORATION_INTENT_PATTERNS = [
   /show me .+ (code|implementation|file)/i,
   /\bwhere.*defined\b/i,
 ] as const;
-
-// Track pending delegations per session
-const pendingDelegations = new Map<string, DelegationState>();
 
 // Track blocked operations per session (for injection)
 const blockedOperations = new Map<string, BlockedOperation>();
@@ -429,14 +418,28 @@ As the orchestrator, delegate implementation work to **the appropriate goop-exec
 \`\`\`
 task({
   subagent_type: "goop-executor-high",
-  description: "Implement changes to ${basename(filePath)}",
+  description: "Implement Task: update ${basename(filePath)}",
   prompt: \`
-    Modify file: ${filePath}
-    
-    Requirements:
-    - [Describe the specific changes needed]
-    
-    Return structured response when complete.
+    ## Task Intent
+    Implement the requested code change in ${filePath}.
+
+    ## Expected Output
+    Return a concise implementation summary, modified files, verification results, and handoff.
+
+    ## Required Context
+    - SPEC must-have(s): [e.g., MH2, MH3]
+    - BLUEPRINT task: [e.g., Wave 1 Task 1.2]
+    - Current wave/task state from .goopspec
+    - Relevant memory search findings
+
+    ## Constraints
+    - Follow existing project conventions and ESM .js import rules
+    - Keep changes atomic and scoped to the requested files
+    - Preserve existing safeguards; do not remove enforcement protections
+
+    ## Verification
+    - Run targeted tests for touched modules
+    - Report pass/fail evidence for each command
   \`
 })
 \`\`\`
@@ -456,8 +459,38 @@ function generateResearchDelegationGuidance(
   const categoryLabel = category === "research" ? "Research" : "Exploration";
   const description = category === "research" ? "Research task" : "Explore codebase";
   const promptBody = category === "research"
-    ? "Research: [Describe what you need to research]\n    \n    Return findings with sources and recommendations."
-    : "Explore: [Describe what you're looking for]\n    \n    Return relevant file paths and code locations.";
+    ? `## Task Intent
+    Research the requested topic and produce actionable recommendations.
+
+    ## Expected Output
+    Findings with sources, tradeoffs, and recommendation.
+
+    ## Required Context
+    - Related SPEC/BLUEPRINT scope
+    - Relevant memory findings
+
+    ## Constraints
+    - Focus on the stated scope only
+    - Cite concrete sources
+
+    ## Verification
+    - Include evidence links and confidence level`
+    : `## Task Intent
+    Explore the codebase to answer the request.
+
+    ## Expected Output
+    Relevant file paths, key code locations, and concise flow explanation.
+
+    ## Required Context
+    - Related SPEC/BLUEPRINT scope
+    - Current wave/task
+
+    ## Constraints
+    - Prefer high-signal files first
+    - Avoid speculative conclusions
+
+    ## Verification
+    - Reference exact files and symbols used as evidence`;
 
   return `
 
@@ -544,66 +577,27 @@ task({
   subagent_type: "${mapping.agent}",
   description: "${description}",
   prompt: \`
-    [Your specific ${promptLabel} request here]
+    ## Task Intent
+    [Your specific ${promptLabel} request]
+
+    ## Expected Output
+    [What the subagent must return]
+
+    ## Required Context
+    - SPEC/BLUEPRINT references
+    - Current wave/task
+    - Relevant memory search findings
+
+    ## Constraints
+    - Scope boundaries and quality requirements
+
+    ## Verification
+    - Required checks/evidence to include
   \`
 })
 \`\`\`
 
 ${confidenceNote}
-`;
-}
-
-/**
- * Parse delegation info from goop_delegate output
- */
-function parseDelegationOutput(output: string): DelegationState | null {
-  try {
-    // Look for <goop_delegation> block
-    const match = output.match(/<goop_delegation>\s*([\s\S]*?)\s*<\/goop_delegation>/);
-    if (!match) return null;
-    
-    const json = JSON.parse(match[1]);
-    if (json.action !== "delegate_via_task") return null;
-    
-    return {
-      pending: true,
-      agent: json.agent || "unknown",
-      prompt: json.composedPrompt || "",
-      callId: "",
-      timestamp: Date.now(),
-    };
-  } catch {
-    return null;
-  }
-}
-
-/**
- * Generate mandatory task invocation instruction
- * 
- * This is injected AFTER goop_delegate output to remind the orchestrator
- * that they MUST follow up with a task tool call.
- */
-function generateTaskInvocation(delegation: DelegationState): string {
-  return `
-
----
-
-## ⚠️ MANDATORY NEXT STEP
-
-You just used \`goop_delegate\` to engineer a prompt for **${delegation.agent}**.
-
-**The delegation is NOT complete.** You MUST now call the \`task\` tool with the engineered prompt.
-
-The \`goop_delegate\` output above contains the exact \`task()\` invocation to execute.
-Copy it and run it NOW.
-
-\`\`\`
-Two-Step Delegation Flow:
-1. goop_delegate ✓ (just completed - prompt engineered)
-2. task         ← YOU ARE HERE (execute the prompt)
-\`\`\`
-
-**If you do not call \`task\`, the subagent will not be spawned and no work will happen.**
 `;
 }
 
@@ -721,7 +715,7 @@ export function createOrchestratorEnforcementHooks(ctx: PluginContext) {
     },
 
     /**
-     * tool.execute.after - Inject delegation guidance and task instructions
+     * tool.execute.after - Inject delegation guidance
      */
     "tool.execute.after": async (
       input: ToolExecuteAfterInput,
@@ -776,33 +770,7 @@ export function createOrchestratorEnforcementHooks(ctx: PluginContext) {
         }
       }
       
-      // === DELEGATION ENFORCER ===
-      if (config.delegationEnforcementEnabled && input.tool === "goop_delegate") {
-        const delegation = parseDelegationOutput(output.output);
-        
-        if (delegation) {
-          delegation.callId = input.callID;
-          pendingDelegations.set(input.sessionID, delegation);
-          
-          log("Delegation detected, injecting task invocation reminder", {
-            agent: delegation.agent,
-            sessionID: input.sessionID,
-          });
-          
-          // Append task invocation instruction to output
-          output.output = output.output + generateTaskInvocation(delegation);
-        }
-      }
-      
-      // Clear pending delegation if task was called
       if (input.tool === "task" || input.tool === "mcp_task") {
-        if (pendingDelegations.has(input.sessionID)) {
-          log("Delegation completed via task tool", {
-            sessionID: input.sessionID,
-          });
-          pendingDelegations.delete(input.sessionID);
-        }
-
         clearExplorationTracking(input.sessionID);
       }
     },
@@ -827,31 +795,23 @@ export function createOrchestratorEnforcementHooks(ctx: PluginContext) {
  * Check if there's a pending delegation that wasn't followed through
  */
 export function hasPendingDelegation(sessionId: string): boolean {
-  const pending = pendingDelegations.get(sessionId);
-  if (!pending) return false;
-  
-  // Consider stale after 5 minutes
-  const staleMs = 5 * 60 * 1000;
-  if (Date.now() - pending.timestamp > staleMs) {
-    pendingDelegations.delete(sessionId);
-    return false;
-  }
-  
-  return pending.pending;
+  void sessionId;
+  return false;
 }
 
 /**
  * Get pending delegation details
  */
-export function getPendingDelegation(sessionId: string): DelegationState | undefined {
-  return pendingDelegations.get(sessionId);
+export function getPendingDelegation(sessionId: string): undefined {
+  void sessionId;
+  return undefined;
 }
 
 /**
  * Clear pending delegation (for testing or manual cleanup)
  */
 export function clearPendingDelegation(sessionId: string): void {
-  pendingDelegations.delete(sessionId);
+  void sessionId;
 }
 
 /**

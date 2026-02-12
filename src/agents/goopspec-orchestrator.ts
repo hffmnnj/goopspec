@@ -91,7 +91,6 @@ export function createGoopSpecOrchestrator(options: OrchestratorOptions): Orches
     color: "#65f463", // Green to distinguish GoopSpec
     permission: {
       // GoopSpec tools
-      goop_delegate: "allow",
       goop_skill: "allow",
       goop_status: "allow",
       goop_adl: "allow",

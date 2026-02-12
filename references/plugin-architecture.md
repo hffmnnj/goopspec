@@ -44,7 +44,6 @@ idle → plan → research → specify → execute → accept → archive
 
 | Tool | Purpose | Key Parameters |
 |------|---------|----------------|
-| `goop_delegate` | Prepares task for specialized agent with context injection | `agent`, `prompt`, `context`, `list` (boolean), `session_id` |
 | `goop_skill` | Loads step-by-step skill guidance | `name`, `list` (boolean) |
 | `goop_reference` | Loads protocols, checklists, templates | `name`, `type` (reference/template/all), `section`, `list` (boolean) |
 | `slashcommand` | Executes GoopSpec slash commands | `command` (string, e.g., "/goop-plan help") |
@@ -136,11 +135,14 @@ Hooks automatically enforce what's allowed in each phase:
 How orchestrator delegates to specialized agents:
 
 ```
-1. goop_delegate({ agent: "goop-executor-{tier}", prompt: "...", context: "..." })
-2. Returns <goop_delegation> with prepared payload
-3. Orchestrator uses task() tool with the delegation
-4. Subagent executes, returns XML envelope response
-5. Orchestrator parses response, updates state/chronicle
+1. Orchestrator constructs rich prompt with:
+   - Task intent and expected output
+   - Project context (stack, wave, patterns)
+   - Constraints and boundaries
+   - Verification expectations
+2. Orchestrator calls task() with subagent_type and prompt
+3. Subagent executes, returns XML envelope response
+4. Orchestrator parses response, updates state/chronicle
 ```
 
 ---
@@ -149,7 +151,7 @@ How orchestrator delegates to specialized agents:
 
 | Agent | Primary Tools | When to Use |
 |-------|---------------|-------------|
-| **Orchestrator** | `goop_status`, `goop_checkpoint`, `slashcommand`, `goop_delegate` | Coordination, delegation, phase management |
+| **Orchestrator** | `goop_status`, `goop_checkpoint`, `slashcommand`, `task` (native) | Coordination, delegation, phase management |
 | **Executor** | `goop_spec`, `goop_adl`, `memory_save`, `memory_note` | Implementation, deviation logging, discovery capture |
 | **Planner** | `goop_spec`, `goop_reference`, `memory_decision` | Architecture decisions, template loading |
 | **Researcher** | `memory_save`, `memory_search`, `goop_skill`, `session_search` | Research persistence, prior work discovery |

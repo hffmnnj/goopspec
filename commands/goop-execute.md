@@ -39,7 +39,7 @@ goop_state({ action: "get" })
 | `goop_state` | **ALL state operations** (NEVER edit state.json directly) |
 | `goop_spec` | Load blueprint for execution |
 | `goop_checkpoint` | Save state at wave boundaries |
-| `goop_delegate` | Spawn executor agents for implementation |
+| `task` | Spawn executor agents for implementation (native delegation) |
 | `goop_adl` | Log deviations during execution |
 | `goop_reference` | Load detailed process |
 

@@ -37,7 +37,8 @@ For each wave:
    \`\`\`
 
 2. **Execute Tasks**
-   - Delegate via \`goop_delegate\` to the executor tier specified in the task's **Executor** metadata field (from BLUEPRINT.md) for implementation
+   - Delegate with native \`task\` to the executor tier specified in the task's **Executor** metadata field (from BLUEPRINT.md)
+   - Build every delegation prompt with task intent, SPEC/BLUEPRINT/wave context, memory context, constraints, and verification expectations
    - Track progress with todo tools
    - Save checkpoints with \`goop_checkpoint\`
 
@@ -55,21 +56,55 @@ For each wave:
    Ready for Wave [N+1]?"
    \`\`\`
 
-### Delegation via goop_delegate
+### Delegation via native task (required)
 
 When delegating tasks:
 \`\`\`
-goop_delegate({
+task({
   // Read the Executor field from BLUEPRINT task metadata
-  agent: "[Read Executor field from BLUEPRINT task metadata]",
-  prompt: "Execute Task [X.Y]: [Name]",
-  context: "\
-Context:\n- [Relevant context from plan]\n\nRequirements:\n- [Specific requirements]\n- [UI patterns or design system guidance, if applicable]\n\nFiles to modify:\n- [file paths]\n\nAcceptance criteria:\n- [How to verify completion]\n\nConstraints:\n- Follow existing code patterns\n- Write clean, tested code\n- Document decisions in ADL\n- Respect decision gates; do not bypass Specify/Accept\n"
+  subagent_type: "[Read Executor field from BLUEPRINT task metadata]",
+  description: "Task [X.Y]: [Atomic action]",
+  prompt: \`
+## TASK INTENT
+[Single atomic outcome and why it matters]
+
+## EXPECTED OUTPUT
+- [Concrete deliverable 1]
+- [Concrete deliverable 2]
+
+## PROJECT CONTEXT
+- SPEC references: [must-have IDs and constraints from SPEC.md]
+- BLUEPRINT references: [wave/task and done criteria from BLUEPRINT.md]
+- Wave position: [current wave/task status]
+- Project conventions: [from PROJECT_KNOWLEDGE_BASE.md]
+- Relevant memory: [prior decisions/observations to follow]
+
+## FILES IN SCOPE
+- [file path 1]
+- [file path 2]
+
+## CONSTRAINTS
+- Follow existing code patterns and naming conventions
+- Keep changes scoped to this task only
+- Apply deviation rules (Rules 1-3 auto-fix, Rule 4 stop and ask)
+- Return XML response envelope with artifacts and handoff
+
+## VERIFICATION
+\`\`\`bash
+[verification command(s)]
+\`\`\`
+  \`
 })
 \`\`\`
 
 **Tier Routing:** Each task in BLUEPRINT.md has an \`| **Executor** | goop-executor-{tier} |\` field.
 Always use the exact executor name from that field. Available tiers: \`goop-executor-low\`, \`goop-executor-medium\`, \`goop-executor-high\`, \`goop-executor-frontend\`.
+
+**Specialist Routing by task type:**
+- \`goop-researcher\` for evaluation/comparison/research requests
+- \`goop-explorer\` for locating code and mapping call paths
+- \`goop-debugger\` for bug investigation and root-cause analysis
+- \`goop-verifier\` for requirement/security verification
 
 ### Handling Execution Issues
 
