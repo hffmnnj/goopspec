@@ -147,6 +147,35 @@ describe("createGoopSpecOrchestrator", () => {
 
     expect(orchestrator.prompt).toContain("<Delegation_Rules>");
     expect(orchestrator.prompt).toContain("task(");
+    expect(orchestrator.prompt).not.toContain("goop_delegate(");
+  });
+
+  it("includes direct task prompt payload requirements", () => {
+    const resolver = createMockResolver();
+    const orchestrator = createGoopSpecOrchestrator({ resolver });
+
+    expect(orchestrator.prompt).toContain("## TASK INTENT");
+    expect(orchestrator.prompt).toContain("## EXPECTED OUTPUT");
+    expect(orchestrator.prompt).toContain("## PROJECT CONTEXT");
+    expect(orchestrator.prompt).toContain("## CONSTRAINTS");
+    expect(orchestrator.prompt).toContain("## VERIFICATION");
+    expect(orchestrator.prompt).toContain("SPEC references");
+    expect(orchestrator.prompt).toContain("BLUEPRINT references");
+    expect(orchestrator.prompt).toContain("Relevant memory");
+  });
+
+  it("includes specialist routing guidance by task type", () => {
+    const resolver = createMockResolver();
+    const orchestrator = createGoopSpecOrchestrator({ resolver });
+
+    expect(orchestrator.prompt).toContain("goop-researcher");
+    expect(orchestrator.prompt).toContain("goop-explorer");
+    expect(orchestrator.prompt).toContain("goop-debugger");
+    expect(orchestrator.prompt).toContain("goop-verifier");
+    expect(orchestrator.prompt).toContain("goop-executor-low");
+    expect(orchestrator.prompt).toContain("goop-executor-medium");
+    expect(orchestrator.prompt).toContain("goop-executor-high");
+    expect(orchestrator.prompt).toContain("goop-executor-frontend");
   });
 
   it("includes constraints in prompt", () => {
