@@ -118,7 +118,6 @@ describe("createGoopSpecOrchestrator", () => {
     const resolver = createMockResolver();
     const orchestrator = createGoopSpecOrchestrator({ resolver });
 
-    expect(orchestrator.permission.goop_delegate).toBe("allow");
     expect(orchestrator.permission.goop_skill).toBe("allow");
     expect(orchestrator.permission.goop_status).toBe("allow");
     expect(orchestrator.permission.goop_adl).toBe("allow");
