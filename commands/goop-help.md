@@ -43,6 +43,9 @@ Display help information and available commands.
 - `/goop-debug` - Debug with scientific method workflow
 - `/goop-quick [description]` - Small tasks without full phase planning
 
+**Code Review:**
+- `/goop-pr-review` - Review GitHub PR with fixes and safe merge (standalone)
+
 **Session Management:**
 - `/goop-pause [name]` - Save checkpoint
 - `/goop-resume [id]` - Resume from checkpoint

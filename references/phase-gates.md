@@ -20,6 +20,7 @@ Phase Gates are mandatory checkpoints that ensure quality and prevent premature 
 | **Spec Gate** | Before /goop-execute | Lock contract with user | /goop-plan (end-of-flow contract gate) |
 | **Execution Gate** | Before /goop-accept | Verify all tasks complete | Orchestrator |
 | **Acceptance Gate** | Within /goop-accept before archival | User accepts deliverable and triggers finalization | /goop-accept |
+| **Merge Confirmation Gate** | Within /goop-pr-review before merge | User confirms merge after review | /goop-pr-review |
 
 ---
 
@@ -272,6 +273,67 @@ ACCEPT / REJECT with [reasons]
 
 ---
 
+## Gate 5: Merge Confirmation Gate
+
+### Location
+Within `/goop-pr-review` after review analysis and optional fixes, before merge execution
+
+### Purpose
+Ensure user explicitly confirms merge operation after reviewing all findings and selecting merge strategy.
+
+### Requirements
+| Requirement | Validation |
+|-------------|------------|
+| Review complete | Quality, security, spec (if present), and summary analysis finished |
+| Merge strategy selected | User chose `merge` or `squash` |
+| Final summary displayed | Unresolved findings and merge impact shown |
+| Explicit confirmation | User typed "yes" or equivalent affirmative |
+
+### Enforcement
+```
+/goop-pr-review merge step:
+  IF review not complete:
+    STOP: Return BLOCKED response immediately
+    REFUSE: "Review analysis incomplete. Cannot proceed to merge."
+    DO NOT CONTINUE processing
+  IF merge strategy not selected:
+    STOP: Return BLOCKED response immediately
+    REFUSE: "Merge strategy required. Select 'merge' or 'squash'."
+    DO NOT CONTINUE processing
+  IF user confirmation != true:
+    STOP: Return BLOCKED response immediately
+    REFUSE: "Explicit merge confirmation required. Type 'yes' to proceed."
+    DO NOT CONTINUE processing
+  ELSE:
+    PROCEED with gh pr merge
+```
+
+### Merge Process
+1. Complete review analysis (quality, security, spec, summary)
+2. Offer and apply user-selected fixes (optional)
+3. Re-verify after fixes (if fixes applied)
+4. Prompt for merge strategy: "merge" or "squash"
+5. Display final summary including any unresolved findings
+6. Request explicit confirmation: "Type 'yes' to merge this PR"
+7. On confirm: Execute `gh pr merge --[strategy]`
+8. Handle merge outcome (success/conflict/permission failure)
+
+### No Bypass
+This gate **cannot be bypassed**. Merge always requires explicit user confirmation, even when:
+- All checks pass
+- No unresolved findings
+- Automated fixes succeeded
+- User has merge permissions
+
+### Failure Handling
+```
+Message: "Merge confirmation required."
+Action: Review final summary and confirm
+Recovery: Type 'yes' to proceed or 'no' to cancel
+```
+
+---
+
 ## Gate Bypass Protocol
 
 ### When Bypass is Allowed
@@ -282,6 +344,7 @@ ACCEPT / REJECT with [reasons]
 | Spec | No | Never - spec lock is fundamental |
 | Execution | Partial | Nice-to-haves may be deferred |
 | Acceptance | No | Never - user must accept |
+| Merge Confirmation | No | Never - explicit confirmation required |
 
 ### Bypass Logging
 
