@@ -55,6 +55,16 @@ import {
 import { analyzeQuality } from "./analyzers/quality.js";
 import { analyzeSecurity } from "./analyzers/security.js";
 import { analyzeSpecAlignment } from "./analyzers/spec.js";
+import { formatReviewReport, countFindings, deriveVerdict } from "./report.js";
+import {
+  checkDirtyWorktree,
+  formatDirtyWorktreeWarning,
+  buildFixOptionsPrompt,
+  getAvailableFixOptions,
+  parseFixSelection,
+  getAllFixCategoryOptions,
+  type DirtyWorktreeResult,
+} from "./prompts.js";
 
 // ============================================================================
 // Fixtures
@@ -1460,5 +1470,625 @@ describe("spec analyzer", () => {
     expect(section.requirements[0].covered).toBe(false);
     expect(section.findings.some((finding) => finding.message.includes("appears uncovered"))).toBe(true);
     expect(section.findings.some((finding) => finding.message.includes("missing from BLUEPRINT"))).toBe(true);
+  });
+});
+
+// ============================================================================
+// Report Formatting
+// ============================================================================
+
+describe("report", () => {
+  function buildReport(overrides: Partial<ReviewReport> = {}): ReviewReport {
+    return {
+      pr: validPrMetadata(),
+      quality: createEmptyQualitySection(),
+      security: createEmptySecuritySection(),
+      spec: createNoSpecSection(),
+      changeSummary: {
+        filesChanged: ["src/app.ts", "src/utils.ts"],
+        additions: 150,
+        deletions: 30,
+        summary: "2 file(s) changed (+150 -30).",
+      },
+      verdict: "comment",
+      fixOptions: [],
+      generatedAt: new Date().toISOString(),
+      ...overrides,
+    };
+  }
+
+  describe("formatReviewReport", () => {
+    it("includes PR header with number and title", () => {
+      const output = formatReviewReport(buildReport());
+      expect(output).toContain("PR Review Report");
+      expect(output).toContain("#42");
+      expect(output).toContain("Add user authentication");
+    });
+
+    it("includes author and branch info", () => {
+      const output = formatReviewReport(buildReport());
+      expect(output).toContain("dev-user");
+      expect(output).toContain("feat/auth");
+      expect(output).toContain("main");
+    });
+
+    it("renders quality section header", () => {
+      const output = formatReviewReport(buildReport());
+      expect(output).toContain("### Quality");
+    });
+
+    it("renders security section header", () => {
+      const output = formatReviewReport(buildReport());
+      expect(output).toContain("### Security");
+    });
+
+    it("renders spec alignment section header", () => {
+      const output = formatReviewReport(buildReport());
+      expect(output).toContain("### Spec Alignment");
+    });
+
+    it("renders change summary section header", () => {
+      const output = formatReviewReport(buildReport());
+      expect(output).toContain("### Change Summary");
+    });
+
+    it("renders verdict section", () => {
+      const output = formatReviewReport(buildReport());
+      expect(output).toContain("### Verdict");
+    });
+
+    it("shows approve verdict when set", () => {
+      const output = formatReviewReport(buildReport({ verdict: "approve" }));
+      expect(output).toContain("APPROVE");
+    });
+
+    it("shows request-changes verdict when set", () => {
+      const output = formatReviewReport(buildReport({ verdict: "request-changes" }));
+      expect(output).toContain("CHANGES REQUESTED");
+    });
+
+    it("shows comment verdict when set", () => {
+      const output = formatReviewReport(buildReport({ verdict: "comment" }));
+      expect(output).toContain("COMMENT");
+    });
+
+    it("renders quality check statuses", () => {
+      const report = buildReport({
+        quality: {
+          checks: [
+            { name: "CI / lint", status: "pass", detail: "lint check" },
+            { name: "CI / test", status: "fail", detail: "tests check" },
+          ],
+          findings: [],
+          summary: "1 passed, 1 failed.",
+        },
+      });
+
+      const output = formatReviewReport(report);
+      expect(output).toContain("✓ CI / lint");
+      expect(output).toContain("✗ CI / test");
+    });
+
+    it("renders findings with severity icons", () => {
+      const report = buildReport({
+        security: {
+          findings: [
+            {
+              severity: "critical",
+              category: "security",
+              message: "CVE detected",
+              suggestion: "Upgrade dependency",
+            },
+          ],
+          summary: "1 critical finding.",
+        },
+      });
+
+      const output = formatReviewReport(report);
+      expect(output).toContain("🔴");
+      expect(output).toContain("[CRITICAL]");
+      expect(output).toContain("CVE detected");
+      expect(output).toContain("→ Upgrade dependency");
+    });
+
+    it("renders finding with file location", () => {
+      const report = buildReport({
+        quality: {
+          checks: [],
+          findings: [
+            {
+              severity: "medium",
+              category: "quality",
+              message: "Unused import",
+              file: "src/index.ts",
+              line: 5,
+            },
+          ],
+          summary: "1 finding.",
+        },
+      });
+
+      const output = formatReviewReport(report);
+      expect(output).toContain("(src/index.ts:5)");
+    });
+
+    it("renders spec requirements with coverage status", () => {
+      const report = buildReport({
+        spec: {
+          available: true,
+          requirements: [
+            { id: "MH1", description: "PR Selection", covered: true, evidence: "Matched: pr, selection" },
+            { id: "MH2", description: "Review Analysis", covered: false },
+          ],
+          findings: [],
+          summary: "1/2 covered.",
+        },
+      });
+
+      const output = formatReviewReport(report);
+      expect(output).toContain("✓ MH1: PR Selection");
+      expect(output).toContain("✗ MH2: Review Analysis");
+    });
+
+    it("renders change summary with file list", () => {
+      const output = formatReviewReport(buildReport());
+      expect(output).toContain("+150 / -30");
+      expect(output).toContain("src/app.ts");
+      expect(output).toContain("src/utils.ts");
+    });
+
+    it("truncates long file lists", () => {
+      const manyFiles = Array.from({ length: 20 }, (_, i) => `src/file-${i}.ts`);
+      const report = buildReport({
+        changeSummary: {
+          filesChanged: manyFiles,
+          additions: 500,
+          deletions: 100,
+          summary: "20 files changed.",
+        },
+      });
+
+      const output = formatReviewReport(report);
+      expect(output).toContain("… and 5 more");
+    });
+
+    it("handles no-spec mode gracefully", () => {
+      const output = formatReviewReport(buildReport());
+      expect(output).toContain("No spec files detected");
+    });
+  });
+
+  describe("countFindings", () => {
+    it("counts all findings across sections", () => {
+      const report = buildReport({
+        quality: {
+          checks: [],
+          findings: [
+            { severity: "high", category: "quality", message: "Test failure" },
+          ],
+          summary: "",
+        },
+        security: {
+          findings: [
+            { severity: "critical", category: "security", message: "CVE" },
+            { severity: "medium", category: "security", message: "Advisory" },
+          ],
+          summary: "",
+        },
+      });
+
+      expect(countFindings(report)).toBe(3);
+    });
+
+    it("returns 0 for report with no findings", () => {
+      expect(countFindings(buildReport())).toBe(0);
+    });
+
+    it("filters by minimum severity", () => {
+      const report = buildReport({
+        quality: {
+          checks: [],
+          findings: [
+            { severity: "high", category: "quality", message: "High issue" },
+            { severity: "low", category: "quality", message: "Low issue" },
+            { severity: "info", category: "quality", message: "Info note" },
+          ],
+          summary: "",
+        },
+      });
+
+      expect(countFindings(report, "high")).toBe(1);
+      expect(countFindings(report, "medium")).toBe(1);
+      expect(countFindings(report, "low")).toBe(2);
+      expect(countFindings(report, "info")).toBe(3);
+    });
+  });
+
+  describe("deriveVerdict", () => {
+    it("returns approve when no findings exist", () => {
+      expect(deriveVerdict(buildReport())).toBe("approve");
+    });
+
+    it("returns request-changes when critical findings exist", () => {
+      const report = buildReport({
+        security: {
+          findings: [
+            { severity: "critical", category: "security", message: "CVE" },
+          ],
+          summary: "",
+        },
+      });
+
+      expect(deriveVerdict(report)).toBe("request-changes");
+    });
+
+    it("returns request-changes when high findings exist", () => {
+      const report = buildReport({
+        quality: {
+          checks: [],
+          findings: [
+            { severity: "high", category: "quality", message: "Test failure" },
+          ],
+          summary: "",
+        },
+      });
+
+      expect(deriveVerdict(report)).toBe("request-changes");
+    });
+
+    it("returns comment when only medium/low findings exist", () => {
+      const report = buildReport({
+        quality: {
+          checks: [],
+          findings: [
+            { severity: "medium", category: "quality", message: "Warning" },
+          ],
+          summary: "",
+        },
+      });
+
+      expect(deriveVerdict(report)).toBe("comment");
+    });
+  });
+});
+
+// ============================================================================
+// Fix Options
+// ============================================================================
+
+describe("fix-options", () => {
+  function buildReport(overrides: Partial<ReviewReport> = {}): ReviewReport {
+    return {
+      pr: validPrMetadata(),
+      quality: createEmptyQualitySection(),
+      security: createEmptySecuritySection(),
+      spec: createNoSpecSection(),
+      changeSummary: {
+        filesChanged: [],
+        additions: 0,
+        deletions: 0,
+        summary: "No changes.",
+      },
+      verdict: "comment",
+      fixOptions: [],
+      generatedAt: new Date().toISOString(),
+      ...overrides,
+    };
+  }
+
+  describe("getAvailableFixOptions", () => {
+    it("returns empty when no actionable findings exist", () => {
+      const options = getAvailableFixOptions(buildReport());
+      expect(options).toEqual([]);
+    });
+
+    it("includes lint option when lint check fails", () => {
+      const report = buildReport({
+        quality: {
+          checks: [{ name: "CI / lint", status: "fail", detail: "lint check" }],
+          findings: [
+            { severity: "medium", category: "quality", message: "Quality check failed: CI / lint" },
+          ],
+          summary: "",
+        },
+      });
+
+      const options = getAvailableFixOptions(report);
+      expect(options.some((o) => o.value === "lint")).toBe(true);
+    });
+
+    it("includes tests option when test check fails", () => {
+      const report = buildReport({
+        quality: {
+          checks: [{ name: "CI / test", status: "fail", detail: "tests check" }],
+          findings: [
+            { severity: "high", category: "quality", message: "Quality check failed: CI / test" },
+          ],
+          summary: "",
+        },
+      });
+
+      const options = getAvailableFixOptions(report);
+      expect(options.some((o) => o.value === "tests")).toBe(true);
+    });
+
+    it("includes comments option when review comment findings exist", () => {
+      const report = buildReport({
+        security: {
+          findings: [
+            { severity: "medium", category: "security", message: "Security keyword detected in review by reviewer." },
+          ],
+          summary: "",
+        },
+      });
+
+      const options = getAvailableFixOptions(report);
+      expect(options.some((o) => o.value === "comments")).toBe(true);
+    });
+
+    it("includes requirements option when spec requirements are uncovered", () => {
+      const report = buildReport({
+        spec: {
+          available: true,
+          requirements: [
+            { id: "MH1", description: "Feature A", covered: false },
+          ],
+          findings: [],
+          summary: "",
+        },
+      });
+
+      const options = getAvailableFixOptions(report);
+      expect(options.some((o) => o.value === "requirements")).toBe(true);
+    });
+
+    it("does not include requirements when spec is unavailable", () => {
+      const report = buildReport({
+        spec: {
+          available: false,
+          requirements: [],
+          findings: [],
+          summary: "",
+        },
+      });
+
+      const options = getAvailableFixOptions(report);
+      expect(options.some((o) => o.value === "requirements")).toBe(false);
+    });
+
+    it("returns multiple options when multiple issues exist", () => {
+      const report = buildReport({
+        quality: {
+          checks: [
+            { name: "CI / lint", status: "fail", detail: "lint check" },
+            { name: "CI / test", status: "fail", detail: "tests check" },
+          ],
+          findings: [
+            { severity: "medium", category: "quality", message: "Quality check failed: CI / lint" },
+            { severity: "high", category: "quality", message: "Quality check failed: CI / test" },
+          ],
+          summary: "",
+        },
+      });
+
+      const options = getAvailableFixOptions(report);
+      expect(options.length).toBeGreaterThanOrEqual(2);
+      expect(options.some((o) => o.value === "lint")).toBe(true);
+      expect(options.some((o) => o.value === "tests")).toBe(true);
+    });
+  });
+
+  describe("buildFixOptionsPrompt", () => {
+    it("returns null when no fix options are available", () => {
+      const result = buildFixOptionsPrompt(buildReport(), { clean: true });
+      expect(result).toBeNull();
+    });
+
+    it("returns prompt text when fix options are available", () => {
+      const report = buildReport({
+        quality: {
+          checks: [{ name: "CI / lint", status: "fail", detail: "lint check" }],
+          findings: [
+            { severity: "medium", category: "quality", message: "Quality check failed: CI / lint" },
+          ],
+          summary: "",
+        },
+      });
+
+      const result = buildFixOptionsPrompt(report, { clean: true });
+      expect(result).not.toBeNull();
+      expect(result).toContain("Available Fix Options");
+      expect(result).toContain("Lint & Format");
+    });
+
+    it("includes dirty worktree warning when worktree is dirty", () => {
+      const report = buildReport({
+        quality: {
+          checks: [{ name: "CI / lint", status: "fail", detail: "lint check" }],
+          findings: [
+            { severity: "medium", category: "quality", message: "Quality check failed: CI / lint" },
+          ],
+          summary: "",
+        },
+      });
+
+      const dirtyResult: DirtyWorktreeResult = {
+        clean: false,
+        warning: "Working directory has 3 uncommitted change(s).",
+        changedFiles: [" M src/dirty.ts", "?? untracked.ts", " M README.md"],
+      };
+
+      const result = buildFixOptionsPrompt(report, dirtyResult);
+      expect(result).not.toBeNull();
+      expect(result).toContain("Dirty Working Directory");
+      expect(result).toContain("uncommitted change");
+      expect(result).toContain("Available Fix Options");
+    });
+
+    it("includes selection instructions", () => {
+      const report = buildReport({
+        quality: {
+          checks: [{ name: "CI / lint", status: "fail", detail: "lint check" }],
+          findings: [
+            { severity: "medium", category: "quality", message: "Quality check failed: CI / lint" },
+          ],
+          summary: "",
+        },
+      });
+
+      const result = buildFixOptionsPrompt(report, { clean: true });
+      expect(result).toContain("comma-separated");
+      expect(result).toContain("`all`");
+      expect(result).toContain("`none`");
+    });
+  });
+
+  describe("parseFixSelection", () => {
+    const allOptions = getAllFixCategoryOptions();
+
+    it("returns empty array for 'none'", () => {
+      expect(parseFixSelection("none", allOptions)).toEqual([]);
+    });
+
+    it("returns empty array for 'skip'", () => {
+      expect(parseFixSelection("skip", allOptions)).toEqual([]);
+    });
+
+    it("returns empty array for empty string", () => {
+      expect(parseFixSelection("", allOptions)).toEqual([]);
+    });
+
+    it("returns all available options for 'all'", () => {
+      const result = parseFixSelection("all", allOptions);
+      expect(result).toEqual(["lint", "tests", "comments", "requirements"]);
+    });
+
+    it("parses single category", () => {
+      const result = parseFixSelection("lint", allOptions);
+      expect(result).toEqual(["lint"]);
+    });
+
+    it("parses comma-separated categories", () => {
+      const result = parseFixSelection("lint,tests", allOptions);
+      expect(result).toEqual(["lint", "tests"]);
+    });
+
+    it("handles whitespace in input", () => {
+      const result = parseFixSelection("  lint , tests  ", allOptions);
+      expect(result).toEqual(["lint", "tests"]);
+    });
+
+    it("ignores invalid category names", () => {
+      const result = parseFixSelection("lint,invalid,tests", allOptions);
+      expect(result).toEqual(["lint", "tests"]);
+    });
+
+    it("only returns categories that are in available options", () => {
+      const limitedOptions = allOptions.filter((o) => o.value === "lint");
+      const result = parseFixSelection("lint,tests", limitedOptions);
+      expect(result).toEqual(["lint"]);
+    });
+
+    it("is case-insensitive", () => {
+      const result = parseFixSelection("LINT,Tests", allOptions);
+      expect(result).toEqual(["lint", "tests"]);
+    });
+  });
+
+  describe("getAllFixCategoryOptions", () => {
+    it("returns all four fix categories", () => {
+      const options = getAllFixCategoryOptions();
+      expect(options).toHaveLength(4);
+      expect(options.map((o) => o.value)).toEqual(["lint", "tests", "comments", "requirements"]);
+    });
+
+    it("each option has label and hint", () => {
+      const options = getAllFixCategoryOptions();
+      for (const opt of options) {
+        expect(opt.label).toBeTruthy();
+        expect(opt.hint).toBeTruthy();
+      }
+    });
+  });
+});
+
+// ============================================================================
+// Dirty Worktree Detection
+// ============================================================================
+
+describe("dirty-worktree", () => {
+  describe("checkDirtyWorktree", () => {
+    it("returns clean when git status is empty", async () => {
+      const run = mockExec({ stdout: "" });
+      const result = await checkDirtyWorktree(run);
+      expect(result.clean).toBe(true);
+      expect(result.warning).toBeUndefined();
+    });
+
+    it("returns dirty with warning when changes exist", async () => {
+      const run = mockExec({ stdout: " M src/dirty.ts\n?? untracked.ts" });
+      const result = await checkDirtyWorktree(run);
+      expect(result.clean).toBe(false);
+      expect(result.warning).toContain("2 uncommitted change");
+      expect(result.changedFiles).toHaveLength(2);
+    });
+
+    it("returns clean when git command fails", async () => {
+      const run = mockExec({ exitCode: 128, stderr: "not a git repository" });
+      const result = await checkDirtyWorktree(run);
+      expect(result.clean).toBe(true);
+    });
+
+    it("returns clean when exec throws", async () => {
+      const run = async () => {
+        throw new Error("exec failed");
+      };
+      const result = await checkDirtyWorktree(run as (cmd: string) => Promise<ExecResult>);
+      expect(result.clean).toBe(true);
+    });
+  });
+
+  describe("formatDirtyWorktreeWarning", () => {
+    it("returns empty string for clean worktree", () => {
+      expect(formatDirtyWorktreeWarning({ clean: true })).toBe("");
+    });
+
+    it("includes warning message for dirty worktree", () => {
+      const result = formatDirtyWorktreeWarning({
+        clean: false,
+        warning: "Working directory has 2 uncommitted change(s).",
+        changedFiles: [" M src/dirty.ts", "?? untracked.ts"],
+      });
+
+      expect(result).toContain("Dirty Working Directory");
+      expect(result).toContain("2 uncommitted change");
+      expect(result).toContain("src/dirty.ts");
+      expect(result).toContain("untracked.ts");
+      expect(result).toContain("committing or stashing");
+    });
+
+    it("truncates long file lists to 5 entries", () => {
+      const changedFiles = Array.from({ length: 10 }, (_, i) => ` M file-${i}.ts`);
+      const result = formatDirtyWorktreeWarning({
+        clean: false,
+        warning: "Working directory has 10 uncommitted change(s).",
+        changedFiles,
+      });
+
+      expect(result).toContain("file-0.ts");
+      expect(result).toContain("file-4.ts");
+      expect(result).toContain("… and 5 more");
+      expect(result).not.toContain("file-5.ts");
+    });
+
+    it("handles missing changedFiles gracefully", () => {
+      const result = formatDirtyWorktreeWarning({
+        clean: false,
+        warning: "Uncommitted changes detected.",
+      });
+
+      expect(result).toContain("Dirty Working Directory");
+      expect(result).toContain("Uncommitted changes detected.");
+    });
   });
 });
