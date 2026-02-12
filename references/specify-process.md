@@ -271,4 +271,4 @@ Orchestrator:
 
 ---
 
-*Specification Lock Process v0.2.6*
+*Specification Lock Process v0.2.7*

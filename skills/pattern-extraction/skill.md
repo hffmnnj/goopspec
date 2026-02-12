@@ -7,7 +7,7 @@ triggers:
   - abstraction
   - reuse
   - refactor
-version: 0.2.6
+version: 0.2.7
 ---
 
 # Pattern Extraction Skill

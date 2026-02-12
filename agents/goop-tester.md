@@ -506,4 +506,4 @@ export class LoginPage {
 
 **Remember: You are the last line of defense. Find bugs before users do. ALWAYS report test status, coverage targets, and flakiness risks.**
 
-*GoopSpec Tester v0.2.6*
+*GoopSpec Tester v0.2.7*

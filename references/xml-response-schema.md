@@ -14,7 +14,7 @@ All GoopSpec agents use a standardized XML envelope for machine-parseable handof
 Every agent response MUST include this XML block at the END of their response:
 
 ```xml
-<goop_report version="0.2.6">
+<goop_report version="0.2.7">
   <status>COMPLETE|PARTIAL|BLOCKED|CHECKPOINT</status>
   <agent>goop-[type]</agent>
   <task_id>W[wave].T[task]</task_id>
@@ -100,7 +100,7 @@ Every agent response MUST include this XML block at the END of their response:
 
 ### Executor Response
 ```xml
-<goop_report version="0.2.6">
+<goop_report version="0.2.7">
   <status>COMPLETE</status>
   <agent>goop-executor-high</agent>
   <task_id>W2.T3</task_id>
@@ -149,7 +149,7 @@ Every agent response MUST include this XML block at the END of their response:
 
 ### Planner Response
 ```xml
-<goop_report version="0.2.6">
+<goop_report version="0.2.7">
   <status>COMPLETE</status>
   <agent>goop-planner</agent>
   <task_name>Create execution blueprint</task_name>
@@ -188,7 +188,7 @@ Every agent response MUST include this XML block at the END of their response:
 
 ### Blocked Response
 ```xml
-<goop_report version="0.2.6">
+<goop_report version="0.2.7">
   <status>BLOCKED</status>
   <agent>goop-executor-high</agent>
   <task_id>W2.T2</task_id>
@@ -233,4 +233,4 @@ Every agent response MUST include this XML block at the END of their response:
 
 ---
 
-*GoopSpec XML Response Schema v0.2.6*
+*GoopSpec XML Response Schema v0.2.7*

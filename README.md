@@ -6,10 +6,10 @@
 
 **Stop the AI chaos. Ship what you actually want.**
 
-[![Version](https://img.shields.io/badge/version-0.2.6-blue?style=for-the-badge)](https://github.com/hffmnnj/opencode-goopspec)
+[![Version](https://img.shields.io/badge/version-0.2.7-blue?style=for-the-badge)](https://github.com/hffmnnj/opencode-goopspec)
 [![Bun](https://img.shields.io/badge/Bun-1.0+-f97316?style=for-the-badge&logo=bun&logoColor=white)](https://bun.sh)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.8-3178c6?style=for-the-badge&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
-[![Tests](https://img.shields.io/badge/tests-1319%20passing-22c55e?style=for-the-badge)](./TEST-SUMMARY.md)
+[![Tests](https://img.shields.io/badge/tests-1560%20passing-22c55e?style=for-the-badge)](./TEST-SUMMARY.md)
 [![License](https://img.shields.io/badge/license-MIT-22c55e?style=for-the-badge)](./LICENSE)
 
 ---
@@ -170,7 +170,7 @@ goopspec reset
 
 ## Commands Reference
 
-All 20 commands, organized by what you're doing.
+All 21 commands, organized by what you're doing.
 
 ### Workflow Commands
 
@@ -195,6 +195,7 @@ All 20 commands, organized by what you're doing.
 | `/goop-research` | Deep research on unknowns or risks |
 | `/goop-debug` | Scientific debugging workflow |
 | `/goop-map-codebase` | Analyze existing codebase structure |
+| `/goop-pr-review` | Review a GitHub pull request with intelligent fixes and safe merge |
 
 ### Memory Commands
 

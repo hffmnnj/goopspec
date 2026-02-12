@@ -114,4 +114,4 @@ Key findings to persist:
 *Research conducted by GoopSpec Intel Agents*
 *Synthesized from {{source_count}} sources*
 *Persisted to memory for future recall*
-*GoopSpec v0.2.6*
+*GoopSpec v0.2.7*

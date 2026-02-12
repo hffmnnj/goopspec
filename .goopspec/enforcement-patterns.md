@@ -145,4 +145,4 @@ When applying these patterns:
 
 ---
 
-*Enforcement Patterns v0.2.6 — for hardening workflow compliance*
+*Enforcement Patterns v0.2.7 — for hardening workflow compliance*

@@ -7,7 +7,7 @@ triggers:
   - architecture
   - discovery
   - mapping
-version: 0.2.6
+version: 0.2.7
 ---
 
 # Codebase Mapping Skill

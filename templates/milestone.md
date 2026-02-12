@@ -129,4 +129,4 @@ When this milestone completes:
 
 *Milestone tracking by GoopSpec*
 *Complete milestones are archived with learnings extracted*
-*GoopSpec v0.2.6*
+*GoopSpec v0.2.7*

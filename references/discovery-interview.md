@@ -274,5 +274,5 @@ A: "Token refresh may conflict with existing session - need to check
 
 ---
 
-*Discovery Interview Protocol v0.2.6*
+*Discovery Interview Protocol v0.2.7*
 *"Nail the spec before you write the code."*

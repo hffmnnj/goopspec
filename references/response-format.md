@@ -391,7 +391,7 @@ See `references/xml-response-schema.md` for the complete specification.
 **Minimal XML envelope:**
 
 ```xml
-<goop_report version="0.2.6">
+<goop_report version="0.2.7">
   <status>COMPLETE</status>
   <agent>goop-[type]</agent>
   <summary>Brief summary</summary>
@@ -422,4 +422,4 @@ See `references/xml-response-schema.md` for the complete specification.
 
 ---
 
-*Response Format v0.2.6*
+*Response Format v0.2.7*

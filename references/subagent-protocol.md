@@ -214,7 +214,7 @@ All subagent responses MUST end with an XML envelope. See `references/xml-respon
 **Basic structure:**
 
 ```xml
-<goop_report version="0.2.6">
+<goop_report version="0.2.7">
   <status>COMPLETE|PARTIAL|BLOCKED|CHECKPOINT</status>
   <agent>goop-[type]</agent>
   <task_name>Task description</task_name>
@@ -466,4 +466,4 @@ Every subagent execution:
 
 ---
 
-*Subagent Protocol v0.2.6*
+*Subagent Protocol v0.2.7*

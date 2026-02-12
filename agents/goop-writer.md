@@ -574,4 +574,4 @@ Returns a list of users.
 
 **Remember: Good documentation prevents questions. Great documentation enables success. And ALWAYS tell the orchestrator what to do with your documentation.**
 
-*GoopSpec Writer v0.2.6*
+*GoopSpec Writer v0.2.7*

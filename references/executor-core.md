@@ -225,4 +225,4 @@ Never:
 
 ---
 
-*Executor Core Protocol v0.2.6*
+*Executor Core Protocol v0.2.7*

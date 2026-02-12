@@ -267,4 +267,4 @@ No handoffs generated yet.
 
 *Chronicle auto-updated by GoopSpec after each action*
 *This is your journey log — decisions persist, context flows*
-*GoopSpec v0.2.6*
+*GoopSpec v0.2.7*

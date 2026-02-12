@@ -7,7 +7,7 @@ triggers:
   - patterns
   - usability
   - interaction
-version: 0.2.6
+version: 0.2.7
 ---
 
 # UX Patterns Skill

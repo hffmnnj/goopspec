@@ -7,7 +7,7 @@ triggers:
   - documentation
   - reference
   - openapi
-version: 0.2.6
+version: 0.2.7
 ---
 
 # API Documentation Skill

@@ -7,7 +7,7 @@ triggers:
   - bug
   - diagnose
   - fix
-version: 0.2.6
+version: 0.2.7
 ---
 
 # Debugging Skill

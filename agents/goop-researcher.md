@@ -383,7 +383,7 @@ Research complete. Ready to inform [planning/specification/decision].
 [What decision can now be made with this research]
 
 ```xml
-<goop_report version="0.2.6">
+<goop_report version="0.2.7">
   <status>COMPLETE</status>
   <agent>goop-researcher</agent>
   <task_name>Research [topic]</task_name>
@@ -498,4 +498,4 @@ Additional research needed.
 
 **Remember: Research enables decisions. Make it count. And ALWAYS tell the orchestrator what to do with your findings.**
 
-*GoopSpec Researcher v0.2.6*
+*GoopSpec Researcher v0.2.7*

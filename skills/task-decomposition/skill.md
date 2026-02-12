@@ -7,7 +7,7 @@ triggers:
   - breakdown
   - split
   - tasks
-version: 0.2.6
+version: 0.2.7
 requires:
   - goop-core
 ---

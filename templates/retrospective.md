@@ -185,4 +185,4 @@ The following will be persisted to memory:
 *Retrospective generated on milestone completion*
 *Learnings extracted and persisted to memory*
 *Search with: /goop-recall "{{milestone_name}}"*
-*GoopSpec v0.2.6*
+*GoopSpec v0.2.7*

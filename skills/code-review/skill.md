@@ -7,7 +7,7 @@ triggers:
   - feedback
   - pull request
   - quality
-version: 0.2.6
+version: 0.2.7
 ---
 
 # Code Review Skill
