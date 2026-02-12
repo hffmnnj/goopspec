@@ -51,7 +51,7 @@ If the command includes a session name (example: `/goop-discuss feat-auth`), cre
 |------|---------|
 | `goop_status` | Check current phase |
 | `goop_state` | Update workflow state (NEVER edit state.json directly) |
-| `question` | Capture structured user choices (including depth selection) |
+| `question` | Structured confirmations with explicit outcomes (depth, approval, options) |
 | `goop_delegate` | Delegate to creative agent (opt-in) |
 | `createSession` | Create a session when `/goop-discuss <name>` is used |
 | `setSession` | Bind the created session to plugin context |
@@ -73,6 +73,7 @@ If the command includes a session name (example: `/goop-discuss feat-auth`), cre
 - [ ] Creative agent opt-in offered after vision question (accepted or declined)
 - [ ] All six questions answered with specifics
 - [ ] At least 1 must-have, 1 out-of-scope, 1 risk defined
+- [ ] Discovery summary confirmed via structured `question` tool with explicit outcomes
 - [ ] REQUIREMENTS.md created
 - [ ] State updated via `goop_state({ action: "complete-interview" })`
 
