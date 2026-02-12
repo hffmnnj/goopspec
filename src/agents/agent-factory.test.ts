@@ -479,6 +479,27 @@ describe("agent-factory", () => {
         expect(config.prompt).toContain("Question Tool (User Interaction)");
       });
 
+      it("includes short-prompt and custom-input guidance for orchestrator", () => {
+        const resource = createMockResource({
+          name: "goop-orchestrator",
+          type: "agent",
+          frontmatter: {
+            name: "goop-orchestrator",
+            mode: "orchestrator",
+            tools: ["question"],
+            description: "Orchestrator",
+          },
+          body: "Base prompt",
+        });
+
+        const resolver = createMockResourceResolver();
+        const config = createAgentFromMarkdown(resource, resolver);
+
+        expect(config.prompt).toContain("mcp_question");
+        expect(config.prompt).toContain("short text inputs");
+        expect(config.prompt).toContain("custom-entry path");
+      });
+
       it("omits question instructions for subagents", () => {
         const resource = createMockResource({
           name: "goop-executor",
@@ -497,6 +518,33 @@ describe("agent-factory", () => {
         });
 
         expect(config.prompt).not.toContain("Question Tool (User Interaction)");
+      });
+
+      it("does not inject question instructions for non-user-facing subagent roles", () => {
+        const subagentNames = ["goop-executor-high", "goop-planner", "goop-researcher"];
+
+        const resolver = createMockResourceResolver();
+
+        for (const name of subagentNames) {
+          const resource = createMockResource({
+            name,
+            type: "agent",
+            frontmatter: {
+              mode: "subagent",
+              tools: ["read", "bash"],
+              description: `${name} test`,
+            },
+            body: "Base prompt",
+          });
+
+          const config = createAgentFromMarkdown(resource, resolver, {
+            enableMemoryTools: false,
+          });
+
+          expect(config.prompt).not.toContain("Question Tool (User Interaction)");
+          expect(config.prompt).not.toContain("mcp_question");
+          expect(config.prompt).not.toContain("custom-entry path");
+        }
       });
     });
 
