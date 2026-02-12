@@ -125,6 +125,36 @@ export interface ReviewReport {
 }
 
 // ============================================================================
+// PR Data (from gh queries)
+// ============================================================================
+
+export interface PrChangedFile {
+  path: string;
+  additions: number;
+  deletions: number;
+}
+
+export interface PrCheckRun {
+  name: string;
+  status: string;
+  conclusion: string | null;
+  detailsUrl?: string;
+}
+
+export interface PrReviewComment {
+  author: string;
+  body: string;
+  state: string;
+  submittedAt?: string;
+}
+
+export interface PrComment {
+  author: string;
+  body: string;
+  createdAt: string;
+}
+
+// ============================================================================
 // Spec Context
 // ============================================================================
 
@@ -137,6 +167,10 @@ export interface SpecAvailability {
 
 export interface ReviewContext {
   pr: PrMetadata;
+  files: PrChangedFile[];
+  checks: PrCheckRun[];
+  reviews: PrReviewComment[];
+  comments: PrComment[];
   specAvailability: SpecAvailability;
   workingDirectoryClean: boolean;
 }

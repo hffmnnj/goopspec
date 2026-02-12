@@ -8,10 +8,17 @@
  */
 
 import { log, logError } from "../../shared/logger.js";
-import type { PrMetadata } from "./types.js";
+import type {
+  PrMetadata,
+  PrChangedFile,
+  PrCheckRun,
+  PrReviewComment,
+  PrComment,
+} from "./types.js";
 
-// Re-export PrMetadata for convenience
+// Re-export types for convenience
 export type { PrMetadata } from "./types.js";
+export type { PrChangedFile, PrCheckRun, PrReviewComment, PrComment };
 
 // ============================================================================
 // Types
@@ -277,4 +284,160 @@ export function formatPrSummary(pr: PrMetadata): string {
   lines.push(`| **Changes** | +${pr.additions} / -${pr.deletions} across ${pr.changedFiles} files |`);
   lines.push(`| **URL** | ${pr.url} |`);
   return lines.join("\n");
+}
+
+// ============================================================================
+// PR Changed Files
+// ============================================================================
+
+interface GhFileEntry {
+  path: string;
+  additions: number;
+  deletions: number;
+}
+
+/**
+ * Fetch the list of changed files for a PR via `gh pr view --json files`.
+ */
+export async function fetchPrFiles(
+  prNumber: number,
+  run: (cmd: string) => Promise<ExecResult> = exec,
+): Promise<PrChangedFile[]> {
+  const cmd = `gh pr view ${prNumber} --json files`;
+  const result = await run(cmd);
+
+  if (result.exitCode !== 0) {
+    logError("Failed to fetch PR files", { prNumber, stderr: result.stderr });
+    return [];
+  }
+
+  try {
+    const data = JSON.parse(result.stdout) as { files: GhFileEntry[] };
+    return (data.files ?? []).map((f) => ({
+      path: f.path,
+      additions: f.additions ?? 0,
+      deletions: f.deletions ?? 0,
+    }));
+  } catch (error) {
+    logError("Failed to parse PR files JSON", error);
+    return [];
+  }
+}
+
+// ============================================================================
+// PR Check Runs
+// ============================================================================
+
+interface GhCheckRunEntry {
+  name: string;
+  status: string;
+  conclusion: string | null;
+  detailsUrl?: string;
+  __typename?: string;
+}
+
+/**
+ * Fetch check-run / status-check results for a PR via `gh pr view --json statusCheckRollup`.
+ */
+export async function fetchPrChecks(
+  prNumber: number,
+  run: (cmd: string) => Promise<ExecResult> = exec,
+): Promise<PrCheckRun[]> {
+  const cmd = `gh pr view ${prNumber} --json statusCheckRollup`;
+  const result = await run(cmd);
+
+  if (result.exitCode !== 0) {
+    logError("Failed to fetch PR checks", { prNumber, stderr: result.stderr });
+    return [];
+  }
+
+  try {
+    const data = JSON.parse(result.stdout) as {
+      statusCheckRollup: GhCheckRunEntry[];
+    };
+    return (data.statusCheckRollup ?? []).map((c) => ({
+      name: c.name ?? c.__typename ?? "unknown",
+      status: c.status ?? "UNKNOWN",
+      conclusion: c.conclusion ?? null,
+      ...(c.detailsUrl ? { detailsUrl: c.detailsUrl } : {}),
+    }));
+  } catch (error) {
+    logError("Failed to parse PR checks JSON", error);
+    return [];
+  }
+}
+
+// ============================================================================
+// PR Reviews and Comments
+// ============================================================================
+
+interface GhReviewEntry {
+  author: { login: string } | null;
+  body: string;
+  state: string;
+  submittedAt?: string;
+}
+
+interface GhCommentEntry {
+  author: { login: string } | null;
+  body: string;
+  createdAt: string;
+}
+
+/**
+ * Fetch review submissions for a PR via `gh pr view --json reviews`.
+ */
+export async function fetchPrReviews(
+  prNumber: number,
+  run: (cmd: string) => Promise<ExecResult> = exec,
+): Promise<PrReviewComment[]> {
+  const cmd = `gh pr view ${prNumber} --json reviews`;
+  const result = await run(cmd);
+
+  if (result.exitCode !== 0) {
+    logError("Failed to fetch PR reviews", { prNumber, stderr: result.stderr });
+    return [];
+  }
+
+  try {
+    const data = JSON.parse(result.stdout) as { reviews: GhReviewEntry[] };
+    return (data.reviews ?? []).map((r) => ({
+      author: r.author?.login ?? "unknown",
+      body: r.body ?? "",
+      state: r.state ?? "COMMENTED",
+      ...(r.submittedAt ? { submittedAt: r.submittedAt } : {}),
+    }));
+  } catch (error) {
+    logError("Failed to parse PR reviews JSON", error);
+    return [];
+  }
+}
+
+/**
+ * Fetch PR-level comments (conversation, not inline review comments)
+ * via `gh pr view --json comments`.
+ */
+export async function fetchPrComments(
+  prNumber: number,
+  run: (cmd: string) => Promise<ExecResult> = exec,
+): Promise<PrComment[]> {
+  const cmd = `gh pr view ${prNumber} --json comments`;
+  const result = await run(cmd);
+
+  if (result.exitCode !== 0) {
+    logError("Failed to fetch PR comments", { prNumber, stderr: result.stderr });
+    return [];
+  }
+
+  try {
+    const data = JSON.parse(result.stdout) as { comments: GhCommentEntry[] };
+    return (data.comments ?? []).map((c) => ({
+      author: c.author?.login ?? "unknown",
+      body: c.body ?? "",
+      createdAt: c.createdAt ?? "",
+    }));
+  } catch (error) {
+    logError("Failed to parse PR comments JSON", error);
+    return [];
+  }
 }

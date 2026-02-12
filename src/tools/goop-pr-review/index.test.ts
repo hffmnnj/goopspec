@@ -1,5 +1,5 @@
 /**
- * Tests for PR Review: types, spec-context detection, preflight, and resolver
+ * Tests for PR Review: types, spec-context detection, preflight, resolver, and context builder
  * @module tools/goop-pr-review/index.test
  */
 
@@ -18,6 +18,10 @@ import {
   resolvePr,
   parsePrInput,
   formatPrSummary,
+  fetchPrFiles,
+  fetchPrChecks,
+  fetchPrReviews,
+  fetchPrComments,
   type ExecResult,
 } from "./github.js";
 import {
@@ -35,12 +39,19 @@ import {
   type ChangeSummarySection,
   type ReviewFinding,
   type FixCategory,
+  type ReviewContext,
   FIX_CATEGORIES,
   FINDING_SEVERITIES,
   CHECK_STATUSES,
   REVIEW_VERDICTS,
 } from "./types.js";
 import { detectSpecContext, isSpecModeEnabled } from "./spec-context.js";
+import {
+  buildReviewContext,
+  clearContextCache,
+  hasCachedContext,
+  isWorkingDirectoryClean,
+} from "./context.js";
 
 // ============================================================================
 // Fixtures
@@ -718,5 +729,471 @@ describe("createGoopPrReviewTool", () => {
     // Either preflight fails (no gh in CI) or it asks for PR input
     expect(typeof result).toBe("string");
     expect(result.length).toBeGreaterThan(0);
+  });
+});
+
+// ============================================================================
+// gh-fetch: fetchPrFiles
+// ============================================================================
+
+describe("gh-fetch: fetchPrFiles", () => {
+  it("returns parsed file list from gh output", async () => {
+    const ghOutput = JSON.stringify({
+      files: [
+        { path: "src/index.ts", additions: 10, deletions: 2 },
+        { path: "src/utils.ts", additions: 5, deletions: 0 },
+      ],
+    });
+    const run = mockExec({ stdout: ghOutput });
+
+    const files = await fetchPrFiles(42, run);
+
+    expect(files).toHaveLength(2);
+    expect(files[0].path).toBe("src/index.ts");
+    expect(files[0].additions).toBe(10);
+    expect(files[0].deletions).toBe(2);
+    expect(files[1].path).toBe("src/utils.ts");
+  });
+
+  it("returns empty array on gh failure", async () => {
+    const run = mockExec({ exitCode: 1, stderr: "network error" });
+
+    const files = await fetchPrFiles(42, run);
+
+    expect(files).toEqual([]);
+  });
+
+  it("returns empty array on malformed JSON", async () => {
+    const run = mockExec({ stdout: "not json" });
+
+    const files = await fetchPrFiles(42, run);
+
+    expect(files).toEqual([]);
+  });
+
+  it("handles missing files array gracefully", async () => {
+    const run = mockExec({ stdout: JSON.stringify({}) });
+
+    const files = await fetchPrFiles(42, run);
+
+    expect(files).toEqual([]);
+  });
+
+  it("defaults missing additions/deletions to 0", async () => {
+    const ghOutput = JSON.stringify({
+      files: [{ path: "README.md" }],
+    });
+    const run = mockExec({ stdout: ghOutput });
+
+    const files = await fetchPrFiles(42, run);
+
+    expect(files[0].additions).toBe(0);
+    expect(files[0].deletions).toBe(0);
+  });
+});
+
+// ============================================================================
+// gh-fetch: fetchPrChecks
+// ============================================================================
+
+describe("gh-fetch: fetchPrChecks", () => {
+  it("returns parsed check runs from gh output", async () => {
+    const ghOutput = JSON.stringify({
+      statusCheckRollup: [
+        { name: "CI / build", status: "COMPLETED", conclusion: "SUCCESS", detailsUrl: "https://ci.example.com/1" },
+        { name: "CI / lint", status: "COMPLETED", conclusion: "FAILURE" },
+        { name: "CI / test", status: "IN_PROGRESS", conclusion: null },
+      ],
+    });
+    const run = mockExec({ stdout: ghOutput });
+
+    const checks = await fetchPrChecks(42, run);
+
+    expect(checks).toHaveLength(3);
+    expect(checks[0].name).toBe("CI / build");
+    expect(checks[0].status).toBe("COMPLETED");
+    expect(checks[0].conclusion).toBe("SUCCESS");
+    expect(checks[0].detailsUrl).toBe("https://ci.example.com/1");
+    expect(checks[1].conclusion).toBe("FAILURE");
+    expect(checks[2].conclusion).toBeNull();
+  });
+
+  it("returns empty array on gh failure", async () => {
+    const run = mockExec({ exitCode: 1, stderr: "error" });
+
+    const checks = await fetchPrChecks(42, run);
+
+    expect(checks).toEqual([]);
+  });
+
+  it("handles missing statusCheckRollup gracefully", async () => {
+    const run = mockExec({ stdout: JSON.stringify({}) });
+
+    const checks = await fetchPrChecks(42, run);
+
+    expect(checks).toEqual([]);
+  });
+
+  it("uses __typename as fallback name", async () => {
+    const ghOutput = JSON.stringify({
+      statusCheckRollup: [
+        { __typename: "StatusContext", status: "COMPLETED", conclusion: "SUCCESS" },
+      ],
+    });
+    const run = mockExec({ stdout: ghOutput });
+
+    const checks = await fetchPrChecks(42, run);
+
+    expect(checks[0].name).toBe("StatusContext");
+  });
+
+  it("omits detailsUrl when not present", async () => {
+    const ghOutput = JSON.stringify({
+      statusCheckRollup: [
+        { name: "test", status: "COMPLETED", conclusion: "SUCCESS" },
+      ],
+    });
+    const run = mockExec({ stdout: ghOutput });
+
+    const checks = await fetchPrChecks(42, run);
+
+    expect(checks[0].detailsUrl).toBeUndefined();
+  });
+});
+
+// ============================================================================
+// gh-fetch: fetchPrReviews
+// ============================================================================
+
+describe("gh-fetch: fetchPrReviews", () => {
+  it("returns parsed reviews from gh output", async () => {
+    const ghOutput = JSON.stringify({
+      reviews: [
+        { author: { login: "reviewer1" }, body: "LGTM", state: "APPROVED", submittedAt: "2026-01-15T10:00:00Z" },
+        { author: { login: "reviewer2" }, body: "Needs changes", state: "CHANGES_REQUESTED" },
+      ],
+    });
+    const run = mockExec({ stdout: ghOutput });
+
+    const reviews = await fetchPrReviews(42, run);
+
+    expect(reviews).toHaveLength(2);
+    expect(reviews[0].author).toBe("reviewer1");
+    expect(reviews[0].body).toBe("LGTM");
+    expect(reviews[0].state).toBe("APPROVED");
+    expect(reviews[0].submittedAt).toBe("2026-01-15T10:00:00Z");
+    expect(reviews[1].submittedAt).toBeUndefined();
+  });
+
+  it("returns empty array on gh failure", async () => {
+    const run = mockExec({ exitCode: 1, stderr: "error" });
+
+    const reviews = await fetchPrReviews(42, run);
+
+    expect(reviews).toEqual([]);
+  });
+
+  it("handles null author gracefully", async () => {
+    const ghOutput = JSON.stringify({
+      reviews: [{ author: null, body: "Comment", state: "COMMENTED" }],
+    });
+    const run = mockExec({ stdout: ghOutput });
+
+    const reviews = await fetchPrReviews(42, run);
+
+    expect(reviews[0].author).toBe("unknown");
+  });
+
+  it("handles missing reviews array gracefully", async () => {
+    const run = mockExec({ stdout: JSON.stringify({}) });
+
+    const reviews = await fetchPrReviews(42, run);
+
+    expect(reviews).toEqual([]);
+  });
+});
+
+// ============================================================================
+// gh-fetch: fetchPrComments
+// ============================================================================
+
+describe("gh-fetch: fetchPrComments", () => {
+  it("returns parsed comments from gh output", async () => {
+    const ghOutput = JSON.stringify({
+      comments: [
+        { author: { login: "user1" }, body: "Great work!", createdAt: "2026-01-15T10:00:00Z" },
+        { author: { login: "user2" }, body: "Question about line 5", createdAt: "2026-01-15T11:00:00Z" },
+      ],
+    });
+    const run = mockExec({ stdout: ghOutput });
+
+    const comments = await fetchPrComments(42, run);
+
+    expect(comments).toHaveLength(2);
+    expect(comments[0].author).toBe("user1");
+    expect(comments[0].body).toBe("Great work!");
+    expect(comments[0].createdAt).toBe("2026-01-15T10:00:00Z");
+  });
+
+  it("returns empty array on gh failure", async () => {
+    const run = mockExec({ exitCode: 1, stderr: "error" });
+
+    const comments = await fetchPrComments(42, run);
+
+    expect(comments).toEqual([]);
+  });
+
+  it("handles null author gracefully", async () => {
+    const ghOutput = JSON.stringify({
+      comments: [{ author: null, body: "Bot comment", createdAt: "2026-01-15T10:00:00Z" }],
+    });
+    const run = mockExec({ stdout: ghOutput });
+
+    const comments = await fetchPrComments(42, run);
+
+    expect(comments[0].author).toBe("unknown");
+  });
+
+  it("handles missing comments array gracefully", async () => {
+    const run = mockExec({ stdout: JSON.stringify({}) });
+
+    const comments = await fetchPrComments(42, run);
+
+    expect(comments).toEqual([]);
+  });
+});
+
+// ============================================================================
+// context: buildReviewContext
+// ============================================================================
+
+describe("context: buildReviewContext", () => {
+  let testDir: string;
+  let cleanup: () => void;
+
+  beforeEach(() => {
+    const env = setupTestEnvironment("pr-review-context");
+    testDir = env.testDir;
+    cleanup = env.cleanup;
+    clearContextCache();
+  });
+
+  afterEach(() => {
+    cleanup();
+    clearContextCache();
+  });
+
+  function contextMockExec(
+    overrides: Partial<Record<string, Partial<ExecResult>>> = {},
+  ): (cmd: string) => Promise<ExecResult> {
+    const defaults: Record<string, Partial<ExecResult>> = {
+      "gh pr view 42 --json files": {
+        stdout: JSON.stringify({
+          files: [
+            { path: "src/app.ts", additions: 20, deletions: 5 },
+            { path: "src/utils.ts", additions: 3, deletions: 1 },
+          ],
+        }),
+      },
+      "gh pr view 42 --json statusCheckRollup": {
+        stdout: JSON.stringify({
+          statusCheckRollup: [
+            { name: "CI / build", status: "COMPLETED", conclusion: "SUCCESS" },
+            { name: "CI / test", status: "COMPLETED", conclusion: "FAILURE" },
+          ],
+        }),
+      },
+      "gh pr view 42 --json reviews": {
+        stdout: JSON.stringify({
+          reviews: [
+            { author: { login: "reviewer" }, body: "Looks good", state: "APPROVED", submittedAt: "2026-01-15T10:00:00Z" },
+          ],
+        }),
+      },
+      "gh pr view 42 --json comments": {
+        stdout: JSON.stringify({
+          comments: [
+            { author: { login: "commenter" }, body: "Nice!", createdAt: "2026-01-15T11:00:00Z" },
+          ],
+        }),
+      },
+      "git status --porcelain": { stdout: "" },
+    };
+
+    const merged = { ...defaults, ...overrides };
+
+    return async (cmd: string) => {
+      for (const [pattern, result] of Object.entries(merged)) {
+        if (cmd.includes(pattern) || cmd === pattern) {
+          return { stdout: "", stderr: "", exitCode: 0, ...result };
+        }
+      }
+      return { stdout: "", stderr: "unknown command", exitCode: 1 };
+    };
+  }
+
+  it("assembles full review context from gh data", async () => {
+    const pr = validPrMetadata();
+    const run = contextMockExec();
+
+    const ctx = await buildReviewContext({ pr, run, projectDir: testDir });
+
+    expect(ctx.pr).toEqual(pr);
+    expect(ctx.files).toHaveLength(2);
+    expect(ctx.files[0].path).toBe("src/app.ts");
+    expect(ctx.checks).toHaveLength(2);
+    expect(ctx.checks[0].name).toBe("CI / build");
+    expect(ctx.reviews).toHaveLength(1);
+    expect(ctx.reviews[0].author).toBe("reviewer");
+    expect(ctx.comments).toHaveLength(1);
+    expect(ctx.comments[0].author).toBe("commenter");
+    expect(ctx.workingDirectoryClean).toBe(true);
+  });
+
+  it("detects spec availability from project directory", async () => {
+    writeFileSync(join(testDir, ".goopspec", "SPEC.md"), "# Spec");
+    writeFileSync(join(testDir, ".goopspec", "BLUEPRINT.md"), "# Blueprint");
+
+    const pr = validPrMetadata();
+    const run = contextMockExec();
+
+    const ctx = await buildReviewContext({ pr, run, projectDir: testDir });
+
+    expect(ctx.specAvailability.specExists).toBe(true);
+    expect(ctx.specAvailability.blueprintExists).toBe(true);
+  });
+
+  it("reports no-spec mode when spec files are absent", async () => {
+    const pr = validPrMetadata();
+    const run = contextMockExec();
+    const emptyDir = join(testDir, "no-spec-project");
+    mkdirSync(emptyDir, { recursive: true });
+
+    const ctx = await buildReviewContext({ pr, run, projectDir: emptyDir });
+
+    expect(ctx.specAvailability.specExists).toBe(false);
+    expect(ctx.specAvailability.blueprintExists).toBe(false);
+  });
+
+  it("detects dirty working directory", async () => {
+    const pr = validPrMetadata();
+    const run = contextMockExec({
+      "git status --porcelain": { stdout: " M src/dirty.ts\n?? untracked.ts" },
+    });
+
+    const ctx = await buildReviewContext({ pr, run, projectDir: testDir });
+
+    expect(ctx.workingDirectoryClean).toBe(false);
+  });
+
+  it("returns cached context on second call for same PR", async () => {
+    const pr = validPrMetadata();
+    let callCount = 0;
+    const countingRun = async (cmd: string) => {
+      callCount++;
+      return contextMockExec()(cmd);
+    };
+
+    const ctx1 = await buildReviewContext({ pr, run: countingRun, projectDir: testDir });
+    const firstCallCount = callCount;
+
+    const ctx2 = await buildReviewContext({ pr, run: countingRun, projectDir: testDir });
+
+    expect(ctx1).toEqual(ctx2);
+    expect(callCount).toBe(firstCallCount); // No additional calls
+    expect(hasCachedContext(pr.number)).toBe(true);
+  });
+
+  it("bypasses cache when skipCache is true", async () => {
+    const pr = validPrMetadata();
+    let callCount = 0;
+    const countingRun = async (cmd: string) => {
+      callCount++;
+      return contextMockExec()(cmd);
+    };
+
+    await buildReviewContext({ pr, run: countingRun, projectDir: testDir });
+    const firstCallCount = callCount;
+
+    await buildReviewContext({ pr, run: countingRun, projectDir: testDir, skipCache: true });
+
+    expect(callCount).toBeGreaterThan(firstCallCount);
+  });
+
+  it("does not use cache for different PR numbers", async () => {
+    const pr1 = validPrMetadata();
+    const pr2 = { ...validPrMetadata(), number: 99 };
+    const run = contextMockExec();
+
+    await buildReviewContext({ pr: pr1, run, projectDir: testDir });
+
+    expect(hasCachedContext(42)).toBe(true);
+    expect(hasCachedContext(99)).toBe(false);
+  });
+
+  it("clearContextCache removes cached data", async () => {
+    const pr = validPrMetadata();
+    const run = contextMockExec();
+
+    await buildReviewContext({ pr, run, projectDir: testDir });
+    expect(hasCachedContext(42)).toBe(true);
+
+    clearContextCache();
+    expect(hasCachedContext(42)).toBe(false);
+  });
+
+  it("gracefully handles all gh queries failing", async () => {
+    const pr = validPrMetadata();
+    const failRun = async () => ({
+      stdout: "",
+      stderr: "network error",
+      exitCode: 1,
+    });
+
+    const ctx = await buildReviewContext({ pr, run: failRun, projectDir: testDir });
+
+    expect(ctx.pr).toEqual(pr);
+    expect(ctx.files).toEqual([]);
+    expect(ctx.checks).toEqual([]);
+    expect(ctx.reviews).toEqual([]);
+    expect(ctx.comments).toEqual([]);
+    // Working directory defaults to clean when git fails
+    expect(ctx.workingDirectoryClean).toBe(true);
+  });
+
+  it("handles partial gh failures gracefully", async () => {
+    const pr = validPrMetadata();
+    const run = contextMockExec({
+      "gh pr view 42 --json statusCheckRollup": { exitCode: 1, stderr: "timeout" },
+      "gh pr view 42 --json reviews": { exitCode: 1, stderr: "timeout" },
+    });
+
+    const ctx = await buildReviewContext({ pr, run, projectDir: testDir });
+
+    expect(ctx.files).toHaveLength(2); // Files still fetched
+    expect(ctx.checks).toEqual([]); // Failed gracefully
+    expect(ctx.reviews).toEqual([]); // Failed gracefully
+    expect(ctx.comments).toHaveLength(1); // Comments still fetched
+  });
+});
+
+// ============================================================================
+// context: isWorkingDirectoryClean
+// ============================================================================
+
+describe("context: isWorkingDirectoryClean", () => {
+  it("returns true when git status is empty", async () => {
+    const run = mockExec({ stdout: "" });
+    expect(await isWorkingDirectoryClean(run)).toBe(true);
+  });
+
+  it("returns false when git status has changes", async () => {
+    const run = mockExec({ stdout: " M src/file.ts" });
+    expect(await isWorkingDirectoryClean(run)).toBe(false);
+  });
+
+  it("returns true when git command fails (non-git repo)", async () => {
+    const run = mockExec({ exitCode: 128, stderr: "not a git repository" });
+    expect(await isWorkingDirectoryClean(run)).toBe(true);
   });
 });
