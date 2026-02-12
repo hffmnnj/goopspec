@@ -52,6 +52,9 @@ import {
   hasCachedContext,
   isWorkingDirectoryClean,
 } from "./context.js";
+import { analyzeQuality } from "./analyzers/quality.js";
+import { analyzeSecurity } from "./analyzers/security.js";
+import { analyzeSpecAlignment } from "./analyzers/spec.js";
 
 // ============================================================================
 // Fixtures
@@ -1195,5 +1198,267 @@ describe("context: isWorkingDirectoryClean", () => {
   it("returns true when git command fails (non-git repo)", async () => {
     const run = mockExec({ exitCode: 128, stderr: "not a git repository" });
     expect(await isWorkingDirectoryClean(run)).toBe(true);
+  });
+});
+
+// ============================================================================
+// analyzers: quality
+// ============================================================================
+
+describe("quality analyzer", () => {
+  function buildContext(overrides: Partial<ReviewContext> = {}): ReviewContext {
+    return {
+      pr: validPrMetadata(),
+      files: [{ path: "src/auth.ts", additions: 10, deletions: 2 }],
+      checks: [],
+      reviews: [],
+      comments: [],
+      specAvailability: {
+        specExists: false,
+        blueprintExists: false,
+        specPath: "",
+        blueprintPath: "",
+      },
+      workingDirectoryClean: true,
+      ...overrides,
+    };
+  }
+
+  it("maps lint/test/typecheck checks to statuses", () => {
+    const ctx = buildContext({
+      checks: [
+        { name: "CI / lint", status: "COMPLETED", conclusion: "FAILURE" },
+        { name: "CI / test", status: "COMPLETED", conclusion: "SUCCESS" },
+        { name: "CI / typecheck", status: "IN_PROGRESS", conclusion: null },
+        { name: "CI / build", status: "COMPLETED", conclusion: "SKIPPED" },
+      ],
+    });
+
+    const section = analyzeQuality(ctx);
+
+    expect(section.checks).toHaveLength(4);
+    expect(section.checks[0].status).toBe("fail");
+    expect(section.checks[1].status).toBe("pass");
+    expect(section.checks[2].status).toBe("pending");
+    expect(section.checks[3].status).toBe("skipped");
+  });
+
+  it("creates findings for failing and pending checks", () => {
+    const ctx = buildContext({
+      checks: [
+        { name: "CI / test", status: "COMPLETED", conclusion: "FAILURE" },
+        { name: "CI / lint", status: "QUEUED", conclusion: null },
+      ],
+    });
+
+    const section = analyzeQuality(ctx);
+
+    expect(section.findings).toHaveLength(2);
+    expect(section.findings[0].severity).toBe("high");
+    expect(section.findings[1].severity).toBe("low");
+    expect(section.summary).toContain("failed");
+    expect(section.summary).toContain("pending");
+  });
+
+  it("returns unknown summary when checks are absent", () => {
+    const section = analyzeQuality(buildContext());
+    expect(section.checks).toEqual([]);
+    expect(section.findings).toEqual([]);
+    expect(section.summary).toContain("unknown");
+  });
+});
+
+// ============================================================================
+// analyzers: security
+// ============================================================================
+
+describe("security analyzer", () => {
+  function buildContext(overrides: Partial<ReviewContext> = {}): ReviewContext {
+    return {
+      pr: validPrMetadata(),
+      files: [],
+      checks: [],
+      reviews: [],
+      comments: [],
+      specAvailability: {
+        specExists: false,
+        blueprintExists: false,
+        specPath: "",
+        blueprintPath: "",
+      },
+      workingDirectoryClean: true,
+      ...overrides,
+    };
+  }
+
+  it("flags failed security checks", () => {
+    const ctx = buildContext({
+      checks: [
+        {
+          name: "CodeQL security scan",
+          status: "COMPLETED",
+          conclusion: "FAILURE",
+        },
+      ],
+    });
+
+    const section = analyzeSecurity(ctx);
+
+    expect(section.findings.length).toBeGreaterThanOrEqual(1);
+    expect(section.findings.some((finding) => finding.message.includes("check failed"))).toBe(true);
+  });
+
+  it("detects security keywords in reviews and comments", () => {
+    const ctx = buildContext({
+      reviews: [
+        {
+          author: "reviewer",
+          state: "COMMENTED",
+          body: "Potential auth bypass and SQL injection risk.",
+        },
+      ],
+      comments: [
+        {
+          author: "maintainer",
+          body: "CVE-2025-1234 appears relevant here.",
+          createdAt: "2026-02-12T00:00:00Z",
+        },
+      ],
+    });
+
+    const section = analyzeSecurity(ctx);
+
+    expect(section.findings.length).toBeGreaterThanOrEqual(2);
+    expect(section.findings.some((finding) => finding.severity === "critical")).toBe(true);
+    expect(section.summary).toContain("Security findings");
+  });
+
+  it("returns clean summary when no security signals exist", () => {
+    const section = analyzeSecurity(buildContext());
+    expect(section.findings).toEqual([]);
+    expect(section.summary).toContain("No security-relevant signals");
+  });
+});
+
+// ============================================================================
+// analyzers: spec
+// ============================================================================
+
+describe("spec analyzer", () => {
+  let testDir: string;
+  let cleanup: () => void;
+
+  beforeEach(() => {
+    const env = setupTestEnvironment("pr-review-spec-analyzer");
+    testDir = env.testDir;
+    cleanup = env.cleanup;
+  });
+
+  afterEach(() => {
+    cleanup();
+  });
+
+  function buildContext(overrides: Partial<ReviewContext> = {}): ReviewContext {
+    return {
+      pr: validPrMetadata(),
+      files: [{ path: "src/tools/goop-pr-review/report.ts", additions: 30, deletions: 1 }],
+      checks: [{ name: "CI / lint", status: "COMPLETED", conclusion: "SUCCESS" }],
+      reviews: [],
+      comments: [],
+      specAvailability: {
+        specExists: false,
+        blueprintExists: false,
+        specPath: "",
+        blueprintPath: "",
+      },
+      workingDirectoryClean: true,
+      ...overrides,
+    };
+  }
+
+  it("skips alignment when SPEC.md is absent", () => {
+    const section = analyzeSpecAlignment(buildContext());
+    expect(section.available).toBe(false);
+    expect(section.requirements).toEqual([]);
+    expect(section.summary).toContain("skipped");
+  });
+
+  it("maps must-haves when spec files exist", () => {
+    const specPath = join(testDir, ".goopspec", "SPEC.md");
+    const blueprintPath = join(testDir, ".goopspec", "BLUEPRINT.md");
+
+    writeFileSync(
+      specPath,
+      [
+        "# SPEC",
+        "",
+        "### MH1: PR Selection Interface",
+        "Prompt for PR number and validate with gh.",
+        "",
+        "### MH2: Comprehensive Review Analysis",
+        "Review checks lint type test status and provides human-readable summary.",
+      ].join("\n"),
+    );
+
+    writeFileSync(
+      blueprintPath,
+      [
+        "# BLUEPRINT",
+        "| MH1 | Task 1.1 |",
+        "| MH2 | Task 2.2 |",
+      ].join("\n"),
+    );
+
+    const section = analyzeSpecAlignment(
+      buildContext({
+        specAvailability: {
+          specExists: true,
+          blueprintExists: true,
+          specPath,
+          blueprintPath,
+        },
+        checks: [
+          { name: "CI / lint", status: "COMPLETED", conclusion: "SUCCESS" },
+          { name: "CI / test", status: "COMPLETED", conclusion: "SUCCESS" },
+          { name: "CI / typecheck", status: "COMPLETED", conclusion: "SUCCESS" },
+        ],
+      }),
+    );
+
+    expect(section.available).toBe(true);
+    expect(section.requirements.length).toBe(2);
+    expect(section.summary).toContain("must-have");
+  });
+
+  it("surfaces uncovered and missing blueprint traceability findings", () => {
+    const specPath = join(testDir, ".goopspec", "SPEC.md");
+    const blueprintPath = join(testDir, ".goopspec", "BLUEPRINT.md");
+
+    writeFileSync(
+      specPath,
+      [
+        "# SPEC",
+        "",
+        "### MH1: Payment Validation",
+        "Includes fraud detection and anti-tampering checks.",
+      ].join("\n"),
+    );
+
+    writeFileSync(blueprintPath, "# BLUEPRINT\nNo requirement IDs listed");
+
+    const section = analyzeSpecAlignment(
+      buildContext({
+        specAvailability: {
+          specExists: true,
+          blueprintExists: true,
+          specPath,
+          blueprintPath,
+        },
+      }),
+    );
+
+    expect(section.requirements[0].covered).toBe(false);
+    expect(section.findings.some((finding) => finding.message.includes("appears uncovered"))).toBe(true);
+    expect(section.findings.some((finding) => finding.message.includes("missing from BLUEPRINT"))).toBe(true);
   });
 });
