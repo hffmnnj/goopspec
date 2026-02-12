@@ -88,6 +88,7 @@ describe("Resource Integration", () => {
       "goop-memory",
       "goop-remember",
       "goop-recall",
+      "goop-pr-review",
     ];
 
     it("loads all expected commands", () => {
