@@ -100,9 +100,9 @@ Enforces delegation rules for the orchestrator agent:
 - Injects delegation guidance when blocked
 
 **Delegation Enforcement:**
-- Detects `goop_delegate` calls
-- Injects `task()` invocation reminders
-- Tracks pending delegations per session
+- Enforces direct `task()` delegation with rich prompts
+- Validates prompt includes required sections (intent, context, constraints, verification)
+- Tracks delegations per session
 
 ## Phase Rules
 

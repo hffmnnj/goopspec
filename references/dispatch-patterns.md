@@ -2,65 +2,76 @@
 
 GoopSpec supports multiple patterns for spawning and coordinating specialized agents. Choose the right pattern based on task characteristics.
 
-## Two-Step Delegation System
+## Direct Task Delegation
 
-GoopSpec uses two tools for delegation, each with a distinct purpose:
+GoopSpec uses the native `task` tool for all agent delegation. The orchestrator constructs rich, context-aware prompts that include task intent, project context, constraints, and verification expectations.
 
-| Tool | Purpose | Required? |
-|------|---------|-----------|
-| `goop_delegate` | **Prompt Engineering** - prepares rich prompts with skills, references, team context | Optional but recommended |
-| `task` | **Agent Execution** - spawns the subagent and runs the work | **Always required** |
+### Task Delegation Pattern
 
-### Full Delegation Pattern (Complex Tasks)
-
-For complex tasks that benefit from skills, references, and team awareness:
-
-```typescript
-// Step 1: Engineer the prompt
-goop_delegate({
-  agent: "goop-executor-high",
-  prompt: "Implement user authentication",
-  context: "Stack: Next.js + NextAuth, Wave 2 Task 3"
-})
-// Output: Rich prompt with skills, refs, memory protocol, team context
-
-// Step 2: Execute (REQUIRED - copy from goop_delegate output)
-task({
-  subagent_type: "goop-executor-high",
-  description: "Implement auth",
-  prompt: `[The composedPrompt from goop_delegate output]`
-})
-```
-
-### Direct Delegation Pattern (Simple Tasks)
-
-For simple, well-defined tasks:
+For all delegation, use the `task` tool with a well-constructed prompt:
 
 ```typescript
 task({
   subagent_type: "goop-executor-high",
-  description: "Implement auth",
-  prompt: `[Your own prompt with context]`
+  description: "Implement user authentication",
+  prompt: `
+## TASK
+Implement user authentication with JWT tokens.
+
+## PROJECT CONTEXT
+- Stack: Next.js 14 + NextAuth
+- Wave 2, Task 3 from BLUEPRINT.md
+- Follow patterns in src/auth/
+
+## CONSTRAINTS
+- Use existing session management
+- Must support OAuth providers
+- Token expiry: 24 hours
+
+## VERIFICATION
+- Run: bun test src/auth/
+- Manual: Test login/logout flow
+- Check: No hardcoded secrets
+
+## EXPECTED OUTPUT
+- src/auth/service.ts - JWT generation
+- src/auth/middleware.ts - Route protection
+- Atomic commit with verification evidence
+  `
 })
 ```
 
-### When to Use Each Pattern
+### Prompt Construction Requirements
 
-| Situation | Pattern | Why |
-|-----------|---------|-----|
-| Task needs agent's skills | `goop_delegate` → `task` | Skills are auto-injected |
-| Task needs team awareness | `goop_delegate` → `task` | Avoids file conflicts |
-| Complex multi-file work | `goop_delegate` → `task` | Full context package |
-| Quick exploration | `task` directly | Faster, less overhead |
-| Simple single-file fix | `task` directly | Sufficient context |
+Every delegation prompt MUST include:
+
+| Section | Purpose | Example |
+|---------|---------|---------|
+| **Task Intent** | What to build and why | "Implement JWT auth to secure API endpoints" |
+| **Project Context** | Stack, wave, patterns | "Stack: Next.js 14, Wave 2 Task 3, follow src/auth/ patterns" |
+| **Constraints** | Boundaries and requirements | "Use existing session management, support OAuth" |
+| **Verification** | How to prove completion | "Run bun test src/auth/, manual login test" |
+| **Expected Output** | Deliverables | "service.ts, middleware.ts, atomic commit" |
+
+### Agent Selection by Task Type
+
+| Task Type | Agent | When to Use |
+|-----------|-------|-------------|
+| Simple config/mechanical | `goop-executor-low` | Config updates, renames, boilerplate |
+| Business logic | `goop-executor-medium` | Standard features, refactors |
+| Complex/architectural | `goop-executor-high` | Critical paths, architecture-sensitive |
+| UI/UX work | `goop-executor-frontend` | Styling, responsive design |
+| Research | `goop-researcher` | Technology evaluation, deep research |
+| Verification | `goop-verifier` | Spec compliance, security audit |
 
 ### Common Mistakes
 
 | Mistake | Symptom | Fix |
 |---------|---------|-----|
-| `goop_delegate` without `task` | Prompt prepared but agent never runs | Always follow with `task` |
-| Using `delegate` tool | Different async system | Use `task` for GoopSpec |
-| Skipping `goop_delegate` for complex work | Missing skills/team context | Use full two-step |
+| Vague prompt | Agent lacks context | Include all 5 required sections |
+| Wrong agent tier | Quality mismatch | Match agent to task complexity |
+| Missing verification | Can't prove completion | Always specify verification commands |
+| No project context | Agent guesses patterns | Include stack, wave, existing patterns |
 
 ## Dispatch Modes
 

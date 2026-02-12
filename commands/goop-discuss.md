@@ -52,7 +52,7 @@ If the command includes a session name (example: `/goop-discuss feat-auth`), cre
 | `goop_status` | Check current phase |
 | `goop_state` | Update workflow state (NEVER edit state.json directly) |
 | `question` | Structured confirmations with explicit outcomes (depth, approval, options) |
-| `goop_delegate` | Delegate to creative agent (opt-in) |
+| `task` | Delegate to creative agent (opt-in, using native task tool) |
 | `createSession` | Create a session when `/goop-discuss <name>` is used |
 | `setSession` | Bind the created session to plugin context |
 | `memory_search` | Find prior context |
