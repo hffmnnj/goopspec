@@ -1,10 +1,10 @@
 ---
 name: goop-accept
-description: Verify work and request acceptance
+description: Verify work, confirm acceptance, and archive milestone
 phase: accept
 requires: execution_complete
-next-step: "Once accepted, complete the milestone and archive"
-next-command: /goop-complete
+next-step: "Once explicitly accepted, finalize and archive automatically"
+next-command: /goop-milestone
 alternatives:
   - command: /goop-execute
     when: "If issues are found that need to be fixed"
@@ -14,7 +14,7 @@ alternatives:
 
 # /goop-accept
 
-**Verify and accept work.** The final gate before completion.
+**Verify, accept, and complete work.** Runs the full verify-to-archive lifecycle.
 
 ### STOP-AND-RETURN
 
@@ -48,15 +48,18 @@ goop_state({ action: "get" })
 2. **Run Verification** — Spawn goop-verifier and goop-tester
 3. **Present Report** — Requirement matrix, test results, security check
 4. **Request Acceptance** — User must type "accept"
-5. **Handle Response** — Update state, generate HANDOFF.md
+5. **Handle Response** — Process acceptance keywords, record decision
+6. **Finalize Milestone** — Archive artifacts, generate retrospective, extract learnings, optional git tag
+
+Completion behavior in Step 6 preserves the prior `/goop-complete` lifecycle, now executed only after explicit acceptance.
 
 ### Acceptance Keywords
 
 | Keyword | Action |
 |---------|--------|
-| `accept` | Complete milestone, proceed to /goop-complete |
+| `accept` | Confirm acceptance and immediately run completion/archival |
 | `issues` | Log issues, return to execution |
-| `accept-with-issues` | Accept with documented known issues |
+| `accept-with-issues` | Record known issues, then require explicit `accept` before archival |
 | `cancel` | Return to execution |
 
 ## Output
@@ -65,6 +68,8 @@ goop_state({ action: "get" })
 |------|---------|
 | State (via goop_state) | Updated with acceptance |
 | `.goopspec/CHRONICLE.md` | Verification results |
+| `.goopspec/archive/<milestone-slug>/` | Archived active milestone artifacts |
+| `.goopspec/archive/<milestone-slug>/RETROSPECTIVE.md` | Generated retrospective |
 | `.goopspec/HANDOFF.md` | Session handoff |
 
 ## Success Criteria
@@ -73,6 +78,8 @@ goop_state({ action: "get" })
 - [ ] goop-verifier spawned with full context
 - [ ] Verification report presented clearly
 - [ ] User explicitly typed "accept"
+- [ ] Archival only starts after explicit "accept"
+- [ ] Completion artifacts generated (archive + retrospective + memory extraction)
 - [ ] HANDOFF.md generated
 
 ## Anti-Patterns

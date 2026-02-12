@@ -19,7 +19,7 @@ Phase Gates are mandatory checkpoints that ensure quality and prevent premature 
 | **Discovery Gate** | Before /goop-plan | Ensure requirements understood | Orchestrator |
 | **Spec Gate** | Before /goop-execute | Lock contract with user | /goop-plan (end-of-flow contract gate) |
 | **Execution Gate** | Before /goop-accept | Verify all tasks complete | Orchestrator |
-| **Acceptance Gate** | Before /goop-complete | User accepts deliverable | /goop-accept |
+| **Acceptance Gate** | Within /goop-accept before archival | User accepts deliverable and triggers finalization | /goop-accept |
 
 ---
 
@@ -195,7 +195,7 @@ If some tasks are optional (nice-to-haves):
 ## Gate 4: Acceptance Gate
 
 ### Location
-Between acceptance and completion (`/goop-accept` → `/goop-complete`)
+Within `/goop-accept` after verification and before archival/finalization
 
 ### Purpose
 User explicitly accepts the deliverable as meeting requirements.
@@ -207,6 +207,7 @@ User explicitly accepts the deliverable as meeting requirements.
 | All must-haves PASS | Requirement matrix shows all green |
 | Security check | Security checklist reviewed |
 | User acceptance | Explicit "accept" from user |
+| Acceptance keywords | `accept`, `issues`, `accept-with-issues`, `cancel` remain supported |
 
 ### State Check
 ```json
@@ -246,7 +247,7 @@ ACCEPT / REJECT with [reasons]
 
 ### Enforcement
 ```
-/goop-complete invoked:
+/goop-accept finalization step:
   IF verification_passed != true:
     STOP: Return BLOCKED response immediately
     REFUSE: "Verification not passed. Review report."
@@ -266,7 +267,7 @@ ACCEPT / REJECT with [reasons]
 ### Acceptance Process
 1. Present verification report
 2. Highlight any concerns
-3. Request user acceptance: "Type 'accept' to complete this milestone"
+3. Request user acceptance: "Type 'accept' to complete and archive this milestone"
 4. On accept: Archive milestone, extract learnings, reset for next
 
 ---
@@ -331,7 +332,7 @@ goop_adl({
    │                               │
    │ (user accepts)                │ (verification fails)
    ▼                               ▼
-/goop-complete                  [rework]
+/goop-accept finalization       [rework]
    │
    ▼
 [done] → archive → [idle]

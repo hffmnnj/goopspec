@@ -166,7 +166,7 @@ The spec is now a contract. Execution can proceed.
 
 Work has been verified and accepted.
 
-→ Use \`/goop-complete\` to finalize.`;
+→ Run \`/goop-accept\` to execute finalization and archival in the same flow.`;
         }
 
         case "reset-acceptance": {

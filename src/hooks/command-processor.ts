@@ -28,7 +28,6 @@ const COMMAND_PHASES: Record<string, WorkflowPhase> = {
   "goop-research": "research",
   "goop-execute": "execute",
   "goop-accept": "accept",
-  "goop-complete": "idle",  // completing returns to idle
 };
 
 /**

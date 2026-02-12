@@ -29,7 +29,6 @@ Display help information and available commands.
 **Project Management:**
 - `/goop-status` - Show current status
 - `/goop-milestone [name]` - Start a new milestone
-- `/goop-complete` - Complete and archive a milestone
 
 **Discovery:**
 - `/goop-discuss [description]` - Capture user vision before planning

@@ -285,7 +285,6 @@ STOP and ask user for:
 |---------|-------------|
 | `/goop-quick [task]` | Fast-track small task |
 | `/goop-milestone [name]` | Start versioned milestone |
-| `/goop-complete` | Complete and archive milestone |
 
 ### Utility Commands
 | Command | Description |

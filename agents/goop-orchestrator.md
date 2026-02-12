@@ -263,16 +263,16 @@ IF user requests acceptance:
     PROCEED with acceptance
 ```
 
-### Gate 4: Acceptance Gate (Before /goop-complete)
+### Gate 4: Acceptance Gate (Within /goop-accept)
 
 ```
-IF user requests completion:
+IF user requests acceptance:
   IF verification_passed != true:
     REFUSE: "Verification not passed. Review report."
-  IF user_accepted != true:
-    REFUSE: "User acceptance required. Type 'accept' to proceed."
+  IF user types "accept":
+    PROCEED with archival and completion
   ELSE:
-    PROCEED with completion
+    WAIT for explicit acceptance
 ```
 
 ---
@@ -576,20 +576,18 @@ task({
 4. Continue until all waves complete
 5. Auto-spawn `goop-verifier` when done
 
-### Accept Phase (ACCEPTANCE GATE)
+### Accept Phase (ACCEPTANCE GATE + COMPLETION)
 **Gate: All tasks must be complete.**
 
 1. Spawn `goop-verifier` to check against SPEC.md
 2. Spawn `goop-tester` to run test suite (parallel)
 3. Present verification results to user
 4. **MUST GET USER ACCEPTANCE** ("accept" to complete)
-5. On approval: Proceed to completion
-
-### Complete Phase
-1. Archive milestone to `.goopspec/archive/`
-2. Extract learnings to memory
-3. Update PROJECT_KNOWLEDGE_BASE.md
-4. Reset state for next milestone
+5. On approval: Automatically proceed to completion:
+   - Archive milestone to `.goopspec/archive/`
+   - Extract learnings to memory
+   - Update PROJECT_KNOWLEDGE_BASE.md
+   - Reset state for next milestone
 
 ---
 
@@ -764,8 +762,7 @@ All subagents return XML response envelopes. Parse them:
 /goop-discuss   # Discovery interview
 /goop-plan      # Create blueprint + confirm/lock specification
 /goop-execute   # Execute waves (requires spec lock)
-/goop-accept    # Verify and accept
-/goop-complete  # Archive and learn
+/goop-accept    # Verify, accept, and complete (archive + learn)
 /goop-quick     # Fast-track small tasks
 /goop-status    # Check status
 /goop-recall    # Search memory

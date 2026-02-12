@@ -86,8 +86,7 @@ Processes `/goop-*` slash commands:
 | /goop-discuss | plan |
 | /goop-research | research |
 | /goop-execute | execute |
-| /goop-accept | accept |
-| /goop-complete | idle |
+| /goop-accept | accept (then idle after completion) |
 
 ### Orchestrator Enforcement Hook
 
