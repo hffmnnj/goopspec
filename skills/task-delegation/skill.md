@@ -94,48 +94,64 @@ Don't pass:
 - Unrelated file contents
 - Completed task details
 
-## Two-Step Delegation (CRITICAL)
+## Direct Task Delegation (CRITICAL)
 
-Delegation in GoopSpec uses **two distinct tools** with different purposes:
+Delegation in GoopSpec uses the native **`task` tool** with rich, context-aware prompts constructed by the orchestrator.
 
-### Step 1: `goop_delegate` — Prompt Engineering
+### Prompt Construction Requirements
 
-This tool **prepares** a rich, production-ready prompt by:
-- Loading the agent's definition (skills, references, model)
-- Injecting team awareness context
-- Adding memory protocols
-- Checking for file conflicts with other agents
+Every delegation prompt MUST include:
 
-```typescript
-goop_delegate({
-  agent: "goop-executor-high",
-  prompt: "Implement user authentication",
-  context: "Stack: Next.js + NextAuth"
-})
-```
+1. **Task Intent** - What to build and why
+2. **Project Context** - Stack, wave, existing patterns
+3. **Constraints** - Boundaries and requirements
+4. **Verification** - Commands to prove completion
+5. **Expected Output** - Specific deliverables
 
-**Output**: A structured prompt package with the exact `task()` call to execute.
-
-### Step 2: `task` — Agent Execution
-
-This tool **spawns** the subagent with the engineered prompt:
+### Example Delegation
 
 ```typescript
 task({
   subagent_type: "goop-executor-high",
-  description: "Implement auth",
-  prompt: `[Copy composedPrompt from goop_delegate output]`
+  description: "Implement user authentication",
+  prompt: `
+## TASK
+Implement JWT-based user authentication with login/logout endpoints.
+
+## PROJECT CONTEXT
+- Stack: Next.js 14 + NextAuth
+- Wave 2, Task 3 from BLUEPRINT.md
+- Follow existing patterns in src/auth/
+- Use jose library for JWT (already in dependencies)
+
+## CONSTRAINTS
+- Must support OAuth providers (Google, GitHub)
+- Token expiry: 24 hours with refresh rotation
+- Use existing session management in src/session/
+
+## VERIFICATION
+- Run: bun test src/auth/
+- Manual: Test login/logout flow in browser
+- Check: No hardcoded secrets or credentials
+
+## EXPECTED OUTPUT
+- src/auth/service.ts - JWT generation and validation
+- src/auth/middleware.ts - Route protection middleware
+- src/auth/types.ts - Auth type definitions
+- Atomic commit with verification evidence
+  `
 })
 ```
 
-### When to Use Each Pattern
+### When to Delegate
 
-| Situation | Recommended Pattern |
-|-----------|---------------------|
-| Complex task needing skills/refs | `goop_delegate` → `task` |
-| Task needing team awareness | `goop_delegate` → `task` |
-| Simple, well-defined task | `task` directly |
-| Quick exploration | `task` directly |
+| Situation | Use Delegation |
+|-----------|----------------|
+| Complex implementation | Yes - use appropriate executor tier |
+| Multi-file changes | Yes - include full context |
+| Architecture-sensitive | Yes - use goop-executor-high |
+| Simple config update | Optional - can be done directly |
+| Quick exploration | Optional - depends on context needs |
 
 ### Available subagent_types
 
@@ -160,29 +176,45 @@ task({
 
 | Mistake | Problem | Fix |
 |---------|---------|-----|
-| Using `goop_delegate` without `task` | Prompt is prepared but agent never runs | Always follow `goop_delegate` with `task` |
-| Using `delegate` instead | Different system, not GoopSpec agents | Use `task` for GoopSpec agents |
-| Skipping `goop_delegate` for complex tasks | Miss skills/refs/team context | Use full two-step for complex work |
+| Vague prompt | Agent lacks context to succeed | Include all 5 required sections |
+| Wrong agent tier | Quality/speed mismatch | Match agent to task complexity |
+| Missing verification | Can't prove completion | Always specify verification commands |
+| No project context | Agent guesses patterns | Include stack, wave, existing patterns |
+| Using `delegate` tool | Different async system | Use `task` for GoopSpec agents |
 
 ### Full Example
 
 ```typescript
-// Step 1: Engineer the prompt
-goop_delegate({
-  agent: "goop-executor-high",
-  prompt: "Implement password reset flow",
-  context: `
-    Stack: Next.js 14, Prisma, Resend
-    Task from BLUEPRINT.md Wave 2, Task 3
-    Must follow existing auth patterns in src/auth/
-  `
-})
-
-// Step 2: Execute (copy the task call from goop_delegate output)
 task({
   subagent_type: "goop-executor-high",
-  description: "Implement password reset",
-  prompt: `[The full composedPrompt from goop_delegate]`
+  description: "Implement password reset flow",
+  prompt: `
+## TASK
+Implement password reset flow with email verification.
+
+## PROJECT CONTEXT
+- Stack: Next.js 14, Prisma, Resend
+- Wave 2, Task 3 from BLUEPRINT.md
+- Follow existing auth patterns in src/auth/
+- Email templates in src/templates/
+
+## CONSTRAINTS
+- Reset token expires in 1 hour
+- One-time use tokens only
+- Rate limit: 3 requests per hour per email
+- Must log all reset attempts
+
+## VERIFICATION
+- Run: bun test src/auth/reset.test.ts
+- Manual: Test full reset flow with real email
+- Check: Token invalidation after use
+
+## EXPECTED OUTPUT
+- src/auth/reset.ts - Reset logic
+- src/api/auth/reset.ts - API endpoint
+- src/templates/reset-email.tsx - Email template
+- Atomic commit with test evidence
+  `
 })
 ```
 

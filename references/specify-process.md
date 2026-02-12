@@ -80,17 +80,30 @@ IF traceability matrix shows < 100%:
 
 ---
 
-⚠️ **Action Required:**
-- Type **"confirm"** to lock the specification
-- Type **"amend"** to modify requirements
-- Type **"cancel"** to return to planning
+```
+
+Use `question` tool:
+
+```ts
+question({
+  questions: [{
+    header: "Contract Gate",
+    question: "How would you like to proceed with this contract?",
+    options: [
+      { label: "Confirm and Lock", description: "Accept contract and lock spec" },
+      { label: "Amend", description: "Modify requirements before locking" },
+      { label: "Cancel", description: "Return to planning, keep spec unlocked" }
+    ],
+    multiple: false
+  }]
+})
 ```
 
 ---
 
 ## Phase 3: Handle Response
 
-**On "confirm":**
+**On "Confirm and Lock":**
 
 1. Lock the spec using goop_state:
 ```
@@ -155,29 +168,37 @@ Changes now require `/goop-amend` with impact analysis.
 Start a **new session** for fresh context, then run the command.
 ```
 
-**On "amend":**
+**On "Amend":**
+
+Use `question` tool:
+
+```ts
+question({
+  questions: [{
+    header: "Amendment Mode",
+    question: "What would you like to change?",
+    options: [
+      { label: "Add a must-have", description: "Add a new requirement" },
+      { label: "Remove a must-have", description: "Remove an existing requirement" },
+      { label: "Modify acceptance criteria", description: "Update criteria for an existing must-have" },
+      { label: "Change out of scope", description: "Adjust scope boundaries" },
+      { label: "Cancel", description: "Return to contract gate" }
+    ],
+    multiple: false
+  }]
+})
+```
+
+Process the selected amendment, then return to the contract gate prompt.
+
+**On "Cancel":**
 
 ```
-## 🔮 GoopSpec · Amendment Mode
+## 🔮 GoopSpec · Contract Not Locked
 
-What would you like to change?
+Spec remains unlocked.
 
-1. Add a must-have
-2. Remove a must-have
-3. Modify acceptance criteria
-4. Change out of scope
-5. Cancel
-
----
-```
-
-Use `question` tool to get choice, then process amendment.
-
-**On "cancel":**
-
-```
-Specification not locked. Returning to planning.
-Run `/goop-plan` to modify or `/goop-discuss` to restart discovery.
+You can update requirements and run `/goop-plan` again.
 ```
 
 ---
@@ -226,9 +247,9 @@ Orchestrator:
 
 ✓ Traceability: 100%
 
-Type "confirm" to lock.
+→ [question tool: Confirm and Lock / Amend / Cancel]
 
-User: confirm
+User: Confirm and Lock
 
 Orchestrator:
 ## 🔮 GoopSpec · Specification Locked

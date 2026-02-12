@@ -67,8 +67,8 @@ describe("Resource Integration", () => {
 
   describe("Commands", () => {
     // Updated for GoopSpec 5-phase workflow
-    // Removed: goop-new (replaced by goop-plan), goop-verify (replaced by goop-accept)
-    // Added: goop-discuss, goop-accept, goop-amend, goop-complete, goop-milestone
+    // Removed: goop-new (replaced by goop-plan), goop-verify (replaced by goop-accept),
+    //          goop-complete (merged into goop-accept)
     const EXPECTED_COMMANDS = [
       "goop-discuss",
       "goop-plan",
@@ -76,7 +76,6 @@ describe("Resource Integration", () => {
       "goop-execute",
       "goop-accept",
       "goop-amend",
-      "goop-complete",
       "goop-milestone",
       "goop-quick",
       "goop-pause",
@@ -89,6 +88,7 @@ describe("Resource Integration", () => {
       "goop-memory",
       "goop-remember",
       "goop-recall",
+      "goop-pr-review",
     ];
 
     it("loads all expected commands", () => {
@@ -103,6 +103,24 @@ describe("Resource Integration", () => {
     it("has correct count of commands", () => {
       const commands = resolver.resolveAll("command");
       expect(commands.length).toBe(EXPECTED_COMMANDS.length);
+    });
+
+    it("does not include removed goop-complete command", () => {
+      const commands = resolver.resolveAll("command");
+      const commandNames = commands.map(c => c.name);
+
+      expect(commandNames).not.toContain("goop-complete");
+      expect(EXPECTED_COMMANDS).not.toContain("goop-complete");
+    });
+
+    it("goop-accept handles the completion path", () => {
+      const accept = resolver.resolve("command", "goop-accept");
+      expect(accept).not.toBeNull();
+
+      if (accept) {
+        // goop-accept now owns the full verify-to-archive lifecycle
+        expect(accept.frontmatter.description).toMatch(/archive/i);
+      }
     });
 
     for (const cmdName of EXPECTED_COMMANDS) {

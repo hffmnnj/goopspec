@@ -55,7 +55,7 @@ goop_state({ action: "get" })
 5. **Spawn goop-planner** — With full discovery context and current depth setting (`shallow`/`standard`/`deep`)
 6. **Per-Wave Dynamic Questioning** — Generate contextual wave-specific questions (typically 3-6 total, scaled by depth: shallow 1-2, standard 3-4, deep 5-6) and capture user answers before finalizing each wave
 7. **Post-Wave Review Gate** — After each wave draft, present review options (approve, request more research, clarify) before moving forward
-8. **Contract Gate** — Present spec summary to user for confirmation. On confirm: lock spec via `goop_state({ action: 'lock-spec' })`. On decline: spec stays unlocked for iteration.
+8. **Contract Gate** — Present spec summary, then use `question` tool with Confirm and Lock / Amend / Cancel options. On confirm: lock spec via `goop_state({ action: 'lock-spec' })`. On decline: spec stays unlocked for iteration.
 9. **Generate HANDOFF.md** — For session continuity
 
 ## Output

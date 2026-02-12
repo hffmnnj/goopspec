@@ -110,11 +110,12 @@ None
 
 When this milestone completes:
 
-1. Run `/goop-complete` to archive
-2. Generate RETROSPECTIVE.md
-3. Extract LEARNINGS.md → Memory
-4. Tag git: `git tag -a {{version}} -m "{{milestone_name}}"`
-5. Update project status
+1. Run `/goop-accept` to verify and finalize
+2. Archival happens automatically after acceptance
+3. RETROSPECTIVE.md is generated
+4. LEARNINGS.md is extracted to memory
+5. Tag git: `git tag -a {{version}} -m "{{milestone_name}}"`
+6. Project status is updated
 
 ---
 

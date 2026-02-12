@@ -127,9 +127,9 @@ ELSE:
 | Spec draft, not locked | `/goop-plan` to confirm and lock |
 | Spec locked, not executing | `/goop-execute` to start |
 | Executing, tasks remaining | `/goop-execute` to continue |
-| Executing, all done | `/goop-accept` to verify |
-| Verified, not accepted | `/goop-accept` to accept |
-| Accepted | `/goop-complete` to archive |
+| Executing, all done | `/goop-accept` to verify and finalize |
+| Verified, not accepted | `/goop-accept` to accept and complete |
+| Accepted | Ready for next milestone |
 
 ---
 

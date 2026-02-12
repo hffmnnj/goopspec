@@ -479,6 +479,27 @@ describe("agent-factory", () => {
         expect(config.prompt).toContain("Question Tool (User Interaction)");
       });
 
+      it("includes short-prompt and custom-input guidance for orchestrator", () => {
+        const resource = createMockResource({
+          name: "goop-orchestrator",
+          type: "agent",
+          frontmatter: {
+            name: "goop-orchestrator",
+            mode: "orchestrator",
+            tools: ["question"],
+            description: "Orchestrator",
+          },
+          body: "Base prompt",
+        });
+
+        const resolver = createMockResourceResolver();
+        const config = createAgentFromMarkdown(resource, resolver);
+
+        expect(config.prompt).toContain("mcp_question");
+        expect(config.prompt).toContain("short text inputs");
+        expect(config.prompt).toContain("custom-entry path");
+      });
+
       it("omits question instructions for subagents", () => {
         const resource = createMockResource({
           name: "goop-executor",
@@ -497,6 +518,33 @@ describe("agent-factory", () => {
         });
 
         expect(config.prompt).not.toContain("Question Tool (User Interaction)");
+      });
+
+      it("does not inject question instructions for non-user-facing subagent roles", () => {
+        const subagentNames = ["goop-executor-high", "goop-planner", "goop-researcher"];
+
+        const resolver = createMockResourceResolver();
+
+        for (const name of subagentNames) {
+          const resource = createMockResource({
+            name,
+            type: "agent",
+            frontmatter: {
+              mode: "subagent",
+              tools: ["read", "bash"],
+              description: `${name} test`,
+            },
+            body: "Base prompt",
+          });
+
+          const config = createAgentFromMarkdown(resource, resolver, {
+            enableMemoryTools: false,
+          });
+
+          expect(config.prompt).not.toContain("Question Tool (User Interaction)");
+          expect(config.prompt).not.toContain("mcp_question");
+          expect(config.prompt).not.toContain("custom-entry path");
+        }
       });
     });
 
@@ -769,6 +817,237 @@ describe("agent-factory", () => {
       const memoryDistillerConfig = composed.get("memory-distiller");
       expect(memoryDistillerConfig).toBeDefined();
       expect(memoryDistillerConfig?.prompt.length).toBeGreaterThan(0);
+    });
+  });
+
+  describe("goop-creative composition integrity", () => {
+    function composeCreativeAgent(): AgentConfig {
+      const resolver = createResourceResolver(PROJECT_ROOT);
+      const resource = resolver.resolve("agent", "goop-creative");
+      if (!resource) throw new Error("goop-creative agent not found");
+      return createAgentFromMarkdown(resource, resolver);
+    }
+
+    describe("frontmatter parsing", () => {
+      it("resolves goop-creative from bundled agents", () => {
+        const resolver = createResourceResolver(PROJECT_ROOT);
+        const resource = resolver.resolve("agent", "goop-creative");
+
+        expect(resource).not.toBeNull();
+        expect(resource!.name).toBe("goop-creative");
+        expect(resource!.type).toBe("agent");
+      });
+
+      it("parses mode as subagent", () => {
+        const config = composeCreativeAgent();
+        expect(config.mode).toBe("subagent");
+      });
+
+      it("parses model from frontmatter", () => {
+        const config = composeCreativeAgent();
+        expect(config.model).toBe("anthropic/claude-opus-4-6");
+      });
+
+      it("parses temperature from frontmatter", () => {
+        const config = composeCreativeAgent();
+        expect(config.temperature).toBe(0.5);
+      });
+
+      it("parses thinking budget from frontmatter", () => {
+        const config = composeCreativeAgent();
+        expect(config.thinking).toBeDefined();
+        expect(config.thinking?.type).toBe("enabled");
+        expect(config.thinking?.budgetTokens).toBe(32000);
+      });
+
+      it("parses description from frontmatter", () => {
+        const config = composeCreativeAgent();
+        expect(config.description).toContain("Visionary");
+      });
+
+      it("includes declared tools in permission map", () => {
+        const config = composeCreativeAgent();
+        expect(config.permission).toBeDefined();
+        expect(config.permission?.goop_state).toBe("allow");
+        expect(config.permission?.read).toBe("allow");
+        expect(config.permission?.glob).toBe("allow");
+        expect(config.permission?.grep).toBe("allow");
+        expect(config.permission?.goop_skill).toBe("allow");
+        expect(config.permission?.goop_reference).toBe("allow");
+      });
+    });
+
+    describe("skills and references injection", () => {
+      it("injects goop-core skill content", () => {
+        const config = composeCreativeAgent();
+        expect(config.prompt).toContain("Loaded Skills");
+        expect(config.prompt).toContain("goop-core");
+      });
+
+      it("injects architecture-design skill content", () => {
+        const config = composeCreativeAgent();
+        expect(config.prompt).toContain("architecture-design");
+      });
+
+      it("injects memory-usage skill content", () => {
+        const config = composeCreativeAgent();
+        expect(config.prompt).toContain("memory-usage");
+      });
+
+      it("adds memory tools to permission map", () => {
+        const config = composeCreativeAgent();
+        expect(config.permission?.memory_save).toBe("allow");
+        expect(config.permission?.memory_search).toBe("allow");
+        expect(config.permission?.memory_note).toBe("allow");
+        expect(config.permission?.memory_decision).toBe("allow");
+        expect(config.permission?.memory_forget).toBe("allow");
+      });
+
+      it("injects reference documents section", () => {
+        const config = composeCreativeAgent();
+        expect(config.prompt).toContain("Reference Documents");
+      });
+
+      it("injects subagent-protocol reference content", () => {
+        const config = composeCreativeAgent();
+        expect(config.prompt).toContain("Subagent Protocol");
+      });
+
+      it("injects response-format reference content", () => {
+        const config = composeCreativeAgent();
+        expect(config.prompt).toContain("Agent Response Format");
+      });
+
+      it("injects xml-response-schema reference content", () => {
+        const config = composeCreativeAgent();
+        expect(config.prompt).toContain("XML Response Schema");
+      });
+
+      it("injects handoff-protocol reference content", () => {
+        const config = composeCreativeAgent();
+        expect(config.prompt).toContain("Handoff Protocol");
+      });
+
+      it("injects context-injection reference content", () => {
+        const config = composeCreativeAgent();
+        expect(config.prompt).toContain("Context Injection");
+      });
+    });
+
+    describe("protocol markers in composed prompt", () => {
+      it("contains mandatory first step protocol", () => {
+        const config = composeCreativeAgent();
+        expect(config.prompt).toContain("MANDATORY FIRST STEP");
+      });
+
+      it("contains goop_state load instruction", () => {
+        const config = composeCreativeAgent();
+        expect(config.prompt).toContain("goop_state");
+      });
+
+      it("contains SPEC.md read instruction", () => {
+        const config = composeCreativeAgent();
+        expect(config.prompt).toContain("SPEC.md");
+      });
+
+      it("contains BLUEPRINT.md read instruction", () => {
+        const config = composeCreativeAgent();
+        expect(config.prompt).toContain("BLUEPRINT.md");
+      });
+
+      it("contains memory_search instruction in first steps", () => {
+        const config = composeCreativeAgent();
+        expect(config.prompt).toContain("memory_search");
+      });
+
+      it("contains XML goop_report envelope requirement", () => {
+        const config = composeCreativeAgent();
+        expect(config.prompt).toContain("goop_report");
+      });
+
+      it("contains handoff fields requirement", () => {
+        const config = composeCreativeAgent();
+        expect(config.prompt).toContain("<handoff>");
+      });
+
+      it("contains status values (COMPLETE, PARTIAL, BLOCKED, CHECKPOINT)", () => {
+        const config = composeCreativeAgent();
+        expect(config.prompt).toContain("COMPLETE");
+        expect(config.prompt).toContain("PARTIAL");
+        expect(config.prompt).toContain("BLOCKED");
+        expect(config.prompt).toContain("CHECKPOINT");
+      });
+
+      it("contains Memory System section", () => {
+        const config = composeCreativeAgent();
+        expect(config.prompt).toContain("Memory System");
+      });
+
+      it("does not contain question tool instructions (subagent)", () => {
+        const config = composeCreativeAgent();
+        expect(config.prompt).not.toContain("Question Tool (User Interaction)");
+      });
+    });
+
+    describe("prompt structure integrity", () => {
+      it("produces a non-empty prompt", () => {
+        const config = composeCreativeAgent();
+        expect(config.prompt.length).toBeGreaterThan(0);
+      });
+
+      it("starts with the base agent body content", () => {
+        const config = composeCreativeAgent();
+        expect(config.prompt).toContain("Elite Strategy and Systems Consultant");
+      });
+
+      it("contains creative protocol section", () => {
+        const config = composeCreativeAgent();
+        expect(config.prompt).toContain("Creative Protocol");
+      });
+
+      it("contains structured ideation mode", () => {
+        const config = composeCreativeAgent();
+        expect(config.prompt).toContain("Structured Ideation Mode");
+      });
+
+      it("contains idea-extension framework", () => {
+        const config = composeCreativeAgent();
+        expect(config.prompt).toContain("Idea-Extension Framework");
+      });
+
+      it("contains technology evaluation protocol", () => {
+        const config = composeCreativeAgent();
+        expect(config.prompt).toContain("Technology Evaluation");
+      });
+
+      it("contains problem decomposition protocol", () => {
+        const config = composeCreativeAgent();
+        expect(config.prompt).toContain("Problem Decomposition Protocol");
+      });
+
+      it("contains edge-case and failure-mode analysis", () => {
+        const config = composeCreativeAgent();
+        expect(config.prompt).toContain("Edge-Case and Failure-Mode Analysis");
+      });
+
+      it("contains universal compatibility protocol", () => {
+        const config = composeCreativeAgent();
+        expect(config.prompt).toContain("Universal Compatibility");
+      });
+
+      it("contains anti-bias checks", () => {
+        const config = composeCreativeAgent();
+        expect(config.prompt).toContain("Anti-Bias Checks");
+      });
+
+      it("passes validation with no issues", () => {
+        const resolver = createResourceResolver(PROJECT_ROOT);
+        const resource = resolver.resolve("agent", "goop-creative");
+        expect(resource).not.toBeNull();
+
+        const issues = validateAgentResource(resource!);
+        expect(issues).toEqual([]);
+      });
     });
   });
 });

@@ -183,6 +183,9 @@ Acceptance: [criteria]
 | Rule 4 | Architectural | **STOP**, ask user |
 
 **On Rule 4:**
+
+Display context, then use `question` tool:
+
 ```
 ## 🔮 GoopSpec · Decision Required
 
@@ -190,18 +193,24 @@ Acceptance: [criteria]
 
 **Context:** [From executor response]
 
-**Options:**
-- **A)** [option] — [impact]
-- **B)** [option] — [impact]
-
 **Recommendation:** [If any]
-
-Which option? (A/B/other)
-
----
 ```
 
-Use `question` tool, then resume with decision.
+```ts
+question({
+  questions: [{
+    header: "Architectural Decision",
+    question: "[Concise description of the decision needed]",
+    options: [
+      { label: "[Option A]", description: "[Impact of option A]" },
+      { label: "[Option B]", description: "[Impact of option B]" }
+    ],
+    multiple: false
+  }]
+})
+```
+
+Resume execution with the selected option.
 
 ---
 
@@ -250,6 +259,9 @@ Wave [N] complete. Starting Wave [N+1] next.
 ```
 
 ### 5.5 Offer continuation options
+
+Display wave summary, then use `question` tool:
+
 ```
 ## 🔮 GoopSpec · Wave [N] Complete
 
@@ -260,18 +272,25 @@ Wave [N] complete. Starting Wave [N+1] next.
 | Tasks | ✓ [X/X] complete |
 | Commits | [Y] |
 | Verification | ✓ PASSED |
-
-### Next
-
-**Option A:** Continue to Wave [N+1] (current session)
-**Option B:** Start new session for fresh context (optional)
-
-For Option B:
-1. Start a new session
-2. Run: `/goop-execute`
-
----
 ```
+
+```ts
+question({
+  questions: [{
+    header: "Wave [N] Complete",
+    question: "How would you like to continue?",
+    options: [
+      { label: "Continue to Wave [N+1]", description: "Proceed in the current session" },
+      { label: "Pause and resume later", description: "Save checkpoint, start fresh next time" }
+    ],
+    multiple: false
+  }]
+})
+```
+
+**On "Continue to Wave [N+1]":** Proceed to next wave in current session.
+
+**On "Pause and resume later":** Save checkpoint via `/goop-pause`, generate HANDOFF.md, suggest starting a new session and running `/goop-execute`.
 
 ### 5.6 Session-Length Guidance (non-blocking)
 
@@ -404,7 +423,7 @@ goop-executor-medium: Task 1.2 COMPLETE (commit: def456)
 
 ## 🔮 GoopSpec · Wave 1 Complete
 
-Continue to Wave 2 in the current session, or pause and resume later.
+→ [question tool: Continue to Wave 2 / Pause and resume later]
 ```
 
 ### Checkpoint Reached
@@ -415,15 +434,11 @@ goop-executor-high: BLOCKED - Rule 4 deviation
 
 **Context:** Database schema change needed
 
-**Options:**
-| A | Add index | Better performance |
-| B | Skip index | Faster deployment |
+→ [question tool: Add index / Skip index]
 
-Which option?
+User: Add index
 
-User: A
-
-Orchestrator: Resuming with Option A...
+Orchestrator: Resuming with selected option...
 ```
 
 ---

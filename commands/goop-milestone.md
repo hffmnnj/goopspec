@@ -39,7 +39,7 @@ Milestones are containers for multiple features/tasks. They help track progress 
 1. **Start:** Define the milestone goal.
 2. **Execute:** Run multiple `/goop-plan` -> `/goop-execute` cycles within the milestone.
 3. **Track:** Aggregates status across all contained features.
-4. **Complete:** Run `/goop-complete` to finish the milestone.
+4. **Complete:** Run `/goop-accept` to verify and finalize the milestone.
 
 ## Artifacts
 - `.goopspec/MILESTONE.md`: Tracks overall progress and contained features.

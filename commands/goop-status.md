@@ -50,7 +50,7 @@ Read-only operation that shows current workflow state.
 | Spec locked | `/goop-execute` |
 | Executing | `/goop-execute` |
 | All tasks done | `/goop-accept` |
-| Accepted | `/goop-complete` |
+| Accepted | Ready for next milestone |
 
 ## Success Criteria
 

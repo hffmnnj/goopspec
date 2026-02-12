@@ -90,6 +90,35 @@ Each piece of data has exactly one authoritative source.
 4. **Evaluate tradeoffs** - Pros/cons of each option
 5. **Document decision** - Record in ADL with rationale
 
+## Technology Evaluation Framework
+
+Use this when comparing frameworks, platforms, or core stack choices.
+
+### Rubric (Score 1-5)
+
+| Criterion | What to Evaluate |
+|-----------|------------------|
+| Fit | Requirement alignment, domain constraints, team familiarity |
+| Complexity | Build/run/debug complexity and operational overhead |
+| Scalability | Headroom for traffic, data growth, and team scaling |
+| Risk | Security, delivery, lock-in, and migration exposure |
+| Maintainability | Testability, readability, upgrade cadence, hiring impact |
+
+### Recommendation Output Pattern
+
+1. Present 2-4 realistic alternatives.
+2. Show rubric scores and one-line rationale per criterion.
+3. Recommend one option with explicit context-based reasoning.
+4. State when that option is not appropriate.
+5. Name a fallback option if core assumptions change.
+
+### Neutrality Guardrails
+
+- Start from constraints, not preferred tools.
+- Avoid single-framework bias; include a credible alternative.
+- Make assumptions explicit when context is incomplete.
+- Tie final choice to measurable outcomes (delivery speed, reliability, cost, risk).
+
 ### Decision Template
 
 ```markdown

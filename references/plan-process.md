@@ -503,21 +503,29 @@ across [M] waves. Contract confirmed and spec locked.
 
 **On `BLOCKED` status:**
 
+Display blocker context, then use `question` tool:
+
 ```
 ## 🔮 GoopSpec · Planning Blocked
 
 ✗ Cannot proceed
 
 **Blocker:** [From planner response]
-
-**Options:**
-1. Provide more context → `/goop-discuss`
-2. Research the unknown → `/goop-research [topic]`
-
----
 ```
 
-Use `question` tool to get user choice.
+```ts
+question({
+  questions: [{
+    header: "Planning Blocked",
+    question: "How would you like to resolve this blocker?",
+    options: [
+      { label: "Provide more context", description: "Return to discovery via /goop-discuss" },
+      { label: "Research the unknown", description: "Investigate via /goop-research" }
+    ],
+    multiple: false
+  }]
+})
+```
 
 ---
 

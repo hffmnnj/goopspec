@@ -148,7 +148,7 @@ export function createSlashcommandTool(ctx: PluginContext): ToolDefinition {
       const spawnAgent = cmdDef.agent;
       
       // Check for immediate action in command content (supports both legacy ## Immediate Action and ### STOP-AND-RETURN)
-      const immediateActionMatch = cmdDef.content.match(/(?:## Immediate Action|### STOP-AND-RETURN)[\s\S]*?```\n([\s\S]*?)\n```/);
+      const immediateActionMatch = cmdDef.content.match(/(?:## Immediate Action|### STOP-AND-RETURN)[\s\S]*?```\r?\n([\s\S]*?)\r?\n```/);
       const immediateAction = immediateActionMatch ? immediateActionMatch[1].trim() : null;
       
       const lines = [

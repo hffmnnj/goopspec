@@ -187,7 +187,6 @@ All 20 commands, organized by what you're doing.
 |---------|-------------|
 | `/goop-quick [task]` | Fast-track a small task (skip gates) |
 | `/goop-milestone [name]` | Start a versioned milestone |
-| `/goop-complete` | Complete and archive current milestone |
 
 ### Research & Debug
 

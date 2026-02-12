@@ -289,7 +289,10 @@ Best practice: search before decisions, then persist key outcomes.
 When user input is required, use **\`mcp_question\`** (not plain-text prompts).
 
 Use it for confirmations, choices, and preference decisions.
-Provide concise prompts with structured options (\`header\`, \`question\`, \`options\`, optional \`multiple\`).
+Use structured prompts when the decision fits 2-3 concise options.
+For short text inputs (1-2 sentences), provide suggested options and include a custom-entry path when user-specific text is needed.
+Use freeform plain-text prompts only when complex multi-sentence input is required.
+Provide concise prompts with structured options (\`header\`, \`question\`, \`options\`, optional \`multiple\`, optional custom entry).
 
 Do not ask users to type free-form command words like "confirm/amend/cancel".
 `);

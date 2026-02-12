@@ -19,7 +19,8 @@ Phase Gates are mandatory checkpoints that ensure quality and prevent premature 
 | **Discovery Gate** | Before /goop-plan | Ensure requirements understood | Orchestrator |
 | **Spec Gate** | Before /goop-execute | Lock contract with user | /goop-plan (end-of-flow contract gate) |
 | **Execution Gate** | Before /goop-accept | Verify all tasks complete | Orchestrator |
-| **Acceptance Gate** | Before /goop-complete | User accepts deliverable | /goop-accept |
+| **Acceptance Gate** | Within /goop-accept before archival | User accepts deliverable and triggers finalization | /goop-accept |
+| **Merge Confirmation Gate** | Within /goop-pr-review before merge | User confirms merge after review | /goop-pr-review |
 
 ---
 
@@ -195,7 +196,7 @@ If some tasks are optional (nice-to-haves):
 ## Gate 4: Acceptance Gate
 
 ### Location
-Between acceptance and completion (`/goop-accept` → `/goop-complete`)
+Within `/goop-accept` after verification and before archival/finalization
 
 ### Purpose
 User explicitly accepts the deliverable as meeting requirements.
@@ -207,6 +208,7 @@ User explicitly accepts the deliverable as meeting requirements.
 | All must-haves PASS | Requirement matrix shows all green |
 | Security check | Security checklist reviewed |
 | User acceptance | Explicit "accept" from user |
+| Acceptance keywords | `accept`, `issues`, `accept-with-issues`, `cancel` remain supported |
 
 ### State Check
 ```json
@@ -246,7 +248,7 @@ ACCEPT / REJECT with [reasons]
 
 ### Enforcement
 ```
-/goop-complete invoked:
+/goop-accept finalization step:
   IF verification_passed != true:
     STOP: Return BLOCKED response immediately
     REFUSE: "Verification not passed. Review report."
@@ -266,8 +268,69 @@ ACCEPT / REJECT with [reasons]
 ### Acceptance Process
 1. Present verification report
 2. Highlight any concerns
-3. Request user acceptance: "Type 'accept' to complete this milestone"
+3. Request user acceptance: "Type 'accept' to complete and archive this milestone"
 4. On accept: Archive milestone, extract learnings, reset for next
+
+---
+
+## Gate 5: Merge Confirmation Gate
+
+### Location
+Within `/goop-pr-review` after review analysis and optional fixes, before merge execution
+
+### Purpose
+Ensure user explicitly confirms merge operation after reviewing all findings and selecting merge strategy.
+
+### Requirements
+| Requirement | Validation |
+|-------------|------------|
+| Review complete | Quality, security, spec (if present), and summary analysis finished |
+| Merge strategy selected | User chose `merge` or `squash` |
+| Final summary displayed | Unresolved findings and merge impact shown |
+| Explicit confirmation | User typed "yes" or equivalent affirmative |
+
+### Enforcement
+```
+/goop-pr-review merge step:
+  IF review not complete:
+    STOP: Return BLOCKED response immediately
+    REFUSE: "Review analysis incomplete. Cannot proceed to merge."
+    DO NOT CONTINUE processing
+  IF merge strategy not selected:
+    STOP: Return BLOCKED response immediately
+    REFUSE: "Merge strategy required. Select 'merge' or 'squash'."
+    DO NOT CONTINUE processing
+  IF user confirmation != true:
+    STOP: Return BLOCKED response immediately
+    REFUSE: "Explicit merge confirmation required. Type 'yes' to proceed."
+    DO NOT CONTINUE processing
+  ELSE:
+    PROCEED with gh pr merge
+```
+
+### Merge Process
+1. Complete review analysis (quality, security, spec, summary)
+2. Offer and apply user-selected fixes (optional)
+3. Re-verify after fixes (if fixes applied)
+4. Prompt for merge strategy: "merge" or "squash"
+5. Display final summary including any unresolved findings
+6. Request explicit confirmation: "Type 'yes' to merge this PR"
+7. On confirm: Execute `gh pr merge --[strategy]`
+8. Handle merge outcome (success/conflict/permission failure)
+
+### No Bypass
+This gate **cannot be bypassed**. Merge always requires explicit user confirmation, even when:
+- All checks pass
+- No unresolved findings
+- Automated fixes succeeded
+- User has merge permissions
+
+### Failure Handling
+```
+Message: "Merge confirmation required."
+Action: Review final summary and confirm
+Recovery: Type 'yes' to proceed or 'no' to cancel
+```
 
 ---
 
@@ -281,6 +344,7 @@ ACCEPT / REJECT with [reasons]
 | Spec | No | Never - spec lock is fundamental |
 | Execution | Partial | Nice-to-haves may be deferred |
 | Acceptance | No | Never - user must accept |
+| Merge Confirmation | No | Never - explicit confirmation required |
 
 ### Bypass Logging
 
@@ -331,7 +395,7 @@ goop_adl({
    │                               │
    │ (user accepts)                │ (verification fails)
    ▼                               ▼
-/goop-complete                  [rework]
+/goop-accept finalization       [rework]
    │
    ▼
 [done] → archive → [idle]

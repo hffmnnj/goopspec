@@ -18,7 +18,6 @@ import { createGoopAdlTool } from "./goop-adl/index.js";
 import { createGoopSpecTool } from "./goop-spec/index.js";
 import { createGoopCheckpointTool } from "./goop-checkpoint/index.js";
 import { createGoopSkillTool } from "./goop-skill/index.js";
-import { createGoopDelegateTool } from "./goop-delegate/index.js";
 import { createSlashcommandTool } from "./slashcommand/index.js";
 
 // Test constants
@@ -196,8 +195,14 @@ describe("Tools", () => {
       expect(Object.keys(tools)).toContain("goop_spec");
       expect(Object.keys(tools)).toContain("goop_checkpoint");
       expect(Object.keys(tools)).toContain("goop_skill");
-      expect(Object.keys(tools)).toContain("goop_delegate");
       expect(Object.keys(tools)).toContain("slashcommand");
+    });
+
+    it("does not include goop_delegate tool", () => {
+      const ctx = createTestContext();
+      const tools = createTools(ctx);
+      
+      expect(Object.keys(tools)).not.toContain("goop_delegate");
     });
     
     it("all tools have description and args", () => {
@@ -450,59 +455,6 @@ describe("Tools", () => {
       // The skill may or may not be found depending on resolution
       // This tests the tool doesn't crash
       expect(typeof result).toBe("string");
-    });
-  });
-  
-  describe("goop_delegate", () => {
-    it("lists available agents (uses bundled)", async () => {
-      const ctx = createTestContext();
-      const tool = createGoopDelegateTool(ctx);
-      
-      // Cast to any to test runtime behavior (list mode)
-      const result = await tool.execute({ list: true } as any, mockToolContext);
-      
-      expect(result).toContain("# Available Agents");
-      // Uses bundled agents - check for one of them
-      expect(result).toContain("goop-orchestrator");
-    });
-    
-    it("prepares task tool delegation payload", async () => {
-      const ctx = createTestContext();
-      const tool = createGoopDelegateTool(ctx);
-      
-      const result = await tool.execute({
-        agent: "goop-planner",
-        prompt: "Do something cool",
-      }, mockToolContext);
-      
-      expect(result).toContain("<goop_delegation>");
-      expect(result).toContain("goop-planner");
-      expect(result).toContain("task");
-    });
-    
-    it("requires prompt for delegation", async () => {
-      const ctx = createTestContext();
-      const tool = createGoopDelegateTool(ctx);
-      
-      // Cast to any to test runtime behavior
-      const result = await tool.execute({
-        agent: "goop-planner",
-      } as any, mockToolContext);
-      
-      expect(result).toContain("Error:");
-      expect(result).toContain("prompt");
-    });
-    
-    it("handles unknown agent", async () => {
-      const ctx = createTestContext();
-      const tool = createGoopDelegateTool(ctx);
-      
-      const result = await tool.execute({
-        agent: "nonexistent-agent",
-        prompt: "Test",
-      }, mockToolContext);
-      
-      expect(result).toContain("not found");
     });
   });
   

@@ -39,7 +39,7 @@ goop_state({ action: "get" })
 | `goop_state` | **ALL state operations** (NEVER edit state.json directly) |
 | `goop_spec` | Load blueprint for execution |
 | `goop_checkpoint` | Save state at wave boundaries |
-| `goop_delegate` | Spawn executor agents for implementation |
+| `task` | Spawn executor agents for implementation (native delegation) |
 | `goop_adl` | Log deviations during execution |
 | `goop_reference` | Load detailed process |
 
@@ -48,8 +48,8 @@ goop_state({ action: "get" })
 1. **Gate Check** — Verify `specLocked` and BLUEPRINT.md exist
 2. **Load Context** — Read SPEC, BLUEPRINT, CHRONICLE, PROJECT_KNOWLEDGE_BASE
 3. **Wave Loop** — Execute tasks, delegate to goop-executor-{tier}
-4. **Deviation Handling** — Apply rules (auto-fix or checkpoint for decisions)
-5. **Wave Completion** — Save checkpoint, generate HANDOFF.md
+4. **Deviation Handling** — Apply rules (auto-fix or use `question` tool for architectural decisions)
+5. **Wave Completion** — Use `question` tool for continuation choice, save checkpoint, generate HANDOFF.md
 6. **Execution Complete** — Transition to accept phase
 
 ### Deviation Rules

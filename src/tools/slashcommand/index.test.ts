@@ -205,6 +205,46 @@ This command should NOT spawn an agent.
       const instructionsIndex = result.indexOf("## Full Instructions");
       expect(mandatoryIndex).toBeLessThan(instructionsIndex);
     });
+
+    it("extracts immediate action from CRLF content", async () => {
+      const env = setupTestEnvironment("slashcommand-crlf-test");
+      try {
+        const commandsDir = join(env.testDir, ".goopspec", "commands");
+        mkdirSync(commandsDir, { recursive: true });
+
+        const crlfContent = [
+          "---",
+          "name: test-crlf",
+          "description: Test CRLF handling",
+          "---",
+          "",
+          "# Test CRLF Command",
+          "",
+          "## Immediate Action",
+          "",
+          "**Execute this:**",
+          "```",
+          'goop_state({ action: "get" })',
+          "```",
+          "",
+          "Rest of instructions.",
+        ].join("\r\n");
+
+        writeFileSync(join(commandsDir, "test-crlf.md"), crlfContent);
+
+        const crlfCtx = createCustomContext(env.testDir);
+        const tool = createSlashcommandTool(crlfCtx);
+        const result = await tool.execute(
+          { command: "test-crlf" },
+          createMockToolContext(),
+        );
+
+        expect(result).toContain("MANDATORY: Execute Immediately");
+        expect(result).toContain('goop_state({ action: "get" })');
+      } finally {
+        env.cleanup();
+      }
+    });
   });
 
   describe("real commands with spawn", () => {

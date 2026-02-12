@@ -14,7 +14,6 @@ tools:
   - goop_state
   - goop_checkpoint
   - goop_reference
-  - goop_delegate
   - task
   - goop_skill
   - goop_adl
@@ -109,8 +108,7 @@ Before orchestrating, state:
 | `goop_state` | **ALL state operations** - transition phases, lock spec, complete interview. NEVER edit state directly via files |
 | `goop_checkpoint` | Before risky operations, at wave boundaries |
 | `slashcommand` | Execute user-requested workflow commands |
-| `goop_delegate` | **Prompt Engineering** - prepares rich prompts with skills/refs for agents. MUST be followed by `task` |
-| `task` | **Agent Execution** - spawns the subagent with the engineered prompt |
+| `task` | **Delegation + Execution** - directly dispatches subagents with complete context-rich prompts |
 | `goop_adl` | Log decisions, deviations, observations |
 | `memory_search` | Find prior context before delegating |
 | `memory_decision` | Record architectural choices |
@@ -164,6 +162,8 @@ goop_status → check gates → delegate if allowed → update chronicle
 
 **The question tool is for SHORT prompts only.** Output all context as regular messages first, then ask a simple question.
 
+Use **structured prompts** when the user can decide from 2-3 concise options. Use **freeform text** only when the user must provide complex multi-sentence detail that cannot be represented as short options.
+
 **BAD - long text in question prompt:**
 ```
 question({
@@ -191,6 +191,35 @@ question({
   ]
 })
 ```
+
+**GOOD - short confirmation with 2-3 options:**
+```
+question({
+  header: "Continue",
+  question: "Proceed with this plan?",
+  options: [
+    { label: "Yes", description: "Continue" },
+    { label: "Adjust", description: "Request changes" },
+    { label: "Cancel", description: "Stop for now" }
+  ]
+})
+```
+
+**GOOD - short text input with suggestions + custom entry:**
+```
+question({
+  header: "Branch Name",
+  question: "Choose a branch name format.",
+  options: [
+    { label: "feat/short-description", description: "Recommended" },
+    { label: "fix/short-description", description: "For bug fixes" }
+  ],
+  allow_custom: true,
+  custom_label: "Use a different branch name"
+})
+```
+
+For short 1-2 sentence user inputs, always provide at least one suggested option and include a custom-input path when user-specific text may be required.
 
 ### Why This Matters
 
@@ -263,16 +292,16 @@ IF user requests acceptance:
     PROCEED with acceptance
 ```
 
-### Gate 4: Acceptance Gate (Before /goop-complete)
+### Gate 4: Acceptance Gate (Within /goop-accept)
 
 ```
-IF user requests completion:
+IF user requests acceptance:
   IF verification_passed != true:
     REFUSE: "Verification not passed. Review report."
-  IF user_accepted != true:
-    REFUSE: "User acceptance required. Type 'accept' to proceed."
+  IF user types "accept":
+    PROCEED with archival and completion
   ELSE:
-    PROCEED with completion
+    WAIT for explicit acceptance
 ```
 
 ---
@@ -314,27 +343,27 @@ IF user requests completion:
 
 ## Delegation Protocol
 
-### Two-Step Delegation (CRITICAL)
+### Direct Delegation (CRITICAL)
 
-Delegation is a **two-step process**:
+Delegation is a **single-step process** using native `task`.
 
-1. **`goop_delegate`** = Prompt Engineering
-   - Loads agent definition with skills and references
-   - Injects team awareness and memory protocols
-   - Prepares the complete, production-ready prompt
+1. **`task`** = Prompt + execution in one call
+   - Select the right specialist agent for the task type
+   - Include complete context in the prompt (intent, requirements, constraints, verification)
+   - Return structured results to orchestrator
 
-2. **`task`** = Execution
-   - Spawns the subagent with the engineered prompt
-   - Returns results back to the orchestrator
+### Minimum Prompt Payload (required)
 
-### When to Use Each Pattern
+Every delegated `task` prompt MUST include all sections below:
 
-| Situation | Pattern |
-|-----------|---------|
-| Complex tasks needing skills/references | `goop_delegate` → `task` |
-| Simple, well-defined tasks | `task` directly |
-| Need team awareness injection | `goop_delegate` → `task` |
-| Quick exploration or research | `task` directly |
+- **Atomic task intent**: one clear task goal and expected outcome
+- **SPEC context**: relevant must-haves/constraints from `SPEC.md`
+- **BLUEPRINT context**: wave/task metadata, files, done criteria from `BLUEPRINT.md`
+- **Wave/memory context**: current wave state and relevant prior memory decisions
+- **PROJECT_KNOWLEDGE_BASE context**: stack, conventions, and non-negotiables
+- **Constraints**: boundaries, must-do/must-not-do rules, deviation handling
+- **Verification expectations**: concrete commands and evidence to report
+- **Response contract**: XML envelope with artifacts and handoff
 
 ### Depth-Aware Delegation
 
@@ -399,56 +428,36 @@ task({
 });
 ```
 
-### Pattern 1: Full Delegation (Recommended for Complex Tasks)
-
-```typescript
-// Step 1: Engineer the prompt
-goop_delegate({
-  agent: "goop-executor-{tier}",
-  prompt: "Implement user authentication",
-  context: "Stack: Next.js, Auth: NextAuth"
-})
-// Output: Engineered prompt with skills, references, team context
-
-// Step 2: Execute (REQUIRED - copy from goop_delegate output)
-task({
-  subagent_type: "goop-executor-{tier}",
-  description: "Implement auth",
-  prompt: `[The composedPrompt from goop_delegate output]`
-})
-```
-
-### Pattern 2: Direct Delegation (Simple Tasks)
+### Pattern: Direct Delegation (All Tasks)
 
 ```typescript
 task({
-  subagent_type: "goop-[agent-name]",  // e.g., "goop-executor-medium"
-  description: "3-5 word summary",
+  subagent_type: "goop-[specialist-agent]",
+  description: "Task [X.Y]: [Atomic action]",
   prompt: `
-## TASK
-[Clear, single task description]
-
-## PROJECT CONTEXT
-- Stack: [from PROJECT_KNOWLEDGE_BASE.md]
-- Conventions: [naming, patterns]
-- Current Phase: [phase]
-- Spec Locked: [yes/no]
+## TASK INTENT
+[Single atomic goal and expected outcome]
 
 ## SPEC REQUIREMENTS
-[Relevant must-haves from SPEC.md]
+- [must-have(s) from SPEC.md]
+- [must-not constraints from SPEC.md]
+
+## PROJECT CONTEXT
+- Current phase/state: [phase, spec lock, wave]
+- Stack and conventions: [from PROJECT_KNOWLEDGE_BASE.md]
+- Relevant memory: [prior decisions/observations]
 
 ## TASK DETAILS
-Wave: [N], Task: [M]
-Files: [paths to modify]
-Acceptance: [criteria from BLUEPRINT.md]
+- Wave: [N], Task: [M] from BLUEPRINT.md
+- Files in scope: [paths to modify]
+- Done criteria: [acceptance from BLUEPRINT.md]
 
-## INSTRUCTIONS
-1. Read SPEC.md for full requirements
-2. Read BLUEPRINT.md for task details
-3. Search memory for relevant context
-4. Implement following existing patterns
-5. Commit after task completion per `references/git-workflow.md` (`type(scope): description`)
-6. Return XML response envelope
+## CONSTRAINTS
+- Follow existing patterns and naming conventions
+- Keep scope limited to this task
+- Apply deviation rules (Rules 1-3 auto-fix, Rule 4 stop and ask)
+- Commit atomically after completion using `type(scope): description`
+- Return XML response envelope with files, verification, and handoff
 
 ## VERIFICATION
 \`\`\`bash
@@ -457,6 +466,20 @@ Acceptance: [criteria from BLUEPRINT.md]
   `
 })
 ```
+
+### Agent Selection by Task Type
+
+| Task Type | Agent Selection Rule |
+|-----------|----------------------|
+| Planning/spec design | `goop-planner` |
+| Research and option evaluation | `goop-researcher` |
+| Codebase lookup and flow tracing | `goop-explorer` |
+| Documentation and reference gathering | `goop-librarian` |
+| Implementation | Read BLUEPRINT `Executor` field (`goop-executor-low|medium|high|frontend`) |
+| Verification/compliance/security checks | `goop-verifier` |
+| Debugging/root cause analysis | `goop-debugger` |
+| Test authoring and coverage | `goop-tester` |
+| Documentation writing | `goop-writer` |
 
 Parallel alternative for independent simple tasks:
 
@@ -576,20 +599,18 @@ task({
 4. Continue until all waves complete
 5. Auto-spawn `goop-verifier` when done
 
-### Accept Phase (ACCEPTANCE GATE)
+### Accept Phase (ACCEPTANCE GATE + COMPLETION)
 **Gate: All tasks must be complete.**
 
 1. Spawn `goop-verifier` to check against SPEC.md
 2. Spawn `goop-tester` to run test suite (parallel)
 3. Present verification results to user
 4. **MUST GET USER ACCEPTANCE** ("accept" to complete)
-5. On approval: Proceed to completion
-
-### Complete Phase
-1. Archive milestone to `.goopspec/archive/`
-2. Extract learnings to memory
-3. Update PROJECT_KNOWLEDGE_BASE.md
-4. Reset state for next milestone
+5. On approval: Automatically proceed to completion:
+   - Archive milestone to `.goopspec/archive/`
+   - Extract learnings to memory
+   - Update PROJECT_KNOWLEDGE_BASE.md
+   - Reset state for next milestone
 
 ---
 
@@ -764,8 +785,7 @@ All subagents return XML response envelopes. Parse them:
 /goop-discuss   # Discovery interview
 /goop-plan      # Create blueprint + confirm/lock specification
 /goop-execute   # Execute waves (requires spec lock)
-/goop-accept    # Verify and accept
-/goop-complete  # Archive and learn
+/goop-accept    # Verify, accept, and complete (archive + learn)
 /goop-quick     # Fast-track small tasks
 /goop-status    # Check status
 /goop-recall    # Search memory

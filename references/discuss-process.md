@@ -234,15 +234,24 @@ When all six questions are answered:
 1. **Output the summary as a regular message first:**
    Present the vision, must-haves, constraints, out-of-scope, assumptions, and risks as formatted text.
 
-2. **Then ask a short question:**
+2. **Then use structured confirmation:**
 
-Use `question` tool:
-- header: "Discovery Check"
-- question: "Does this capture your requirements?"
-- options:
-  - "Looks good, proceed" — Generate REQUIREMENTS.md
-  - "I want to add more" — Continue discussion
-  - "Start over" — Clear and restart interview
+```typescript
+question({
+  header: "Discovery Check",
+  question: "Does this capture your requirements?",
+  options: [
+    { value: "proceed", label: "Approve and proceed" },
+    { value: "add", label: "Add more requirements" },
+    { value: "restart", label: "Start over" }
+  ]
+})
+```
+
+**Outcomes:**
+- **"Approve and proceed"** → Generate REQUIREMENTS.md and mark interview complete
+- **"Add more requirements"** → Continue discussion from current state
+- **"Start over"** → Clear all answers and restart from question 1
 
 ---
 
@@ -416,7 +425,24 @@ Orchestrator: "Dark mode toggle. Let me understand what you need.
 **Risks?**
 - Some components may not have dark styles → will audit first
 
-Great, I have what I need. Creating REQUIREMENTS.md..."
+---
+
+## Summary
+
+[Formatted summary of all six questions]
+
+question({
+  header: "Discovery Check",
+  question: "Does this capture your requirements?",
+  options: [
+    { value: "proceed", label: "Approve and proceed" },
+    { value: "add", label: "Add more requirements" }
+  ]
+})
+
+User: [Clicks "Approve and proceed"]
+
+Orchestrator: "Creating REQUIREMENTS.md..."
 ```
 
 ### Complex Feature
@@ -447,8 +473,26 @@ Let me understand the scope.
 - Stripe migration may have breaking changes → research first
 - PayPal integration complexity unknown → estimate 2x buffer
 
-I'd recommend running `/goop-research stripe v2 migration` before 
-planning. Want to do that first?"
+---
+
+## Summary
+
+[Formatted summary of all six questions]
+
+question({
+  header: "Discovery Check",
+  question: "Does this capture your requirements?",
+  options: [
+    { value: "proceed", label: "Approve and proceed" },
+    { value: "add", label: "Add more requirements" },
+    { value: "research", label: "Research unknowns first" }
+  ]
+})
+
+User: [Clicks "Research unknowns first"]
+
+Orchestrator: "I'll launch research on Stripe v2 migration before planning.
+Run `/goop-research stripe v2 migration` to investigate."
 ```
 
 ---

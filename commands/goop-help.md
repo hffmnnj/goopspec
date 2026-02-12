@@ -29,7 +29,6 @@ Display help information and available commands.
 **Project Management:**
 - `/goop-status` - Show current status
 - `/goop-milestone [name]` - Start a new milestone
-- `/goop-complete` - Complete and archive a milestone
 
 **Discovery:**
 - `/goop-discuss [description]` - Capture user vision before planning
@@ -43,6 +42,9 @@ Display help information and available commands.
 - `/goop-amend [change]` - Propose changes to locked spec
 - `/goop-debug` - Debug with scientific method workflow
 - `/goop-quick [description]` - Small tasks without full phase planning
+
+**Code Review:**
+- `/goop-pr-review` - Review GitHub PR with fixes and safe merge (standalone)
 
 **Session Management:**
 - `/goop-pause [name]` - Save checkpoint
