@@ -929,4 +929,230 @@ describe("orchestrator-enforcement hooks", () => {
     });
   });
 
+  describe("question enforcement policy regression", () => {
+    it("injects guidance containing mcp_question for genuine short questions", async () => {
+      const hooks = createOrchestratorEnforcementHooks(ctx);
+      const output = {
+        title: "Result",
+        output: "Which approach should we take?",
+        metadata: {},
+      };
+
+      await hooks["tool.execute.after"](
+        { tool: "task", sessionID: "regression-genuine-q", callID: "call-1" },
+        output
+      );
+
+      expect(output.output).toContain("mcp_question");
+    });
+
+    it("injected guidance always includes custom-answer option text", async () => {
+      const hooks = createOrchestratorEnforcementHooks(ctx);
+      const output = {
+        title: "Result",
+        output: "Do you want to proceed with this plan?",
+        metadata: {},
+      };
+
+      await hooks["tool.execute.after"](
+        { tool: "task", sessionID: "regression-custom-answer", callID: "call-1" },
+        output
+      );
+
+      expect(output.output).toContain("Type your own answer");
+    });
+
+    it("does not inject guidance for non-question output", async () => {
+      const hooks = createOrchestratorEnforcementHooks(ctx);
+      const output = {
+        title: "Result",
+        output: "Implementation complete. All tests pass.",
+        metadata: {},
+      };
+
+      await hooks["tool.execute.after"](
+        { tool: "task", sessionID: "regression-no-question", callID: "call-1" },
+        output
+      );
+
+      expect(output.output).not.toContain("Structured Question Guidance");
+      expect(output.output).not.toContain("mcp_question");
+    });
+
+    it("does not inject guidance for self-answered questions", async () => {
+      const hooks = createOrchestratorEnforcementHooks(ctx);
+      const output = {
+        title: "Result",
+        output: "Should we proceed? Yes.",
+        metadata: {},
+      };
+
+      await hooks["tool.execute.after"](
+        { tool: "task", sessionID: "regression-self-answered", callID: "call-1" },
+        output
+      );
+
+      expect(output.output).not.toContain("Structured Question Guidance");
+    });
+
+    it("does not inject guidance for heading-style questions", async () => {
+      const hooks = createOrchestratorEnforcementHooks(ctx);
+      const output = {
+        title: "Result",
+        output: "## What are the next steps?",
+        metadata: {},
+      };
+
+      await hooks["tool.execute.after"](
+        { tool: "task", sessionID: "regression-heading", callID: "call-1" },
+        output
+      );
+
+      expect(output.output).not.toContain("Structured Question Guidance");
+    });
+
+    it("does not inject guidance for code-block questions", async () => {
+      const hooks = createOrchestratorEnforcementHooks(ctx);
+      const output = {
+        title: "Result",
+        output: "Here is the code:\n```\n// Should we cache this?\nconst x = 1;\n```",
+        metadata: {},
+      };
+
+      await hooks["tool.execute.after"](
+        { tool: "task", sessionID: "regression-codeblock", callID: "call-1" },
+        output
+      );
+
+      expect(output.output).not.toContain("Structured Question Guidance");
+    });
+
+    it("does not inject guidance for embedded prose questions", async () => {
+      const hooks = createOrchestratorEnforcementHooks(ctx);
+      const output = {
+        title: "Result",
+        output: "Here is what we need to decide about the architecture?",
+        metadata: {},
+      };
+
+      await hooks["tool.execute.after"](
+        { tool: "task", sessionID: "regression-prose", callID: "call-1" },
+        output
+      );
+
+      expect(output.output).not.toContain("Structured Question Guidance");
+    });
+
+    it("does not inject guidance for rhetorical questions", async () => {
+      const hooks = createOrchestratorEnforcementHooks(ctx);
+      const rhetoricalQuestions = [
+        "Sound good?",
+        "Makes sense?",
+        "Ready?",
+        "Agreed?",
+        "Why this matters?",
+      ];
+
+      for (const question of rhetoricalQuestions) {
+        const output = {
+          title: "Result",
+          output: question,
+          metadata: {},
+        };
+
+        await hooks["tool.execute.after"](
+          { tool: "task", sessionID: `regression-rhetorical-${question}`, callID: "call-1" },
+          output
+        );
+
+        expect(output.output).not.toContain("Structured Question Guidance");
+      }
+    });
+
+    it("enforces guidance for multiple genuine question patterns", async () => {
+      const hooks = createOrchestratorEnforcementHooks(ctx);
+      const genuineQuestions = [
+        "Should we proceed with deployment?",
+        "Which database should we use?",
+        "Do you want to continue?",
+        "Would you like to review the changes?",
+      ];
+
+      let enforcedCount = 0;
+      for (const question of genuineQuestions) {
+        const output = {
+          title: "Result",
+          output: question,
+          metadata: {},
+        };
+
+        await hooks["tool.execute.after"](
+          { tool: "task", sessionID: `regression-enforce-${question}`, callID: "call-1" },
+          output
+        );
+
+        if (output.output.includes("Structured Question Guidance")) {
+          enforcedCount++;
+        }
+      }
+
+      // 95%+ of genuine short questions should trigger enforcement
+      const coveragePercent = (enforcedCount / genuineQuestions.length) * 100;
+      expect(coveragePercent).toBeGreaterThanOrEqual(95);
+    });
+  });
+
+  describe("detectFreeFormQuestion regression", () => {
+    it("returns consistent reason codes for all false-positive guard categories", () => {
+      const guardedCategories = [
+        { input: "Use mcp_question with options", expectedReason: "already-structured" },
+        { input: "Why this matters?", expectedReason: "rhetorical" },
+        { input: "Sound good?", expectedReason: "rhetorical" },
+        { input: "For example, should this include references?", expectedReason: "contextual" },
+        { input: "Should we proceed? Yes.", expectedReason: "self-answered" },
+        { input: "## What should we build?", expectedReason: "heading" },
+        { input: "Here is what we need to decide?", expectedReason: "embedded-prose" },
+        { input: "Implementation complete.", expectedReason: "none" },
+      ];
+
+      for (const { input, expectedReason } of guardedCategories) {
+        const result = detectFreeFormQuestion(input);
+        expect(result.reason).toBe(expectedReason);
+        if (expectedReason !== "none") {
+          expect(result.shouldEnforce).toBe(false);
+        }
+      }
+    });
+
+    it("enforces for yes/no questions with 3+ words", () => {
+      const yesNoQuestions = [
+        "Should we proceed now?",
+        "Do you want this?",
+        "Can we deploy today?",
+        "Is this approach correct?",
+      ];
+
+      for (const question of yesNoQuestions) {
+        const result = detectFreeFormQuestion(question);
+        expect(result.shouldEnforce).toBe(true);
+        expect(result.reason).toBe("yes-no");
+      }
+    });
+
+    it("rejects questions below minimum word count", () => {
+      const shortQuestions = ["Why?", "How?", "What?"];
+
+      for (const question of shortQuestions) {
+        const result = detectFreeFormQuestion(question);
+        expect(result.shouldEnforce).toBe(false);
+      }
+    });
+
+    it("rejects questions above maximum word count", () => {
+      const longQuestion = "Should we " + "really ".repeat(25) + "proceed?";
+      const result = detectFreeFormQuestion(longQuestion);
+      expect(result.shouldEnforce).toBe(false);
+    });
+  });
+
 });

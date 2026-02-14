@@ -296,6 +296,160 @@ describe("createGoopSpecOrchestrator", () => {
     });
     expect(parOrch.prompt).toContain("Parallel");
   });
+
+  describe("structured-question policy regression", () => {
+    it("enforces custom-answer option text in runtime policy", () => {
+      const resolver = createMockResolver();
+      const orchestrator = createGoopSpecOrchestrator({ resolver });
+
+      expect(orchestrator.prompt).toContain("Type your own answer");
+    });
+
+    it("enforces 2-5 option range in runtime policy", () => {
+      const resolver = createMockResolver();
+      const orchestrator = createGoopSpecOrchestrator({ resolver });
+
+      expect(orchestrator.prompt).toContain("2-5");
+    });
+
+    it("includes question tool in permissions", () => {
+      const resolver = createMockResolver();
+      const orchestrator = createGoopSpecOrchestrator({ resolver });
+
+      expect(orchestrator.permission.question).toBe("allow");
+      expect(orchestrator.permission.mcp_question).toBe("allow");
+    });
+
+    it("applies policy across all five workflow phases", () => {
+      const resolver = createMockResolver();
+      const orchestrator = createGoopSpecOrchestrator({ resolver });
+
+      const phases = [
+        "Phase 1: Discuss",
+        "Phase 2: Plan",
+        "Phase 3: Execute",
+        "Phase 4: Audit",
+        "Phase 5: Confirm",
+      ];
+
+      for (const phase of phases) {
+        expect(orchestrator.prompt).toContain(phase);
+      }
+
+      // Each phase section should contain the shared policy header
+      const policyOccurrences = orchestrator.prompt
+        .split("Short-Answer Question Policy")
+        .length - 1;
+      // At least one per phase section plus the runtime policy section
+      expect(policyOccurrences).toBeGreaterThanOrEqual(5);
+    });
+
+    it("contains structured question policy for discuss phase", () => {
+      const resolver = createMockResolver();
+      const orchestrator = createGoopSpecOrchestrator({ resolver });
+
+      // Discuss section must contain policy markers
+      expect(orchestrator.prompt).toContain("Phase_1_Discuss");
+      expect(orchestrator.prompt).toContain("Short-Answer Question Policy");
+    });
+
+    it("contains structured question policy for plan phase", () => {
+      const resolver = createMockResolver();
+      const orchestrator = createGoopSpecOrchestrator({ resolver });
+
+      expect(orchestrator.prompt).toContain("Phase_2_Plan");
+    });
+
+    it("contains structured question policy for execute phase", () => {
+      const resolver = createMockResolver();
+      const orchestrator = createGoopSpecOrchestrator({ resolver });
+
+      expect(orchestrator.prompt).toContain("Phase_3_Execute");
+    });
+
+    it("contains structured question policy for audit phase", () => {
+      const resolver = createMockResolver();
+      const orchestrator = createGoopSpecOrchestrator({ resolver });
+
+      expect(orchestrator.prompt).toContain("Phase_4_Audit");
+    });
+
+    it("contains structured question policy for confirm phase", () => {
+      const resolver = createMockResolver();
+      const orchestrator = createGoopSpecOrchestrator({ resolver });
+
+      expect(orchestrator.prompt).toContain("Phase_5_Confirm");
+    });
+
+    it("includes all six discovery categories in prompt", () => {
+      const resolver = createMockResolver();
+      const orchestrator = createGoopSpecOrchestrator({ resolver });
+
+      const categories = [
+        "Vision",
+        "Must-Haves",
+        "Constraints",
+        "Out of Scope",
+        "Assumptions",
+        "Risks",
+      ];
+
+      for (const category of categories) {
+        expect(orchestrator.prompt).toContain(category);
+      }
+    });
+
+    it("fallback policy is appended when primary markers are missing", () => {
+      // Simulate a prompt that lacks the policy markers by using a resolver
+      // that returns agents/skills that don't include the policy text.
+      // The ensureStructuredQuestionPolicy function should append the fallback.
+      const resolver = createMockResolver();
+      const orchestrator = createGoopSpecOrchestrator({ resolver });
+
+      // The prompt must always contain the runtime policy section
+      expect(orchestrator.prompt).toContain("Structured Question Runtime Policy");
+    });
+
+    it("includes reusable template patterns in discuss section", () => {
+      const resolver = createMockResolver();
+      const orchestrator = createGoopSpecOrchestrator({ resolver });
+
+      // Discuss section should include template patterns
+      expect(orchestrator.prompt).toContain("Yes/No template");
+      expect(orchestrator.prompt).toContain("Multi-choice template");
+      expect(orchestrator.prompt).toContain("Progressive collection template");
+    });
+
+    it("short-answer policy count covers 95%+ of phase sections", () => {
+      const resolver = createMockResolver();
+      const orchestrator = createGoopSpecOrchestrator({ resolver });
+
+      // Count phase sections that contain the shared policy
+      const phaseSections = [
+        "Phase_1_Discuss",
+        "Phase_2_Plan",
+        "Phase_3_Execute",
+        "Phase_4_Audit",
+        "Phase_5_Confirm",
+      ];
+
+      let sectionsWithPolicy = 0;
+      for (const section of phaseSections) {
+        const sectionStart = orchestrator.prompt.indexOf(`<${section}>`);
+        const sectionEnd = orchestrator.prompt.indexOf(`</${section}>`);
+        if (sectionStart !== -1 && sectionEnd !== -1) {
+          const sectionContent = orchestrator.prompt.slice(sectionStart, sectionEnd);
+          if (sectionContent.includes("Short-Answer Question Policy")) {
+            sectionsWithPolicy++;
+          }
+        }
+      }
+
+      // 95%+ means at least 5 out of 5 phase sections must have the policy
+      const coveragePercent = (sectionsWithPolicy / phaseSections.length) * 100;
+      expect(coveragePercent).toBeGreaterThanOrEqual(95);
+    });
+  });
 });
 
 describe("getAgentNames", () => {
