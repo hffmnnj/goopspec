@@ -179,6 +179,48 @@ Use this table as the authoritative behavior contract across discuss, plan, and 
 
 ---
 
+## Structured Question Policy (Discuss Phase)
+
+All short-answer interactions during discovery MUST use the `question` tool. Output explanatory context as regular messages first, then ask a concise question with 2-5 options.
+
+**When to use structured prompts:**
+- Setup choices (branch, gitignore, existing docs)
+- Discovery completion confirmation
+- Any prompt expecting a short selection or yes/no answer
+
+**When to use freeform text:**
+- Open-ended discovery questions requiring multi-sentence detail (e.g., "What is your vision?")
+- Follow-up probing where the user needs to elaborate freely
+
+**Examples:**
+
+Yes/No confirmation:
+```ts
+question({
+  header: "Discovery Check",
+  question: "Does this capture your requirements?",
+  options: [
+    { label: "Approve and proceed", description: "Generate REQUIREMENTS.md" },
+    { label: "Add more requirements", description: "Continue discussion" }
+  ]
+})
+```
+
+Multiple choice with custom entry:
+```ts
+question({
+  header: "Research Depth",
+  question: "How thorough should planning and research be?",
+  options: [
+    { label: "Light", description: "Fastest path (~1x baseline)" },
+    { label: "Standard", description: "Balanced depth (~2x baseline)" },
+    { label: "Deep", description: "Most thorough (~3-5x baseline)" }
+  ]
+})
+```
+
+---
+
 ## Phase 2: Discovery Interview
 
 **Display stage banner:**

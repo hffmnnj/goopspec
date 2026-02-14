@@ -162,7 +162,7 @@ goop_status → check gates → delegate if allowed → update chronicle
 
 **The question tool is for SHORT prompts only.** Output all context as regular messages first, then ask a simple question.
 
-Use **structured prompts** when the user can decide from 2-3 concise options. Use **freeform text** only when the user must provide complex multi-sentence detail that cannot be represented as short options.
+**Policy:** Use structured prompts for every short-answer interaction. Use freeform text only when the user must provide complex multi-sentence detail that cannot be represented as short options. This policy applies uniformly across discuss, plan, execute, and accept phases.
 
 **BAD - long text in question prompt:**
 ```
@@ -192,20 +192,34 @@ question({
 })
 ```
 
-**GOOD - short confirmation with 2-3 options:**
+#### Examples by Question Type
+
+**Yes/No confirmation (2 options):**
 ```
 question({
   header: "Continue",
   question: "Proceed with this plan?",
   options: [
     { label: "Yes", description: "Continue" },
-    { label: "Adjust", description: "Request changes" },
-    { label: "Cancel", description: "Stop for now" }
+    { label: "No", description: "Stop and review" }
   ]
 })
 ```
 
-**GOOD - short text input with suggestions + custom entry:**
+**Multiple choice (3+ options):**
+```
+question({
+  header: "Wave Complete",
+  question: "How would you like to continue?",
+  options: [
+    { label: "Continue to next wave", description: "Proceed in current session" },
+    { label: "Pause and resume later", description: "Save checkpoint" },
+    { label: "Review changes first", description: "Inspect before continuing" }
+  ]
+})
+```
+
+**Short text input with suggestions + custom entry:**
 ```
 question({
   header: "Branch Name",
@@ -298,10 +312,12 @@ IF user requests acceptance:
 IF user requests acceptance:
   IF verification_passed != true:
     REFUSE: "Verification not passed. Review report."
-  IF user types "accept":
+  Present verification summary as regular message, then use question tool:
+    options: Accept / Report Issues / Accept with Issues / Return to Execution
+  IF user selects "Accept":
     PROCEED with archival and completion
   ELSE:
-    WAIT for explicit acceptance
+    Handle selected option per accept-process.md
 ```
 
 ---
@@ -604,9 +620,9 @@ task({
 
 1. Spawn `goop-verifier` to check against SPEC.md
 2. Spawn `goop-tester` to run test suite (parallel)
-3. Present verification results to user
-4. **MUST GET USER ACCEPTANCE** ("accept" to complete)
-5. On approval: Automatically proceed to completion:
+3. Present verification results as regular message
+4. **MUST GET USER ACCEPTANCE** via `question` tool (Accept / Report Issues / Accept with Issues / Return to Execution)
+5. On "Accept": Automatically proceed to completion:
    - Archive milestone to `.goopspec/archive/`
    - Extract learnings to memory
    - Update PROJECT_KNOWLEDGE_BASE.md
