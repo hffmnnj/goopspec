@@ -12,6 +12,7 @@ import {
   isBlockedTool,
   getToolCategory,
   detectIntent,
+  detectFreeFormQuestion,
   clearExplorationTracking,
 } from "./orchestrator-enforcement.js";
 import {
@@ -676,6 +677,92 @@ describe("orchestrator-enforcement hooks", () => {
     it("returns null for unrecognized intents", () => {
       expect(detectIntent("hello world").type).toBe(null);
       expect(detectIntent("implement feature X").type).toBe(null);
+    });
+  });
+
+  describe("detectFreeFormQuestion", () => {
+    it("detects short yes/no free-form question", () => {
+      const result = detectFreeFormQuestion("Should we proceed with this plan?");
+
+      expect(result.shouldEnforce).toBe(true);
+      expect(result.reason).toBe("yes-no");
+      expect(result.question).toContain("Should we proceed");
+    });
+
+    it("detects short multi-choice free-form question", () => {
+      const result = detectFreeFormQuestion("Do you prefer option A or option B?");
+
+      expect(result.shouldEnforce).toBe(true);
+      expect(result.reason).toBe("yes-no");
+    });
+
+    it("does not flag already structured question tool usage", () => {
+      const result = detectFreeFormQuestion(
+        "Use mcp_question with options: ['Yes', 'No', 'Type your own answer']"
+      );
+
+      expect(result.shouldEnforce).toBe(false);
+      expect(result.reason).toBe("already-structured");
+    });
+
+    it("does not flag rhetorical prompts", () => {
+      const result = detectFreeFormQuestion("Why this matters?");
+
+      expect(result.shouldEnforce).toBe(false);
+      expect(result.reason).toBe("rhetorical");
+    });
+
+    it("does not flag contextual informational prompts", () => {
+      const result = detectFreeFormQuestion(
+        "For example, should this section include references?"
+      );
+
+      expect(result.shouldEnforce).toBe(false);
+      expect(result.reason).toBe("contextual");
+    });
+
+    it("ignores non-question text", () => {
+      const result = detectFreeFormQuestion("Implementation complete. Proceeding to verification.");
+
+      expect(result.shouldEnforce).toBe(false);
+      expect(result.reason).toBe("none");
+    });
+  });
+
+  describe("tool.execute.after hook (question guidance injection)", () => {
+    it("injects mcp_question guidance for short free-form question output", async () => {
+      const hooks = createOrchestratorEnforcementHooks(ctx);
+      const output = {
+        title: "Result",
+        output: "Should I continue to Wave 3?",
+        metadata: {},
+      };
+
+      await hooks["tool.execute.after"](
+        { tool: "task", sessionID: "question-inject-test", callID: "call-1" },
+        output
+      );
+
+      expect(output.output).toContain("Structured Question Guidance");
+      expect(output.output).toContain("mcp_question");
+      expect(output.output).toContain("Type your own answer");
+    });
+
+    it("does not inject guidance for rhetorical/contextual question output", async () => {
+      const hooks = createOrchestratorEnforcementHooks(ctx);
+      const output = {
+        title: "Result",
+        output: "Why this matters?",
+        metadata: {},
+      };
+
+      await hooks["tool.execute.after"](
+        { tool: "task", sessionID: "question-no-inject-test", callID: "call-1" },
+        output
+      );
+
+      expect(output.output).not.toContain("Structured Question Guidance");
+      expect(output.output).not.toContain("mcp_question");
     });
   });
 

@@ -83,6 +83,19 @@ export type DetectedIntent = {
   confidence: "high" | "medium" | "low";
 };
 
+export interface FreeFormQuestionDetection {
+  shouldEnforce: boolean;
+  question: string | null;
+  reason:
+    | "short-question"
+    | "yes-no"
+    | "multi-choice"
+    | "already-structured"
+    | "rhetorical"
+    | "contextual"
+    | "none";
+}
+
 // Track blocked operations to inject guidance
 interface BlockedOperation {
   tool: string;
@@ -227,6 +240,26 @@ export const EXPLORATION_INTENT_PATTERNS = [
   /\bwhere.*defined\b/i,
 ] as const;
 
+const YES_NO_QUESTION_PATTERN = /^(should|can|could|would|will|do|does|did|is|are|was|were|have|has|had|am|may|might)\b/i;
+const WH_QUESTION_PATTERN = /^(what|which|who|where|when|why|how)\b/i;
+const MULTI_CHOICE_QUESTION_PATTERN = /(\bchoose\b|\bselect\b|\bprefer\b|\boption\b|\ba\)|\bb\)|\b1\)|\b2\)|\bor\b)/i;
+const RHETORICAL_QUESTION_PATTERNS = [
+  /^why this matters\??$/i,
+  /^what this means\??$/i,
+  /^who cares\??$/i,
+  /^isn't it\??$/i,
+  /^isnt it\??$/i,
+] as const;
+const CONTEXTUAL_QUESTION_PATTERNS = [
+  /for example/i,
+  /e\.g\./i,
+  /i\.e\./i,
+  /for instance/i,
+  /in this section/i,
+  /see (above|below)/i,
+  /questions to consider/i,
+] as const;
+
 // Track blocked operations per session (for injection)
 const blockedOperations = new Map<string, BlockedOperation>();
 
@@ -350,6 +383,78 @@ export function detectIntent(message: string): DetectedIntent {
   }
 
   return { type: null, pattern: null, confidence: "low" };
+}
+
+function stripCodeBlocks(text: string): string {
+  return text.replace(/```[\s\S]*?```/g, " ");
+}
+
+function normalizeQuestionText(value: string): string {
+  return value
+    .replace(/^[-*]\s*/, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function extractQuestionCandidates(text: string): string[] {
+  const stripped = stripCodeBlocks(text);
+  const matches = stripped.match(/[^?\n]{4,}\?/g) ?? [];
+  return matches
+    .map(normalizeQuestionText)
+    .filter(candidate => candidate.length > 0);
+}
+
+function isAlreadyStructuredQuestion(text: string): boolean {
+  return /\bmcp_question\b|\bquestion\s*\(|\boptions\s*:/i.test(text);
+}
+
+/**
+ * Detect likely non-compliant short free-form questions.
+ * Used to nudge orchestrator output toward mcp_question usage.
+ */
+export function detectFreeFormQuestion(text: string): FreeFormQuestionDetection {
+  if (!text || text.trim().length === 0) {
+    return { shouldEnforce: false, question: null, reason: "none" };
+  }
+
+  if (isAlreadyStructuredQuestion(text)) {
+    return { shouldEnforce: false, question: null, reason: "already-structured" };
+  }
+
+  const candidates = extractQuestionCandidates(text);
+  if (candidates.length === 0) {
+    return { shouldEnforce: false, question: null, reason: "none" };
+  }
+
+  for (const candidate of candidates) {
+    const wordCount = candidate.split(/\s+/).filter(Boolean).length;
+
+    if (wordCount < 3 || wordCount > 24 || candidate.length > 160) {
+      continue;
+    }
+
+    if (CONTEXTUAL_QUESTION_PATTERNS.some(pattern => pattern.test(candidate))) {
+      return { shouldEnforce: false, question: candidate, reason: "contextual" };
+    }
+
+    if (RHETORICAL_QUESTION_PATTERNS.some(pattern => pattern.test(candidate))) {
+      return { shouldEnforce: false, question: candidate, reason: "rhetorical" };
+    }
+
+    if (YES_NO_QUESTION_PATTERN.test(candidate)) {
+      return { shouldEnforce: true, question: candidate, reason: "yes-no" };
+    }
+
+    if (MULTI_CHOICE_QUESTION_PATTERN.test(candidate)) {
+      return { shouldEnforce: true, question: candidate, reason: "multi-choice" };
+    }
+
+    if (WH_QUESTION_PATTERN.test(candidate)) {
+      return { shouldEnforce: true, question: candidate, reason: "short-question" };
+    }
+  }
+
+  return { shouldEnforce: false, question: null, reason: "none" };
 }
 
 /**
@@ -601,6 +706,40 @@ ${confidenceNote}
 `;
 }
 
+/**
+ * Generate guidance for short free-form question correction.
+ */
+export function generateQuestionToolGuidance(questionText: string): string {
+  const normalizedQuestion = questionText.trim();
+
+  return `
+
+---
+
+## 🧭 Structured Question Guidance
+
+Detected a short free-form question:
+
+> ${normalizedQuestion}
+
+For short-answer interactions, prefer **\`mcp_question\`** with concise options and custom input.
+
+\`\`\`
+await mcp_question({
+  header: "Quick Decision",
+  question: "${normalizedQuestion}",
+  options: [
+    "Option 1",
+    "Option 2",
+    "Type your own answer"
+  ]
+});
+\`\`\`
+
+Use free-form prompts only when multi-paragraph detail is required.
+`;
+}
+
 // ============================================================================
 // Hook Factory
 // ============================================================================
@@ -772,6 +911,19 @@ export function createOrchestratorEnforcementHooks(ctx: PluginContext) {
       
       if (input.tool === "task" || input.tool === "mcp_task") {
         clearExplorationTracking(input.sessionID);
+      }
+
+      // === FREE-FORM SHORT QUESTION DETECTION ===
+      const existingOutput = output.output || "";
+      const questionDetection = detectFreeFormQuestion(existingOutput);
+      if (questionDetection.shouldEnforce && questionDetection.question) {
+        output.output = existingOutput + generateQuestionToolGuidance(questionDetection.question);
+
+        log("Injected question-tool guidance for likely short free-form question", {
+          tool: input.tool,
+          sessionID: input.sessionID,
+          reason: questionDetection.reason,
+        });
       }
     },
 
