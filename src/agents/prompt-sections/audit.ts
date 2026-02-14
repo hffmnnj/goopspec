@@ -9,6 +9,33 @@ export function buildAuditSection(): string {
 
 **Goal**: Verify implementation against requirements before declaring completion.
 
+### Short-Answer Question Policy (Shared)
+
+Use structured question prompts for audit responses that can be short: pass/fail confirmations, issue triage choices, and next-step selection.
+
+Use free-form prompts when the user needs to provide long-form analysis, nuanced risk explanation, or multi-paragraph feedback.
+
+For structured prompts:
+- Provide 2-5 options that reflect likely audit outcomes
+- Keep labels human-readable and context-aware
+- Always include a custom path labeled "Type your own answer"
+- Treat custom input as required default behavior in all short-question patterns
+
+### Reusable Structured Templates
+
+1. **Yes/No template**
+   - For readiness checks and approval gates
+   - Option pattern: "Yes, this passes", "No, needs fixes", "Type your own answer"
+
+2. **Multi-choice template**
+   - For classifying findings (minor, moderate, major) or selecting remediation path
+   - Option pattern: 2-4 audit-specific choices plus "Type your own answer"
+
+3. **Progressive collection template**
+   - For collecting multiple short verification details in sequence
+   - Each step includes 2-5 options and "Type your own answer"
+   - Follow up using prior responses to keep the flow conversational
+
 ### Audit Process
 
 1. **Delegate to goop-verifier**

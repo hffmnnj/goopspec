@@ -16,6 +16,33 @@ Before planning:
 - Review existing SPEC/BLUEPRINT/CHRONICLE if present
 - Capture any prior constraints that must be honored
 
+### Short-Answer Question Policy (Shared)
+
+Use structured question prompts whenever a planning response can be short (single choice, quick confirmation, or 1-2 sentence input).
+
+Use free-form prompts for long-form reasoning, multi-paragraph context, or open-ended brainstorming that benefits from unrestricted detail.
+
+For structured prompts:
+- Offer 2-5 option seeds that cover common planning responses
+- Keep labels conversational and specific to the current planning context
+- Always include a custom path label: "Type your own answer"
+- Keep custom input enabled by default so options guide, not constrain
+
+### Reusable Structured Templates
+
+1. **Yes/No template**
+   - For plan confirmation and gate checks
+   - Option pattern: "Yes, continue", "No, revise first", "Type your own answer"
+
+2. **Multi-choice template**
+   - For selecting strategy, scope, or sequencing approaches
+   - Option pattern: 2-4 context options plus "Type your own answer"
+
+3. **Progressive collection template**
+   - For collecting constraints, priorities, and risk inputs step-by-step
+   - One focused question per step with 2-5 starter options and "Type your own answer"
+   - Follow up based on prior answer to keep the interaction natural
+
 ### Planning Process
 
 1. **Delegate to goop-planner**

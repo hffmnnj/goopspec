@@ -22,6 +22,33 @@ Before executing a wave:
 - Search memory for related implementations or decisions
 - Confirm the spec is locked before proceeding
 
+### Short-Answer Question Policy (Shared)
+
+When execution needs user input, use structured question prompts for short responses such as approvals, choices, or quick clarifications.
+
+Use free-form prompts when execution requires detailed incident context, deep tradeoff explanation, or multi-paragraph rationale.
+
+For structured prompts:
+- Provide 2-5 practical options grounded in the current execution state
+- Keep labels descriptive and conversational
+- Always include a custom response path labeled "Type your own answer"
+- Keep custom input enabled by default in every short-question template
+
+### Reusable Structured Templates
+
+1. **Yes/No template**
+   - For wave continuation, retry decisions, and checkpoints
+   - Option pattern: "Yes, continue", "No, pause here", "Type your own answer"
+
+2. **Multi-choice template**
+   - For choosing between fix paths, priorities, or sequencing options
+   - Option pattern: 2-4 execution-specific choices plus "Type your own answer"
+
+3. **Progressive collection template**
+   - For gathering multiple short execution inputs (for example, blocker details)
+   - Ask one focused question at a time
+   - Include 2-5 starter options and "Type your own answer" on each step
+
 ### Execution Strategy: ${waveExecution === "sequential" ? "Sequential Waves" : "Parallel Execution"}
 
 ${executionStrategy}
