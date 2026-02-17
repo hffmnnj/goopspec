@@ -1,7 +1,7 @@
 ---
 name: goop-executor-low
 description: Low-tier executor for simple, mechanical tasks - config edits, renaming, scaffolding, markdown
-model: anthropic/claude-sonnet-4-5
+model: anthropic/claude-sonnet-4-6
 temperature: 0.1
 thinking_budget: 8000
 mode: subagent

@@ -67,10 +67,10 @@ describe("createGoopSpecOrchestrator", () => {
     const resolver = createMockResolver();
     const orchestrator = createGoopSpecOrchestrator({
       resolver,
-      model: "anthropic/claude-sonnet-4-5",
+      model: "anthropic/claude-sonnet-4-6",
     });
 
-    expect(orchestrator.model).toBe("anthropic/claude-sonnet-4-5");
+    expect(orchestrator.model).toBe("anthropic/claude-sonnet-4-6");
   });
 
   it("prefers agents.goop-orchestrator.model over orchestrator.model", () => {
@@ -93,7 +93,7 @@ describe("createGoopSpecOrchestrator", () => {
   it("uses orchestrator.model when agent override is missing", () => {
     const resolver = createMockResolver();
     const pluginConfig: GoopSpecConfig = {
-      orchestrator: { model: "anthropic/claude-sonnet-4-5" },
+      orchestrator: { model: "anthropic/claude-sonnet-4-6" },
     };
 
     const orchestrator = createGoopSpecOrchestrator({
@@ -101,7 +101,7 @@ describe("createGoopSpecOrchestrator", () => {
       pluginConfig,
     });
 
-    expect(orchestrator.model).toBe("anthropic/claude-sonnet-4-5");
+    expect(orchestrator.model).toBe("anthropic/claude-sonnet-4-6");
   });
 
   it("uses custom thinking budget when provided", () => {

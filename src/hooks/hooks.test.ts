@@ -26,7 +26,7 @@ const defaultConfig: GoopSpecConfig = {
   enforcement: "assist",
   constitution: true,
   adlEnabled: true,
-  defaultModel: "anthropic/claude-sonnet-4-5",
+  defaultModel: "anthropic/claude-sonnet-4-6",
 };
 
 /**

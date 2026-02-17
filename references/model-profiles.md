@@ -8,7 +8,7 @@ Model profiles control which model each GoopSpec agent uses. This enables optima
 |-------|-------|-----------|
 | goop-debugger | openai/gpt-5.3-codex | Best for code-heavy debugging, hypothesis testing, evidence-based analysis |
 | goop-designer | anthropic/claude-opus-4-6 | Best for visual design, UI/UX reasoning, component architecture decisions |
-| goop-executor-low | anthropic/claude-sonnet-4-5 | Best for simple mechanical edits, config updates, and low-risk scaffolding |
+| goop-executor-low | anthropic/claude-sonnet-4-6 | Best for simple mechanical edits, config updates, and low-risk scaffolding |
 | goop-executor-medium | kimi-for-coding/k2p5 | Best for business logic, refactors, utility work, and balanced implementation tasks |
 | goop-executor-high | openai/gpt-5.3-codex | Best for complex implementation, architecture-sensitive changes, and critical code paths |
 | goop-executor-frontend | anthropic/claude-opus-4-6 | Best for UI/UX implementation, responsive design, and frontend polish |
@@ -105,7 +105,7 @@ Users can override models for specific scenarios in goopspec.json:
 | Scenario | Recommended Model | Reason |
 |----------|-------------------|--------|
 | Budget constrained | Use Gemini 3 Flash for exploration, Kimi K2.5 Free for testing | Lowest cost while maintaining quality |
-| Maximum quality | Use GPT-5.2-Codex for code, Opus 4.5 for planning | Best performance per task type |
+| Maximum quality | Use GPT-5.2-Codex for code, Opus 4.6 for planning | Best performance per task type |
 | Balanced (default) | As per default assignments | Smart allocation per task type |
 | Security critical | Use GPT-5.2-Codex for verification | Strong security analysis capabilities |
 | Research intensive | Use GPT-5.2 for research and information retrieval | Best for knowledge synthesis |

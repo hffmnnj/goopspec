@@ -140,7 +140,7 @@ function formatModelSuggestions(): string {
   lines.push("{");
   lines.push('  "agents": {');
   lines.push('    "goop-orchestrator": { "model": "openai/gpt-5.3-codex" },');
-  lines.push('    "goop-executor-low": { "model": "anthropic/claude-sonnet-4-5" },');
+  lines.push('    "goop-executor-low": { "model": "anthropic/claude-sonnet-4-6" },');
   lines.push('    "goop-executor-medium": { "model": "kimi-for-coding/k2p5" },');
   lines.push('    "goop-executor-high": { "model": "openai/gpt-5.3-codex" },');
   lines.push('    "goop-executor-frontend": { "model": "anthropic/claude-opus-4-6" }');

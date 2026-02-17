@@ -39,7 +39,7 @@ export const AGENT_MODEL_SUGGESTIONS: Record<string, AgentModelSuggestion> = {
   },
   "goop-executor-low": {
     suggestions: [
-      "anthropic/claude-sonnet-4-5",
+      "anthropic/claude-sonnet-4-6",
       "kimi-for-coding/k2p5",
       "opencode/minimax-m2.1-free",
       "zai-coding-plan/glm-4.7",
@@ -49,7 +49,7 @@ export const AGENT_MODEL_SUGGESTIONS: Record<string, AgentModelSuggestion> = {
   "goop-executor-medium": {
     suggestions: [
       "kimi-for-coding/k2p5",
-      "anthropic/claude-sonnet-4-5",
+      "anthropic/claude-sonnet-4-6",
       "openai/gpt-5.3-codex",
       "opencode/minimax-m2.1-free",
     ],
@@ -86,7 +86,7 @@ export const AGENT_MODEL_SUGGESTIONS: Record<string, AgentModelSuggestion> = {
     suggestions: [
       "openai/gpt-5.2",
       "google/antigravity-gemini-3-flash",
-      "anthropic/claude-sonnet-4-5",
+      "anthropic/claude-sonnet-4-6",
     ],
     description: "Codebase search and documentation retrieval",
   },
@@ -95,7 +95,7 @@ export const AGENT_MODEL_SUGGESTIONS: Record<string, AgentModelSuggestion> = {
       "openai/gpt-5.3-codex",
       "anthropic/claude-opus-4-6",
       "kimi-for-coding/k2p5",
-      "anthropic/claude-sonnet-4-5",
+      "anthropic/claude-sonnet-4-6",
     ],
     description: "Primary orchestrator - spec clarity and wave execution",
   },
@@ -104,14 +104,14 @@ export const AGENT_MODEL_SUGGESTIONS: Record<string, AgentModelSuggestion> = {
       "openai/gpt-5.3-codex",
       "anthropic/claude-opus-4-6",
       "kimi-for-coding/k2p5",
-      "anthropic/claude-sonnet-4-5",
+      "anthropic/claude-sonnet-4-6",
     ],
     description: "Detailed execution plans with architectural precision",
   },
   "goop-researcher": {
     suggestions: [
       "openai/gpt-5.2",
-      "anthropic/claude-sonnet-4-5",
+      "anthropic/claude-sonnet-4-6",
       "kimi-for-coding/k2p5",
       "opencode/glm-4.7-free",
     ],
@@ -119,7 +119,7 @@ export const AGENT_MODEL_SUGGESTIONS: Record<string, AgentModelSuggestion> = {
   },
   "goop-tester": {
     suggestions: [
-      "anthropic/claude-sonnet-4-5",
+      "anthropic/claude-sonnet-4-6",
       "kimi-for-coding/k2p5",
       "google/antigravity-gemini-3-flash",
     ],
@@ -136,7 +136,7 @@ export const AGENT_MODEL_SUGGESTIONS: Record<string, AgentModelSuggestion> = {
     suggestions: [
       "google/antigravity-gemini-3-pro-high",
       "kimi-for-coding/k2p5",
-      "anthropic/claude-sonnet-4-5",
+      "anthropic/claude-sonnet-4-6",
     ],
     description: "Comprehensive documentation generation",
   },

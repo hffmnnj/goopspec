@@ -240,7 +240,7 @@ The Conductor never writes implementation code. It directs specialists.
 
 | Agent | Alias | Default Model | What They Do |
 |-------|-------|---------------|--------------|
-| `goop-executor-low` | The Builder (Low) | `anthropic/claude-sonnet-4-5` | Handles simple, mechanical implementation tasks |
+| `goop-executor-low` | The Builder (Low) | `anthropic/claude-sonnet-4-6` | Handles simple, mechanical implementation tasks |
 | `goop-executor-medium` | The Builder (Medium) | `kimi-for-coding/k2p5` | Handles business logic and test-oriented implementation |
 | `goop-executor-high` | The Builder (High) | `openai/gpt-5.3-codex` | Handles complex architecture and security-sensitive work |
 | `goop-executor-frontend` | The Builder (Frontend) | `anthropic/claude-opus-4-6` | Handles UI, styling, responsiveness, and accessibility work |
@@ -264,7 +264,7 @@ GoopSpec routes implementation work through four executor tiers so each task get
 
 | Tier | Default Model | Scope | Example Tasks |
 |------|---------------|-------|---------------|
-| `goop-executor-low` | `anthropic/claude-sonnet-4-5` | Config files, simple edits, renaming, dependency updates, markdown, boilerplate | Rename files, update config flags, scaffold command docs |
+| `goop-executor-low` | `anthropic/claude-sonnet-4-6` | Config files, simple edits, renaming, dependency updates, markdown, boilerplate | Rename files, update config flags, scaffold command docs |
 | `goop-executor-medium` | `kimi-for-coding/k2p5` | Business logic, utilities, middleware, data transforms, tests, refactoring | Add service logic, write unit tests, refactor utilities |
 | `goop-executor-high` | `openai/gpt-5.3-codex` | Architecture, complex algorithms, DB schemas, API design, security | Design API contracts, implement auth flow, optimize core algorithms |
 | `goop-executor-frontend` | `anthropic/claude-opus-4-6` | UI components, styling, layouts, responsive design, accessibility, UX | Build responsive UI, improve a11y, implement design system components |
@@ -273,8 +273,8 @@ GoopSpec routes implementation work through four executor tiers so each task get
 
 | Tier | Default Model | Recommended Models |
 |------|---------------|--------------------|
-| `goop-executor-low` | `anthropic/claude-sonnet-4-5` | `anthropic/claude-sonnet-4-5`, `kimi-for-coding/k2p5`, `opencode/minimax-m2.1-free`, `zai-coding-plan/glm-4.7` |
-| `goop-executor-medium` | `kimi-for-coding/k2p5` | `kimi-for-coding/k2p5`, `anthropic/claude-sonnet-4-5`, `openai/gpt-5.3-codex`, `opencode/minimax-m2.1-free` |
+| `goop-executor-low` | `anthropic/claude-sonnet-4-6` | `anthropic/claude-sonnet-4-6`, `kimi-for-coding/k2p5`, `opencode/minimax-m2.1-free`, `zai-coding-plan/glm-4.7` |
+| `goop-executor-medium` | `kimi-for-coding/k2p5` | `kimi-for-coding/k2p5`, `anthropic/claude-sonnet-4-6`, `openai/gpt-5.3-codex`, `opencode/minimax-m2.1-free` |
 | `goop-executor-high` | `openai/gpt-5.3-codex` | `openai/gpt-5.3-codex`, `anthropic/claude-opus-4-6`, `kimi-for-coding/k2p5`, `opencode/minimax-m2.1-free` |
 | `goop-executor-frontend` | `anthropic/claude-opus-4-6` | `anthropic/claude-opus-4-6`, `kimi-for-coding/k2p5`, `google/antigravity-gemini-3-pro-high`, `openai/gpt-5.3-codex` |
 
@@ -294,7 +294,7 @@ Run `/goop-setup` (or `goopspec models`) to select models for each executor tier
 ```json
 {
   "agents": {
-    "goop-executor-low": { "model": "anthropic/claude-sonnet-4-5" },
+    "goop-executor-low": { "model": "anthropic/claude-sonnet-4-6" },
     "goop-executor-medium": { "model": "kimi-for-coding/k2p5" },
     "goop-executor-high": { "model": "openai/gpt-5.3-codex" },
     "goop-executor-frontend": { "model": "anthropic/claude-opus-4-6" }
@@ -583,7 +583,7 @@ Scientific method: hypothesis → experiment → analyze → iterate.
 
 Configure via `.goopspec/config.json` after running `/goop-setup`. Key settings:
 
-- **orchestrator.model** — Model for the Conductor (default: claude-opus-4-5)
+- **orchestrator.model** — Model for the Conductor (default: claude-opus-4-6)
 - **agents.{name}.model** — Model for specific agents
 - **enforcement** — `assist`, `warn`, or `strict`
 - **memory.enabled** — Persistent memory on/off

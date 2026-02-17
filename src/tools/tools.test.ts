@@ -42,7 +42,7 @@ const defaultConfig: GoopSpecConfig = {
   enforcement: "assist",
   constitution: true,
   adlEnabled: true,
-  defaultModel: "anthropic/claude-sonnet-4-5",
+  defaultModel: "anthropic/claude-sonnet-4-6",
 };
 
 /**
@@ -68,7 +68,7 @@ function setupTestFixtures() {
   writeFileSync(join(agentsDir, "test-agent.md"), `---
 name: test-agent
 description: A test agent for testing
-model: anthropic/claude-sonnet-4-5
+model: anthropic/claude-sonnet-4-6
 temperature: 0.5
 tools:
   - read
