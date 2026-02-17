@@ -286,13 +286,20 @@ Best practice: search before decisions, then persist key outcomes.
     sections.push(`
 ## Question Tool (User Interaction)
 
-When user input is required, use **\`mcp_question\`** (not plain-text prompts).
+When user input is required, use **\`question\`** / **\`mcp_question\`** (not plain-text prompts).
 
-Use it for confirmations, choices, and preference decisions.
-Use structured prompts when the decision fits 2-3 concise options.
-For short text inputs (1-2 sentences), provide suggested options and include a custom-entry path when user-specific text is needed.
-Use freeform plain-text prompts only when complex multi-sentence input is required.
-Provide concise prompts with structured options (\`header\`, \`question\`, \`options\`, optional \`multiple\`, optional custom entry).
+Use structured prompts for short-answer interactions:
+- confirmations, gate approvals, next-step choices
+- single-choice decisions
+- short text inputs (1-2 sentences)
+
+For structured prompts:
+- provide 2-5 concise, conversational options
+- always include a custom-entry path option labeled **"Type your own answer"**
+- keep custom entry enabled by default
+
+Use freeform plain-text prompts only when multi-paragraph input is truly required.
+In discovery interviews, keep structured coverage across Vision, Must-Haves, Constraints, Out of Scope, Assumptions, and Risks.
 
 Do not ask users to type free-form command words like "confirm/amend/cancel".
 `);

@@ -63,6 +63,49 @@ IF unresolved blockers exist:
 
 ---
 
+## Structured Question Policy (Accept Phase)
+
+All short-answer interactions during acceptance MUST use the `question` tool. Output context (verification reports, requirement matrices, test results) as regular messages first, then ask a concise question with 2-5 options.
+
+**When to use structured prompts:**
+- Acceptance gate decisions (accept/issues/cancel)
+- PR creation choices
+- Target branch selection
+- Issue resolution routing
+
+**When to use freeform text:**
+- Detailed issue descriptions when reporting problems
+
+**Examples:**
+
+Acceptance gate (3 options):
+```ts
+question({
+  header: "Acceptance Gate",
+  question: "Verification passed. How would you like to proceed?",
+  options: [
+    { label: "Accept", description: "Finalize and archive milestone" },
+    { label: "Report Issues", description: "Document problems found" },
+    { label: "Return to Execution", description: "Fix issues first" }
+  ]
+})
+```
+
+PR creation (3 options):
+```ts
+question({
+  header: "Pull Request",
+  question: "Work is verified. Create a pull request?",
+  options: [
+    { label: "Create PR (Recommended)", description: "Well-formatted pull request" },
+    { label: "Create draft PR", description: "Draft for further review" },
+    { label: "Skip PR", description: "Continue to completion" }
+  ]
+})
+```
+
+---
+
 ## Phase 2: Run Verification
 
 **Spawn goop-verifier:**
@@ -185,6 +228,8 @@ Run complete test suite and report results
 
 **If PASSED:**
 
+Display verification summary as a regular message first:
+
 ```
 ## 🔮 GoopSpec · Acceptance Gate
 
@@ -193,20 +238,28 @@ Run complete test suite and report results
 **Tests:** [X] passing
 
 ---
+```
 
-Type **"accept"** to complete this milestone.
-Type **"issues"** to report problems.
-Type **"accept-with-issues"** to record known issues before final confirmation.
-Type **"cancel"** to return to execution.
+Then use `question` tool:
 
----
+```ts
+question({
+  header: "Acceptance Gate",
+  question: "Verification passed. How would you like to proceed?",
+  options: [
+    { label: "Accept", description: "Finalize and archive milestone" },
+    { label: "Report Issues", description: "Document problems found" },
+    { label: "Accept with Issues", description: "Record known issues, then finalize" },
+    { label: "Return to Execution", description: "Go back and fix issues" }
+  ]
+})
 ```
 
 ---
 
 ## Phase 5: Handle Response
 
-**On "accept":**
+**On "Accept":**
 
 1. Update state:
 ```
@@ -338,12 +391,12 @@ Display PR URL to user.
 ---
 ```
 
-**On "issues":**
+**On "Report Issues":**
+
+Ask for issue details (freeform text is appropriate here since issues require multi-sentence detail):
 
 ```
-What issues did you find?
-
-[Use question tool or text input]
+What issues did you find? Please describe them.
 ```
 
 Then:
@@ -351,11 +404,13 @@ Then:
 2. Return to execution phase
 3. Suggest `/goop-execute` to fix
 
-**On "accept-with-issues":**
+**On "Accept with Issues":**
 
 1. Log that acceptance was with known issues
 2. Document issues in CHRONICLE.md
-3. Re-open acceptance gate and require explicit `accept` before archival
+3. Re-open acceptance gate and require explicit confirmation before archival
+
+Display issues as a regular message:
 
 ```
 ## 🔮 GoopSpec · Accepted With Issues
@@ -365,8 +420,19 @@ Then:
 - [Issue 2]
 
 These will be documented in the retrospective.
+```
 
-Type **"accept"** to finalize and archive.
+Then use `question` tool for final confirmation:
+
+```ts
+question({
+  header: "Finalize with Issues",
+  question: "Confirm acceptance with the known issues above?",
+  options: [
+    { label: "Finalize", description: "Archive milestone with documented issues" },
+    { label: "Cancel", description: "Return to fix issues first" }
+  ]
+})
 ```
 
 ---
@@ -388,9 +454,9 @@ Orchestrator:
 
 ### Overall: PASSED
 
-Type "accept" to complete.
+→ [question tool: Accept / Report Issues / Accept with Issues / Return to Execution]
 
-User: accept
+User: [Selects "Accept"]
 
 Orchestrator:
 ## 🔮 GoopSpec · Accepted and Archived
@@ -408,11 +474,9 @@ Orchestrator:
 **Failures:**
 | MH2 | Test failing | edge case in theme switch |
 
-**Options:**
-1. Fix issues → /goop-execute
-2. Accept anyway → "accept-with-issues"
+→ [question tool: Return to Execution / Accept with Issues]
 
-User: Let's fix it
+User: [Selects "Return to Execution"]
 
 Orchestrator: Run `/goop-execute` to continue.
 ```

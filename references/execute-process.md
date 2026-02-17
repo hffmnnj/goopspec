@@ -79,6 +79,47 @@ If `currentBranch` is NOT in the default-branch set, proceed silently with no pr
 
 ---
 
+## Structured Question Policy (Execute Phase)
+
+All short-answer interactions during execution MUST use the `question` tool. Output context (wave progress, deviation details, PR summaries) as regular messages first, then ask a concise question with 2-5 options.
+
+**When to use structured prompts:**
+- Feature branch guard decisions
+- Wave completion continuation choices
+- Deviation handling (Rule 4 architectural decisions)
+- PR creation and target branch selection
+
+**When to use freeform text:**
+- Detailed architectural rationale when Rule 4 options need elaboration
+
+**Examples:**
+
+Wave completion (2 options):
+```ts
+question({
+  header: "Wave 1 Complete",
+  question: "How would you like to continue?",
+  options: [
+    { label: "Continue to Wave 2", description: "Proceed in current session" },
+    { label: "Pause and resume later", description: "Save checkpoint, start fresh" }
+  ]
+})
+```
+
+Architectural decision (Rule 4):
+```ts
+question({
+  header: "Architectural Decision",
+  question: "Database schema change needed. Add index on users.email?",
+  options: [
+    { label: "Add index", description: "Better query performance, minor migration" },
+    { label: "Skip index", description: "Simpler migration, optimize later" }
+  ]
+})
+```
+
+---
+
 ## Phase 2: Load Context
 
 ```

@@ -548,6 +548,127 @@ describe("agent-factory", () => {
       });
     });
 
+    describe("question-tool policy regression", () => {
+      it("orchestrator prompt always contains custom-answer option text", () => {
+        const resource = createMockResource({
+          name: "goop-orchestrator",
+          type: "agent",
+          frontmatter: {
+            name: "goop-orchestrator",
+            mode: "orchestrator",
+            tools: ["question"],
+            description: "Orchestrator",
+          },
+          body: "Base prompt",
+        });
+
+        const resolver = createMockResourceResolver();
+        const config = createAgentFromMarkdown(resource, resolver);
+
+        expect(config.prompt).toContain("Type your own answer");
+      });
+
+      it("orchestrator prompt contains 2-5 option range guidance", () => {
+        const resource = createMockResource({
+          name: "goop-orchestrator",
+          type: "agent",
+          frontmatter: {
+            name: "goop-orchestrator",
+            mode: "orchestrator",
+            tools: ["question"],
+            description: "Orchestrator",
+          },
+          body: "Base prompt",
+        });
+
+        const resolver = createMockResourceResolver();
+        const config = createAgentFromMarkdown(resource, resolver);
+
+        expect(config.prompt).toContain("2-5");
+      });
+
+      it("user_facing frontmatter flag triggers question instructions", () => {
+        const resource = createMockResource({
+          name: "custom-agent",
+          type: "agent",
+          frontmatter: {
+            mode: "subagent",
+            user_facing: true,
+            tools: ["read"],
+            description: "Custom user-facing agent",
+          },
+          body: "Base prompt",
+        });
+
+        const resolver = createMockResourceResolver();
+        const config = createAgentFromMarkdown(resource, resolver, {
+          enableMemoryTools: false,
+        });
+
+        expect(config.prompt).toContain("Question Tool (User Interaction)");
+        expect(config.prompt).toContain("Type your own answer");
+      });
+
+      it("no subagent role receives question-tool boilerplate across all executor tiers", () => {
+        const subagentNames = [
+          "goop-executor-low",
+          "goop-executor-medium",
+          "goop-executor-high",
+          "goop-executor-frontend",
+          "goop-planner",
+          "goop-researcher",
+          "goop-explorer",
+          "goop-verifier",
+          "goop-debugger",
+          "goop-creative",
+          "memory-distiller",
+        ];
+
+        const resolver = createMockResourceResolver();
+
+        for (const name of subagentNames) {
+          const resource = createMockResource({
+            name,
+            type: "agent",
+            frontmatter: {
+              mode: "subagent",
+              tools: ["read", "bash"],
+              description: `${name} test`,
+            },
+            body: "Base prompt",
+          });
+
+          const config = createAgentFromMarkdown(resource, resolver, {
+            enableMemoryTools: false,
+          });
+
+          expect(config.prompt).not.toContain("Question Tool (User Interaction)");
+          expect(config.prompt).not.toContain("mcp_question");
+        }
+      });
+
+      it("question tool with question in tools list triggers instructions even for subagent mode", () => {
+        const resource = createMockResource({
+          name: "some-agent",
+          type: "agent",
+          frontmatter: {
+            mode: "subagent",
+            tools: ["read", "question"],
+            description: "Agent with question tool",
+          },
+          body: "Base prompt",
+        });
+
+        const resolver = createMockResourceResolver();
+        const config = createAgentFromMarkdown(resource, resolver, {
+          enableMemoryTools: false,
+        });
+
+        expect(config.prompt).toContain("Question Tool (User Interaction)");
+        expect(config.prompt).toContain("custom-entry path");
+      });
+    });
+
     describe("skills injection", () => {
       it("injects skill content into prompt", () => {
         const skill = createMockResource({

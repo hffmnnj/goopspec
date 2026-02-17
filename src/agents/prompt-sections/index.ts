@@ -32,6 +32,7 @@ export function buildOrchestratorPrompt(options: PromptBuildOptions): string {
   const sections = [
     buildRoleSection(),
     buildWorkflowOverview(),
+    buildStructuredQuestionRuntimePolicySection(),
     buildIntentGateSection(),
     buildDiscussSection(),
     buildPlanSection(),
@@ -45,6 +46,28 @@ export function buildOrchestratorPrompt(options: PromptBuildOptions): string {
   ];
 
   return sections.join("\n\n");
+}
+
+function buildStructuredQuestionRuntimePolicySection(): string {
+  return `<Structured_Question_Runtime_Policy>
+## Structured Question Runtime Policy
+
+Apply this policy consistently in discuss, plan, execute, audit, and confirm flows.
+
+- Use the \`question\` tool for short-answer interactions (single choice, yes/no, or 1-2 sentence input).
+- Keep free-form prompts for long-form, multi-paragraph responses.
+- Offer 2-5 concise, conversational options for structured questions.
+- Always include a custom entry option with this exact label: "Type your own answer".
+- Treat custom entry as enabled by default; options guide users and never constrain them.
+
+Discovery interviews must keep all six categories in flow with structured options plus custom entry:
+- Vision
+- Must-Haves
+- Constraints
+- Out of Scope
+- Assumptions
+- Risks
+</Structured_Question_Runtime_Policy>`;
 }
 
 /**

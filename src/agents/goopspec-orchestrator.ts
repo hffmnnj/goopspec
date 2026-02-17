@@ -15,6 +15,30 @@ import type {
 import { buildOrchestratorPrompt } from "./prompt-sections/index.js";
 import { log } from "../shared/logger.js";
 
+const DISCOVERY_CATEGORIES = [
+  "Vision",
+  "Must-Haves",
+  "Constraints",
+  "Out of Scope",
+  "Assumptions",
+  "Risks",
+] as const;
+
+const STRUCTURED_POLICY_FALLBACK = `<Structured_Question_Runtime_Policy>
+## Structured Question Runtime Policy
+
+Use \`question\` for short-answer interactions and free-form prompts for long-form, multi-paragraph responses.
+Always provide 2-5 conversational options and include \"Type your own answer\" as a default custom-entry path.
+
+Discovery categories to keep in flow:
+- Vision
+- Must-Haves
+- Constraints
+- Out of Scope
+- Assumptions
+- Risks
+</Structured_Question_Runtime_Policy>`;
+
 // ============================================================================
 // Types
 // ============================================================================
@@ -69,12 +93,14 @@ export function createGoopSpecOrchestrator(options: OrchestratorOptions): Orches
   });
 
   // Build the dynamic prompt based on available resources
-  const prompt = buildOrchestratorPrompt({
+  const prompt = ensureStructuredQuestionPolicy(
+    buildOrchestratorPrompt({
     phaseGates: options.phaseGates ?? "ask",
     waveExecution: options.waveExecution ?? "sequential",
     availableAgents,
     availableSkills,
-  });
+    })
+  );
 
   return {
     // NOTE: name MUST match the registration key in config-handler.ts
@@ -98,6 +124,7 @@ export function createGoopSpecOrchestrator(options: OrchestratorOptions): Orches
       goop_checkpoint: "allow",
       // Standard tools
       question: "allow",
+      mcp_question: "allow",
       todowrite: "allow",
       todoread: "allow",
       read: "allow",
@@ -109,6 +136,20 @@ export function createGoopSpecOrchestrator(options: OrchestratorOptions): Orches
       task: "allow",
     },
   };
+}
+
+function ensureStructuredQuestionPolicy(prompt: string): string {
+  const hasPolicyHeader = prompt.includes("Structured Question Runtime Policy");
+  const hasCustomAnswer = prompt.includes("Type your own answer");
+  const hasAllDiscoveryCategories = DISCOVERY_CATEGORIES.every(category =>
+    prompt.includes(category)
+  );
+
+  if (hasPolicyHeader && hasCustomAnswer && hasAllDiscoveryCategories) {
+    return prompt;
+  }
+
+  return `${prompt}\n\n${STRUCTURED_POLICY_FALLBACK}`;
 }
 
 function resolveOrchestratorModel(options: OrchestratorOptions): { model: string; source: string } {

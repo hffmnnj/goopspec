@@ -120,11 +120,117 @@ Ask broad questions to understand intent:
 - "Why is this needed now?"
 - "Who will use this?"
 
-### Step 2: Structured Questions
-Work through the six questions, prompting for specifics:
-- "What happens if [edge case]?"
-- "How should [error scenario] be handled?"
-- "What's the expected behavior when [boundary condition]?"
+### Step 2: Structured Discovery Questions
+
+Use the `question` tool for each discovery category. Offer practical option seeds and always include a custom-answer path. Adapt option labels to the user's project context when possible.
+
+#### Vision — Structured Entry Point
+
+```
+question({
+  header: "Project Vision",
+  question: "What kind of project is this?",
+  options: [
+    "New feature for an existing app",
+    "Bug fix or improvement to existing behavior",
+    "New standalone project or service",
+    "Refactor or migration of existing code",
+    "Type your own answer"
+  ]
+})
+```
+
+After the user selects a project type, follow up conversationally to gather the problem statement, target users, and success criteria. Use free-form for the detailed vision narrative.
+
+#### Must-Haves — Progressive Collection
+
+```
+question({
+  header: "Must-Haves",
+  question: "What's the next requirement for this to be complete?",
+  options: [
+    "Add a new must-have requirement",
+    "Review what we have so far",
+    "That covers the must-haves",
+    "Type your own answer"
+  ]
+})
+```
+
+Loop: when the user selects "Add a new must-have", prompt for detail in free-form. On "Review what we have so far", present the collected list and ask if anything is missing. Continue until "That covers the must-haves" is selected.
+
+#### Constraints — Category Groups
+
+```
+question({
+  header: "Constraints",
+  question: "Are there technical or practical constraints to consider?",
+  options: [
+    "Stack or framework requirements",
+    "Performance or scalability targets",
+    "Timeline or resource limits",
+    "Must integrate with existing code",
+    "No specific constraints",
+    "Type your own answer"
+  ]
+})
+```
+
+For each selected category, follow up with specifics in free-form. Multiple categories can be explored in sequence.
+
+#### Out of Scope — Curated Exclusions
+
+```
+question({
+  header: "Out of Scope",
+  question: "What should we explicitly exclude from this work?",
+  options: [
+    "Features deferred to a future phase",
+    "Alternative approaches we're not pursuing",
+    "Edge cases we'll handle later",
+    "Infrastructure or deployment changes",
+    "Type your own answer"
+  ]
+})
+```
+
+Probe for at least one concrete exclusion. Use free-form follow-ups to capture specifics.
+
+#### Assumptions — Common Categories
+
+```
+question({
+  header: "Assumptions",
+  question: "What are we assuming to be true for this work?",
+  options: [
+    "Existing infrastructure or services are available",
+    "Certain code or APIs already work as expected",
+    "External dependencies are stable",
+    "Team or user behavior follows a known pattern",
+    "Type your own answer"
+  ]
+})
+```
+
+For each assumption, ask what happens if it turns out to be false. Capture the "if false" impact alongside the assumption.
+
+#### Risks — Prompted Categories
+
+```
+question({
+  header: "Risks",
+  question: "What could go wrong or block this work?",
+  options: [
+    "Technical complexity or unknowns",
+    "Dependency on external systems or teams",
+    "Breaking changes to existing behavior",
+    "Timeline or scope pressure",
+    "Type your own answer"
+  ]
+})
+```
+
+For each identified risk, follow up with impact, likelihood, and mitigation in free-form. Challenge "no risks" answers — there are always risks.
 
 ### Step 3: Summarize and Confirm
 Present back:

@@ -38,12 +38,21 @@ If the command includes a session name (example: `/goop-discuss feat-auth`), cre
 
 ### The Six Questions
 
+Use the `question` tool with category-specific options for each discovery question. Always include a "Type your own answer" option. Adapt labels to the user's project context.
+
 1. **Vision** — What are you building? What problem? Who for?
+   - Options: "New feature for an existing app", "Bug fix or improvement", "New standalone project", "Refactor or migration", custom
 2. **Must-Haves** — Non-negotiable requirements and acceptance criteria
+   - Options: "Add a new must-have requirement", "Review what we have so far", "That covers the must-haves", custom
+   - Loop until the user selects "That covers the must-haves"
 3. **Constraints** — Stack, frameworks, performance, timeline
+   - Options: "Stack or framework requirements", "Performance or scalability targets", "Timeline or resource limits", "Must integrate with existing code", "No specific constraints", custom
 4. **Out of Scope** — What we're NOT building
+   - Options: "Features deferred to a future phase", "Alternative approaches we're not pursuing", "Edge cases we'll handle later", "Infrastructure or deployment changes", custom
 5. **Assumptions** — What we're relying on being true
+   - Options: "Existing infrastructure or services are available", "Certain code or APIs already work", "External dependencies are stable", "Team or user behavior follows a known pattern", custom
 6. **Risks** — What could go wrong? Mitigations?
+   - Options: "Technical complexity or unknowns", "Dependency on external systems or teams", "Breaking changes to existing behavior", "Timeline or scope pressure", custom
 
 ### Tools Used
 

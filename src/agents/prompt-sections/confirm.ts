@@ -20,6 +20,33 @@ Before presenting confirmation:
 - Check memory for recorded decisions or open items to close
 - Ensure acceptance criteria are addressed
 
+### Short-Answer Question Policy (Shared)
+
+Use structured question prompts for short confirmation responses: acceptance decisions, follow-up preference, and completion acknowledgments.
+
+Use free-form prompts when the user needs to explain detailed change requests, broad retrospective feedback, or multi-paragraph concerns.
+
+For structured prompts:
+- Offer 2-5 options that match likely confirmation outcomes
+- Keep wording conversational and user-friendly
+- Always include a custom response path labeled "Type your own answer"
+- Keep custom input enabled by default in every short-question prompt
+
+### Reusable Structured Templates
+
+1. **Yes/No template**
+   - For final acceptance and checkpoint confirmations
+   - Option pattern: "Yes, approved", "No, needs changes", "Type your own answer"
+
+2. **Multi-choice template**
+   - For selecting next action (accept, revise, start follow-up work)
+   - Option pattern: 2-4 context options plus "Type your own answer"
+
+3. **Progressive collection template**
+   - For collecting short post-delivery feedback step-by-step
+   - Ask one focused question per step with 2-5 options and "Type your own answer"
+   - Use each answer to shape the next conversational follow-up
+
 ### Confirmation Gate Mode: ${phaseGates}
 
 ${gateInstructions}

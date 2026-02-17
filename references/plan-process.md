@@ -60,6 +60,49 @@ IF .goopspec/REQUIREMENTS.md does not exist:
 
 ---
 
+## Structured Question Policy (Plan Phase)
+
+All short-answer interactions during planning MUST use the `question` tool. Output context (wave summaries, traceability tables, contract details) as regular messages first, then ask a concise question with 2-5 options.
+
+**When to use structured prompts:**
+- Contract gate decisions (confirm/amend/cancel)
+- Per-wave review approvals
+- Blocker resolution choices
+- Plan review shortcuts (approve all vs review each)
+
+**When to use freeform text:**
+- Amendment details requiring multi-sentence specification changes
+
+**Examples:**
+
+Contract gate (3 options):
+```ts
+question({
+  header: "Contract Gate",
+  question: "How would you like to proceed with this contract?",
+  options: [
+    { label: "Confirm and Lock", description: "Accept contract and lock spec" },
+    { label: "Amend", description: "Revise contract before locking" },
+    { label: "Cancel", description: "Stop now and keep spec unlocked" }
+  ]
+})
+```
+
+Wave review (yes/no with alternative):
+```ts
+question({
+  header: "Wave 2 Review",
+  question: "Review Wave 2: Auth Migration. How would you like to proceed?",
+  options: [
+    { label: "Approve Wave", description: "Wave looks good, proceed" },
+    { label: "Request More Research", description: "Need deeper investigation" },
+    { label: "Clarify Scope", description: "Adjust what this wave covers" }
+  ]
+})
+```
+
+---
+
 ## Phase 2: Load Context
 
 **Note:** Existing document archiving is handled in `/goop-discuss` Phase 1.2. 
