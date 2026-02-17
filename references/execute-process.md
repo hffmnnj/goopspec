@@ -484,4 +484,4 @@ Orchestrator: Resuming with selected option...
 
 ---
 
-*Execution Process v0.2.7*
+*Execution Process v0.2.8*

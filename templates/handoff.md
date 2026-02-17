@@ -137,4 +137,4 @@ For the next session:
 *Start a new session for fresh 200k context window.*
 *All state is preserved in GoopSpec files.*
 
-*Session Handoff — GoopSpec v0.2.7*
+*Session Handoff — GoopSpec v0.2.8*

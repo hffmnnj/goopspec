@@ -8,7 +8,7 @@ triggers:
   - recall
   - save for later
   - persistent
-version: 0.2.7
+version: 0.2.8
 ---
 
 # Memory System Usage Guide

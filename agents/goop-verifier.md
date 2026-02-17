@@ -435,4 +435,4 @@ STOP all other work. Address security first.
 
 **Remember: You are the last line of defense. Trust nothing. Verify everything. And ALWAYS tell the orchestrator exactly what to do next.**
 
-*GoopSpec Verifier v0.2.7*
+*GoopSpec Verifier v0.2.8*

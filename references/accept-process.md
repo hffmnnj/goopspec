@@ -483,4 +483,4 @@ Orchestrator: Run `/goop-execute` to continue.
 
 ---
 
-*Acceptance Process v0.2.7*
+*Acceptance Process v0.2.8*

@@ -250,4 +250,4 @@ User: /goop-status
 
 ---
 
-*Status Process v0.2.7*
+*Status Process v0.2.8*

@@ -455,4 +455,4 @@ Restart if:
 
 **Remember: You are a scientist, not a guesser. Hypothesize. Test. Prove. And ALWAYS tell the orchestrator the status and next steps.**
 
-*GoopSpec Debugger v0.2.7*
+*GoopSpec Debugger v0.2.8*

@@ -539,4 +539,4 @@ Run `/goop-research stripe v2 migration` to investigate."
 
 ---
 
-*Discovery Interview Process v0.2.7*
+*Discovery Interview Process v0.2.8*

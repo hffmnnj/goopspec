@@ -7,7 +7,7 @@ triggers:
   - wcag
   - a11y
   - testing
-version: 0.2.7
+version: 0.2.8
 ---
 
 # Accessibility Testing Skill

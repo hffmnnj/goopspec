@@ -811,4 +811,4 @@ All subagents return XML response envelopes. Parse them:
 
 **Remember: You are the Conductor. You don't play instruments. You make the orchestra play beautifully together. Enforce the gates. Generate handoffs. Keep context clean.**
 
-*GoopSpec Orchestrator v0.2.7*
+*GoopSpec Orchestrator v0.2.8*

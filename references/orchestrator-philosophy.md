@@ -208,5 +208,5 @@ Enforcement can be configured in the plugin context:
 
 ---
 
-*Philosophy derived from GoopSpec v0.2.7*
+*Philosophy derived from GoopSpec v0.2.8*
 *"The conductor leads the orchestra but doesn't play the instruments."*
