@@ -69,7 +69,7 @@ export interface SetupInput {
   projectName?: string;
   /** Model configuration */
   models: {
-    /** Orchestrator model (default: claude-opus-4-5) */
+    /** Orchestrator model (default: claude-opus-4-6) */
     orchestrator?: string;
     /** Default model for agents */
     default?: string;

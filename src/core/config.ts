@@ -98,7 +98,7 @@ export const GoopSpecConfigSchema = z.object({
 export const DEFAULT_CONFIG: GoopSpecConfig = {
   enforcement: "assist" as EnforcementLevel,
   adlEnabled: true,
-  defaultModel: "anthropic/claude-sonnet-4-5",
+  defaultModel: "anthropic/claude-sonnet-4-6",
   mcp: {
     context7: true,
     exa: true,

@@ -230,13 +230,13 @@ describe("config", () => {
         const projectConfigPath = join(projectDir, ".goopspec", "config.json");
         writeJsonFile(projectConfigPath, {
           orchestrator: {
-            model: "anthropic/claude-sonnet-4-5",
+            model: "anthropic/claude-sonnet-4-6",
           },
         });
 
         const config = loadPluginConfig(projectDir);
 
-        expect(config.orchestrator?.model).toBe("anthropic/claude-sonnet-4-5");
+        expect(config.orchestrator?.model).toBe("anthropic/claude-sonnet-4-6");
       } finally {
         rmSync(tempRoot, { recursive: true, force: true });
       }

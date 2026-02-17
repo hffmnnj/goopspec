@@ -254,7 +254,7 @@ describe("agent-factory", () => {
         const resolver = createMockResourceResolver();
         const config = createAgentFromMarkdown(resource, resolver);
 
-        expect(config.model).toBe("anthropic/claude-sonnet-4-5");
+        expect(config.model).toBe("anthropic/claude-sonnet-4-6");
       });
     });
 

@@ -463,7 +463,7 @@ export const DEFAULT_TEST_CONFIG: GoopSpecConfig = {
   enforcement: "assist",
   constitution: true,
   adlEnabled: true,
-  defaultModel: "anthropic/claude-sonnet-4-5",
+  defaultModel: "anthropic/claude-sonnet-4-6",
 };
 
 export interface MockPluginContextOptions {
@@ -530,7 +530,7 @@ export const TEST_AGENT_RESOURCE: ResolvedResource = {
   frontmatter: {
     name: "goop-planner",
     description: "Creates detailed execution plans",
-    model: "anthropic/claude-sonnet-4-5",
+    model: "anthropic/claude-sonnet-4-6",
     temperature: 0.3,
     tools: ["read", "write", "glob"],
     skills: ["planning", "decomposition"],

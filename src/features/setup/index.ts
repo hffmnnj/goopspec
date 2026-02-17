@@ -420,7 +420,7 @@ export async function setupMemoryDependencies(
   memoryConfig: MemorySetupInput | undefined,
   quick: boolean = false,
   agentModels: Record<string, string> = {},
-  defaultModel: string = "anthropic/claude-sonnet-4-5",
+  defaultModel: string = "anthropic/claude-sonnet-4-6",
   installDependencies: boolean = true
 ): Promise<MemorySetupResult> {
   const result: MemorySetupResult = {
@@ -579,7 +579,7 @@ export async function applyInit(
         plan.memoryConfig,
         plan.quick ?? false,
         plan.agentModels ?? {},
-        "anthropic/claude-sonnet-4-5"
+        "anthropic/claude-sonnet-4-6"
       );
       
       // Add degraded features as warnings

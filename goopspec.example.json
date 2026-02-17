@@ -4,7 +4,7 @@
   "enforcement": "warn",
   "_enforcement_comment": "assist = gentle guidance, warn = highlight issues, strict = enforce gates and constraints.",
   "adlEnabled": true,
-  "defaultModel": "anthropic/claude-sonnet-4-5",
+  "defaultModel": "anthropic/claude-sonnet-4-6",
   "agents": {
     "goop-explorer": {
       "model": "google/antigravity-gemini-3-flash",
@@ -19,7 +19,7 @@
       "temperature": 0.3
     },
     "goop-tester": {
-      "model": "anthropic/claude-sonnet-4-5",
+      "model": "anthropic/claude-sonnet-4-6",
       "temperature": 0.2
     },
     "goop-writer": {

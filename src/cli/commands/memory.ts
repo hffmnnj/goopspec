@@ -138,7 +138,7 @@ export async function runMemory(): Promise<void> {
           memoryConfig,
           true,
           {},
-          "anthropic/claude-sonnet-4-5",
+          "anthropic/claude-sonnet-4-6",
           true,
         );
 

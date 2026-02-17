@@ -328,7 +328,7 @@ export async function runInit(): Promise<void> {
         memoryConfig,
         false,
         agentModels,
-        AGENT_MODEL_SUGGESTIONS["goop-orchestrator"]?.suggestions[0] ?? "anthropic/claude-sonnet-4-5",
+        AGENT_MODEL_SUGGESTIONS["goop-orchestrator"]?.suggestions[0] ?? "anthropic/claude-sonnet-4-6",
         false,
       );
       previewSpinner.stop("Memory capability check complete");

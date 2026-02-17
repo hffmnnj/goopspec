@@ -308,7 +308,7 @@ describe("goop_setup tool", () => {
         scope: "project",
         agentModels: {
           "goop-orchestrator": "anthropic/claude-opus-4-6",
-          "goop-executor": "anthropic/claude-sonnet-4-5",
+          "goop-executor": "anthropic/claude-sonnet-4-6",
         },
       }, toolContext);
 
@@ -434,7 +434,7 @@ describe("goop_setup tool", () => {
       const result = await tool.execute({
         action: "plan",
         scope: "project",
-        defaultModel: "anthropic/claude-sonnet-4-5",
+        defaultModel: "anthropic/claude-sonnet-4-6",
       }, toolContext);
 
       expect(result).toContain("# GoopSpec Setup Plan");

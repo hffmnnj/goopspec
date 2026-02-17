@@ -163,7 +163,7 @@ describe("createConfigHandler", () => {
     const pluginConfig: GoopSpecConfig = {
       enforcement: "assist",
       orchestrator: {
-        model: "anthropic/claude-sonnet-4-5",
+        model: "anthropic/claude-sonnet-4-6",
         thinkingBudget: 16000,
         phaseGates: "strict",
         waveExecution: "parallel",
@@ -180,7 +180,7 @@ describe("createConfigHandler", () => {
     await handler(config);
 
     const goopspec = (config.agent as Record<string, unknown>).goopspec as Record<string, unknown>;
-    expect(goopspec.model).toBe("anthropic/claude-sonnet-4-5");
+    expect(goopspec.model).toBe("anthropic/claude-sonnet-4-6");
     expect((goopspec.thinking as { budgetTokens: number }).budgetTokens).toBe(16000);
   });
 
@@ -248,7 +248,7 @@ describe("createConfigHandler", () => {
 
       writeProjectConfig(env.goopspecDir, {
         orchestrator: {
-          model: "anthropic/claude-sonnet-4-5",
+          model: "anthropic/claude-sonnet-4-6",
         },
       });
 
@@ -264,7 +264,7 @@ describe("createConfigHandler", () => {
       await handler(config);
 
       const goopspec = (config.agent as Record<string, unknown>).goopspec as Record<string, unknown>;
-      expect(goopspec.model).toBe("anthropic/claude-sonnet-4-5");
+      expect(goopspec.model).toBe("anthropic/claude-sonnet-4-6");
     } finally {
       env.cleanup();
     }
@@ -284,7 +284,7 @@ describe("createConfigHandler", () => {
           },
         },
         orchestrator: {
-          model: "anthropic/claude-sonnet-4-5",
+          model: "anthropic/claude-sonnet-4-6",
         },
       });
 
