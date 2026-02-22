@@ -149,9 +149,13 @@ IMPORTANT: Always use this tool instead of Read/Edit on state.json to avoid conf
 
         case "lock-spec": {
           ctx.stateManager.lockSpec();
-          return `🔒 Specification locked.
+          const confirmedState = ctx.stateManager.getState();
+          if (!confirmedState.workflow.specLocked) {
+            return "✗ Error: Spec lock failed — state did not confirm. Retry this action.";
+          }
+          return `🔒 Specification locked. Confirmed: specLocked = true.
 
-The spec is now a contract. Execution can proceed.
+The specification is now frozen. Changes require \`/goop-amend\`.
 
 → Run \`/goop-execute\` to begin implementation.`;
         }
