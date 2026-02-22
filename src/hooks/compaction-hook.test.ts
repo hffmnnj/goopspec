@@ -265,6 +265,114 @@ describe("compaction hook", () => {
   });
 
   // =========================================================================
+  // Autopilot Directive Injection Tests
+  // =========================================================================
+
+  describe("autopilot directive injection", () => {
+    it("includes autopilot directive when workflow.autopilot is true", async () => {
+      const hookCtx = createMockPluginContext({
+        testDir,
+        state: {
+          workflow: {
+            phase: "execute",
+            specLocked: true,
+            currentWave: 2,
+            totalWaves: 4,
+            mode: "standard",
+            depth: "standard",
+            researchOptIn: false,
+            acceptanceConfirmed: false,
+            interviewComplete: true,
+            interviewCompletedAt: null,
+            currentPhase: null,
+            lastActivity: new Date().toISOString(),
+            autopilot: true,
+          },
+        },
+      });
+      const hook = createCompactionHook(hookCtx);
+      const output: { context: string[]; prompt?: string } = { context: [] };
+
+      await hook(undefined, output);
+
+      const joined = output.context.join("\n");
+      expect(joined).toContain(
+        "AUTOPILOT ACTIVE: Do not pause between phases. Continue to the next phase immediately."
+      );
+    });
+
+    it("does not include autopilot directive when workflow.autopilot is false", async () => {
+      const hookCtx = createMockPluginContext({
+        testDir,
+        state: {
+          workflow: {
+            phase: "execute",
+            specLocked: true,
+            currentWave: 2,
+            totalWaves: 4,
+            mode: "standard",
+            depth: "standard",
+            researchOptIn: false,
+            acceptanceConfirmed: false,
+            interviewComplete: true,
+            interviewCompletedAt: null,
+            currentPhase: null,
+            lastActivity: new Date().toISOString(),
+            autopilot: false,
+          },
+        },
+      });
+      const hook = createCompactionHook(hookCtx);
+      const output: { context: string[]; prompt?: string } = { context: [] };
+
+      await hook(undefined, output);
+
+      const joined = output.context.join("\n");
+      expect(joined).not.toContain("AUTOPILOT ACTIVE");
+    });
+
+    it("does not include autopilot directive when workflow.autopilot is undefined", async () => {
+      // Default state has no autopilot field (undefined)
+      const hook = createCompactionHook(ctx);
+      const output: { context: string[]; prompt?: string } = { context: [] };
+
+      await hook(undefined, output);
+
+      const joined = output.context.join("\n");
+      expect(joined).not.toContain("AUTOPILOT ACTIVE");
+    });
+
+    it("autopilot directive appears in the workflow state block specifically", () => {
+      const hookCtx = createMockPluginContext({
+        testDir,
+        state: {
+          workflow: {
+            phase: "execute",
+            specLocked: true,
+            currentWave: 1,
+            totalWaves: 3,
+            mode: "standard",
+            depth: "standard",
+            researchOptIn: false,
+            acceptanceConfirmed: false,
+            interviewComplete: true,
+            interviewCompletedAt: null,
+            currentPhase: null,
+            lastActivity: new Date().toISOString(),
+            autopilot: true,
+          },
+        },
+      });
+
+      const block = buildWorkflowStateBlock(hookCtx);
+      expect(block).toContain(
+        "AUTOPILOT ACTIVE: Do not pause between phases. Continue to the next phase immediately."
+      );
+      expect(block).toContain("## GoopSpec Workflow State");
+    });
+  });
+
+  // =========================================================================
   // Task 2.3: Spec Content Injection Tests
   // =========================================================================
 

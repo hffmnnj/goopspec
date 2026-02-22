@@ -56,6 +56,15 @@ export function buildWorkflowStateBlock(ctx: PluginContext): string {
       `- Acceptance: ${acceptanceConfirmed ? "Confirmed" : "Pending"}`
     );
 
+    // Autopilot directive — injected only when flag is truthy
+    const autopilot = workflow?.autopilot;
+    if (autopilot) {
+      lines.push("");
+      lines.push(
+        "AUTOPILOT ACTIVE: Do not pause between phases. Continue to the next phase immediately."
+      );
+    }
+
     lines.push("");
 
     // Closing directive paragraph
