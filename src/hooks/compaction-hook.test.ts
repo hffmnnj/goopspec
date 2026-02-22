@@ -262,6 +262,90 @@ describe("compaction hook", () => {
       // They should be different
       expect(planJoined).not.toEqual(execJoined);
     });
+
+    it("always includes question tool enforcement directive", () => {
+      const block = buildWorkflowStateBlock(ctx);
+      expect(block).toContain("QUESTION TOOL REQUIRED");
+      expect(block).toContain("question tool");
+      expect(block).toContain("question() call");
+    });
+
+    it("includes question tool directive regardless of phase", () => {
+      const planCtx = createMockPluginContext({
+        testDir,
+        state: {
+          workflow: {
+            phase: "plan",
+            specLocked: false,
+            currentWave: 0,
+            totalWaves: 0,
+            mode: "standard",
+            depth: "standard",
+            researchOptIn: false,
+            acceptanceConfirmed: false,
+            interviewComplete: false,
+            interviewCompletedAt: null,
+            currentPhase: null,
+            lastActivity: new Date().toISOString(),
+          },
+        },
+      });
+      const executeCtx = createMockPluginContext({
+        testDir,
+        state: {
+          workflow: {
+            phase: "execute",
+            specLocked: true,
+            currentWave: 2,
+            totalWaves: 4,
+            mode: "standard",
+            depth: "standard",
+            researchOptIn: false,
+            acceptanceConfirmed: false,
+            interviewComplete: true,
+            interviewCompletedAt: null,
+            currentPhase: null,
+            lastActivity: new Date().toISOString(),
+          },
+        },
+      });
+      const idleCtx = createMockPluginContext({
+        testDir,
+        state: {
+          workflow: {
+            phase: "idle",
+            specLocked: false,
+            currentWave: 0,
+            totalWaves: 0,
+            mode: "standard",
+            depth: "standard",
+            researchOptIn: false,
+            acceptanceConfirmed: false,
+            interviewComplete: false,
+            interviewCompletedAt: null,
+            currentPhase: null,
+            lastActivity: new Date().toISOString(),
+          },
+        },
+      });
+
+      const planBlock = buildWorkflowStateBlock(planCtx);
+      const executeBlock = buildWorkflowStateBlock(executeCtx);
+      const idleBlock = buildWorkflowStateBlock(idleCtx);
+
+      expect(planBlock).toContain("QUESTION TOOL REQUIRED");
+      expect(executeBlock).toContain("QUESTION TOOL REQUIRED");
+      expect(idleBlock).toContain("QUESTION TOOL REQUIRED");
+    });
+
+    it("question tool directive appears after phase directive", () => {
+      const block = buildWorkflowStateBlock(ctx);
+      const phaseIdx = block.indexOf("You are in the");
+      const questionIdx = block.indexOf("QUESTION TOOL REQUIRED");
+      expect(phaseIdx).toBeGreaterThan(-1);
+      expect(questionIdx).toBeGreaterThan(-1);
+      expect(questionIdx).toBeGreaterThan(phaseIdx);
+    });
   });
 
   // =========================================================================

@@ -99,6 +99,12 @@ export function buildWorkflowStateBlock(ctx: PluginContext): string {
     const phaseDirective = buildPhaseDirective(phase, currentWave, specLocked);
     lines.push(phaseDirective);
 
+    // Question tool enforcement — always injected regardless of phase or autopilot
+    lines.push("");
+    lines.push(
+      "QUESTION TOOL REQUIRED: Every user-facing question, offer, or yes/no prompt MUST use the question tool. Never present plain-text questions to the user without a corresponding question() call."
+    );
+
     return lines.join("\n");
   } catch (error) {
     logError("Failed to build workflow state block", error);
