@@ -53,4 +53,41 @@ describe("goop_state tool", () => {
     expect(existsSync(sessionStatePath)).toBe(true);
     expect(existsSync(rootStatePath)).toBe(false);
   });
+
+  describe("set-autopilot action", () => {
+    it("enables autopilot when autopilot is true", async () => {
+      const tool = createGoopStateTool(ctx);
+      const result = await tool.execute(
+        { action: "set-autopilot", autopilot: true },
+        createMockToolContext()
+      );
+
+      expect(result).toContain("Autopilot enabled");
+      const state = ctx.stateManager.getState();
+      expect(state.workflow.autopilot).toBe(true);
+    });
+
+    it("disables autopilot when autopilot is false", async () => {
+      const tool = createGoopStateTool(ctx);
+      const result = await tool.execute(
+        { action: "set-autopilot", autopilot: false },
+        createMockToolContext()
+      );
+
+      expect(result).toContain("Autopilot disabled");
+      const state = ctx.stateManager.getState();
+      expect(state.workflow.autopilot).toBe(false);
+    });
+
+    it("returns error when autopilot param is missing", async () => {
+      const tool = createGoopStateTool(ctx);
+      const result = await tool.execute(
+        { action: "set-autopilot" },
+        createMockToolContext()
+      );
+
+      expect(result).toContain("Error");
+      expect(result).toContain("autopilot");
+    });
+  });
 });
