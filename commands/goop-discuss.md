@@ -81,9 +81,11 @@ Use the `question` tool with category-specific options for each discovery questi
 - [ ] Inferred branch name CONFIRMED before creation (or created silently in Lazy Autopilot mode)
 - [ ] Research depth selected (Light/Standard/Deep) before interview begins
 - [ ] Depth persisted via `goop_state({ action: "set-depth", depth: "[shallow|standard|deep]" })`
-- [ ] Autopilot opt-in offered after depth selection, before the vision question
+- [ ] Autopilot opt-in offered after depth selection, before the vision question; three options presented: Manual, Autopilot, and Lazy Autopilot
 - [ ] Autopilot choice persisted via `goop_state({ action: "set-autopilot", autopilot: true|false })`
 - [ ] In Lazy Autopilot mode: branch created silently with inferred name (no confirmation prompt)
+- [ ] Lazy Autopilot option offered; if selected, all six questions skipped and REQUIREMENTS.md generated directly from initial prompt
+- [ ] When Lazy Autopilot selected, state persisted with autopilot: true AND lazyAutopilot: true
 - [ ] Creative agent opt-in offered after vision question (accepted or declined)
 - [ ] All six questions answered with specifics
 - [ ] At least 1 must-have, 1 out-of-scope, 1 risk defined
@@ -94,6 +96,8 @@ Use the `question` tool with category-specific options for each discovery questi
 ## Anti-Patterns
 
 **DON'T:** Accept vague answers, skip risks, rush, auto-trigger creative agent
+**DON'T:** Ask any questions when Lazy Autopilot mode is active
+**DON'T:** Pause for confirmations, branch name confirmation, or creative opt-in in Lazy Autopilot mode
 **DO:** Probe for specifics, challenge "no risks", conduct interview yourself, offer creative input as opt-in choice
 
 ---

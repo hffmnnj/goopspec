@@ -178,36 +178,53 @@ Research depth selected: [Light|Standard|Deep] ([shallow|standard|deep], [~1x|~2
 
 ### 1.10 Autopilot Opt-In
 
-After depth selection, offer the user autopilot mode. This determines whether the full pipeline (discuss → plan → execute) runs unattended or pauses for confirmation between phases.
+After depth selection, offer the user autopilot mode.
 
 Use `question` tool:
 - header: "Autopilot Mode"
-- question: "Would you like to enable autopilot? This will run the full pipeline (discuss → plan → execute) unattended at **[Light|Standard|Deep]** depth (~[1x|2x|3-5x] baseline cost). The workflow will only pause at final acceptance for your review."
+- question: "How much should I drive? Running at **[Light|Standard|Deep]** depth (~[1x|2x|3-5x] baseline cost)."
 - options:
-  - "Enable autopilot — run full pipeline unattended" — Discuss, plan, and execute will chain automatically without stopping. Pauses only at final acceptance.
-  - "Manual mode — confirm between phases (default)" — You'll review and approve at each phase transition.
-
-**Substitute the depth label and cost multiplier** from the selection made in section 1.9.
-
-**On "Enable autopilot":**
-```
-goop_state({ action: "set-autopilot", autopilot: true })
-```
-
-Confirm to the user:
-```
-✓ Autopilot enabled. The full pipeline will run unattended at [depth] depth. You'll only be asked to review at final acceptance.
-```
+  - "Manual mode — confirm between phases (default)" — Review and approve at each phase transition.
+  - "Autopilot — run pipeline unattended" — Discuss, plan, and execute chain runs automatically. Pauses only at final acceptance.
+  - "Lazy Autopilot — infer everything, zero questions" — No clarifying questions. Agent reads your initial prompt and infers all decisions. Full pipeline runs unattended. Pauses only at final acceptance.
 
 **On "Manual mode":**
 ```
 goop_state({ action: "set-autopilot", autopilot: false })
 ```
+Confirm to the user: "✓ Manual mode. You'll confirm at each phase transition."
 
-Confirm to the user:
+**On "Autopilot":**
 ```
-✓ Manual mode. You'll confirm at each phase transition.
+goop_state({ action: "set-autopilot", autopilot: true })
 ```
+Confirm to the user: "✓ Autopilot enabled. The full pipeline will run unattended at [depth] depth. You'll only be asked to review at final acceptance."
+
+**On "Lazy Autopilot":**
+```
+goop_state({ action: "set-autopilot", autopilot: true, lazy: true })
+```
+Confirm to the user: "✓ Lazy Autopilot enabled. I'll infer everything from your prompt — no questions asked. Full pipeline runs unattended. Pauses only at final acceptance."
+
+### 1.11 Lazy Autopilot Interview Behavior
+
+When `workflow.lazyAutopilot === true`, skip the entire six-question discovery interview. Instead:
+
+1. **Read the initial prompt** — extract all context from what the user has provided.
+2. **Infer all six discovery categories** directly from the prompt:
+   - **Vision:** what the user wants to build and why
+   - **Must-haves:** derive from stated goals, tasks, and implied requirements
+   - **Constraints:** infer from tech context, existing codebase, and stack references
+   - **Out of scope:** note obvious exclusions or deferred work mentioned
+   - **Assumptions:** what must be true for this work to succeed
+   - **Risks:** obvious risks given the stated scope
+3. **Do NOT use the `question` tool** at any point during the interview.
+4. **Skip** the creative agent opt-in (section 2.1).
+5. **Branch creation:** Infer a `feat/kebab-case` name from the prompt topic. Create it silently with `git checkout -b` — no confirmation question.
+6. **Generate REQUIREMENTS.md directly** from the inferred answers using the same template as the standard interview.
+7. **Proceed to `/goop-plan` immediately** — no confirmation gate between phases.
+
+The compaction hook automatically injects the LAZY AUTOPILOT ACTIVE directive when this state flag is set, ensuring all subagents also avoid asking questions or pausing.
 
 ---
 
