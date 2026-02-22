@@ -44,8 +44,8 @@ describe("createMemoryNoteTool", () => {
       const toolCtx = createMockToolContext({ sessionID: "test-session" });
 
       const result = await tool.execute({ note: "Test note" }, toolCtx);
-      expect(result).toContain("Error");
-      expect(result).toContain("not initialized");
+      expect(result).toContain("Memory system is not configured");
+      expect(result).toContain("Note not persisted");
     });
 
     it("saves a simple note", async () => {

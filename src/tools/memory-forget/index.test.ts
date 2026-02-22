@@ -45,8 +45,8 @@ describe("createMemoryForgetTool", () => {
       const toolCtx = createMockToolContext();
 
       const result = await tool.execute({ id: 1 }, toolCtx);
-      expect(result).toContain("Error");
-      expect(result).toContain("not initialized");
+      expect(result).toContain("Memory system is not configured");
+      expect(result).toContain("Nothing to forget");
     });
 
     it("requires either id or query", async () => {

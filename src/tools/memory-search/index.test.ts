@@ -94,8 +94,8 @@ describe("memory_search tool", () => {
         query: "test",
       }, toolContext);
 
-      expect(result).toContain("Error");
-      expect(result).toContain("Memory system is not initialized");
+      expect(result).toContain("Memory system is not configured");
+      expect(result).toContain("No memories found");
     });
   });
 
