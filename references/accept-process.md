@@ -84,7 +84,7 @@ question({
   header: "Acceptance Gate",
   question: "Verification passed. How would you like to proceed?",
   options: [
-    { label: "Accept", description: "Finalize and archive milestone" },
+    { label: "Accept (Recommended)", description: "Finalize and archive milestone" },
     { label: "Report Issues", description: "Document problems found" },
     { label: "Return to Execution", description: "Fix issues first" }
   ]
@@ -247,7 +247,7 @@ question({
   header: "Acceptance Gate",
   question: "Verification passed. How would you like to proceed?",
   options: [
-    { label: "Accept", description: "Finalize and archive milestone" },
+    { label: "Accept (Recommended)", description: "Finalize and archive milestone" },
     { label: "Report Issues", description: "Document problems found" },
     { label: "Accept with Issues", description: "Record known issues, then finalize" },
     { label: "Return to Execution", description: "Go back and fix issues" }
@@ -429,7 +429,7 @@ question({
   header: "Finalize with Issues",
   question: "Confirm acceptance with the known issues above?",
   options: [
-    { label: "Finalize", description: "Archive milestone with documented issues" },
+    { label: "Finalize (Recommended)", description: "Archive milestone with documented issues" },
     { label: "Cancel", description: "Return to fix issues first" }
   ]
 })

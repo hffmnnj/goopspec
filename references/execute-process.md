@@ -100,7 +100,7 @@ question({
   header: "Wave 1 Complete",
   question: "How would you like to continue?",
   options: [
-    { label: "Continue to Wave 2", description: "Proceed in current session" },
+    { label: "Continue to Wave 2 (Recommended)", description: "Proceed in current session" },
     { label: "Pause and resume later", description: "Save checkpoint, start fresh" }
   ]
 })
@@ -112,7 +112,7 @@ question({
   header: "Architectural Decision",
   question: "Database schema change needed. Add index on users.email?",
   options: [
-    { label: "Add index", description: "Better query performance, minor migration" },
+    { label: "Add index (Recommended)", description: "Better query performance, minor migration" },
     { label: "Skip index", description: "Simpler migration, optimize later" }
   ]
 })
@@ -243,7 +243,7 @@ question({
     header: "Architectural Decision",
     question: "[Concise description of the decision needed]",
     options: [
-      { label: "[Option A]", description: "[Impact of option A]" },
+      { label: "[Option A] (Recommended)", description: "[Impact of option A]" },
       { label: "[Option B]", description: "[Impact of option B]" }
     ],
     multiple: false
@@ -321,7 +321,7 @@ question({
     header: "Wave [N] Complete",
     question: "How would you like to continue?",
     options: [
-      { label: "Continue to Wave [N+1]", description: "Proceed in the current session" },
+      { label: "Continue to Wave [N+1] (Recommended)", description: "Proceed in the current session" },
       { label: "Pause and resume later", description: "Save checkpoint, start fresh next time" }
     ],
     multiple: false

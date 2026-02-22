@@ -158,7 +158,7 @@ Use `question` tool:
 - question: "How thorough should planning and research be for this work?"
 - options:
   - "Light" — Fastest path with minimal agents and focused coverage (~1x baseline token/cost)
-  - "Standard" — Balanced depth with moderate exploration (~2x baseline token/cost)
+  - "Standard (Recommended)" — Balanced depth with moderate exploration (~2x baseline token/cost)
   - "Deep" — Most thorough with multiple parallel agents and expanded analysis (~3-5x baseline token/cost)
 
 Map the selected label to workflow depth:
@@ -184,7 +184,7 @@ Use `question` tool:
 - header: "Autopilot Mode"
 - question: "How much should I drive? Running at **[Light|Standard|Deep]** depth (~[1x|2x|3-5x] baseline cost)."
 - options:
-  - "Manual mode — confirm between phases (default)" — Review and approve at each phase transition.
+  - "Manual mode — confirm between phases (default) (Recommended)" — Review and approve at each phase transition.
   - "Autopilot — run pipeline unattended" — Discuss, plan, and execute chain runs automatically. Pauses only at final acceptance.
   - "Lazy Autopilot — infer everything, zero questions" — No clarifying questions. Agent reads your initial prompt and infers all decisions. Full pipeline runs unattended. Pauses only at final acceptance.
 
@@ -261,7 +261,7 @@ question({
   header: "Discovery Check",
   question: "Does this capture your requirements?",
   options: [
-    { label: "Approve and proceed", description: "Generate REQUIREMENTS.md" },
+    { label: "Approve and proceed (Recommended)", description: "Generate REQUIREMENTS.md" },
     { label: "Add more requirements", description: "Continue discussion" }
   ]
 })
@@ -274,7 +274,7 @@ question({
   question: "How thorough should planning and research be?",
   options: [
     { label: "Light", description: "Fastest path (~1x baseline)" },
-    { label: "Standard", description: "Balanced depth (~2x baseline)" },
+    { label: "Standard (Recommended)", description: "Balanced depth (~2x baseline)" },
     { label: "Deep", description: "Most thorough (~3-5x baseline)" }
   ]
 })
@@ -321,7 +321,7 @@ question({
   header: "Branch Name",
   question: "Based on what you're building, I'd suggest: `feat/[inferred-slug]`. Create this branch?",
   options: [
-    { label: "Yes, create `feat/[inferred-slug]`", description: "Approve the inferred name" },
+    { label: "Yes, create `feat/[inferred-slug]` (Recommended)", description: "Approve the inferred name" },
     { label: "Use a different name", description: "Type a custom branch name" }
   ]
 })
@@ -444,7 +444,7 @@ question({
   header: "Discovery Check",
   question: "Does this capture your requirements?",
   options: [
-    { value: "proceed", label: "Approve and proceed" },
+    { value: "proceed", label: "Approve and proceed (Recommended)" },
     { value: "add", label: "Add more requirements" },
     { value: "restart", label: "Start over" }
   ]
@@ -640,12 +640,12 @@ question({
   header: "Discovery Check",
   question: "Does this capture your requirements?",
   options: [
-    { value: "proceed", label: "Approve and proceed" },
+    { value: "proceed", label: "Approve and proceed (Recommended)" },
     { value: "add", label: "Add more requirements" }
   ]
 })
 
-User: [Clicks "Approve and proceed"]
+User: [Clicks "Approve and proceed (Recommended)"]
 
 Orchestrator: "Creating REQUIREMENTS.md..."
 ```
@@ -688,7 +688,7 @@ question({
   header: "Discovery Check",
   question: "Does this capture your requirements?",
   options: [
-    { value: "proceed", label: "Approve and proceed" },
+    { value: "proceed", label: "Approve and proceed (Recommended)" },
     { value: "add", label: "Add more requirements" },
     { value: "research", label: "Research unknowns first" }
   ]
