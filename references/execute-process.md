@@ -259,6 +259,32 @@ Resume execution with the selected option.
 
 **At end of each wave:**
 
+### ⚠️ update-wave Calling Convention
+
+**CRITICAL:** `goop_state({ action: "update-wave" })` MUST only be called AFTER a wave's tasks have fully completed and been verified. Calling it before a wave runs triggers premature auto-progression to the accept phase.
+
+**Rule:** `update-wave(N, total)` means "N waves are now complete." Call it only after wave N's tasks are done and verified.
+
+**Correct pattern:**
+```
+# Starting Wave 3 of 5 — DO NOT call update-wave yet
+[Execute all Wave 3 tasks...]
+[Verify Wave 3...]
+# Wave 3 tasks complete — NOW call update-wave
+goop_state({ action: "update-wave", currentWave: 3, totalWaves: 5 })
+goop_checkpoint({ action: "save", id: "wave-3-complete" })
+```
+
+**Anti-pattern (causes premature accept):**
+```
+# About to start Wave 5 of 5 — WRONG, this fires auto-progression immediately
+goop_state({ action: "update-wave", currentWave: 5, totalWaves: 5 })
+# ❌ Auto-progression triggers here → accept phase starts before Wave 5 runs!
+[Wave 5 tasks never execute]
+```
+
+**Why this matters:** The auto-progression hook checks `currentWave >= totalWaves` after every tool call. If you call `update-wave(5, 5)` to "announce" you're starting Wave 5, the hook sees all waves as complete and transitions to the accept phase immediately — before any Wave 5 tasks run.
+
 ### 5.1 Run wave verification
 ```
 Spawn goop-verifier for wave-level checks
@@ -273,10 +299,14 @@ Spawn goop-verifier for wave-level checks
 - Time: [timestamp]
 ```
 
-### 5.3 Save checkpoint
+### 5.3 Record wave completion and save checkpoint
 ```
+# Wave N verified — NOW mark it complete (see update-wave convention above)
+goop_state({ action: "update-wave", currentWave: N, totalWaves: M })
+
 goop_checkpoint({ 
   action: "save",
+  id: "wave-N-complete",
   context: { wave: N, phase: "execute" }
 })
 ```
