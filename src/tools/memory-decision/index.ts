@@ -6,6 +6,7 @@
 
 import { tool, type ToolDefinition } from "@opencode-ai/plugin/tool";
 import type { PluginContext, ToolContext } from "../../core/types.js";
+import { log } from "../../shared/logger.js";
 
 /**
  * Create the memory_decision tool
@@ -37,7 +38,8 @@ export function createMemoryDecisionTool(ctx: PluginContext): ToolDefinition {
       try {
         // Check if memory manager is available
         if (!ctx.memoryManager) {
-          return "Error: Memory system is not initialized. Run goop_setup first.";
+          log("Memory system not initialized, skipping memory-decision");
+          return "Memory system is not configured. Decision not persisted.";
         }
 
         // Calculate importance based on impact

@@ -134,6 +134,21 @@ export interface GoopState {
      * Undefined means the preference has not been set yet.
      */
     gitignoreGoopspec?: boolean;
+
+    /**
+     * When true, the workflow auto-chains discuss → plan → execute without
+     * inter-phase confirmation gates. Pauses only at final acceptance.
+     * Undefined/false means manual mode (confirm between phases).
+     */
+    autopilot?: boolean;
+
+    /**
+     * When true (in combination with autopilot), agent makes all inferences
+     * from the initial prompt without asking ANY clarifying questions.
+     * Only stops for: Rule 4 decisions, missing secrets, destructive ops,
+     * or external blockers. All other stops are suppressed.
+     */
+    lazyAutopilot?: boolean;
     
     /**
      * @deprecated Use `phase` instead. Kept for backward compatibility with existing state files.

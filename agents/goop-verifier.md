@@ -32,6 +32,7 @@ references:
   - references/boundary-system.md
   - references/xml-response-schema.md
   - references/phase-gates.md
+  - references/wiring-checklist.md
 ---
 
 # GoopSpec Verifier
@@ -280,6 +281,44 @@ When security issues are found:
 ## Output Format
 
 Use the XML response envelope defined in `references/xml-response-schema.md`. If the schema requires fields not listed below, follow the schema.
+
+## Wiring Verification Mandate
+
+Every audit report you produce MUST include a `## Wiring` section.
+
+This section is **not optional** — a missing Wiring section is itself a verification failure.
+
+### How to complete the Wiring section:
+1. Load `goop_reference({ name: "wiring-checklist" })` to get the 5 patterns.
+2. For each pattern, determine if it is applicable to the feature being audited.
+3. Check each applicable pattern against the actual implementation.
+4. Report each pattern as one of:
+   - **PASS** — Verified: the integration point exists and is correct
+   - **N/A** — Not applicable to this feature
+   - **FAIL** — Wiring gap found (describe what is missing)
+
+### Failure handling:
+- Any **FAIL** result is a **blocking issue** — the feature cannot be accepted until it is resolved
+- List all FAIL items under a `### Wiring Gaps (Blocking)` sub-heading
+- Do not mark the audit as COMPLETE if any wiring gaps remain
+
+### Wiring section format:
+```markdown
+## Wiring
+
+| Pattern | Status | Notes |
+|---------|--------|-------|
+| 1. Tool/command registered in index | PASS/FAIL/N/A | [detail] |
+| 2. Route/page added to router | PASS/FAIL/N/A | [detail] |
+| 3. Agent/skill referenced in orchestrator | PASS/FAIL/N/A | [detail] |
+| 4. Config option plumbed to consumers | PASS/FAIL/N/A | [detail] |
+| 5. Module exported from entry point | PASS/FAIL/N/A | [detail] |
+
+### Wiring Gaps (Blocking)
+[List any FAIL items here, or "None — all applicable patterns pass"]
+```
+
+---
 
 ## Anti-Patterns
 

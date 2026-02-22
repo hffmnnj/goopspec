@@ -37,6 +37,7 @@ references:
   - references/discovery-interview.md
   - references/phase-gates.md
   - references/tdd.md
+  - references/wiring-checklist.md
   - templates/spec.md
   - templates/blueprint.md
   - templates/requirements.md
@@ -442,6 +443,29 @@ bun test src/auth/
 ## Risk Assessment
 [Risks and mitigations]
 ```
+
+---
+
+## Wiring Task Mandate
+
+Every BLUEPRINT.md you create MUST include at least one dedicated **Wiring Task** per feature.
+
+A wiring task is NOT about building the feature — it is about connecting the built feature to the existing project so it actually works end-to-end.
+
+### What a wiring task must contain:
+- **Which entry points** to update (e.g., `src/index.ts`, plugin config, router)
+- **Which registries** to add the new item to (e.g., tool registry, command registry, agent dispatch table)
+- **Which exports** to add (e.g., re-exporting from package entry point)
+- **Which consumers** need updating (e.g., hooks that read a new config field, orchestrator prompts that reference a new agent)
+- **Verification** that wiring is complete (e.g., `grep` for the new name in registry files, build test, runtime smoke test)
+
+### Wiring task placement:
+- Place the wiring task in the **final wave** (integration wave) of the blueprint
+- It should run AFTER the feature is built, not before
+- Every feature — no matter how small — needs at least one wiring item checked
+
+### Load the wiring checklist:
+Before finalizing any blueprint, load `goop_reference({ name: "wiring-checklist" })` and verify that your blueprint addresses each applicable pattern from the checklist. At minimum, check patterns 1, 3, and 5 for every feature that adds new code.
 
 ---
 

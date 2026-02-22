@@ -4,11 +4,6 @@ description: Fast-track a small task
 phase: quick
 next-step: "After verification, confirm completion with the user"
 next-command: null
-alternatives:
-  - command: /goop-discuss
-    when: "If the task is complex or requires multiple waves"
-  - command: /goop-debug
-    when: "If the task is debugging a specific issue"
 ---
 
 # /goop-quick
@@ -21,14 +16,12 @@ alternatives:
 /goop-quick [task description]
 ```
 
-### STOP-AND-RETURN
+### Load Process
 
 **Execute this tool call NOW before reading anything else:**
 ```
 goop_state({ action: "get" })
 ```
-
-**IF quick qualification is not met:** return **BLOCKED** immediately with: "Task does not qualify for quick mode. Run /goop-discuss instead." Do not process further instructions.
 
 **Then load:** `goop_reference({ name: "quick-process" })`
 
@@ -56,12 +49,12 @@ goop_state({ action: "get" })
 
 ### Quick Criteria
 
-A task qualifies for quick mode if ALL of these are true:
-- [ ] Single file OR tightly coupled files (max 3)
-- [ ] Clear, unambiguous intent
-- [ ] No architectural decisions required
-- [ ] Estimated < 15 minutes of work
-- [ ] No new dependencies needed
+Quick mode works best for tasks that are:
+- Single file OR tightly coupled files (max 3)
+- Clear, unambiguous intent
+- No architectural decisions required
+- Estimated < 15 minutes of work
+- No new dependencies needed
 
 ## Output
 
@@ -73,7 +66,6 @@ A task qualifies for quick mode if ALL of these are true:
 
 ## Success Criteria
 
-- [ ] Quick criteria validated (5 checkboxes)
 - [ ] Intent captured in one sentence
 - [ ] Success criterion defined before execution
 - [ ] Atomic commit created
@@ -82,8 +74,8 @@ A task qualifies for quick mode if ALL of these are true:
 
 ## Anti-Patterns
 
-**DON'T:** Use for multi-wave work, skip verification, force complex tasks into quick mode
-**DO:** Escalate to `/goop-discuss` if scope grows, verify before declaring done, document in ADL
+**DON'T:** Skip verification, skip the ADL log entry
+**DO:** Verify before declaring done, document in ADL, keep changes focused
 
 ---
 

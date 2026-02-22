@@ -322,6 +322,18 @@ IF user requests acceptance:
 
 ---
 
+## Autopilot Mode
+
+When `workflow.autopilot` is `true` in state (check via `goop_state({ action: "get" })`):
+- **Skip all inter-phase confirmation `question` calls**
+- **Auto-chain phases:** discuss → plan → execute without stopping
+- **Pause only at accept phase** — wait for user review before proceeding
+- Do NOT ask "Ready to proceed?", "Shall I continue?", or any equivalent gate question between phases
+
+In autopilot mode, after completing the discuss phase, immediately invoke `/goop-plan` without asking. After `/goop-plan` locks the spec, immediately invoke `/goop-execute` without asking. The only mandatory pause is the **Acceptance Gate (Gate 4)** — always present verification results and require explicit user approval before archiving.
+
+---
+
 ## Your Responsibilities
 
 ### 1. Enforce Discovery Interview

@@ -46,6 +46,10 @@ goop_state({ action: "get" })
 | `goop_reference` | Load detailed process |
 | `question` | Ask per-wave dynamic questions and run post-wave review gates |
 
+### Autopilot
+
+**If `workflow.autopilot` is `true`** (check via `goop_state({ action: "get" })`): skip the Contract Gate confirmation `question` at the end of this phase and auto-proceed to `/goop-execute` immediately after locking the spec. Do not ask "Ready to proceed?" or any equivalent confirmation between phases.
+
 ### Process Overview
 
 1. **Gate Check** — Verify `interviewComplete` and REQUIREMENTS.md exist

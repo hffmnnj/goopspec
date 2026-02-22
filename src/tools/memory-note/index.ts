@@ -6,6 +6,7 @@
 
 import { tool, type ToolDefinition } from "@opencode-ai/plugin/tool";
 import type { PluginContext, ToolContext } from "../../core/types.js";
+import { log } from "../../shared/logger.js";
 
 /**
  * Create the memory_note tool
@@ -26,7 +27,8 @@ export function createMemoryNoteTool(ctx: PluginContext): ToolDefinition {
       try {
         // Check if memory manager is available
         if (!ctx.memoryManager) {
-          return "Error: Memory system is not initialized. Run goop_setup first.";
+          log("Memory system not initialized, skipping memory-note");
+          return "Memory system is not configured. Note not persisted.";
         }
 
         // Use first 100 chars as title, full text as content

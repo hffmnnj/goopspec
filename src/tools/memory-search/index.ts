@@ -7,6 +7,7 @@
 import { tool, type ToolDefinition } from "@opencode-ai/plugin/tool";
 import type { PluginContext, ToolContext } from "../../core/types.js";
 import type { MemoryType, SearchResult } from "../../features/memory/types.js";
+import { log } from "../../shared/logger.js";
 
 /**
  * Format a search result for display
@@ -77,7 +78,8 @@ export function createMemorySearchTool(ctx: PluginContext): ToolDefinition {
       try {
         // Check if memory manager is available
         if (!ctx.memoryManager) {
-          return "Error: Memory system is not initialized. Run goop_setup first.";
+          log("Memory system not initialized, skipping memory-search");
+          return "Memory system is not configured. No memories found.";
         }
 
         // Validate and cap limit

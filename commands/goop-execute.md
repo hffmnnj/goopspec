@@ -43,6 +43,10 @@ goop_state({ action: "get" })
 | `goop_adl` | Log deviations during execution |
 | `goop_reference` | Load detailed process |
 
+### Autopilot
+
+**If `workflow.autopilot` is `true`** (check via `goop_state({ action: "get" })`): skip the wave-completion continuation `question` calls between waves and auto-proceed through all waves without stopping. Do not ask "How would you like to continue?" or any equivalent inter-phase confirmation. The workflow pauses only at the accept phase for user review.
+
 ### Process Overview
 
 1. **Gate Check** — Verify `specLocked` and BLUEPRINT.md exist

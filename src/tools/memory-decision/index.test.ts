@@ -48,8 +48,8 @@ describe("createMemoryDecisionTool", () => {
         reasoning: "Better ecosystem",
       }, toolCtx);
       
-      expect(result).toContain("Error");
-      expect(result).toContain("not initialized");
+      expect(result).toContain("Memory system is not configured");
+      expect(result).toContain("Decision not persisted");
     });
 
     it("records a basic decision", async () => {

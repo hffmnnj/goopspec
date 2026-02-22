@@ -17,7 +17,7 @@ goop_state({ action: "get" })        # NEVER read state.json directly
 
 ### 1.2 Git branch check (Session Start)
 
-Check current branch and offer to create a new one for this work:
+Check current branch:
 
 ```bash
 git branch --show-current
@@ -26,28 +26,17 @@ git status
 
 Use `question` tool:
 - header: "Git Branch"
-- question: "You're on branch `[current-branch]`. How would you like to proceed?"
+- question: "You're on branch `[current-branch]`. Would you like to create a new branch for this work?"
 - options:
-  - "Create new feature branch (Recommended)" — Create a clean branch for this work
-  - "Stay on current branch" — Continue on [current-branch]
+  - "Yes, create a branch" — A new branch will be created after you describe your vision
+  - "No, stay on current branch" — Continue on [current-branch]
 
-**On "Create new feature branch":**
+**On "Yes, create a branch":**
+Record the intent. Do NOT ask for a branch name. Do NOT run `git checkout` yet.
+Branch creation is deferred until after the vision question — see section 2.1.1.
 
-Ask for branch name context (or infer from topic):
-```
-Branch name will be: feat/[short-description]
-```
-
-Then create branch:
-```bash
-git checkout -b feat/[short-description]
-```
-
-**Branch naming rules:**
-- Format: `type/short-description`
-- Types: `feat/`, `fix/`, `refactor/`, `chore/`
-- Keep descriptions short and kebab-case
-- Check existing branches first: `git branch --list`
+**On "No, stay on current branch":**
+Continue the flow normally.
 
 ### 1.3 Gitignore preference for `.goopspec/`
 
@@ -59,7 +48,27 @@ goop_state({ action: "get" })
 
 Inspect `workflow.gitignoreGoopspec`:
 - If `true` or `false`: preference already captured, skip this prompt entirely.
-- If `undefined`/`null`: ask once during discuss setup.
+- If `undefined`/`null`: proceed to the file check below.
+
+**Smart detection — check `.gitignore` before asking:**
+
+Run the following bash check:
+
+```bash
+if [ -f .gitignore ] && grep -qE '^\.goopspec/?$' .gitignore; then
+  echo "found"
+else
+  echo "not_found"
+fi
+```
+
+- If **`found`**: `.goopspec/` is already in `.gitignore`. Skip the question entirely. Silently persist the preference:
+  ```
+  goop_state({ action: "set-gitignore", gitignoreGoopspec: true })
+  ```
+  Then continue to section 1.4 — do not show the question below.
+
+- If **`not_found`** (`.gitignore` doesn't exist, or exists but doesn't contain `.goopspec/`): Ask the question as normal (existing behavior below).
 
 Use `question` tool:
 - header: "Gitignore Preference"
@@ -167,6 +176,58 @@ Confirm selection to the user before moving on:
 Research depth selected: [Light|Standard|Deep] ([shallow|standard|deep], [~1x|~2x|~3-5x] baseline)
 ```
 
+### 1.10 Autopilot Opt-In
+
+After depth selection, offer the user autopilot mode.
+
+Use `question` tool:
+- header: "Autopilot Mode"
+- question: "How much should I drive? Running at **[Light|Standard|Deep]** depth (~[1x|2x|3-5x] baseline cost)."
+- options:
+  - "Manual mode — confirm between phases (default)" — Review and approve at each phase transition.
+  - "Autopilot — run pipeline unattended" — Discuss, plan, and execute chain runs automatically. Pauses only at final acceptance.
+  - "Lazy Autopilot — infer everything, zero questions" — No clarifying questions. Agent reads your initial prompt and infers all decisions. Full pipeline runs unattended. Pauses only at final acceptance.
+
+**On "Manual mode":**
+```
+goop_state({ action: "set-autopilot", autopilot: false })
+```
+Confirm to the user: "✓ Manual mode. You'll confirm at each phase transition."
+
+**On "Autopilot":**
+```
+goop_state({ action: "set-autopilot", autopilot: true })
+```
+Confirm to the user: "✓ Autopilot enabled. The full pipeline will run unattended at [depth] depth. You'll only be asked to review at final acceptance."
+
+**On "Lazy Autopilot":**
+```
+goop_state({ action: "set-autopilot", autopilot: true, lazy: true })
+```
+Confirm to the user: "✓ Lazy Autopilot enabled. I'll infer everything from your prompt — no questions asked. Full pipeline runs unattended. Pauses only at final acceptance."
+
+### 1.11 Lazy Autopilot Interview Behavior
+
+When `workflow.lazyAutopilot === true`, skip the entire six-question discovery interview. Instead:
+
+1. **Read the initial prompt** — extract all context from what the user has provided.
+2. **Infer all six discovery categories** directly from the prompt:
+   - **Vision:** what the user wants to build and why
+   - **Must-haves:** derive from stated goals, tasks, and implied requirements
+   - **Constraints:** infer from tech context, existing codebase, and stack references
+   - **Out of scope:** note obvious exclusions or deferred work mentioned
+   - **Assumptions:** what must be true for this work to succeed
+   - **Risks:** obvious risks given the stated scope
+3. **Do NOT use the `question` tool** at any point during the interview.
+4. **Skip** the creative agent opt-in (section 2.1).
+5. **Branch creation:** Infer a `feat/kebab-case` name from the prompt topic. Create it silently with `git checkout -b` — no confirmation question.
+6. **Generate REQUIREMENTS.md directly** from the inferred answers using the same template as the standard interview.
+7. **Proceed to `/goop-plan` immediately** — no confirmation gate between phases.
+
+The compaction hook automatically injects the LAZY AUTOPILOT ACTIVE directive when this state flag is set, ensuring all subagents also avoid asking questions or pausing.
+
+---
+
 ### Depth Tier Behavior Reference
 
 Use this table as the authoritative behavior contract across discuss, plan, and research phases.
@@ -240,6 +301,44 @@ If `$ARGUMENTS` provided:
 
 Otherwise:
 > "What do you want to build?"
+
+### 2.1.1 Branch Name Inference (if branch creation requested)
+
+**Only execute this section if the user selected "Yes, create a branch" in section 1.2.**
+
+After the user has described their vision (section 2.1), infer a branch name from what they described:
+
+1. **Infer a branch name** from the vision content:
+   - Construct a short `type/kebab-case` slug from the topic or goal
+   - Default type prefix: `feat/` unless the work is clearly a fix, refactor, or chore
+   - Keep slugs short: 3–5 words max, kebab-case
+   - Examples: `feat/lazy-autopilot-wiring`, `fix/branch-name-timing`, `refactor/discuss-flow`
+
+2. **Confirm with the user** using the `question` tool:
+
+```ts
+question({
+  header: "Branch Name",
+  question: "Based on what you're building, I'd suggest: `feat/[inferred-slug]`. Create this branch?",
+  options: [
+    { label: "Yes, create `feat/[inferred-slug]`", description: "Approve the inferred name" },
+    { label: "Use a different name", description: "Type a custom branch name" }
+  ]
+})
+```
+
+3. **On approval:** Run `git checkout -b feat/[inferred-slug]`
+4. **On "Use a different name":** Accept the user's input, then run `git checkout -b [custom-name]`
+
+**In Lazy Autopilot mode:** Skip the confirmation question entirely — infer the name from the vision and create the branch silently.
+
+**Branch naming rules:**
+- Format: `type/short-description`
+- Types: `feat/`, `fix/`, `refactor/`, `chore/`
+- Keep descriptions short and kebab-case
+- Check existing branches first: `git branch --list`
+
+---
 
 ### 2.2 Work through the six questions
 
@@ -424,6 +523,8 @@ memory_save({
 **Create the blueprint** — Transform requirements into an execution plan
 
 → `/goop-plan`
+
+> **Autopilot:** If `workflow.autopilot === true`, skip the confirmation question above and immediately invoke `/goop-plan` without stopping. Do not ask "Ready to proceed?" or any equivalent gate question.
 
 ---
 

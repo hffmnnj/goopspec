@@ -727,6 +727,7 @@ This file tracks architectural decisions, deviations, and observations made duri
         totalWaves: 0,
         lastActivity: now,
         status: "idle",
+        autopilot: undefined,
       },
       execution: {
         ...current.execution,

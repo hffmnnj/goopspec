@@ -6,6 +6,7 @@
 
 import { tool, type ToolDefinition } from "@opencode-ai/plugin/tool";
 import type { PluginContext, ToolContext } from "../../core/types.js";
+import { log } from "../../shared/logger.js";
 
 /**
  * Create the memory_forget tool
@@ -31,7 +32,8 @@ export function createMemoryForgetTool(ctx: PluginContext): ToolDefinition {
       try {
         // Check if memory manager is available
         if (!ctx.memoryManager) {
-          return "Error: Memory system is not initialized. Run goop_setup first.";
+          log("Memory system not initialized, skipping memory-forget");
+          return "Memory system is not configured. Nothing to forget.";
         }
 
         // Must provide either id or query

@@ -13,34 +13,19 @@ goop_status()
 goop_state({ action: "get" })        # NEVER read state.json directly
 ```
 
-### 1.2 Validate quick criteria
+### 1.2 Note quick criteria
 
-The task MUST pass ALL five criteria:
+Quick mode works best for tasks that are:
 
-| Criterion | Check | Pass? |
-|-----------|-------|-------|
-| **Scope** | Single file OR max 3 tightly coupled files | [ ] |
-| **Clarity** | Intent is clear and unambiguous | [ ] |
-| **Complexity** | No architectural decisions required | [ ] |
-| **Effort** | Estimated < 15 minutes of work | [ ] |
-| **Dependencies** | No new packages/dependencies needed | [ ] |
+| Criterion | Guidance |
+|-----------|----------|
+| **Scope** | Single file OR max 3 tightly coupled files |
+| **Clarity** | Intent is clear and unambiguous |
+| **Complexity** | No architectural decisions required |
+| **Effort** | Estimated < 15 minutes of work |
+| **Dependencies** | No new packages/dependencies needed |
 
-**If ANY criterion fails:**
-
-```
-## 🔮 GoopSpec · Quick Mode Denied
-
-✗ Task does not qualify for quick mode.
-
-**Failed criteria:**
-- [List failed criteria]
-
-**Recommendation:** This task needs proper planning.
-
-→ Run: `/goop-discuss [task]`
-
----
-```
+These are informational guidelines. Proceed with the task — the user has chosen quick mode.
 
 ### 1.3 Search for prior context
 
@@ -181,9 +166,7 @@ Check that the defined success criterion is met.
 **Expected:** [success criterion]
 **Actual:** [what happened]
 
-Options:
-1. Retry with adjusted approach
-2. Escalate to full workflow
+Retrying with adjusted approach...
 
 ---
 ```
@@ -211,7 +194,7 @@ Type **'accept'** to confirm, or describe any issues.
 | Response | Action |
 |----------|--------|
 | "accept" / "done" / "looks good" | Mark complete, thank user |
-| Describes issue | Assess if fixable in quick mode, or escalate |
+| Describes issue | Assess and address the issue |
 | Silence (continues other work) | Consider task accepted |
 
 ### 4.4 Final confirmation
@@ -224,36 +207,6 @@ Type **'accept'** to confirm, or describe any issues.
 **Summary:**
 - [One line summary]
 - Commit: [sha]
-
----
-```
-
----
-
-## Escalation Rules
-
-**Immediately escalate to `/goop-discuss` if:**
-
-| Situation | Why |
-|-----------|-----|
-| Fix requires touching 4+ files | Scope too large for quick mode |
-| Architectural decision needed | Requires deliberation |
-| New dependency required | Has ripple effects |
-| Fix doesn't work after 2 attempts | Deeper issue exists |
-| User requests change in scope | Needs proper planning |
-
-**Escalation message:**
-
-```
-## 🔮 GoopSpec · Escalating
-
-This task has grown beyond quick mode scope.
-
-**Reason:** [Why escalating]
-
-**Recommendation:** Start a proper discovery interview.
-
-→ Run: `/goop-discuss [task description]`
 
 ---
 ```
@@ -314,28 +267,6 @@ User: accept
 ## 🔮 GoopSpec · Accepted
 
 ✓ Quick fix confirmed.
-```
-
-### Escalation Example
-
-```
-User: /goop-quick Add user authentication
-
-Orchestrator:
-## 🔮 GoopSpec · Quick Mode Denied
-
-✗ Task does not qualify for quick mode.
-
-**Failed criteria:**
-- Scope: Auth affects many files (routes, middleware, UI)
-- Complexity: Requires architectural decisions (JWT vs sessions)
-- Dependencies: Likely needs new packages
-
-**Recommendation:** This task needs proper planning.
-
-→ Run: `/goop-discuss Add user authentication`
-
----
 ```
 
 ---

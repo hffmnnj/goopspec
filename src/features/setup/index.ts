@@ -36,6 +36,39 @@ import { installSqliteVec, installLocalEmbeddings } from "./installer.js";
 import { getDefaultFeatures, isFeatureAvailable } from "./feature-catalog.js";
 import { createDistillationConfig, getDistillationModel } from "./distillation-config.js";
 
+/**
+ * Deep merge two plain objects. Values in `updates` win.
+ * Nested plain objects are merged recursively.
+ * Arrays in `updates` replace arrays in `base` (no append).
+ * No prototype traversal.
+ */
+function deepMerge(
+  base: Record<string, unknown>,
+  updates: Record<string, unknown>
+): Record<string, unknown> {
+  const result: Record<string, unknown> = { ...base };
+  for (const key of Object.keys(updates)) {
+    const baseVal = base[key];
+    const updateVal = updates[key];
+    if (
+      updateVal !== null &&
+      typeof updateVal === "object" &&
+      !Array.isArray(updateVal) &&
+      baseVal !== null &&
+      typeof baseVal === "object" &&
+      !Array.isArray(baseVal)
+    ) {
+      result[key] = deepMerge(
+        baseVal as Record<string, unknown>,
+        updateVal as Record<string, unknown>
+      );
+    } else {
+      result[key] = updateVal;
+    }
+  }
+  return result;
+}
+
 // ============================================================================
 // Environment Detection
 // ============================================================================
@@ -373,7 +406,18 @@ export async function applySetup(plan: SetupPlan): Promise<SetupResult> {
           mkdirSync(dir, { recursive: true });
         }
         
-        writeFileSync(configWrite.path, JSON.stringify(configWrite.content, null, 2));
+        // Read existing config and deep-merge if file exists
+        let contentToWrite = configWrite.content as Record<string, unknown>;
+        if (existsSync(configWrite.path)) {
+          try {
+            const existing = JSON.parse(readFileSync(configWrite.path, "utf-8")) as Record<string, unknown>;
+            contentToWrite = deepMerge(existing, contentToWrite);
+          } catch {
+            // If we can't read/parse existing config, write the new content as-is
+            log(`Could not read existing config at ${configWrite.path}, writing fresh`);
+          }
+        }
+        writeFileSync(configWrite.path, JSON.stringify(contentToWrite, null, 2));
         result.configsWritten.push(configWrite.path);
         log(`Wrote config: ${configWrite.path}`);
       } catch (error) {

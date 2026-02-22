@@ -66,8 +66,8 @@ describe("memory_save tool", () => {
         content: "Test content",
       }, toolContext);
 
-      expect(result).toContain("Error");
-      expect(result).toContain("Memory system is not initialized");
+      expect(result).toContain("Memory system is not configured");
+      expect(result).toContain("Note not persisted");
     });
   });
 

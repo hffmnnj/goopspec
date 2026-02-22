@@ -7,6 +7,7 @@
 import { tool, type ToolDefinition } from "@opencode-ai/plugin/tool";
 import type { PluginContext, ToolContext } from "../../core/types.js";
 import type { MemoryType } from "../../features/memory/types.js";
+import { log } from "../../shared/logger.js";
 
 function normalizeImportance(value: number | undefined): number {
   if (value === undefined) {
@@ -69,7 +70,8 @@ export function createMemorySaveTool(ctx: PluginContext): ToolDefinition {
 
         // Check if memory manager is available
         if (!ctx.memoryManager) {
-          return "Error: Memory system is not initialized. Run goop_setup first.";
+          log("Memory system not initialized, skipping memory-save");
+          return "Memory system is not configured. Note not persisted.";
         }
 
         const memory = await ctx.memoryManager.save({
