@@ -196,7 +196,15 @@ export function buildADLBlock(ctx: PluginContext): string {
 
 /** Static tool re-hydration instructions — always injected last. */
 export function buildToolInstructionsBlock(): string {
-  return "";
+  return `## GoopSpec Re-hydration Required
+
+Your session was compacted. Run these tools NOW, in this order, before taking any action:
+
+1. \`goop_status\` — Restore live workflow phase and next-step guidance
+2. \`goop_spec({ "action": "read", "file": "spec" })\` — Load the full active specification contract
+3. \`goop_adl({ "action": "read" })\` — Load all architectural decisions
+
+Do NOT proceed with any planning, coding, or decision-making until you have run all three tools above.`;
 }
 
 /**
