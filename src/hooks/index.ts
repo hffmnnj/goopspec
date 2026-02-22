@@ -6,6 +6,7 @@
 import type { Hooks } from "@opencode-ai/plugin";
 import type { PluginContext } from "../core/types.js";
 import { createChatMessageHook } from "./chat-message.js";
+import { createCompactionHook } from "./compaction-hook.js";
 import { createToolLifecycleHooks } from "./tool-lifecycle.js";
 import { createEventHandler } from "./event-handler.js";
 import { createSystemTransformHook } from "./system-transform.js";
@@ -95,6 +96,9 @@ export function createHooks(ctx: PluginContext): Partial<Hooks> {
     hooks["experimental.chat.system.transform"] = createSystemTransformHook(ctx);
   }
 
+  // Add compaction hook for workflow state injection on context window reset
+  hooks["experimental.session.compacting"] = createCompactionHook(ctx);
+
   return hooks;
 }
 
@@ -121,3 +125,4 @@ export {
   createAutoProgressionHook,
   checkProgressionConditions,
 } from "./auto-progression.js";
+export { createCompactionHook } from "./compaction-hook.js";
