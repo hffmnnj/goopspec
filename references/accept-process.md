@@ -399,6 +399,29 @@ Display PR URL to user.
      ⚠️ **CRITICAL:** Never delete originals before verifying copy success. Data loss is unrecoverable.
    - **Retrospective:** generate `.goopspec/archive/<milestone-slug>/RETROSPECTIVE.md`
    - **Memory extraction:** persist milestone learnings (patterns, decisions, gotchas) via memory tools
+
+   - **AGENTS.md Update:** Update the project's AGENTS.md to reflect the completed milestone:
+
+     1. **Load guide:** `goop_reference({ name: "agents-md-guide" })` — This reference defines the section ownership model, validation-gated rules, and auto-update process.
+
+     2. **Read current AGENTS.md** from project root. If no AGENTS.md exists, create a minimal skeleton from the template in `agents-md-guide`.
+
+     3. **Gather milestone context** to identify what changed:
+        - Read `.goopspec/archive/<milestone-slug>/CHRONICLE.md` — tasks completed, commands verified
+        - Read `.goopspec/archive/<milestone-slug>/BLUEPRINT.md` — files modified, patterns used
+        - Read `.goopspec/ADL.md` — architectural decisions made
+        - Run `git log --oneline -20` to see recent commits
+
+     4. **Apply section ownership rules** (from `agents-md-guide`):
+        - **`(Auto)` sections:** Safe to rewrite. Update `## Commands (Auto)`, `## Gotchas (Auto)`, and any other machine-owned sections.
+        - **Human-owned sections** (no sentinel suffix): Read-only. Never modify.
+        - **`(Human + Auto)` sections:** Patch-only. Add/remove bullets; never reflow prose.
+        - **Fallback (no sentinels exist):** Treat all existing sections as human-owned; only append new `(Auto)` sections.
+
+     5. **Apply validation-gated rule** (from `agents-md-guide`): Only write commands/patterns that were verified during this milestone. Never write speculative or assumed content. Prune patterns only when there is clear evidence they no longer apply.
+
+     6. **Write updated AGENTS.md.**
+
    - **Tagging (optional):** create git tag if milestone flow requests it
 
 7. Display completion summary and archival artifacts:
