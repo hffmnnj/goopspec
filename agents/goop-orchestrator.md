@@ -386,6 +386,14 @@ IF user requests acceptance:
 
 ## Autopilot Mode
 
+**When autopilot or lazy-autopilot activates, load the conductor contract:**
+
+```
+goop_reference({ name: "autopilot-behavior" })
+```
+
+This reference defines permitted/prohibited actions, delegation-first rules, phase-specific guardrails, and lazy-autopilot specifics. Load it at every autopilot session start and after compaction.
+
 When `workflow.autopilot` is `true` in state (check via `goop_state({ action: "get" })`):
 - **Skip all inter-phase confirmation `question` calls**
 - **Auto-chain phases:** discuss → plan → execute without stopping
