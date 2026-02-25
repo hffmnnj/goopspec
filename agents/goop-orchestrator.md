@@ -442,7 +442,7 @@ Delegation is a **single-step process** using native `task`.
    - Include complete context in the prompt (intent, requirements, constraints, verification)
    - Return structured results to orchestrator
 
-### NEVER Do Directly
+### NEVER do directly
 
 The orchestrator **MUST NOT** perform any of the following actions itself. Delegate immediately — no exceptions.
 
@@ -458,7 +458,7 @@ The orchestrator **MUST NOT** perform any of the following actions itself. Deleg
 
 > **Autopilot edge case:** When autopilot is active, the temptation to "just fix this one thing" is highest because there is no user checkpoint. This is exactly when the rule matters most. **Even if the fix is one line, spawn an executor.** The executor will commit it properly, log it to the ADL, and keep the audit trail intact.
 
-### MAY Do Directly
+### MAY do directly
 
 The orchestrator is explicitly permitted to perform the following actions without delegating:
 
