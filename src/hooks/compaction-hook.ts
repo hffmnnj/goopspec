@@ -93,6 +93,15 @@ export function buildWorkflowStateBlock(ctx: PluginContext): string {
       );
     }
 
+    // Conductor identity reminder — reinforce orchestrator role during autopilot execution/acceptance
+    if ((autopilot || lazyAutopilot) && (phase === "EXECUTE" || phase === "ACCEPT")) {
+      lines.push("");
+      lines.push(
+        "CONDUCTOR REMINDER: You are the orchestrator. You coordinate and delegate — " +
+        "you NEVER write code directly. All implementation MUST be delegated to executor agents via task()."
+      );
+    }
+
     lines.push("");
 
     // Closing directive paragraph
