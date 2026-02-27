@@ -651,6 +651,14 @@ Then display confirmation:
 → `/goop-execute`
 ```
 
+**Autopilot continuation:** If `workflow.autopilot === true`, immediately call:
+
+```
+mcp_slashcommand({ command: "/goop-execute" })
+```
+
+**DO NOT** write "Proceeding to /goop-execute" in a text message and stop. Announcing intent without calling the tool is a **hard failure** — `/goop-execute` never starts. The transition only happens when `mcp_slashcommand` is actually executed.
+
 Generate/update `HANDOFF.md`:
 
 ```markdown

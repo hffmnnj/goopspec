@@ -470,6 +470,14 @@ Why a new session? Execution sessions accumulate significant context from planni
 ---
 ```
 
+**Autopilot continuation:** If `workflow.autopilot === true`, immediately call:
+
+```
+mcp_slashcommand({ command: "/goop-accept" })
+```
+
+**DO NOT** display "Start a new session, then run `/goop-accept`" and stop in autopilot mode. Announcing intent in text without calling the tool is a **hard failure** — the accept phase never starts. The transition only happens when `mcp_slashcommand` is actually executed. The accept phase will pause for mandatory user review regardless of autopilot state.
+
 ---
 
 ## Examples

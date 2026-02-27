@@ -410,7 +410,8 @@ Display PR URL to user.
         - Read `.goopspec/archive/<milestone-slug>/CHRONICLE.md` — tasks completed, commands verified
         - Read `.goopspec/archive/<milestone-slug>/BLUEPRINT.md` — files modified, patterns used
         - Read `.goopspec/ADL.md` — architectural decisions made
-        - Run `git log --oneline -20` to see recent commits
+         - Run `git log --oneline -20` to see recent commits
+         - Run `git diff <base>...HEAD --stat` to see files changed during this milestone
 
      4. **Apply section ownership rules** (from `agents-md-guide`):
         - **`(Auto)` sections:** Safe to rewrite. Update `## Commands (Auto)`, `## Gotchas (Auto)`, and any other machine-owned sections.

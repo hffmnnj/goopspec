@@ -45,7 +45,15 @@ goop_state({ action: "get" })
 
 ### Autopilot
 
-**If `workflow.autopilot` is `true`** (check via `goop_state({ action: "get" })`): skip the wave-completion continuation `question` calls between waves and auto-proceed through all waves without stopping. Do not ask "How would you like to continue?" or any equivalent inter-phase confirmation. The workflow pauses only at the accept phase for user review.
+**If `workflow.autopilot` is `true`** (check via `goop_state({ action: "get" })`): skip the wave-completion continuation `question` calls between waves and auto-proceed through all waves without stopping. Do not ask "How would you like to continue?" or any equivalent inter-phase confirmation.
+
+When all waves are complete, immediately call:
+
+```
+mcp_slashcommand({ command: "/goop-accept" })
+```
+
+**Hard rule:** Do NOT display "Start a new session, then run `/goop-accept`" and stop. Announcing intent in text without calling the tool is a **hard failure** — `/goop-accept` never runs. The transition only happens when `mcp_slashcommand` is actually executed. The workflow pauses at the accept phase for mandatory user review.
 
 ### Process Overview
 

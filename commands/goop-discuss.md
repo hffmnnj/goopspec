@@ -94,12 +94,23 @@ Use the `question` tool with category-specific options for each discovery questi
 - [ ] State updated via `goop_state({ action: "complete-interview" })`
 - [ ] All question tool calls include (Recommended) on exactly one option
 
+## Autopilot Phase Transition
+
+**If `workflow.autopilot` is `true`** (standard or lazy): after writing REQUIREMENTS.md and calling `goop_state({ action: "complete-interview" })`, the next step is to call:
+
+```
+mcp_slashcommand({ command: "/goop-plan" })
+```
+
+**Hard rule:** Do NOT write a message like *"Autopilot is enabled — proceeding directly to /goop-plan"* and then stop. That is the failure mode. Announcing intent in text without calling the tool means `/goop-plan` never runs. The transition only happens when `mcp_slashcommand` is actually executed.
+
 ## Anti-Patterns
 
 **DON'T:** Accept vague answers, skip risks, rush, auto-trigger creative agent
 **DON'T:** Ask any questions when Lazy Autopilot mode is active
 **DON'T:** Pause for confirmations, branch name confirmation, or creative opt-in in Lazy Autopilot mode
 **DON'T:** Present question options without marking one as (Recommended)
+**DON'T:** Announce phase transitions in text without calling `mcp_slashcommand` — this is a hard failure
 **DO:** Probe for specifics, challenge "no risks", conduct interview yourself, offer creative input as opt-in choice
 
 ---
