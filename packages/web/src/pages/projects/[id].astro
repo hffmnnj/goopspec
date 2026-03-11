@@ -1,0 +1,84 @@
+---
+import AppLayout from "../../layouts/AppLayout.astro";
+import { Breadcrumb } from "../../components/breadcrumb";
+import { WorkItemBoard } from "../../components/work-item-board";
+import { ProjectFilterBar } from "../../components/project-filter-bar";
+import { api, ApiError } from "../../lib/api-client";
+import { parseFiltersFromURL } from "../../hooks/use-filters";
+import type { Project, WorkItem } from "../../lib/api-client";
+
+const { id } = Astro.params;
+
+if (!id) {
+  return Astro.redirect("/");
+}
+
+let project: Project | null = null;
+let items: WorkItem[] = [];
+let error: string | null = null;
+
+const filters = parseFiltersFromURL(Astro.url.searchParams);
+
+try {
+  const [projectRes, itemsRes] = await Promise.all([
+    api.projects.get(id),
+    api.items.list(id, {
+      status: filters.status,
+      priority: filters.priority,
+      tags: filters.tags.length > 0 ? filters.tags.join(",") : undefined,
+      sort: filters.sort,
+    }),
+  ]);
+  project = projectRes.project;
+  items = itemsRes.items;
+} catch (err) {
+  if (err instanceof ApiError && err.status === 404) {
+    return Astro.redirect("/");
+  }
+  error =
+    err instanceof ApiError
+      ? `Failed to load project (${err.status}): ${err.message}`
+      : "Failed to connect to the daemon. Is it running?";
+}
+---
+
+<AppLayout title={project ? `${project.name} — GoopSpec` : "Project — GoopSpec"}>
+  <div class="space-y-6">
+    <Breadcrumb
+      items={[
+        { label: "Dashboard", href: "/" },
+        { label: project?.name ?? "Project" },
+      ]}
+    />
+
+    {error ? (
+      <div class="rounded-lg border border-destructive/50 bg-destructive/10 p-4">
+        <p class="text-sm text-destructive">{error}</p>
+      </div>
+    ) : project ? (
+      <>
+        <div>
+          <h1 class="text-3xl font-bold tracking-tight">{project.name}</h1>
+          {project.description && (
+            <p class="text-muted-foreground mt-1">{project.description}</p>
+          )}
+          <p class="text-xs text-muted-foreground font-mono mt-1">{project.path}</p>
+        </div>
+
+        {/* Filters + Search bar */}
+        <ProjectFilterBar
+          client:load
+          initialFilters={filters}
+        />
+
+        {/* Board */}
+        <WorkItemBoard
+          client:load
+          projectId={id}
+          items={items}
+          searchQuery={filters.query}
+        />
+      </>
+    ) : null}
+  </div>
+</AppLayout>

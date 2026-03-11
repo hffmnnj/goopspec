@@ -1,5 +1,63 @@
 ---
 import AppLayout from "../layouts/AppLayout.astro";
+import { ProjectCard } from "../components/project-card";
+import { ActivityFeed } from "../components/activity-feed";
+import { api, ApiError } from "../lib/api-client";
+import type { Project, WorkflowSession } from "../lib/api-client";
+
+interface ProjectWithCounts extends Project {
+  itemCount: number;
+  activeWorkflowCount: number;
+}
+
+let projects: ProjectWithCounts[] = [];
+let recentSessions: WorkflowSession[] = [];
+let error: string | null = null;
+
+try {
+  const [projectsRes, workflowsRes] = await Promise.all([
+    api.projects.list(),
+    api.workflows.list(),
+  ]);
+
+  const allSessions = workflowsRes.sessions;
+  recentSessions = allSessions
+    .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
+    .slice(0, 10);
+
+  // Enrich projects with counts
+  const itemCountPromises = projectsRes.projects.map(async (project) => {
+    try {
+      const { items } = await api.items.list(project.id);
+      const activeWorkflows = allSessions.filter(
+        (s) => s.projectId === project.id && (s.status === "running" || s.status === "paused"),
+      );
+      return {
+        ...project,
+        itemCount: items.length,
+        activeWorkflowCount: activeWorkflows.length,
+      };
+    } catch {
+      return {
+        ...project,
+        itemCount: 0,
+        activeWorkflowCount: 0,
+      };
+    }
+  });
+
+  projects = await Promise.all(itemCountPromises);
+} catch (err) {
+  error =
+    err instanceof ApiError
+      ? `Failed to load data (${err.status}): ${err.message}`
+      : "Failed to connect to the daemon. Is it running?";
+}
+
+const totalItems = projects.reduce((sum, p) => sum + p.itemCount, 0);
+const activeWorkflows = recentSessions.filter(
+  (s) => s.status === "running" || s.status === "paused",
+).length;
 ---
 
 <AppLayout title="Dashboard — GoopSpec">
@@ -11,19 +69,66 @@ import AppLayout from "../layouts/AppLayout.astro";
       </p>
     </div>
 
-    <div class="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-      <div class="rounded-lg border bg-card p-6 text-card-foreground shadow-sm">
-        <h3 class="text-sm font-medium text-muted-foreground">Projects</h3>
-        <p class="mt-2 text-2xl font-bold">—</p>
+    {error ? (
+      <div class="rounded-lg border border-destructive/50 bg-destructive/10 p-4">
+        <p class="text-sm text-destructive">{error}</p>
       </div>
-      <div class="rounded-lg border bg-card p-6 text-card-foreground shadow-sm">
-        <h3 class="text-sm font-medium text-muted-foreground">Active Workflows</h3>
-        <p class="mt-2 text-2xl font-bold">—</p>
-      </div>
-      <div class="rounded-lg border bg-card p-6 text-card-foreground shadow-sm">
-        <h3 class="text-sm font-medium text-muted-foreground">Work Items</h3>
-        <p class="mt-2 text-2xl font-bold">—</p>
-      </div>
-    </div>
+    ) : (
+      <>
+        {/* Summary cards */}
+        <div class="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+          <div class="rounded-lg border bg-card p-6 text-card-foreground shadow-sm">
+            <h3 class="text-sm font-medium text-muted-foreground">Projects</h3>
+            <p class="mt-2 text-2xl font-bold">{projects.length}</p>
+          </div>
+          <div class="rounded-lg border bg-card p-6 text-card-foreground shadow-sm">
+            <h3 class="text-sm font-medium text-muted-foreground">Active Workflows</h3>
+            <p class="mt-2 text-2xl font-bold">{activeWorkflows}</p>
+          </div>
+          <div class="rounded-lg border bg-card p-6 text-card-foreground shadow-sm">
+            <h3 class="text-sm font-medium text-muted-foreground">Work Items</h3>
+            <p class="mt-2 text-2xl font-bold">{totalItems}</p>
+          </div>
+        </div>
+
+        {projects.length === 0 ? (
+          <div class="rounded-lg border border-dashed p-8 text-center">
+            <h2 class="text-lg font-semibold">No projects yet</h2>
+            <p class="mt-2 text-sm text-muted-foreground max-w-md mx-auto">
+              Register a project using the GoopSpec CLI to get started.
+              Run <code class="rounded bg-muted px-1.5 py-0.5 text-xs font-mono">goopspec register</code> in your project directory.
+            </p>
+          </div>
+        ) : (
+          <div class="grid gap-6 lg:grid-cols-3">
+            {/* Project list */}
+            <div class="lg:col-span-2 space-y-4">
+              <h2 class="text-lg font-semibold">Projects</h2>
+              <div class="grid gap-4 sm:grid-cols-2">
+                {projects.map((project) => (
+                  <ProjectCard
+                    id={project.id}
+                    name={project.name}
+                    description={project.description}
+                    path={project.path}
+                    itemCount={project.itemCount}
+                    activeWorkflowCount={project.activeWorkflowCount}
+                    updatedAt={project.updatedAt}
+                  />
+                ))}
+              </div>
+            </div>
+
+            {/* Activity feed */}
+            <div class="space-y-4">
+              <h2 class="text-lg font-semibold">Recent Activity</h2>
+              <div class="rounded-lg border">
+                <ActivityFeed sessions={recentSessions} className="p-2" />
+              </div>
+            </div>
+          </div>
+        )}
+      </>
+    )}
   </div>
 </AppLayout>
