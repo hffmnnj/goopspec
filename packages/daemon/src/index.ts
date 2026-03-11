@@ -1,5 +1,6 @@
 import type { DaemonConfig } from "@goopspec/core";
 import { getConfig } from "./config.js";
+import { getDatabase } from "./db/index.js";
 import { createServer } from "./server.js";
 
 const VERSION = "0.1.0";
@@ -29,7 +30,8 @@ export function createShutdownHandler(
 }
 
 export function startDaemon(config: DaemonConfig = getConfig()): DaemonRuntime {
-  const app = createServer(config);
+  const db = getDatabase(config.dbPath);
+  const app = createServer({ config, db });
   const server = Bun.serve({
     port: config.port,
     hostname: config.host,

@@ -1,18 +1,30 @@
 import type { DaemonConfig, DaemonHealth } from "@goopspec/core";
-import { describe, expect, it, mock } from "bun:test";
+import { afterEach, beforeEach, describe, expect, it, mock } from "bun:test";
+import type { Database } from "bun:sqlite";
+import { createTestDatabase } from "./db/index.js";
 import { createShutdownHandler, type StoppableServer } from "./index.js";
 import { createServer } from "./server.js";
 
 const testConfig: DaemonConfig = {
   port: 7331,
   host: "127.0.0.1",
-  dbPath: ".goopspec-daemon.test.db",
+  dbPath: ":memory:",
   logLevel: "info",
 };
 
 describe("daemon server", () => {
+  let db: Database;
+
+  beforeEach(() => {
+    db = createTestDatabase();
+  });
+
+  afterEach(() => {
+    db.close();
+  });
+
   it("returns health payload from GET /health", async () => {
-    const app = createServer(testConfig);
+    const app = createServer({ config: testConfig, db });
     const response = await app.request("/health");
 
     expect(response.status).toBe(200);
@@ -28,7 +40,7 @@ describe("daemon server", () => {
   });
 
   it("returns 404 payload for unknown route", async () => {
-    const app = createServer(testConfig);
+    const app = createServer({ config: testConfig, db });
     const response = await app.request("/missing");
 
     expect(response.status).toBe(404);
