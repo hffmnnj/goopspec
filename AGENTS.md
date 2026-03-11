@@ -197,3 +197,15 @@ export function createMyHook(ctx: PluginContext) {
 7. **Explicit types** - Avoid `any`, define interfaces in core/types.ts.
 8. **Minimal comments** - Only document non-obvious logic.
 9. **Atomic commits** - Keep changes focused and small.
+
+## Gotchas (Auto)
+
+<!-- Last verified: 2026-03-11 — git-worktree-multi-session milestone -->
+
+- **Bun `mock.module()` replaces the entire module globally.** When mocking `../../features/worktree/git.js` in a tool test, spread the real module into the mock (`const real = await import(...); mock.module(..., () => ({ ...real, fn: mockFn }))`) — otherwise named exports disappear and other tests in the same run fail with "Export named 'X' not found".
+
+- **State schema v2 required for multi-workflow.** `state.json` must be `"version": 2` with a `workflows` map. v1 files are auto-migrated on first write with a `.backup` copy. The `"default"` workflow key maps to `.goopspec/` root (backward compat); all other workflow IDs get their own subdirectory.
+
+- **Workflow-scoped docs live under `.goopspec/<workflowId>/`.** When writing SPEC.md, BLUEPRINT.md, CHRONICLE.md, ADL.md, HANDOFF.md, REQUIREMENTS.md, RESEARCH.md — always use `getWorkflowDocPath(projectDir, workflowId, filename)` from `src/shared/paths.ts`. Never write these to `.goopspec/` root for non-default workflows.
+
+- **`GOOPSPEC_DEBUG=true` enables verbose logging** via `log()` in `src/shared/logger.ts`. Without it, `log()` calls are no-ops. Only `logError()` always logs.
