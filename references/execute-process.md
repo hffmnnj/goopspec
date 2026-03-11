@@ -155,6 +155,13 @@ Identify:
 
 ### 3.1 Delegate to executor
 
+Before delegating, resolve the active workflowId and doc prefix:
+```
+goop_state({ action: "get" })
+# Extract: activeWorkflowId and workflowDocPrefix from the response
+# workflowDocPrefix = ".goopspec/<activeWorkflowId>/" (or ".goopspec/" for "default")
+```
+
 ```
 task({
   subagent_type: "goop-executor-{tier}",
@@ -163,14 +170,21 @@ task({
 ## TASK
 Wave [N], Task [M]: [Task Name]
 
+## WORKFLOW ISOLATION (CRITICAL)
+- Active Workflow ID: <activeWorkflowId>
+- Workflow doc directory: <workflowDocPrefix>
+- Write ALL workflow files (CHRONICLE.md, HANDOFF.md, RESEARCH.md, etc.) to <workflowDocPrefix>
+- NEVER write workflow docs to .goopspec/ root (unless workflowId is "default")
+- state.json, config.json, memory.db remain at .goopspec/ root always
+
 ## PROJECT CONTEXT
 [From PROJECT_KNOWLEDGE_BASE.md]
 
 ## SPEC REQUIREMENTS
-[Relevant must-have from SPEC.md]
+[Relevant must-have from .goopspec/<activeWorkflowId>/SPEC.md]
 
 ## TASK DETAILS
-[From BLUEPRINT.md]
+[From .goopspec/<activeWorkflowId>/BLUEPRINT.md]
 
 Intent: [intent]
 Deliverables: [list]
@@ -194,6 +208,8 @@ Acceptance: [criteria]
 - Extract handoff instructions
 
 ### 3.3 Update CHRONICLE.md
+
+Write to `.goopspec/<activeWorkflowId>/CHRONICLE.md` (resolved from active workflow):
 
 ```markdown
 ### Task [N.M]: [Name]

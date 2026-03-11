@@ -55,6 +55,22 @@ Use `question` tool:
 
 ---
 
+## Worktree Status
+
+After detection completes, check if the session is running inside a git worktree:
+
+1. Call `detectWorktree(ctx)` from `src/features/worktree/detector.ts`
+2. If running inside a git worktree (`isWorktree: true`):
+   - Report: "Running in git worktree: `<worktreePath>`"
+   - Show detected branch: `<branchName>`
+   - Show inferred workflowId from branch name: `<inferredWorkflowId>`
+   - Show current active workflow ID: `<activeWorkflowId>` (from state)
+3. If not in a worktree: report "Not running in a git worktree" (informational only)
+
+Include this information in the setup status output alongside other environment details.
+
+---
+
 ## Completion
 
 After setup completes, show:

@@ -117,7 +117,6 @@ function formatNextSteps(guidance: PhaseGuidance): string[] {
  */
 async function formatStatus(state: GoopState | null, verbose: boolean, ctx: PluginContext): Promise<string> {
   const lines: string[] = [];
-  void ctx;
   
   // Handle missing or incomplete state
   if (!state) {
@@ -166,6 +165,21 @@ async function formatStatus(state: GoopState | null, verbose: boolean, ctx: Plug
     milestone: "🎯",
   };
 
+  // Build workflows section (shared between compact and verbose)
+  const workflows = ctx.stateManager.listWorkflows?.() ?? [];
+  const activeWorkflowId = ctx.stateManager.getActiveWorkflowId?.() ?? "default";
+
+  let workflowsSection = "";
+  if (workflows.length > 1) {
+    const rows = workflows.map(wf => {
+      const prefix = wf.isActive ? "►" : " ";
+      return `${prefix} ${wf.workflowId}`;
+    }).join(", ");
+    workflowsSection = `\n- **Workflows:** ${workflows.length} active (${rows})`;
+  } else if (workflows.length === 1) {
+    workflowsSection = `\n- **Workflow:** ${activeWorkflowId}`;
+  }
+
   if (!verbose) {
     lines.push("## 🔮 GoopSpec · Status");
     lines.push(`**Project:** ${projectName}`);
@@ -174,7 +188,7 @@ async function formatStatus(state: GoopState | null, verbose: boolean, ctx: Plug
     const modeIcon = modeIcons[workflow.mode] || "📦";
     lines.push(`- **Phase:** ${phaseIcon} ${workflow.phase || "idle"} | **Mode:** ${modeIcon} ${workflow.mode || "standard"}`);
 
-    const interviewComplete = (workflow as Record<string, unknown>).interviewComplete as boolean | undefined;
+    const interviewComplete = workflow.interviewComplete;
     const interviewStatus = interviewComplete ? "✅" : "⏳";
     const specStatus = workflow.specLocked ? "🔒" : "🔓";
     const acceptedStatus = workflow.acceptanceConfirmed ? "✅" : "⏳";
@@ -184,6 +198,10 @@ async function formatStatus(state: GoopState | null, verbose: boolean, ctx: Plug
       const progress = workflow.currentWave / workflow.totalWaves;
       const progressBar = generateProgressBar(progress);
       lines.push(`- **Wave:** ${workflow.currentWave}/${workflow.totalWaves} ${progressBar}`);
+    }
+
+    if (workflowsSection) {
+      lines.push(workflowsSection);
     }
 
     const activeAgents = await getActiveAgents();
@@ -215,7 +233,7 @@ async function formatStatus(state: GoopState | null, verbose: boolean, ctx: Plug
   const modeIcon = modeIcons[workflow.mode] || "📦";
   lines.push(`- **Phase:** ${phaseIcon} ${workflow.phase || "idle"} | **Mode:** ${modeIcon} ${workflow.mode || "standard"}`);
 
-  const interviewComplete = (workflow as Record<string, unknown>).interviewComplete as boolean | undefined;
+  const interviewComplete = workflow.interviewComplete;
   const interviewStatus = interviewComplete ? "✅" : "⏳";
   const specStatus = workflow.specLocked ? "🔒" : "🔓";
   const acceptedStatus = workflow.acceptanceConfirmed ? "✅" : "⏳";
@@ -225,6 +243,23 @@ async function formatStatus(state: GoopState | null, verbose: boolean, ctx: Plug
     const progress = workflow.currentWave / workflow.totalWaves;
     const progressBar = generateProgressBar(progress);
     lines.push(`- **Wave:** ${workflow.currentWave}/${workflow.totalWaves} ${progressBar}`);
+  }
+
+  if (workflowsSection) {
+    lines.push(workflowsSection);
+  }
+
+  // Verbose: detailed workflow table when multiple workflows exist
+  if (workflows.length > 1) {
+    lines.push("");
+    lines.push("### Workflows");
+    lines.push(`| | ID | Phase | Wave | Spec |`);
+    lines.push(`|---|---|---|---|---|`);
+    for (const wf of workflows) {
+      const prefix = wf.isActive ? "►" : " ";
+      const spec = wf.specLocked ? "🔒" : "🔓";
+      lines.push(`| ${prefix} | ${wf.workflowId} | ${wf.phase} | ${wf.currentWave}/${wf.totalWaves} | ${spec} |`);
+    }
   }
 
   const execution = state.execution || {

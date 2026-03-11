@@ -206,9 +206,12 @@ function extractKeySections(lines: string[]): string {
 }
 
 /** Active SPEC.md content (full if <=200 lines, must-haves + out-of-scope otherwise). */
-export function buildSpecBlock(projectDir: string): string {
+export function buildSpecBlock(projectDir: string, workflowId?: string): string {
   try {
-    const specPath = join(getProjectGoopspecDir(projectDir), "SPEC.md");
+    const effectiveId = workflowId ?? "default";
+    const specPath = effectiveId === "default"
+      ? join(getProjectGoopspecDir(projectDir), "SPEC.md")
+      : join(getProjectGoopspecDir(projectDir), effectiveId, "SPEC.md");
     if (!existsSync(specPath)) return "";
 
     const content = readFileSync(specPath, "utf-8");
@@ -286,9 +289,14 @@ export function createCompactionHook(ctx: PluginContext) {
     log("Compaction hook triggered");
 
     try {
+      const activeWorkflowId =
+        (ctx as { workflowId?: string }).workflowId ??
+        ctx.stateManager.getActiveWorkflowId?.() ??
+        "default";
+
       const blocks = [
         buildWorkflowStateBlock(ctx),
-        buildSpecBlock(ctx.input.directory),
+        buildSpecBlock(ctx.input.directory, activeWorkflowId),
         buildADLBlock(ctx),
       ];
 

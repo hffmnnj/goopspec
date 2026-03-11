@@ -113,6 +113,7 @@ export function createSession(
   projectDir: string,
   id?: string,
   description?: string,
+  workflowId?: string,
 ): SessionInfo {
   const sessionsRoot = getSessionsRoot(projectDir);
   ensureDirectory(sessionsRoot);
@@ -149,6 +150,7 @@ export function createSession(
     mode: "standard",
     lastActivity: now,
     createdAt: now,
+    workflowId,
   };
 
   updateSessionIndex(projectDir, [...existingIndex.sessions, session]);

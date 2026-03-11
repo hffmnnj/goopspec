@@ -42,6 +42,8 @@ describe("system transform hook session context", () => {
   it("injects session context when session is active", async () => {
     const ctx = createContext();
     ctx.sessionId = "feature-auth";
+    ctx.stateManager.createWorkflow("workflow-auth");
+    ctx.stateManager.setActiveWorkflow("workflow-auth");
 
     const hook = createSystemTransformHook(ctx);
     const result = await hook(
@@ -57,10 +59,11 @@ describe("system transform hook session context", () => {
     expect(result.system).toContain("## Session Context");
     expect(result.system).toContain("<session>");
     expect(result.system).toContain("id: feature-auth");
-    expect(result.system).toContain(".goopspec/sessions/feature-auth/SPEC.md");
-    expect(result.system).toContain(".goopspec/sessions/feature-auth/BLUEPRINT.md");
-    expect(result.system).toContain(".goopspec/sessions/feature-auth/CHRONICLE.md");
-    expect(result.system).toContain(".goopspec/sessions/feature-auth/RESEARCH.md");
+    expect(result.system).toContain(".goopspec/workflow-auth/SPEC.md");
+    expect(result.system).toContain(".goopspec/workflow-auth/BLUEPRINT.md");
+    expect(result.system).toContain(".goopspec/workflow-auth/CHRONICLE.md");
+    expect(result.system).toContain(".goopspec/workflow-auth/RESEARCH.md");
+    expect(result.system).toContain(".goopspec/state.json");
   });
 
   it("does not inject session context when no session is active", async () => {

@@ -21,6 +21,7 @@ import {
 } from "../../features/setup/index.js";
 import { detectPlatform, getSqliteVecPackage } from "../../features/setup/platform.js";
 import { AGENT_MODEL_SUGGESTIONS } from "../../features/setup/model-suggestions.js";
+import { detectWorktree, type WorktreeDetectionResult } from "../../features/worktree/detector.js";
 import type { 
   SetupInput, 
   SetupEnvironment,
@@ -503,7 +504,7 @@ function formatResetResult(result: ResetResult): string {
 /**
  * Format status for display
  */
-function formatStatus(status: SetupStatus): string {
+function formatStatus(status: SetupStatus, worktree?: WorktreeDetectionResult): string {
   const lines = [
     "# GoopSpec Configuration Status",
     "",
@@ -549,6 +550,15 @@ function formatStatus(status: SetupStatus): string {
     for (const [agent, model] of Object.entries(status.agentModels)) {
       lines.push(`- ${agent}: \`${model}\``);
     }
+  }
+
+  if (worktree) {
+    lines.push("");
+    lines.push("## Worktree Status");
+    lines.push(`- In worktree: ${worktree.isWorktree ? "Yes" : "No"}`);
+    lines.push(`- Worktree path: ${worktree.worktreePath ?? "None"}`);
+    lines.push(`- Branch: ${worktree.branchName ?? "N/A"}`);
+    lines.push(`- Inferred workflow ID: ${worktree.inferredWorkflowId ?? "None"}`);
   }
   
   return lines.join("\n");
@@ -622,7 +632,8 @@ export function createGoopSetupTool(ctx: PluginContext): ToolDefinition {
         // ====================================================================
         if (args.action === "status") {
           const status = await getSetupStatus(projectDir);
-          return formatStatus(status);
+          const worktree = await detectWorktree(ctx);
+          return formatStatus(status, worktree);
         }
         
         // ====================================================================

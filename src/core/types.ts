@@ -90,11 +90,88 @@ export interface SessionInfo {
   mode: string;
   lastActivity: string;
   createdAt: string;
+  workflowId?: string;
 }
 
 export interface SessionIndex {
   sessions: SessionInfo[];
   lastUpdated: string;
+}
+
+export interface WorkflowState {
+  /**
+   * Unique workflow identifier for multi-workflow state routing.
+   * Optional for backward compatibility with older persisted states.
+   */
+  workflowId?: string;
+
+  /**
+   * Named phase identifier for the current work item (e.g., "auth-feature", "phase-1")
+   * This is the project-specific phase name, NOT the workflow stage.
+   * Can be null if not in a named phase.
+   * @deprecated Prefer `workflow.phase` for stage tracking. This field is reserved for future phase naming.
+   */
+  currentPhase: string | null;
+
+  /**
+   * Current workflow stage (idle, plan, research, specify, execute, accept)
+   * This is the GoopSpec workflow stage, NOT the project phase name.
+   */
+  phase: WorkflowPhase;
+
+  mode: TaskMode;
+  depth: WorkflowDepth;
+  researchOptIn: boolean;
+  specLocked: boolean;
+  acceptanceConfirmed: boolean;
+  interviewComplete: boolean;
+  interviewCompletedAt: string | null; // ISO timestamp
+  currentWave: number;
+  totalWaves: number;
+  lastActivity: string; // ISO timestamp
+
+  /**
+   * Persists the user's one-time choice for adding `.goopspec/` to `.gitignore`.
+   * Undefined means the preference has not been set yet.
+   */
+  gitignoreGoopspec?: boolean;
+
+  /**
+   * When true, the workflow auto-chains discuss -> plan -> execute without
+   * inter-phase confirmation gates. Pauses only at final acceptance.
+   * Undefined/false means manual mode (confirm between phases).
+   */
+  autopilot?: boolean;
+
+  /**
+   * When true (in combination with autopilot), agent makes all inferences
+   * from the initial prompt without asking ANY clarifying questions.
+   * Only stops for: Rule 4 decisions, missing secrets, destructive ops,
+   * or external blockers. All other stops are suppressed.
+   */
+  lazyAutopilot?: boolean;
+
+  /**
+   * @deprecated Use `phase` instead. Kept for backward compatibility with existing state files.
+   */
+  status?: WorkflowPhase;
+}
+
+/**
+ * A single workflow's state plus its workflow identifier.
+ */
+export interface WorkflowEntry extends WorkflowState {
+  workflowId: string;
+}
+
+export interface WorkflowSummary {
+  workflowId: string;
+  phase: WorkflowPhase;
+  currentWave: number;
+  totalWaves: number;
+  specLocked: boolean;
+  lastActivity: string;
+  isActive: boolean;
 }
 
 export interface GoopState {
@@ -103,58 +180,8 @@ export interface GoopState {
     name: string;
     initialized: string; // ISO timestamp
   };
-  workflow: {
-    /**
-     * Named phase identifier for the current work item (e.g., "auth-feature", "phase-1")
-     * This is the project-specific phase name, NOT the workflow stage.
-     * Can be null if not in a named phase.
-     * @deprecated Prefer `workflow.phase` for stage tracking. This field is reserved for future phase naming.
-     */
-    currentPhase: string | null;
-    
-    /**
-     * Current workflow stage (idle, plan, research, specify, execute, accept)
-     * This is the GoopSpec workflow stage, NOT the project phase name.
-     */
-    phase: WorkflowPhase;
-    
-    mode: TaskMode;
-    depth: WorkflowDepth;
-    researchOptIn: boolean;
-    specLocked: boolean;
-    acceptanceConfirmed: boolean;
-    interviewComplete: boolean;
-    interviewCompletedAt: string | null; // ISO timestamp
-    currentWave: number;
-    totalWaves: number;
-    lastActivity: string; // ISO timestamp
-
-    /**
-     * Persists the user's one-time choice for adding `.goopspec/` to `.gitignore`.
-     * Undefined means the preference has not been set yet.
-     */
-    gitignoreGoopspec?: boolean;
-
-    /**
-     * When true, the workflow auto-chains discuss → plan → execute without
-     * inter-phase confirmation gates. Pauses only at final acceptance.
-     * Undefined/false means manual mode (confirm between phases).
-     */
-    autopilot?: boolean;
-
-    /**
-     * When true (in combination with autopilot), agent makes all inferences
-     * from the initial prompt without asking ANY clarifying questions.
-     * Only stops for: Rule 4 decisions, missing secrets, destructive ops,
-     * or external blockers. All other stops are suppressed.
-     */
-    lazyAutopilot?: boolean;
-    
-    /**
-     * @deprecated Use `phase` instead. Kept for backward compatibility with existing state files.
-     */
-    status?: WorkflowPhase;
-  };
+  workflow: WorkflowState;
+  workflows?: Record<string, WorkflowEntry>;
   execution: {
     activeCheckpointId: string | null;
     completedPhases: WorkflowPhase[];
@@ -306,7 +333,13 @@ export interface GoopSpecConfig {
 export interface StateManager {
   getState(): GoopState;
   setState(state: Partial<GoopState>): void;
-  updateWorkflow(updates: Partial<GoopState["workflow"]>): void;
+  updateWorkflow(updates: Partial<WorkflowState>): void;
+  getWorkflow(id: string): WorkflowEntry | null;
+  listWorkflows(): WorkflowSummary[];
+  setActiveWorkflow(id: string): boolean;
+  createWorkflow(id: string): WorkflowEntry;
+  removeWorkflow(id: string): boolean;
+  getActiveWorkflowId(): string;
   transitionPhase(to: WorkflowPhase, force?: boolean): boolean;
   lockSpec(): void;
   unlockSpec(): void;
@@ -331,6 +364,7 @@ export interface PluginContext {
   resolver: ResourceResolver;
   stateManager: StateManager;
   sessionId?: string;
+  workflowId?: string;
   memoryManager?: MemoryManager;
 }
 

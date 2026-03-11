@@ -15,6 +15,8 @@ import { createGoopReferenceTool } from "./goop-reference/index.js";
 import { createSlashcommandTool } from "./slashcommand/index.js";
 import { createGoopSetupTool } from "./goop-setup/index.js";
 import { createGoopStateTool } from "./goop-state/index.js";
+import { createWorktreeCreateTool } from "./worktree-create/index.js";
+import { createWorktreeDeleteTool } from "./worktree-delete/index.js";
 
 // Memory tools
 import { createMemorySaveTool } from "./memory-save/index.js";
@@ -51,6 +53,8 @@ export function createTools(ctx: PluginContext): ToolsMap {
     goop_skill: createGoopSkillTool(ctx),
     goop_reference: createGoopReferenceTool(ctx),
     goop_setup: createGoopSetupTool(ctx),
+    worktree_create: createWorktreeCreateTool(ctx),
+    worktree_delete: createWorktreeDeleteTool(ctx),
     slashcommand: createSlashcommandTool(ctx),
     
     // Memory tools
@@ -75,6 +79,8 @@ export { createGoopSkillTool } from "./goop-skill/index.js";
 export { createGoopReferenceTool } from "./goop-reference/index.js";
 export { createGoopSetupTool } from "./goop-setup/index.js";
 export { createSlashcommandTool } from "./slashcommand/index.js";
+export { createWorktreeCreateTool } from "./worktree-create/index.js";
+export { createWorktreeDeleteTool } from "./worktree-delete/index.js";
 
 // Memory tool exports
 export { createMemorySaveTool } from "./memory-save/index.js";

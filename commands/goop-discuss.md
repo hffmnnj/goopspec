@@ -68,15 +68,20 @@ Use the `question` tool with category-specific options for each discovery questi
 | `memory_save` | Persist interview results |
 | `goop_reference` | Load detailed process |
 
-## Workflow Creation
+## Workflow Creation (CRITICAL — must happen before any file writes)
 
-During `/goop-discuss`, a `workflowId` is inferred from the user's vision and created in state:
+During `/goop-discuss`, workflow isolation is established immediately after the vision question. This is **not optional** — without it, every concurrent session writes to the same `default` slot and files collide.
 
-1. Infer `workflowId` from vision text (kebab-case slug, e.g., `feat-auth`)
-2. Call `goop_state({ action: "create-workflow", workflowId: "<inferred-id>" })` to register it
-3. All subsequent workflow docs are written to `.goopspec/<workflowId>/`
+**Sequence (section 2.1.1 of discuss-process):**
+1. Infer `workflowId` from vision text (kebab-case slug, e.g., `feat-auth`, `payment-rebuild`)
+   - If in a git worktree: use branch-derived ID from section 1.12
+   - Otherwise: derive from the feature/topic the user described
+2. Call `goop_state({ action: "create-workflow", workflowId: "<inferred-id>" })` — registers the slot in state.json
+3. Call `goop_state({ action: "set-active-workflow", workflowId: "<inferred-id>" })` — binds this session to it
+4. Confirm binding with `goop_state({ action: "get" })` — active workflowId must appear in response
+5. All subsequent file writes target `.goopspec/<inferred-id>/`
 
-If no explicit workflow is inferred, `workflowId` defaults to `"default"` (backward-compatible root layout).
+**Both `create-workflow` AND `set-active-workflow` must be called.** Creating without binding leaves the session writing to `default`.
 
 ## Output
 

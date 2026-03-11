@@ -7,8 +7,8 @@ All GoopSpec subagents follow a standardized protocol for memory usage, planning
 **DO NOT proceed past this section until all steps are complete.**
 
 1. `goop_state({ action: "get" })` - Load workflow state
-2. `Read(".goopspec/SPEC.md")` - Read specification
-3. `Read(".goopspec/BLUEPRINT.md")` - Read execution plan
+2. `Read(".goopspec/<workflowId>/SPEC.md")` - Read specification <!-- workflowId is the active workflow identifier, e.g., "feat-auth" -->
+3. `Read(".goopspec/<workflowId>/BLUEPRINT.md")` - Read execution plan
 4. `memory_search({ query: "[task context]", limit: 5 })` - Search relevant memory
 5. `Read(".goopspec/PROJECT_KNOWLEDGE_BASE.md")` - If present
 
@@ -61,13 +61,13 @@ memory_search({
 })
 
 // 4. Read the specification
-Read(".goopspec/SPEC.md")
+Read(".goopspec/<workflowId>/SPEC.md")
 
 // 5. Read current state
-Read(".goopspec/CHRONICLE.md")
+Read(".goopspec/<workflowId>/CHRONICLE.md")
 
 // 6. Read the task details
-Read(".goopspec/BLUEPRINT.md")
+Read(".goopspec/<workflowId>/BLUEPRINT.md")
 ```
 
 ### During Work
@@ -76,7 +76,7 @@ Every subagent SHOULD:
 
 ```typescript
 // Update progress
-Edit(".goopspec/CHRONICLE.md", {
+Edit(".goopspec/<workflowId>/CHRONICLE.md", {
   update: "Task 2.1: [status]"
 })
 
@@ -107,7 +107,7 @@ git add [changed files]
 git commit -m "type(scope): description"
 
 // 2. Update chronicle with outcome
-Edit(".goopspec/CHRONICLE.md", {
+Edit(".goopspec/<workflowId>/CHRONICLE.md", {
   update: "Task 2.1: COMPLETE (commit: abc123)"
 })
 

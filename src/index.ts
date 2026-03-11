@@ -16,6 +16,8 @@ import { createHooks } from "./hooks/index.js";
 import { createConfigHandler } from "./plugin-handlers/config-handler.js";
 import { log, logError, setDebug } from "./shared/logger.js";
 import { basename } from "./shared/platform.js";
+import { git } from "./features/worktree/git.js";
+import { inferWorkflowIdFromBranch } from "./features/worktree/branch-name.js";
 
 /**
  * Create a minimal hooks object for error/degraded mode
@@ -33,6 +35,32 @@ function createMinimalHooks(): Hooks {
       },
     },
   };
+}
+
+async function inferWorkflowIdFromWorktree(
+  directory: string,
+  worktree?: string,
+): Promise<string | undefined> {
+  if (!worktree || worktree === directory) {
+    return undefined;
+  }
+
+  const branchResult = await git(["rev-parse", "--abbrev-ref", "HEAD"], directory);
+  if (branchResult.ok && branchResult.value !== "HEAD") {
+    const inferredFromBranch = inferWorkflowIdFromBranch(branchResult.value);
+    if (inferredFromBranch) {
+      return inferredFromBranch;
+    }
+  }
+
+  // Fallback keeps compatibility if git is unavailable or HEAD is detached.
+  const candidate = basename(worktree)
+    .toLowerCase()
+    .replace(/[^a-z0-9-]/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "");
+
+  return candidate || undefined;
 }
 
 /**
@@ -75,6 +103,8 @@ const GoopSpecPlugin: Plugin = async (input) => {
       serverUrl: input.serverUrl,
     };
 
+    const inferredWorkflowId = await inferWorkflowIdFromWorktree(input.directory, input.worktree);
+
     // Load configuration (global + project merge)
     const config = loadPluginConfig(input.directory);
     log("Config loaded", { config });
@@ -87,7 +117,9 @@ const GoopSpecPlugin: Plugin = async (input) => {
     const stateManager = createStateManager(
       input.directory,
       config.projectName || projectName,
-      config
+      config,
+      undefined,
+      inferredWorkflowId,
     );
     log("State manager created");
 
@@ -132,6 +164,7 @@ const GoopSpecPlugin: Plugin = async (input) => {
       resolver,
       stateManager,
       sessionId: undefined,
+      workflowId: inferredWorkflowId,
       memoryManager: memoryClient,
     };
 

@@ -6,12 +6,16 @@ import { afterEach, describe, expect, it } from "bun:test";
 import { mkdtempSync, rmSync } from "fs";
 import { tmpdir } from "os";
 import {
+  WORKFLOW_SCOPED_FILES,
   getPackageRoot,
   isDevMode,
   getProjectGoopspecDir,
   getGlobalConfigDir,
   getBundledResourceDir,
   getProjectResourceDir,
+  getWorkflowDir,
+  getWorkflowDocPath,
+  isWorkflowScopedFile,
   getSessionDir,
   getSessionGoopspecPath,
   getSharedResourcePath,
@@ -177,6 +181,39 @@ describe("paths", () => {
 
       expect(empty).toBe(joinPath(".goopspec"));
       expect(missing).toBe(joinPath(".goopspec"));
+    });
+  });
+
+  describe("workflow-scoped paths", () => {
+    it("returns root .goopspec for default workflow", () => {
+      const dir = getWorkflowDir("proj", "default");
+      expect(dir).toBe(joinPath("proj", ".goopspec"));
+    });
+
+    it("returns workflow subdirectory for non-default workflow", () => {
+      const dir = getWorkflowDir("proj", "feat-x");
+      expect(dir).toBe(joinPath("proj", ".goopspec", "feat-x"));
+    });
+
+    it("builds workflow doc path for non-default workflow", () => {
+      const path = getWorkflowDocPath("proj", "feat-x", "SPEC.md");
+      expect(path).toBe(joinPath("proj", ".goopspec", "feat-x", "SPEC.md"));
+    });
+
+    it("builds workflow doc path at root for default workflow", () => {
+      const path = getWorkflowDocPath("proj", "default", "SPEC.md");
+      expect(path).toBe(joinPath("proj", ".goopspec", "SPEC.md"));
+    });
+
+    it("detects workflow scoped files", () => {
+      expect(isWorkflowScopedFile("SPEC.md")).toBe(true);
+      expect(isWorkflowScopedFile("checkpoints/")).toBe(true);
+      expect(isWorkflowScopedFile("state.json")).toBe(false);
+    });
+
+    it("exports workflow scoped file constants", () => {
+      expect(WORKFLOW_SCOPED_FILES).toContain("ADL.md");
+      expect(WORKFLOW_SCOPED_FILES).toContain("history/");
     });
   });
 

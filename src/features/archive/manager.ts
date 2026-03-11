@@ -5,12 +5,12 @@
  * @module features/archive/manager
  */
 
-import { existsSync, mkdirSync, readdirSync, renameSync, writeFileSync, readFileSync, statSync } from "fs";
+import { existsSync, mkdirSync, readdirSync, renameSync, rmSync, writeFileSync, readFileSync, statSync } from "fs";
 import { join, basename } from "path";
-import { getProjectGoopspecDir } from "../../shared/paths.js";
+import { getProjectGoopspecDir, getWorkflowDir } from "../../shared/paths.js";
 import { log, logError } from "../../shared/logger.js";
 import { extractLearnings, formatLearningsMarkdown } from "./learnings.js";
-import type { MemoryManager, MemoryInput } from "../../core/types.js";
+import type { MemoryManager, MemoryInput, StateManager } from "../../core/types.js";
 import type { ExtractedLearning } from "./learnings.js";
 
 // ============================================================================
@@ -26,7 +26,7 @@ export interface ArchiveEntry {
 }
 
 export interface ArchiveManager {
-  archiveMilestone(milestoneId: string, retrospective: string): Promise<ArchiveEntry>;
+  archiveMilestone(milestoneId: string, retrospective: string, workflowId?: string): Promise<ArchiveEntry>;
   archiveQuickTask(taskName: string, summary: string): Promise<string>;
   listArchived(): ArchiveEntry[];
   getArchivedMilestone(id: string): ArchiveEntry | null;
@@ -39,7 +39,6 @@ export interface ArchiveManager {
 // ============================================================================
 
 const ARCHIVE_DIR = "archive";
-const MILESTONES_DIR = "milestones";
 const QUICK_DIR = "quick";
 const ARCHIVE_INDEX = "index.md";
 const RETROSPECTIVE_FILE = "RETROSPECTIVE.md";
@@ -47,6 +46,17 @@ const LEARNINGS_FILE = "LEARNINGS.md";
 const SPEC_FILE = "SPEC.md";
 const CHRONICLE_FILE = "CHRONICLE.md";
 const SUMMARY_FILE = "SUMMARY.md";
+
+/** Workflow document files to archive (matches WORKFLOW_SCOPED_FILES minus directories) */
+const WORKFLOW_DOC_FILES = [
+  "SPEC.md",
+  "BLUEPRINT.md",
+  "CHRONICLE.md",
+  "REQUIREMENTS.md",
+  "HANDOFF.md",
+  "RESEARCH.md",
+  "ADL.md",
+] as const;
 
 // ============================================================================
 // Utilities
@@ -299,11 +309,12 @@ function extractConcepts(learnings: ExtractedLearning): string[] {
  */
 export function createArchiveManager(
   projectDir: string,
-  memoryManager?: MemoryManager
+  memoryManager?: MemoryManager,
+  defaultWorkflowId?: string,
+  stateManager?: StateManager,
 ): ArchiveManager {
   const goopspecDir = getProjectGoopspecDir(projectDir);
   const archiveDir = join(goopspecDir, ARCHIVE_DIR);
-  const milestonesDir = join(goopspecDir, MILESTONES_DIR);
   const quickDir = join(goopspecDir, QUICK_DIR);
 
   /**
@@ -325,71 +336,123 @@ export function createArchiveManager(
   }
 
   /**
-   * Archive a completed milestone
+   * Archive a completed milestone/workflow
+   *
+   * Sources workflow documents from the workflow-scoped directory and
+   * archives them to `.goopspec/archive/<workflowId>-<timestamp>/`.
+   * For the "default" workflow, sources from `.goopspec/` root.
+   * Non-default workflow directories are cleaned up after archival.
    */
   async function archiveMilestone(
     milestoneId: string,
-    retrospective: string
+    retrospective: string,
+    archiveWorkflowId?: string,
   ): Promise<ArchiveEntry> {
     ensureArchiveDir();
-    
-    const sourcePath = join(milestonesDir, milestoneId);
-    const destPath = join(archiveDir, milestoneId);
-    
-    // Validate source exists
-    if (!existsSync(sourcePath)) {
-      throw new Error(`Milestone not found: ${milestoneId}`);
+
+    const effectiveWorkflowId = archiveWorkflowId ?? defaultWorkflowId ?? "default";
+
+    // Source: workflow directory (Wave 2 path routing)
+    const workflowDir = getWorkflowDir(projectDir, effectiveWorkflowId);
+
+    // Archive destination: .goopspec/archive/<workflowId>-<timestamp>/
+    const timestamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
+    const archiveId = `${effectiveWorkflowId}-${timestamp}`;
+    const destPath = join(archiveDir, archiveId);
+
+    // Verify the workflow directory has at least one doc file
+    const hasAnyDoc = WORKFLOW_DOC_FILES.some((filename) =>
+      existsSync(join(workflowDir, filename)),
+    );
+    if (!hasAnyDoc && !existsSync(workflowDir)) {
+      throw new Error(`Workflow directory not found: ${effectiveWorkflowId}`);
     }
-    
-    // Check if already archived
-    if (existsSync(destPath)) {
-      throw new Error(`Milestone already archived: ${milestoneId}`);
-    }
-    
-    // Read milestone documents for learnings extraction
-    const specPath = join(sourcePath, SPEC_FILE);
-    const chroniclePath = join(sourcePath, CHRONICLE_FILE);
-    
-    const specContent = safeReadFile(specPath) || "";
-    const chronicleContent = safeReadFile(chroniclePath) || "";
-    
+
+    // Read workflow documents for learnings extraction
+    const specContent = safeReadFile(join(workflowDir, SPEC_FILE)) ?? "";
+    const chronicleContent = safeReadFile(join(workflowDir, CHRONICLE_FILE)) ?? "";
+
     // Use provided retrospective or generate template
-    const retrospectiveContent = retrospective || generateRetrospectiveTemplate(milestoneId);
-    
+    const retrospectiveContent = retrospective || generateRetrospectiveTemplate(milestoneId || effectiveWorkflowId);
+
     // Extract learnings
     const learnings = extractLearnings(specContent, chronicleContent, retrospectiveContent);
     const learningsMarkdown = formatLearningsMarkdown(learnings);
-    
-    // Move milestone to archive
-    try {
-      renameSync(sourcePath, destPath);
-      log(`Moved milestone to archive: ${milestoneId}`);
-    } catch (error) {
-      logError(`Failed to move milestone: ${milestoneId}`, error);
-      throw new Error(`Failed to archive milestone: ${error instanceof Error ? error.message : String(error)}`);
+
+    // Copy workflow docs to archive
+    mkdirSync(destPath, { recursive: true });
+
+    for (const filename of WORKFLOW_DOC_FILES) {
+      const src = join(workflowDir, filename);
+      const dst = join(destPath, filename);
+      if (existsSync(src)) {
+        try {
+          renameSync(src, dst);
+        } catch {
+          // Cross-device fallback: copy instead of move
+          writeFileSync(dst, readFileSync(src, "utf-8"), "utf-8");
+        }
+      }
     }
-    
-    // Write retrospective and learnings
+
+    // Also move checkpoints/ and history/ directories if they exist
+    const dirsToArchive = ["checkpoints", "history"];
+    for (const dir of dirsToArchive) {
+      const srcDir = join(workflowDir, dir);
+      const dstDir = join(destPath, dir);
+      if (existsSync(srcDir)) {
+        try {
+          renameSync(srcDir, dstDir);
+        } catch {
+          // Cross-device: skip for now (non-critical)
+          log(`Could not move directory ${dir} to archive (cross-device), skipping`);
+        }
+      }
+    }
+
+    // Write retrospective and learnings to archive destination
     const retrospectivePath = join(destPath, RETROSPECTIVE_FILE);
     const learningsPath = join(destPath, LEARNINGS_FILE);
-    
+
     atomicWriteFile(retrospectivePath, retrospectiveContent);
     atomicWriteFile(learningsPath, learningsMarkdown);
-    
-    log(`Archived milestone: ${milestoneId}`, {
+
+    // Clean up: remove the workflow directory if it's not "default"
+    // (don't remove root .goopspec/ for default workflow)
+    if (effectiveWorkflowId !== "default" && existsSync(workflowDir)) {
+      try {
+        rmSync(workflowDir, { recursive: true, force: true });
+        log(`Cleaned up workflow directory: ${workflowDir}`);
+      } catch (error) {
+        logError(`Failed to clean up workflow dir: ${workflowDir}`, error);
+      }
+    }
+
+    // Remove the workflow entry from state.json (skip for "default")
+    if (effectiveWorkflowId !== "default" && stateManager) {
+      try {
+        stateManager.removeWorkflow(effectiveWorkflowId);
+        log(`Removed workflow entry from state: ${effectiveWorkflowId}`);
+      } catch (error) {
+        logError(`Failed to remove workflow entry from state: ${effectiveWorkflowId}`, error);
+      }
+    }
+
+    log(`Archived workflow: ${effectiveWorkflowId}`, {
+      archiveId,
       patterns: learnings.patterns.length,
       decisions: learnings.decisions.length,
       gotchas: learnings.gotchas.length,
     });
-    
+
     // Update archive index
     generateArchiveIndex();
-    
+
     const archivedAt = new Date().toISOString();
-    
+
     return {
-      id: milestoneId,
-      name: milestoneId,
+      id: archiveId,
+      name: milestoneId || effectiveWorkflowId,
       archivedAt,
       retrospectivePath,
       learningsPath,

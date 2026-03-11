@@ -16,17 +16,20 @@ import type {
   WorkflowPhase,
   TaskMode,
   TaskInfo,
-  GoopSpecConfig
+  GoopSpecConfig,
+  WorkflowEntry,
+  WorkflowSummary,
+  WorkflowState,
 } from "../../core/types.js";
 import { listSessions, updateSessionIndex } from "../session/manager.js";
-import { getProjectGoopspecDir, getSessionGoopspecPath } from "../../shared/paths.js";
+import { getProjectGoopspecDir, getWorkflowDocPath } from "../../shared/paths.js";
 import { log, logError } from "../../shared/logger.js";
 
 // ============================================================================
 // Constants
 // ============================================================================
 
-const STATE_VERSION = 1;
+const STATE_VERSION = 2;
 const STATE_FILENAME = "state.json";
 const ADL_FILENAME = "ADL.md";
 const CHECKPOINTS_DIR = "checkpoints";
@@ -36,29 +39,100 @@ const HISTORY_DIR = "history";
 // Default State
 // ============================================================================
 
-function createDefaultState(projectName: string = "unnamed"): GoopState {
+function toWorkflowState(entry: WorkflowEntry): WorkflowState {
+  return {
+    workflowId: entry.workflowId,
+    currentPhase: entry.currentPhase,
+    phase: entry.phase,
+    mode: entry.mode,
+    depth: entry.depth,
+    researchOptIn: entry.researchOptIn,
+    specLocked: entry.specLocked,
+    acceptanceConfirmed: entry.acceptanceConfirmed,
+    interviewComplete: entry.interviewComplete,
+    interviewCompletedAt: entry.interviewCompletedAt,
+    currentWave: entry.currentWave,
+    totalWaves: entry.totalWaves,
+    lastActivity: entry.lastActivity,
+    gitignoreGoopspec: entry.gitignoreGoopspec,
+    autopilot: entry.autopilot,
+    lazyAutopilot: entry.lazyAutopilot,
+    status: entry.status,
+  };
+}
+
+function toWorkflowEntry(workflowId: string, workflow: WorkflowState): WorkflowEntry {
+  return {
+    workflowId,
+    currentPhase: workflow.currentPhase,
+    phase: workflow.phase,
+    mode: workflow.mode,
+    depth: workflow.depth,
+    researchOptIn: workflow.researchOptIn,
+    specLocked: workflow.specLocked,
+    acceptanceConfirmed: workflow.acceptanceConfirmed,
+    interviewComplete: workflow.interviewComplete,
+    interviewCompletedAt: workflow.interviewCompletedAt,
+    currentWave: workflow.currentWave,
+    totalWaves: workflow.totalWaves,
+    lastActivity: workflow.lastActivity,
+    gitignoreGoopspec: workflow.gitignoreGoopspec,
+    autopilot: workflow.autopilot,
+    lazyAutopilot: workflow.lazyAutopilot,
+    status: workflow.status,
+  };
+}
+
+function isWorkflowStateEqual(workflow: WorkflowState, entry: WorkflowEntry): boolean {
+  return (
+    workflow.workflowId === entry.workflowId
+    &&
+    workflow.currentPhase === entry.currentPhase
+    && workflow.phase === entry.phase
+    && workflow.mode === entry.mode
+    && workflow.depth === entry.depth
+    && workflow.researchOptIn === entry.researchOptIn
+    && workflow.specLocked === entry.specLocked
+    && workflow.acceptanceConfirmed === entry.acceptanceConfirmed
+    && workflow.interviewComplete === entry.interviewComplete
+    && workflow.interviewCompletedAt === entry.interviewCompletedAt
+    && workflow.currentWave === entry.currentWave
+    && workflow.totalWaves === entry.totalWaves
+    && workflow.lastActivity === entry.lastActivity
+    && workflow.gitignoreGoopspec === entry.gitignoreGoopspec
+    && workflow.autopilot === entry.autopilot
+    && workflow.lazyAutopilot === entry.lazyAutopilot
+    && workflow.status === entry.status
+  );
+}
+
+function createDefaultState(projectName: string = "unnamed", workflowId: string = "default"): GoopState {
   const now = new Date().toISOString();
+  const defaultWorkflow: WorkflowEntry = {
+    workflowId,
+    currentPhase: null,
+    phase: "idle",
+    mode: "standard",
+    depth: "standard",
+    researchOptIn: false,
+    specLocked: false,
+    acceptanceConfirmed: false,
+    interviewComplete: false,
+    interviewCompletedAt: null,
+    currentWave: 0,
+    totalWaves: 0,
+    lastActivity: now,
+    status: "idle",
+  };
+
   return {
     version: STATE_VERSION,
     project: {
       name: projectName,
       initialized: now,
     },
-    workflow: {
-      currentPhase: null,
-      phase: "idle" as WorkflowPhase,
-      mode: "standard" as TaskMode,
-      depth: "standard",
-      researchOptIn: false,
-      specLocked: false,
-      acceptanceConfirmed: false,
-      interviewComplete: false,
-      interviewCompletedAt: null,
-      currentWave: 0,
-      totalWaves: 0,
-      lastActivity: now,
-      status: "idle" as WorkflowPhase, // Legacy field
-    },
+    workflow: toWorkflowState(defaultWorkflow),
+    workflows: { [workflowId]: defaultWorkflow },
     execution: {
       activeCheckpointId: null,
       completedPhases: [],
@@ -115,7 +189,7 @@ function migrateOldState(oldState: Record<string, unknown>, projectName?: string
         typeof t === 'object' && t !== null && 'id' in t && 'name' in t)
     : [];
   
-  return {
+  const result: GoopState = {
     version: STATE_VERSION,
     project: {
       name: resolvedProjectName,
@@ -145,21 +219,50 @@ function migrateOldState(oldState: Record<string, unknown>, projectName?: string
       pendingTasks,
     },
   };
+
+  const workflowEntry = toWorkflowEntry("default", result.workflow);
+  return {
+    ...result,
+    version: STATE_VERSION,
+    workflows: { default: workflowEntry },
+    workflow: toWorkflowState(workflowEntry),
+  };
+}
+
+function migrateV1ToV2(v1State: GoopState, projectName?: string): GoopState {
+  log("Migrating state from v1 to v2 (multi-workflow format)");
+  const workflowEntry = toWorkflowEntry("default", v1State.workflow);
+  return {
+    ...v1State,
+    version: STATE_VERSION,
+    workflows: { default: workflowEntry },
+    workflow: toWorkflowState(workflowEntry),
+    project: { ...v1State.project, ...(projectName ? { name: projectName } : {}) },
+  };
 }
 
 function normalizeState(state: GoopState | Record<string, unknown>, projectName?: string): GoopState {
-  // Check if migration is needed:
-  // 1. Has old format keys (project_state) without version
-  // 2. Has no version key at all (hybrid state from partial updates)
   const hasOldFormat = 'project_state' in state;
   const hasVersion = 'version' in state;
-  
+  const version = ('version' in state ? (state as Record<string, unknown>).version : 0) as number;
+
   if (hasOldFormat || !hasVersion) {
     return migrateOldState(state as Record<string, unknown>, projectName);
   }
-  
+
+  if (version === 1) {
+    return migrateV1ToV2(state as GoopState, projectName);
+  }
+
   const defaults = createDefaultState(projectName);
   const typedState = state as GoopState;
+  const normalizedWorkflow = {
+    ...defaults.workflow,
+    ...typedState.workflow,
+  };
+  const normalizedWorkflows = typedState.workflows ?? {
+    default: toWorkflowEntry("default", normalizedWorkflow),
+  };
   
   return {
     ...defaults,
@@ -169,8 +272,10 @@ function normalizeState(state: GoopState | Record<string, unknown>, projectName?
       ...typedState.project,
     },
     workflow: {
-      ...defaults.workflow,
-      ...typedState.workflow,
+      ...normalizedWorkflow,
+    },
+    workflows: {
+      ...normalizedWorkflows,
     },
     execution: {
       ...defaults.execution,
@@ -251,12 +356,15 @@ export function createStateManager(
   projectName?: string,
   config?: GoopSpecConfig,
   sessionId?: string,
+  workflowId?: string,
 ): StateManager {
   const goopspecDir = getProjectGoopspecDir(projectDir);
-  const statePath = getSessionGoopspecPath(projectDir, STATE_FILENAME, sessionId);
-  const adlPath = getSessionGoopspecPath(projectDir, ADL_FILENAME, sessionId);
-  const checkpointsDir = getSessionGoopspecPath(projectDir, CHECKPOINTS_DIR, sessionId);
-  const historyDir = getSessionGoopspecPath(projectDir, HISTORY_DIR, sessionId);
+  const effectiveWorkflowId = workflowId ?? "default";
+  const statePath = join(getProjectGoopspecDir(projectDir), STATE_FILENAME);
+  const adlPath = getWorkflowDocPath(projectDir, effectiveWorkflowId, ADL_FILENAME);
+  const checkpointsDir = getWorkflowDocPath(projectDir, effectiveWorkflowId, CHECKPOINTS_DIR);
+  const historyDir = getWorkflowDocPath(projectDir, effectiveWorkflowId, HISTORY_DIR);
+  let activeWorkflowId = effectiveWorkflowId;
 
   // In-memory cache of current state
   let cachedState: GoopState | null = null;
@@ -267,6 +375,13 @@ export function createStateManager(
   function ensureGoopspecDir(): void {
     if (!existsSync(goopspecDir)) {
       mkdirSync(goopspecDir, { recursive: true });
+    }
+
+    if (effectiveWorkflowId && effectiveWorkflowId !== "default") {
+      const workflowDir = join(goopspecDir, effectiveWorkflowId);
+      if (!existsSync(workflowDir)) {
+        mkdirSync(workflowDir, { recursive: true });
+      }
     }
   }
 
@@ -326,28 +441,39 @@ export function createStateManager(
 
     const content = safeReadFile(statePath);
     if (!content) {
-      cachedState = createDefaultState(projectName);
+      cachedState = createDefaultState(projectName, activeWorkflowId);
       return cachedState;
     }
 
     try {
       const parsed = JSON.parse(content) as Record<string, unknown>;
-      
-      // Check if migration is needed
-      const needsMigration = !('version' in parsed) || ('project_state' in parsed);
-      
+
+      const version = (parsed.version ?? 0) as number;
+      const needsMigration = !('version' in parsed) || ('project_state' in parsed) || version < STATE_VERSION;
+
+      if (needsMigration && existsSync(statePath)) {
+        const backupPath = `${statePath}.v${version || "old"}-backup`;
+        if (!existsSync(backupPath)) {
+          try {
+            writeFileSync(backupPath, content, "utf-8");
+            log("Created state backup before migration", { backupPath });
+          } catch (error) {
+            logError("Failed to create state backup (continuing anyway)", error);
+          }
+        }
+      }
+
       cachedState = normalizeState(parsed, projectName);
-      
-      // If migration occurred, persist the migrated state to disk
+
       if (needsMigration) {
         log("Persisting migrated state to disk");
         saveState(cachedState);
       }
-      
+
       return cachedState;
     } catch (error) {
       logError("Failed to parse state.json, using default", error);
-      cachedState = createDefaultState(projectName);
+      cachedState = createDefaultState(projectName, activeWorkflowId);
       return cachedState;
     }
   }
@@ -357,9 +483,19 @@ export function createStateManager(
    */
   function saveState(state: GoopState): void {
     ensureGoopspecDir();
-    atomicWriteFile(statePath, JSON.stringify(state, null, 2));
-    cachedState = state;
-    syncSessionMetadata(state);
+    const activeEntry = toWorkflowEntry(activeWorkflowId, state.workflow);
+    const workflows = {
+      ...(state.workflows ?? {}),
+      [activeWorkflowId]: activeEntry,
+    };
+    const synced: GoopState = {
+      ...state,
+      workflow: toWorkflowState(workflows[activeWorkflowId]),
+      workflows,
+    };
+    atomicWriteFile(statePath, JSON.stringify(synced, null, 2));
+    cachedState = synced;
+    syncSessionMetadata(synced);
   }
 
   // -------------------------------------------------------------------------
@@ -367,11 +503,21 @@ export function createStateManager(
   // -------------------------------------------------------------------------
 
   function getState(): GoopState {
-    return loadState();
+    const state = loadState();
+    const active = state.workflows?.[activeWorkflowId];
+    if (active && !isWorkflowStateEqual(state.workflow, active)) {
+      const nextState: GoopState = {
+        ...state,
+        workflow: toWorkflowState(active),
+      };
+      cachedState = nextState;
+      return nextState;
+    }
+    return state;
   }
 
   function setState(updates: Partial<GoopState>): void {
-    const current = loadState();
+    const current = getState();
     const newState: GoopState = {
       ...current,
       ...updates,
@@ -388,8 +534,8 @@ export function createStateManager(
     saveState(newState);
   }
 
-  function updateWorkflow(updates: Partial<GoopState["workflow"]>): void {
-    const current = loadState();
+  function updateWorkflow(updates: Partial<WorkflowState>): void {
+    const current = getState();
     const newState: GoopState = {
       ...current,
       workflow: {
@@ -538,7 +684,7 @@ This file tracks architectural decisions, deviations, and observations made duri
   }
 
   function transitionPhase(to: WorkflowPhase, force: boolean = false): boolean {
-    const current = loadState();
+    const current = getState();
     const from = current.workflow.phase;
     const validTransitions = VALID_TRANSITIONS[from] ?? [];
     
@@ -593,7 +739,7 @@ This file tracks architectural decisions, deviations, and observations made duri
   }
 
   function lockSpec(): void {
-    const current = loadState();
+    const current = getState();
     const newState: GoopState = {
       ...current,
       workflow: {
@@ -607,7 +753,7 @@ This file tracks architectural decisions, deviations, and observations made duri
   }
 
   function unlockSpec(): void {
-    const current = loadState();
+    const current = getState();
     const newState: GoopState = {
       ...current,
       workflow: {
@@ -621,7 +767,7 @@ This file tracks architectural decisions, deviations, and observations made duri
   }
 
   function confirmAcceptance(): void {
-    const current = loadState();
+    const current = getState();
     const newState: GoopState = {
       ...current,
       workflow: {
@@ -635,7 +781,7 @@ This file tracks architectural decisions, deviations, and observations made duri
   }
 
   function resetAcceptance(): void {
-    const current = loadState();
+    const current = getState();
     const newState: GoopState = {
       ...current,
       workflow: {
@@ -649,7 +795,7 @@ This file tracks architectural decisions, deviations, and observations made duri
   }
 
   function completeInterview(): void {
-    const current = loadState();
+    const current = getState();
     const now = new Date().toISOString();
     const newState: GoopState = {
       ...current,
@@ -665,7 +811,7 @@ This file tracks architectural decisions, deviations, and observations made duri
   }
 
   function resetInterview(): void {
-    const current = loadState();
+    const current = getState();
     const newState: GoopState = {
       ...current,
       workflow: {
@@ -680,7 +826,7 @@ This file tracks architectural decisions, deviations, and observations made duri
   }
 
   function setMode(mode: TaskMode): void {
-    const current = loadState();
+    const current = getState();
     const newState: GoopState = {
       ...current,
       workflow: {
@@ -694,7 +840,7 @@ This file tracks architectural decisions, deviations, and observations made duri
   }
 
   function updateWaveProgress(currentWave: number, totalWaves: number): void {
-    const current = loadState();
+    const current = getState();
     const newState: GoopState = {
       ...current,
       workflow: {
@@ -709,7 +855,7 @@ This file tracks architectural decisions, deviations, and observations made duri
   }
 
   function resetWorkflow(): void {
-    const current = loadState();
+    const current = getState();
     const now = new Date().toISOString();
     const newState: GoopState = {
       ...current,
@@ -739,10 +885,108 @@ This file tracks architectural decisions, deviations, and observations made duri
     log("Workflow reset");
   }
 
+  function getWorkflow(id: string): WorkflowEntry | null {
+    const state = loadState();
+    return state.workflows?.[id] ?? null;
+  }
+
+  function listWorkflows(): WorkflowSummary[] {
+    const state = loadState();
+    const workflows = state.workflows ?? { default: toWorkflowEntry("default", state.workflow) };
+
+    return Object.entries(workflows).map(([id, workflow]) => ({
+      workflowId: id,
+      phase: workflow.phase,
+      currentWave: workflow.currentWave,
+      totalWaves: workflow.totalWaves,
+      specLocked: workflow.specLocked,
+      lastActivity: workflow.lastActivity,
+      isActive: id === activeWorkflowId,
+    }));
+  }
+
+  function setActiveWorkflow(id: string): boolean {
+    const state = loadState();
+    if (!state.workflows?.[id]) {
+      return false;
+    }
+
+    activeWorkflowId = id;
+    cachedState = null;
+    return true;
+  }
+
+  function createWorkflow(id: string): WorkflowEntry {
+    const state = getState();
+    const existing = state.workflows?.[id];
+    if (existing) {
+      return existing;
+    }
+
+    const now = new Date().toISOString();
+    const newWorkflow: WorkflowEntry = {
+      workflowId: id,
+      currentPhase: null,
+      phase: "idle",
+      mode: "standard",
+      depth: "standard",
+      researchOptIn: false,
+      specLocked: false,
+      acceptanceConfirmed: false,
+      interviewComplete: false,
+      interviewCompletedAt: null,
+      currentWave: 0,
+      totalWaves: 0,
+      lastActivity: now,
+      status: "idle",
+    };
+
+    saveState({
+      ...state,
+      workflows: { ...(state.workflows ?? {}), [id]: newWorkflow },
+    });
+
+    return newWorkflow;
+  }
+
+  function removeWorkflow(id: string): boolean {
+    if (id === "default") {
+      log("Cannot remove the default workflow");
+      return false;
+    }
+
+    const state = getState();
+    if (!state.workflows?.[id]) {
+      return false;
+    }
+
+    const { [id]: _removed, ...remaining } = state.workflows;
+    saveState({ ...state, workflows: remaining });
+
+    // If the removed workflow was active, fall back to "default"
+    if (activeWorkflowId === id) {
+      activeWorkflowId = "default";
+      cachedState = null;
+    }
+
+    log("Removed workflow from state", { workflowId: id });
+    return true;
+  }
+
+  function getActiveWorkflowId(): string {
+    return activeWorkflowId;
+  }
+
   return {
     getState,
     setState,
     updateWorkflow,
+    getWorkflow,
+    listWorkflows,
+    setActiveWorkflow,
+    createWorkflow,
+    removeWorkflow,
+    getActiveWorkflowId,
     transitionPhase,
     lockSpec,
     unlockSpec,

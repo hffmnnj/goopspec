@@ -9,7 +9,11 @@ import type { PluginContext } from "../core/types.js";
 import { log, logError } from "../shared/logger.js";
 import { createMemoryContextBuilder } from "../features/memory/context-builder.js";
 import { buildEnforcementContext } from "../features/enforcement/index.js";
-import { getSessionGoopspecPath } from "../shared/paths.js";
+import {
+  getSessionGoopspecPath,
+  getWorkflowDir,
+  getWorkflowDocPath,
+} from "../shared/paths.js";
 import { ensurePosixPath } from "../shared/platform.js";
 
 type SystemTransformInput = {
@@ -29,14 +33,15 @@ function normalizePromptPath(path: string): string {
   return ensurePosixPath(path);
 }
 
-function buildSessionContextBlock(sessionId: string): string {
-  const specPath = normalizePromptPath(getSessionGoopspecPath("", "SPEC.md", sessionId));
-  const blueprintPath = normalizePromptPath(getSessionGoopspecPath("", "BLUEPRINT.md", sessionId));
-  const chroniclePath = normalizePromptPath(getSessionGoopspecPath("", "CHRONICLE.md", sessionId));
-  const researchPath = normalizePromptPath(getSessionGoopspecPath("", "RESEARCH.md", sessionId));
-  const statePath = normalizePromptPath(getSessionGoopspecPath("", "state.json", sessionId));
-  const checkpointsPath = normalizePromptPath(getSessionGoopspecPath("", "checkpoints", sessionId));
-  const historyPath = normalizePromptPath(getSessionGoopspecPath("", "history", sessionId));
+function buildSessionContextBlock(projectDir: string, workflowId: string, sessionId: string): string {
+  const workflowDir = getWorkflowDir(projectDir, workflowId);
+  const specPath = normalizePromptPath(getWorkflowDocPath(projectDir, workflowId, "SPEC.md"));
+  const blueprintPath = normalizePromptPath(getWorkflowDocPath(projectDir, workflowId, "BLUEPRINT.md"));
+  const chroniclePath = normalizePromptPath(getWorkflowDocPath(projectDir, workflowId, "CHRONICLE.md"));
+  const researchPath = normalizePromptPath(getWorkflowDocPath(projectDir, workflowId, "RESEARCH.md"));
+  const statePath = normalizePromptPath(getSessionGoopspecPath(projectDir, "state.json"));
+  const checkpointsPath = normalizePromptPath(`${workflowDir}/checkpoints`);
+  const historyPath = normalizePromptPath(`${workflowDir}/history`);
 
   return [
     "<session>",
@@ -72,9 +77,17 @@ export function createSystemTransformHook(ctx: PluginContext) {
     try {
       const state = ctx.stateManager.getState();
       const enforcementContext = buildEnforcementContext(state);
+      const activeWorkflowId =
+        ctx.stateManager.getActiveWorkflowId()
+        || (typeof ctx.workflowId === "string" ? ctx.workflowId.trim() : "")
+        || "default";
       const sessionContext =
         typeof ctx.sessionId === "string" && ctx.sessionId.trim().length > 0
-          ? buildSessionContextBlock(ctx.sessionId.trim())
+          ? buildSessionContextBlock(
+            ctx.input.directory,
+            activeWorkflowId,
+            ctx.sessionId.trim(),
+          )
           : "";
 
       let memoryContext = "";

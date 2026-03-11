@@ -13,6 +13,36 @@ import { getHomeDir } from "./platform.js";
 
 const SHARED_RESOURCE_NAMES = ["memory.db", "config.json", "archive"] as const;
 
+/**
+ * Files that are workflow-scoped (live in .goopspec/<workflowId>/)
+ */
+export const WORKFLOW_SCOPED_FILES = [
+  "SPEC.md",
+  "BLUEPRINT.md",
+  "CHRONICLE.md",
+  "REQUIREMENTS.md",
+  "HANDOFF.md",
+  "RESEARCH.md",
+  "ADL.md",
+  "checkpoints/",
+  "history/",
+] as const;
+
+export type WorkflowScopedFile = (typeof WORKFLOW_SCOPED_FILES)[number];
+
+/**
+ * Files that are always global (live at .goopspec/ root)
+ */
+export const GLOBAL_FILES = [
+  "state.json",
+  "config.json",
+  "memory.db",
+  "archive",
+  "sessions/",
+] as const;
+
+export type GlobalFile = (typeof GLOBAL_FILES)[number];
+
 type PathLike = {
   basename(value: string): string;
   resolve(...paths: string[]): string;
@@ -67,6 +97,57 @@ export function isDevMode(): boolean {
  */
 export function getProjectGoopspecDir(projectDir: string): string {
   return join(projectDir, ".goopspec");
+}
+
+/**
+ * Check if a filename is workflow-scoped
+ */
+export function isWorkflowScopedFile(filename: string): boolean {
+  return WORKFLOW_SCOPED_FILES.some((file) => {
+    if (file.endsWith("/")) {
+      const dir = file.slice(0, -1);
+      return filename === file || filename === dir || filename.startsWith(`${dir}/`);
+    }
+
+    return filename === file;
+  });
+}
+
+/**
+ * Get the workflow-scoped directory: .goopspec/<workflowId>/
+ */
+export function getWorkflowDir(projectDir: string, workflowId: string): string {
+  if (!workflowId || workflowId === "default") {
+    return getProjectGoopspecDir(projectDir);
+  }
+
+  return join(getProjectGoopspecDir(projectDir), workflowId);
+}
+
+/**
+ * Get the full path for a workflow-scoped document
+ * .goopspec/<workflowId>/SPEC.md, etc.
+ */
+export function getWorkflowDocPath(
+  projectDir: string,
+  workflowId: string,
+  filename: string,
+): string {
+  return join(getWorkflowDir(projectDir, workflowId), filename);
+}
+
+/**
+ * Ensure the workflow directory exists
+ */
+export async function ensureWorkflowDir(
+  projectDir: string,
+  workflowId: string,
+): Promise<void> {
+  if (!workflowId || workflowId === "default") {
+    return;
+  }
+
+  await ensureDir(getWorkflowDir(projectDir, workflowId));
 }
 
 /**

@@ -59,8 +59,9 @@ Every agent response MUST include this XML block at the END of their response:
       Exact description of next task
     </next_action>
     <files_to_read>
-      <file>.goopspec/SPEC.md</file>
-      <file>.goopspec/BLUEPRINT.md</file>
+      <!-- workflowId is the active workflow identifier, e.g., "feat-auth" -->
+      <file>.goopspec/<workflowId>/SPEC.md</file>
+      <file>.goopspec/<workflowId>/BLUEPRINT.md</file>
     </files_to_read>
     <blockers>None | Description of blocker</blockers>
     <suggest_new_session>true|false</suggest_new_session>
@@ -164,8 +165,8 @@ Every agent response MUST include this XML block at the END of their response:
   
   <artifacts>
     <files>
-      <file path=".goopspec/BLUEPRINT.md" action="created">Execution blueprint</file>
-      <file path=".goopspec/SPEC.md" action="modified">Added traceability mapping</file>
+      <file path=".goopspec/<workflowId>/BLUEPRINT.md" action="created">Execution blueprint</file>
+      <file path=".goopspec/<workflowId>/SPEC.md" action="modified">Added traceability mapping</file>
     </files>
   </artifacts>
   
@@ -177,7 +178,7 @@ Every agent response MUST include this XML block at the END of their response:
     <ready>true</ready>
     <next_action agent="orchestrator">Review blueprint with user, confirm lock in /goop-plan, then /goop-execute</next_action>
     <files_to_read>
-      <file>.goopspec/BLUEPRINT.md</file>
+      <file>.goopspec/<workflowId>/BLUEPRINT.md</file>
     </files_to_read>
     <blockers>None</blockers>
     <suggest_new_session>true</suggest_new_session>

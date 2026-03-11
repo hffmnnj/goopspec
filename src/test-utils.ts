@@ -115,7 +115,7 @@ export function createMockToolContext(overrides: Partial<ToolContext> = {}): Too
  * Default GoopState for testing
  */
 export const DEFAULT_TEST_STATE: GoopState = {
-  version: 1,
+  version: 2,
   project: {
     name: "test-project",
     initialized: new Date().toISOString(),
@@ -133,6 +133,23 @@ export const DEFAULT_TEST_STATE: GoopState = {
     currentWave: 0,
     totalWaves: 0,
     lastActivity: new Date().toISOString(),
+  },
+  workflows: {
+    default: {
+      workflowId: "default",
+      phase: "idle",
+      mode: "standard",
+      depth: "standard",
+      researchOptIn: false,
+      specLocked: false,
+      acceptanceConfirmed: false,
+      interviewComplete: false,
+      interviewCompletedAt: null,
+      currentPhase: null,
+      currentWave: 0,
+      totalWaves: 0,
+      lastActivity: new Date().toISOString(),
+    },
   },
   execution: {
     activeCheckpointId: null,
@@ -157,6 +174,19 @@ export function createMockStateManager(initialState: Partial<GoopState> = {}): S
   let adlContent = "# Automated Decision Log\n\n";
   const checkpoints = new Map<string, CheckpointData>();
   const history: HistoryEntry[] = [];
+  let activeWorkflowId = "default";
+
+  function syncActiveWorkflow(): void {
+    state.workflows = {
+      ...(state.workflows ?? {}),
+      [activeWorkflowId]: {
+        workflowId: activeWorkflowId,
+        ...state.workflow,
+      },
+    };
+  }
+
+  syncActiveWorkflow();
   
   return {
     getState: () => state,
@@ -166,9 +196,11 @@ export function createMockStateManager(initialState: Partial<GoopState> = {}): S
         ...state,
         ...updates,
         workflow: { ...state.workflow, ...updates.workflow },
+        workflows: { ...state.workflows, ...updates.workflows },
         execution: { ...state.execution, ...updates.execution },
         project: { ...state.project, ...updates.project },
       };
+      syncActiveWorkflow();
     },
     
     updateWorkflow: (updates: Partial<GoopState["workflow"]>) => {
@@ -176,7 +208,94 @@ export function createMockStateManager(initialState: Partial<GoopState> = {}): S
         ...state,
         workflow: { ...state.workflow, ...updates },
       };
+      syncActiveWorkflow();
     },
+
+    getWorkflow: (id: string) => state.workflows?.[id] ?? null,
+
+    listWorkflows: () => {
+      const workflows = state.workflows ?? {
+        default: {
+          workflowId: "default",
+          ...state.workflow,
+        },
+      };
+
+      return Object.entries(workflows).map(([workflowId, workflow]) => ({
+        workflowId,
+        phase: workflow.phase,
+        currentWave: workflow.currentWave,
+        totalWaves: workflow.totalWaves,
+        specLocked: workflow.specLocked,
+        lastActivity: workflow.lastActivity,
+        isActive: workflowId === activeWorkflowId,
+      }));
+    },
+
+    setActiveWorkflow: (id: string) => {
+      if (!state.workflows?.[id]) {
+        return false;
+      }
+
+      activeWorkflowId = id;
+      state = {
+        ...state,
+        workflow: {
+          ...state.workflows[id],
+        },
+      };
+      return true;
+    },
+
+    createWorkflow: (id: string) => {
+      const existing = state.workflows?.[id];
+      if (existing) {
+        return existing;
+      }
+
+      const now = new Date().toISOString();
+      const workflow: NonNullable<GoopState["workflows"]>[string] = {
+        workflowId: id,
+        currentPhase: null,
+        phase: "idle",
+        mode: "standard",
+        depth: "standard",
+        researchOptIn: false,
+        specLocked: false,
+        acceptanceConfirmed: false,
+        interviewComplete: false,
+        interviewCompletedAt: null,
+        currentWave: 0,
+        totalWaves: 0,
+        lastActivity: now,
+      };
+
+      state = {
+        ...state,
+        workflows: {
+          ...(state.workflows ?? {}),
+          [id]: workflow,
+        },
+      };
+      return workflow;
+    },
+
+    removeWorkflow: (id: string): boolean => {
+      if (id === "default") {
+        return false;
+      }
+      if (!state.workflows?.[id]) {
+        return false;
+      }
+      const { [id]: _removed, ...remaining } = state.workflows;
+      state = { ...state, workflows: remaining };
+      if (activeWorkflowId === id) {
+        activeWorkflowId = "default";
+      }
+      return true;
+    },
+
+    getActiveWorkflowId: () => activeWorkflowId,
     
     transitionPhase: (to: WorkflowPhase, force = false): boolean => {
       const validTransitions: Record<WorkflowPhase, WorkflowPhase[]> = {
@@ -197,6 +316,7 @@ export function createMockStateManager(initialState: Partial<GoopState> = {}): S
         }
         state.workflow.phase = to;
         state.workflow.lastActivity = new Date().toISOString();
+        syncActiveWorkflow();
         return true;
       }
       return false;
@@ -204,37 +324,45 @@ export function createMockStateManager(initialState: Partial<GoopState> = {}): S
     
     lockSpec: () => {
       state.workflow.specLocked = true;
+      syncActiveWorkflow();
     },
     
     unlockSpec: () => {
       state.workflow.specLocked = false;
+      syncActiveWorkflow();
     },
     
     confirmAcceptance: () => {
       state.workflow.acceptanceConfirmed = true;
+      syncActiveWorkflow();
     },
     
     resetAcceptance: () => {
       state.workflow.acceptanceConfirmed = false;
+      syncActiveWorkflow();
     },
     
     completeInterview: () => {
       state.workflow.interviewComplete = true;
       state.workflow.interviewCompletedAt = new Date().toISOString();
+      syncActiveWorkflow();
     },
     
     resetInterview: () => {
       state.workflow.interviewComplete = false;
       state.workflow.interviewCompletedAt = null;
+      syncActiveWorkflow();
     },
     
     setMode: (mode: TaskMode) => {
       state.workflow.mode = mode;
+      syncActiveWorkflow();
     },
     
     updateWaveProgress: (current: number, total: number) => {
       state.workflow.currentWave = current;
       state.workflow.totalWaves = total;
+      syncActiveWorkflow();
     },
     
     resetWorkflow: () => {
@@ -252,6 +380,7 @@ export function createMockStateManager(initialState: Partial<GoopState> = {}): S
         totalWaves: 0,
         lastActivity: new Date().toISOString(),
       };
+      syncActiveWorkflow();
     },
     
     getADL: () => adlContent,
@@ -591,6 +720,151 @@ export const TEST_SKILL_RESOURCE: ResolvedResource = {
   body: "# GoopSpec Core\n\nThe 5-phase workflow...",
   content: "---\nname: goop-core\n---\n# GoopSpec Core",
 };
+
+// ============================================================================
+// Multi-Workflow Test Fixtures
+// ============================================================================
+
+/**
+ * Create a v1 (pre-multi-workflow) state JSON object for migration testing
+ */
+export function createMockV1State(overrides: {
+  projectName?: string;
+  phase?: WorkflowPhase;
+  specLocked?: boolean;
+} = {}): Record<string, unknown> {
+  return {
+    version: 1,
+    project: {
+      name: overrides.projectName ?? "legacy-project",
+      initialized: new Date().toISOString(),
+    },
+    workflow: {
+      currentPhase: null,
+      phase: overrides.phase ?? "idle",
+      mode: "standard",
+      depth: "standard",
+      researchOptIn: false,
+      specLocked: overrides.specLocked ?? false,
+      acceptanceConfirmed: false,
+      interviewComplete: false,
+      interviewCompletedAt: null,
+      currentWave: 0,
+      totalWaves: 0,
+      lastActivity: new Date().toISOString(),
+      status: overrides.phase ?? "idle",
+    },
+    execution: {
+      activeCheckpointId: null,
+      completedPhases: [],
+      pendingTasks: [],
+    },
+  };
+}
+
+/**
+ * Create a v2 (multi-workflow) state JSON object for testing
+ */
+export function createMockV2State(overrides: {
+  projectName?: string;
+  workflows?: Record<string, {
+    phase?: WorkflowPhase;
+    specLocked?: boolean;
+    currentWave?: number;
+    totalWaves?: number;
+  }>;
+  activeWorkflowId?: string;
+} = {}): Record<string, unknown> {
+  const workflowDefs = overrides.workflows ?? { default: {} };
+  const now = new Date().toISOString();
+
+  const workflows: Record<string, unknown> = {};
+  for (const [id, def] of Object.entries(workflowDefs)) {
+    workflows[id] = {
+      workflowId: id,
+      currentPhase: null,
+      phase: def.phase ?? "idle",
+      mode: "standard",
+      depth: "standard",
+      researchOptIn: false,
+      specLocked: def.specLocked ?? false,
+      acceptanceConfirmed: false,
+      interviewComplete: false,
+      interviewCompletedAt: null,
+      currentWave: def.currentWave ?? 0,
+      totalWaves: def.totalWaves ?? 0,
+      lastActivity: now,
+      status: def.phase ?? "idle",
+    };
+  }
+
+  const activeId = overrides.activeWorkflowId ?? Object.keys(workflows)[0] ?? "default";
+  const activeEntry = workflows[activeId] as Record<string, unknown>;
+
+  return {
+    version: 2,
+    project: {
+      name: overrides.projectName ?? "test-project",
+      initialized: now,
+    },
+    workflow: { ...activeEntry },
+    workflows,
+    execution: {
+      activeCheckpointId: null,
+      completedPhases: [],
+      pendingTasks: [],
+    },
+  };
+}
+
+/**
+ * Set up a test environment with multiple workflows pre-created on disk.
+ * Returns a temp dir with a valid .goopspec/state.json containing multiple workflows.
+ */
+export function setupMultiWorkflowEnvironment(
+  workflowIds: string[],
+  options: {
+    prefix?: string;
+    phases?: Record<string, WorkflowPhase>;
+    specLocked?: Record<string, boolean>;
+  } = {},
+): {
+  testDir: string;
+  goopspecDir: string;
+  cleanup: () => void;
+} {
+  const env = setupTestEnvironment(options.prefix ?? "goopspec-multi-wf");
+  const { testDir, goopspecDir } = env;
+
+  const workflowDefs: Record<string, { phase?: WorkflowPhase; specLocked?: boolean }> = {};
+  for (const id of workflowIds) {
+    workflowDefs[id] = {
+      phase: options.phases?.[id],
+      specLocked: options.specLocked?.[id],
+    };
+  }
+
+  const state = createMockV2State({
+    projectName: "multi-wf-project",
+    workflows: workflowDefs,
+  });
+
+  // Write state to disk
+  writeFileSync(
+    join(goopspecDir, "state.json"),
+    JSON.stringify(state, null, 2),
+    "utf-8",
+  );
+
+  // Create per-workflow subdirs for non-default workflows
+  for (const id of workflowIds) {
+    if (id !== "default") {
+      mkdirSync(join(goopspecDir, id), { recursive: true });
+    }
+  }
+
+  return { testDir, goopspecDir, cleanup: env.cleanup };
+}
 
 // ============================================================================
 // Test Fixtures - Phase Files

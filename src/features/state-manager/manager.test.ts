@@ -3,12 +3,12 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach } from "bun:test";
-import { mkdirSync, rmSync, existsSync, readFileSync } from "fs";
+import { mkdirSync, rmSync, existsSync, readFileSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
-import { createStateManager, initializeGoopspec } from "./manager";
+import { createStateManager, initializeGoopspec } from "./manager.js";
 import { createSession } from "../session/manager.js";
-import type { ADLEntry, HistoryEntry } from "../../core/types";
+import type { ADLEntry, HistoryEntry } from "../../core/types.js";
 
 // Use a temp directory for tests
 const TEST_DIR = join(tmpdir(), `goopspec-test-${Date.now()}`);
@@ -43,9 +43,10 @@ describe("state-manager", () => {
       const manager = createStateManager(TEST_DIR, "test-project");
       const state = manager.getState();
       
-      expect(state.version).toBe(1);
+      expect(state.version).toBe(2);
       expect(state.project.name).toBe("test-project");
       expect(state.workflow.phase).toBe("idle");
+      expect(state.workflow.workflowId).toBe("default");
       expect(state.workflow.mode).toBe("standard");
       expect(state.workflow.specLocked).toBe(false);
       expect(state.workflow.acceptanceConfirmed).toBe(false);
@@ -53,6 +54,7 @@ describe("state-manager", () => {
       expect(state.workflow.totalWaves).toBe(0);
       expect(state.workflow.currentPhase).toBeNull();
       expect(state.execution.completedPhases).toEqual([]);
+      expect(state.workflows?.default).toBeDefined();
     });
 
     it("should return cached state on subsequent calls", () => {
@@ -387,8 +389,163 @@ describe("state-manager", () => {
     });
   });
 
+  describe("multi-workflow", () => {
+    it("default state has workflows map with 'default' entry", () => {
+      const manager = createStateManager(TEST_DIR);
+      const state = manager.getState();
+
+      expect(state.workflows).toBeDefined();
+      expect(state.workflows?.default).toBeDefined();
+      expect(state.workflows?.default.workflowId).toBe("default");
+      expect(state.workflows?.default.phase).toBe("idle");
+    });
+
+    it("getWorkflow returns workflow by id", () => {
+      const manager = createStateManager(TEST_DIR);
+      manager.createWorkflow("feat-x");
+
+      const workflow = manager.getWorkflow("feat-x");
+      expect(workflow).not.toBeNull();
+      expect(workflow?.workflowId).toBe("feat-x");
+    });
+
+    it("listWorkflows returns all workflows", () => {
+      const manager = createStateManager(TEST_DIR);
+      manager.createWorkflow("feat-a");
+      manager.createWorkflow("feat-b");
+
+      const workflows = manager.listWorkflows();
+      expect(workflows.some((workflow) => workflow.workflowId === "default")).toBe(true);
+      expect(workflows.some((workflow) => workflow.workflowId === "feat-a")).toBe(true);
+      expect(workflows.some((workflow) => workflow.workflowId === "feat-b")).toBe(true);
+    });
+
+    it("setActiveWorkflow switches active workflow", () => {
+      const manager = createStateManager(TEST_DIR);
+      manager.createWorkflow("feat-a");
+      manager.createWorkflow("feat-b");
+
+      manager.setActiveWorkflow("feat-b");
+      manager.updateWorkflow({ phase: "plan" });
+
+      const activeState = manager.getState();
+      const featB = manager.getWorkflow("feat-b");
+      expect(activeState.workflow.workflowId).toBe("feat-b");
+      expect(activeState.workflow.phase).toBe("plan");
+      expect(featB?.phase).toBe("plan");
+    });
+
+    it("createWorkflow adds new entry to workflows map", () => {
+      const manager = createStateManager(TEST_DIR);
+      manager.createWorkflow("feat-x");
+
+      const state = manager.getState();
+      expect(state.workflows?.["feat-x"]).toBeDefined();
+      expect(manager.getWorkflow("feat-x")).not.toBeNull();
+    });
+
+    it("getActiveWorkflowId returns current workflow id", () => {
+      const manager = createStateManager(TEST_DIR);
+      expect(manager.getActiveWorkflowId()).toBe("default");
+    });
+  });
+
+  describe("migration v1 -> v2", () => {
+    it("v1 migration: preserves workflow as default entry", () => {
+      const goopspecDir = join(TEST_DIR, ".goopspec");
+      mkdirSync(goopspecDir, { recursive: true });
+
+      const v1State = {
+        version: 1,
+        project: {
+          name: "v1-project",
+          initialized: new Date().toISOString(),
+        },
+        workflow: {
+          currentPhase: "legacy-phase",
+          phase: "execute",
+          mode: "comprehensive",
+          depth: "deep",
+          researchOptIn: true,
+          specLocked: true,
+          acceptanceConfirmed: false,
+          interviewComplete: true,
+          interviewCompletedAt: new Date().toISOString(),
+          currentWave: 3,
+          totalWaves: 9,
+          lastActivity: new Date().toISOString(),
+          autopilot: true,
+          lazyAutopilot: false,
+          status: "execute",
+        },
+        execution: {
+          activeCheckpointId: null,
+          completedPhases: ["plan", "research", "specify"],
+          pendingTasks: [],
+        },
+      };
+
+      const statePath = join(goopspecDir, "state.json");
+      mkdirSync(goopspecDir, { recursive: true });
+      writeFileSync(statePath, JSON.stringify(v1State, null, 2), "utf-8");
+
+      const manager = createStateManager(TEST_DIR);
+      const state = manager.getState();
+
+      expect(state.version).toBe(2);
+      expect(state.workflows?.default).toBeDefined();
+      expect(state.workflows?.default.workflowId).toBe("default");
+      expect(state.workflows?.default.phase).toBe("execute");
+      expect(state.workflows?.default.currentPhase).toBe("legacy-phase");
+      expect(state.workflows?.default.currentWave).toBe(3);
+      expect(state.workflows?.default.totalWaves).toBe(9);
+    });
+
+    it("v1 migration: creates backup file", () => {
+      const goopspecDir = join(TEST_DIR, ".goopspec");
+      mkdirSync(goopspecDir, { recursive: true });
+
+      const v1State = {
+        version: 1,
+        project: {
+          name: "backup-project",
+          initialized: new Date().toISOString(),
+        },
+        workflow: {
+          currentPhase: null,
+          phase: "idle",
+          mode: "standard",
+          depth: "standard",
+          researchOptIn: false,
+          specLocked: false,
+          acceptanceConfirmed: false,
+          interviewComplete: false,
+          interviewCompletedAt: null,
+          currentWave: 0,
+          totalWaves: 0,
+          lastActivity: new Date().toISOString(),
+          status: "idle",
+        },
+        execution: {
+          activeCheckpointId: null,
+          completedPhases: [],
+          pendingTasks: [],
+        },
+      };
+
+      const statePath = join(goopspecDir, "state.json");
+      writeFileSync(statePath, JSON.stringify(v1State, null, 2), "utf-8");
+
+      const manager = createStateManager(TEST_DIR);
+      manager.getState();
+
+      const backupPath = `${statePath}.v1-backup`;
+      expect(existsSync(backupPath)).toBe(true);
+    });
+  });
+
   describe("session-aware routing", () => {
-    it("should persist session state in session directory", () => {
+    it("should persist state at root even when session is provided", () => {
       createSession(TEST_DIR, "feat-auth");
       const manager = createStateManager(TEST_DIR, "session-project", undefined, "feat-auth");
 
@@ -408,8 +565,8 @@ describe("state-manager", () => {
       );
       const rootStatePath = join(TEST_DIR, ".goopspec", "state.json");
 
-      expect(existsSync(sessionStatePath)).toBe(true);
-      expect(existsSync(rootStatePath)).toBe(false);
+      expect(existsSync(sessionStatePath)).toBe(false);
+      expect(existsSync(rootStatePath)).toBe(true);
     });
 
     it("should keep root state path behavior when no session is provided", () => {
@@ -426,9 +583,15 @@ describe("state-manager", () => {
       expect(existsSync(rootStatePath)).toBe(true);
     });
 
-    it("should write checkpoints and history inside the session directory", () => {
+    it("should write checkpoints and history inside the workflow directory", () => {
       createSession(TEST_DIR, "feat-routing");
-      const manager = createStateManager(TEST_DIR, "routing-project", undefined, "feat-routing");
+      const manager = createStateManager(
+        TEST_DIR,
+        "routing-project",
+        undefined,
+        "feat-routing",
+        "feat-routing",
+      );
       const state = manager.getState();
 
       manager.saveCheckpoint("cp-session", {
@@ -445,7 +608,6 @@ describe("state-manager", () => {
       const sessionCheckpointPath = join(
         TEST_DIR,
         ".goopspec",
-        "sessions",
         "feat-routing",
         "checkpoints",
         "cp-session.json",
@@ -454,7 +616,6 @@ describe("state-manager", () => {
       const sessionHistoryPath = join(
         TEST_DIR,
         ".goopspec",
-        "sessions",
         "feat-routing",
         "history",
         `${today}.json`,

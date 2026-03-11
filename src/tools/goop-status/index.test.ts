@@ -369,4 +369,57 @@ describe("goop_status tool", () => {
       expect(result).not.toContain("Active Sessions");
     });
   });
+
+  describe("multi-workflow display", () => {
+    it("shows workflow ID for single workflow", async () => {
+      const tool = createGoopStatusTool(ctx);
+      const result = await tool.execute({}, toolContext);
+
+      expect(result).toContain("**Workflow:** default");
+    });
+
+    it("shows count and list for multiple workflows", async () => {
+      ctx.stateManager.createWorkflow("feat-auth");
+      ctx.stateManager.createWorkflow("feat-billing");
+
+      const tool = createGoopStatusTool(ctx);
+      const result = await tool.execute({}, toolContext);
+
+      expect(result).toContain("**Workflows:** 3 active");
+      expect(result).toContain("► default");
+      expect(result).toContain("feat-auth");
+      expect(result).toContain("feat-billing");
+    });
+
+    it("shows detailed workflow table in verbose mode with multiple workflows", async () => {
+      ctx.stateManager.createWorkflow("feat-auth");
+
+      const tool = createGoopStatusTool(ctx);
+      const result = await tool.execute({ verbose: true }, toolContext);
+
+      expect(result).toContain("### Workflows");
+      expect(result).toContain("| ► | default |");
+      expect(result).toContain("feat-auth");
+    });
+
+    it("gracefully handles missing listWorkflows method", async () => {
+      // Simulate a state manager without listWorkflows (older version)
+      const origList = ctx.stateManager.listWorkflows;
+      const origGetActive = ctx.stateManager.getActiveWorkflowId;
+      // @ts-expect-error — testing graceful degradation with undefined method
+      ctx.stateManager.listWorkflows = undefined;
+      // @ts-expect-error — testing graceful degradation with undefined method
+      ctx.stateManager.getActiveWorkflowId = undefined;
+
+      const tool = createGoopStatusTool(ctx);
+      const result = await tool.execute({}, toolContext);
+
+      // Should still render without crashing
+      expect(result).toContain("GoopSpec · Status");
+      expect(result).toContain("Phase:");
+
+      ctx.stateManager.listWorkflows = origList;
+      ctx.stateManager.getActiveWorkflowId = origGetActive;
+    });
+  });
 });

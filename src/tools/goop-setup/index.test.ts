@@ -549,6 +549,17 @@ describe("goop_setup tool", () => {
 
       expect(result).toContain("## MCPs");
     });
+
+    it("shows worktree status", async () => {
+      const tool = createGoopSetupTool(ctx);
+      const result = await tool.execute({ action: "status" }, toolContext);
+
+      expect(result).toContain("## Worktree Status");
+      expect(result).toContain("In worktree:");
+      expect(result).toContain("Worktree path:");
+      expect(result).toContain("Branch:");
+      expect(result).toContain("Inferred workflow ID:");
+    });
   });
 
   describe("memory configuration", () => {

@@ -332,11 +332,61 @@ If `$ARGUMENTS` provided:
 Otherwise:
 > "What do you want to build?"
 
-### 2.1.1 Branch Name Inference (if branch creation requested)
+### 2.1.1 Workflow ID Creation (REQUIRED — always run this)
+
+**This step is mandatory regardless of whether a branch was requested or a worktree was detected.** Every discuss session must be bound to an isolated workflowId before any files are written.
+
+**Step 1 — Infer workflowId from the user's vision:**
+
+If worktree detection (section 1.12) already produced an `inferredWorkflowId`, use it. Otherwise infer from the vision text:
+- Extract the topic or goal the user described
+- Normalise to a short kebab-case slug: 3–6 words max
+- Strip common prefixes if they came from a branch name: `feat/`, `fix/`, `feature/`, `bugfix/`, `chore/`
+- Examples: `dark-mode-toggle`, `payment-system-rebuild`, `auth-jwt-refresh`, `user-profile-page`
+- Default if nothing can be inferred: `default`
+
+**Step 2 — Create and bind the workflow:**
+
+```
+goop_state({ action: "create-workflow", workflowId: "<inferredId>" })
+goop_state({ action: "set-active-workflow", workflowId: "<inferredId>" })
+```
+
+These two calls are **non-negotiable**. They must happen before writing ANY workflow document (REQUIREMENTS.md, SPEC.md, BLUEPRINT.md, etc.). Until these calls are made, all file writes will fall into the `default` workflow slot and collide with other sessions.
+
+**In Lazy Autopilot mode:** Infer the workflowId silently from the user's initial prompt and execute both calls without any confirmation question.
+
+**In standard/autopilot mode** — confirm with the user using the `question` tool:
+
+```ts
+question({
+  header: "Workflow ID",
+  question: "I'll scope this work to workflow `<inferredId>`. All documents will be saved under `.goopspec/<inferredId>/`.",
+  options: [
+    { label: "Use `<inferredId>` (Recommended)", description: "Isolates this session from other concurrent work" },
+    { label: "Use a different name", description: "Enter a custom workflow ID (kebab-case)" }
+  ]
+})
+```
+
+On approval (or in Lazy Autopilot): execute both `create-workflow` and `set-active-workflow` calls.
+On custom: accept user input, validate it is kebab-case, then execute both calls with the custom value.
+
+**Verification — after both calls, confirm the binding:**
+
+```
+goop_state({ action: "get" })
+```
+
+The returned state should show `workflowId: "<inferredId>"` as the active workflow. All subsequent file writes in this session target `.goopspec/<inferredId>/`.
+
+---
+
+### 2.1.2 Branch Name Inference (if branch creation requested)
 
 **Only execute this section if the user selected "Yes, create a branch" in section 1.2.**
 
-After the user has described their vision (section 2.1), infer a branch name from what they described:
+After the user has described their vision (section 2.1) and the workflowId has been created and bound (section 2.1.1), infer a branch name from what they described:
 
 1. **Infer a branch name** from the vision content:
    - Construct a short `type/kebab-case` slug from the topic or goal

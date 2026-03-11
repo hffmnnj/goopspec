@@ -38,6 +38,9 @@ Actions:
 - 'set-autopilot': Enable or disable autopilot mode (supports optional lazy mode)
 - 'update-wave': Update wave progress (call ONLY after wave completes — setting currentWave=totalWaves triggers auto-progression to accept)
 - 'reset': Reset entire workflow to idle state
+- 'list-workflows': List all workflows with status table
+- 'set-active-workflow': Switch the active workflow (requires workflowId)
+- 'create-workflow': Create a new workflow entry (requires workflowId in kebab-case)
 
 IMPORTANT: Always use this tool instead of Read/Edit on state.json to avoid conflicts.`,
     args: {
@@ -55,7 +58,11 @@ IMPORTANT: Always use this tool instead of Read/Edit on state.json to avoid conf
         "set-autopilot",
         "update-wave",
         "reset",
+        "list-workflows",
+        "set-active-workflow",
+        "create-workflow",
       ]),
+      workflowId: tool.schema.string().optional(),
       phase: tool.schema.string().optional(),
       mode: tool.schema.string().optional(),
       depth: tool.schema.string().optional(),
@@ -102,8 +109,15 @@ IMPORTANT: Always use this tool instead of Read/Edit on state.json to avoid conf
               : `${phaseCount} phases (... → ${lastThree})`;
           }
           
+          const activeWorkflowId = ctx.stateManager.getActiveWorkflowId?.() ?? "default";
+          const resolvedWorkflowId = workflow.workflowId ?? activeWorkflowId;
+          const workflowDocPrefix = activeWorkflowId === "default"
+            ? ".goopspec/"
+            : `.goopspec/${activeWorkflowId}/`;
+
           return `## 🔮 GoopSpec · State
 - **Project:** ${state.project.name} | **Initialized:** ${initializedDate}
+- **Workflow ID:** ${resolvedWorkflowId} | **Active Workflow:** ${activeWorkflowId} | **Docs:** \`${workflowDocPrefix}\`
 - **Phase:** ${phaseIcon} ${workflow.phase} | **Mode:** ${workflow.mode} | **Depth:** ${workflow.depth}
 - **Interview:** ${workflow.interviewComplete ? "✓ Complete" : "⏳ Pending"}${interviewDate ? ` (${interviewDate})` : ""} | **Spec:** ${workflow.specLocked ? "🔒 Locked" : "🔓 Unlocked"}
 - **Acceptance:** ${workflow.acceptanceConfirmed ? "✓ Confirmed" : "⏳ Pending"} | **Wave:** ${workflow.currentWave}/${workflow.totalWaves}
@@ -261,8 +275,51 @@ All workflow flags cleared. Ready for a new task.
 → Run \`/goop-discuss\` to start.`;
         }
 
+        case "list-workflows": {
+          const workflows = ctx.stateManager.listWorkflows?.() ?? [];
+          if (workflows.length === 0) {
+            return "No workflows found. Run `/goop-discuss` to create one.";
+          }
+          const activeId = ctx.stateManager.getActiveWorkflowId?.() ?? "default";
+          const rows = workflows.map(wf => {
+            const prefix = wf.workflowId === activeId ? "►" : " ";
+            const waveStr = `${wf.currentWave}/${wf.totalWaves}`;
+            const spec = wf.specLocked ? "🔒" : "🔓";
+            const date = wf.lastActivity?.split("T")[0] ?? "—";
+            return `${prefix} ${wf.workflowId.padEnd(20)} ${wf.phase.padEnd(8)} Wave ${waveStr.padEnd(6)} ${spec} ${date}`;
+          });
+          return `## Workflows\n\n  ${"ID".padEnd(20)} ${"Phase".padEnd(8)} ${"Wave".padEnd(10)} Spec Date\n${rows.join("\n")}\n\nActive: ${activeId}`;
+        }
+
+        case "set-active-workflow": {
+          if (!args.workflowId) {
+            return "✗ Error: 'workflowId' is required for set-active-workflow action.";
+          }
+          const success = ctx.stateManager.setActiveWorkflow(args.workflowId);
+          if (!success) {
+            return `✗ Error: Workflow '${args.workflowId}' not found. Use list-workflows to see available workflows.`;
+          }
+          ctx.workflowId = args.workflowId;
+          return `✓ Active workflow set to: ${args.workflowId}`;
+        }
+
+        case "create-workflow": {
+          if (!args.workflowId) {
+            return "✗ Error: 'workflowId' is required for create-workflow action.";
+          }
+          if (!/^[a-z0-9][a-z0-9-]*[a-z0-9]$/.test(args.workflowId) || args.workflowId.length < 2) {
+            return `✗ Error: Invalid workflow ID '${args.workflowId}'. Must be kebab-case (lowercase letters, numbers, hyphens), min 2 chars.`;
+          }
+          const existing = ctx.stateManager.getWorkflow(args.workflowId);
+          if (existing) {
+            return `✓ Workflow '${args.workflowId}' already exists (no-op).\n\nWorkflow ID: ${existing.workflowId}\nPhase: ${existing.phase}\n\n→ Use set-active-workflow to bind this session to it.`;
+          }
+          const workflow = ctx.stateManager.createWorkflow(args.workflowId);
+          return `✓ Workflow '${args.workflowId}' created.\n\nWorkflow ID: ${workflow.workflowId}\nPhase: ${workflow.phase}\n\n→ Call set-active-workflow to bind this session to the new workflow.`;
+        }
+
         default:
-          return "Unknown action. Valid actions: get, transition, complete-interview, reset-interview, lock-spec, unlock-spec, confirm-acceptance, reset-acceptance, set-mode, set-depth, set-autopilot (supports optional lazy), update-wave, reset";
+          return "Unknown action. Valid actions: get, transition, complete-interview, reset-interview, lock-spec, unlock-spec, confirm-acceptance, reset-acceptance, set-mode, set-depth, set-autopilot (supports optional lazy), update-wave, reset, list-workflows, set-active-workflow, create-workflow";
       }
     },
   });

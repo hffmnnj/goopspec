@@ -9,8 +9,8 @@ import {
   getSessionIndex,
   listSessions,
   updateSessionIndex,
-  type SessionInfo,
 } from "./manager.js";
+import type { SessionInfo } from "./types.js";
 import * as sessionModule from "./index.js";
 
 describe("session manager", () => {
@@ -48,6 +48,14 @@ describe("session manager", () => {
     expect(sessions[0]?.description).toBe("Auth work");
     expect(typeof sessions[0]?.createdAt).toBe("string");
     expect(typeof sessions[0]?.lastActivity).toBe("string");
+  });
+
+  it("stores workflowId when creating a session", () => {
+    const created = createSession(testDir, "feature-workflow", "Workflow work", "feat-x");
+    const sessions = listSessions(testDir);
+
+    expect(created.workflowId).toBe("feat-x");
+    expect(sessions[0]?.workflowId).toBe("feat-x");
   });
 
   it("archives a session and removes it from active index", () => {
