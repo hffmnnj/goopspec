@@ -1,0 +1,157 @@
+---
+import AppLayout from "../../layouts/AppLayout.astro";
+import { Breadcrumb } from "../../components/breadcrumb";
+import { WorkflowStatusPanel } from "../../components/workflow-status-panel";
+import { PhaseTimeline } from "../../components/phase-timeline";
+import { WaveProgress } from "../../components/wave-progress";
+import { AgentActivity } from "../../components/agent-activity";
+import { api, ApiError } from "../../lib/api-client";
+import type { WorkflowSession, WorkflowEvent } from "../../lib/api-client";
+
+const { id } = Astro.params;
+
+if (!id) {
+  return Astro.redirect("/");
+}
+
+let session: WorkflowSession | null = null;
+let events: WorkflowEvent[] = [];
+let projectName: string | null = null;
+let error: string | null = null;
+
+try {
+  const sessionRes = await api.workflows.get(id);
+  session = sessionRes.session;
+
+  // Fetch project name for breadcrumb
+  try {
+    const projectRes = await api.projects.get(session.projectId);
+    projectName = projectRes.project.name;
+  } catch {
+    // Non-critical — breadcrumb will use project ID
+  }
+
+  // Fetch event history from sync endpoint
+  try {
+    const syncRes = await fetch(
+      `${import.meta.env.PUBLIC_DAEMON_URL ?? "http://localhost:7331"}/api/sync/${encodeURIComponent(session.projectId)}`,
+      { headers: { "Content-Type": "application/json" } },
+    );
+    if (syncRes.ok) {
+      const syncData = await syncRes.json();
+      const allEvents = (syncData.recentEvents ?? []) as WorkflowEvent[];
+      events = allEvents.filter((e: WorkflowEvent) => e.sessionId === id);
+    }
+  } catch {
+    // Non-critical — activity log will be empty initially, live events will populate
+  }
+} catch (err) {
+  if (err instanceof ApiError && err.status === 404) {
+    return Astro.redirect("/");
+  }
+  error =
+    err instanceof ApiError
+      ? `Failed to load workflow (${err.status}): ${err.message}`
+      : "Failed to connect to the daemon. Is it running?";
+}
+
+const isTerminal = session?.status === "completed" || session?.status === "failed";
+
+function formatDate(dateStr: string): string {
+  return new Date(dateStr).toLocaleString();
+}
+---
+
+<AppLayout title={session ? `Workflow — GoopSpec` : "Workflow — GoopSpec"}>
+  <div class="space-y-6">
+    <Breadcrumb
+      items={[
+        { label: "Dashboard", href: "/" },
+        ...(session
+          ? [
+              {
+                label: projectName ?? session.projectId,
+                href: `/projects/${session.projectId}`,
+              },
+            ]
+          : []),
+        { label: session ? `Workflow ${id.slice(0, 8)}…` : "Workflow" },
+      ]}
+    />
+
+    {error ? (
+      <div class="rounded-lg border border-destructive/50 bg-destructive/10 p-4">
+        <p class="text-sm text-destructive">{error}</p>
+      </div>
+    ) : session ? (
+      <div class="space-y-8">
+        {/* Header row */}
+        <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <h1 class="text-2xl font-bold tracking-tight">
+              Workflow
+              <span class="ml-2 text-base font-normal text-muted-foreground font-mono">
+                {id.slice(0, 8)}
+              </span>
+            </h1>
+            <div class="mt-1 flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
+              <span>Started {formatDate(session.startedAt)}</span>
+              {session.completedAt && (
+                <span>· Completed {formatDate(session.completedAt)}</span>
+              )}
+              {session.workItemId && (
+                <a
+                  href={`/projects/${session.projectId}/items/${session.workItemId}`}
+                  class="text-primary hover:underline"
+                >
+                  View work item →
+                </a>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Phase timeline */}
+        <PhaseTimeline
+          client:load
+          currentPhase={session.phase}
+          isTerminal={isTerminal}
+        />
+
+        {/* Two-column layout: status panel + wave progress */}
+        <div class="grid gap-6 lg:grid-cols-3">
+          <div class="lg:col-span-1">
+            <WorkflowStatusPanel
+              client:load
+              sessionId={id}
+              projectId={session.projectId}
+              initialSession={session}
+            />
+          </div>
+
+          <div class="lg:col-span-2 space-y-6">
+            {/* Wave progress */}
+            <div class="rounded-lg border bg-card p-6">
+              <WaveProgress
+                client:load
+                currentWave={session.currentWave}
+                totalWaves={session.totalWaves}
+              />
+            </div>
+
+            {/* Agent activity log */}
+            <div class="rounded-lg border bg-card p-6">
+              <h3 class="mb-4 text-sm font-semibold text-muted-foreground uppercase tracking-wider">
+                Activity Log
+              </h3>
+              <AgentActivity
+                client:load
+                events={events}
+              />
+            </div>
+          </div>
+        </div>
+      </div>
+    ) : null}
+  </div>
+</AppLayout>
