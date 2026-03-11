@@ -1,7 +1,11 @@
 import type { DaemonConfig } from "@goopspec/core";
 import { getConfig } from "./config.js";
 import { getDatabase } from "./db/index.js";
+import { CliLauncher } from "./orchestration/cli-launcher.js";
+import { WorkflowLifecycleManager } from "./orchestration/lifecycle.js";
 import { createServer } from "./server.js";
+import { RoomManager } from "./transport/rooms.js";
+import { WsServer, type WsData } from "./transport/ws-server.js";
 
 const VERSION = "0.1.0";
 
@@ -31,11 +35,23 @@ export function createShutdownHandler(
 
 export function startDaemon(config: DaemonConfig = getConfig()): DaemonRuntime {
   const db = getDatabase(config.dbPath);
-  const app = createServer({ config, db });
+  const lifecycle = new WorkflowLifecycleManager(db, new CliLauncher());
+  const roomManager = new RoomManager<WsData>();
+  const wsServer = new WsServer(roomManager, lifecycle);
+  const app = createServer({ config, db, lifecycle, wsServer });
+
   const server = Bun.serve({
     port: config.port,
     hostname: config.host,
-    fetch: app.fetch,
+    fetch: (req, bunServer) => {
+      const pathname = new URL(req.url).pathname;
+      if (pathname === "/api/ws") {
+        return wsServer.upgrade(req, bunServer) ?? new Response("WS upgrade failed", { status: 400 });
+      }
+
+      return app.fetch(req, bunServer);
+    },
+    websocket: wsServer.websocket,
   });
 
   console.log(`GoopSpec Daemon v${VERSION} listening on http://${config.host}:${config.port}`);
@@ -43,6 +59,8 @@ export function startDaemon(config: DaemonConfig = getConfig()): DaemonRuntime {
   const shutdown = createShutdownHandler(
     server,
     () => {
+      wsServer.destroy();
+      db.close();
       console.log("Daemon stopped.");
     },
     (code) => {
