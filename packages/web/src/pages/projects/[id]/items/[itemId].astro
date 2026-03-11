@@ -1,6 +1,7 @@
 ---
 import AppLayout from "../../../../layouts/AppLayout.astro";
 import { Breadcrumb } from "../../../../components/breadcrumb";
+import { SpawnWorkflowButton } from "../../../../components/spawn-workflow-button";
 import { api, ApiError } from "../../../../lib/api-client";
 import type { Project, WorkItem } from "../../../../lib/api-client";
 
@@ -77,7 +78,15 @@ const badgeBase = "inline-flex items-center rounded-full border px-2.5 py-0.5 te
       <div class="max-w-2xl space-y-6">
         {/* Header */}
         <div>
-          <h1 class="text-2xl font-bold tracking-tight">{item.title}</h1>
+          <div class="flex items-start justify-between gap-4">
+            <h1 class="text-2xl font-bold tracking-tight">{item.title}</h1>
+            <SpawnWorkflowButton
+              client:load
+              projectId={id}
+              workItemId={itemId}
+              itemTitle={item.title}
+            />
+          </div>
           <div class="mt-3 flex flex-wrap items-center gap-2">
             <span class={`${badgeBase} text-foreground`}>
               {typeLabels[item.type] ?? item.type}

@@ -212,5 +212,36 @@ export const api = {
         `/api/workflows/${encodeURIComponent(id)}`,
       );
     },
+    spawn(body: {
+      projectId: string;
+      workItemId?: string;
+      prompt?: string;
+      workflowId?: string;
+    }) {
+      return apiFetch<{ session: WorkflowSession }>(
+        "/api/workflows/spawn",
+        { method: "POST", body: JSON.stringify(body) },
+      );
+    },
   },
 };
+
+// ---------------------------------------------------------------------------
+// Workflow event types (from daemon sync/stream endpoints)
+// ---------------------------------------------------------------------------
+
+export interface WorkflowEvent {
+  id: string;
+  sessionId: string;
+  type: string;
+  data: Record<string, unknown>;
+  timestamp: string;
+}
+
+export interface SyncResponse {
+  project: Project;
+  activeSessions: WorkflowSession[];
+  recentSessions: WorkflowSession[];
+  recentEvents: WorkflowEvent[];
+  serverTime: string;
+}
