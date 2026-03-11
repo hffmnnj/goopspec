@@ -4,6 +4,7 @@ import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { logger } from "hono/logger";
 import { timing } from "hono/timing";
+import { createItemRoutes } from "./routes/items.js";
 import { createProjectRoutes } from "./routes/projects.js";
 import { ProjectService } from "./services/project-service.js";
 
@@ -44,6 +45,7 @@ export function createServer(deps: ServerDeps): Hono {
   });
 
   app.route("/api/projects", createProjectRoutes(deps.db));
+  app.route("/api/projects", createItemRoutes(deps.db));
 
   app.notFound((c) => {
     return c.json({ error: "Not Found", path: c.req.path }, 404);
