@@ -9,8 +9,11 @@ import { WorkflowLifecycleManager } from "./orchestration/lifecycle.js";
 import type { WorkflowLauncher } from "./orchestration/launcher.js";
 import { createItemRoutes } from "./routes/items.js";
 import { createProjectRoutes } from "./routes/projects.js";
+import { createSyncRoutes } from "./routes/sync.js";
 import { createWorkflowRoutes } from "./routes/workflows.js";
 import { ProjectService } from "./services/project-service.js";
+import type { SseManager } from "./transport/sse.js";
+import type { WsServer } from "./transport/ws-server.js";
 
 const VERSION = "0.1.0";
 
@@ -19,6 +22,8 @@ export interface ServerDeps {
   db: Database;
   launcher?: WorkflowLauncher;
   lifecycle?: WorkflowLifecycleManager;
+  wsServer?: WsServer;
+  sseManager?: SseManager;
 }
 
 export function createServer(deps: ServerDeps): Hono {
@@ -56,6 +61,11 @@ export function createServer(deps: ServerDeps): Hono {
   app.route("/api/projects", createProjectRoutes(deps.db));
   app.route("/api/projects", createItemRoutes(deps.db));
   app.route("/api/workflows", createWorkflowRoutes(deps.db, lifecycle));
+  app.route("/api", createSyncRoutes(deps.db));
+
+  if (deps.sseManager) {
+    app.route("/api", deps.sseManager.createHandler());
+  }
 
   app.notFound((c) => {
     return c.json({ error: "Not Found", path: c.req.path }, 404);
