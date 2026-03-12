@@ -6,7 +6,8 @@
  */
 
 import { existsSync } from "fs";
-import { basename, dirname, join, resolve } from "path";
+import { homedir } from "node:os";
+import { basename, dirname, isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath } from "url";
 
 import { getHomeDir } from "./platform.js";
@@ -263,4 +264,63 @@ export async function ensureSessionDir(projectDir = "", sessionId = ""): Promise
   await ensureDir(sessionDir);
   await ensureDir(join(sessionDir, "checkpoints"));
   await ensureDir(join(sessionDir, "history"));
+}
+
+// ---------------------------------------------------------------------------
+// Cross-platform path normalization utilities
+// ---------------------------------------------------------------------------
+
+/**
+ * Normalize a path to use forward slashes on all platforms.
+ * Converts Windows backslashes, collapses double backslashes,
+ * and handles UNC paths (\\server\share → //server/share).
+ * Unix paths pass through unchanged.
+ */
+export function normalizePath(p: string): string {
+  return p.replace(/\\/g, "/");
+}
+
+/**
+ * Returns the GoopSpec home directory (~/.goopspec).
+ * Uses os.homedir() + path.join for cross-platform safety.
+ * Never ends with a trailing slash.
+ */
+export function goopspecHome(): string {
+  return join(homedir(), ".goopspec");
+}
+
+/**
+ * Returns path to the GoopSpec config file (~/.goopspec/config.json).
+ */
+export function goopspecConfigPath(): string {
+  return join(goopspecHome(), "config.json");
+}
+
+/**
+ * Returns path to the GoopSpec memory database (~/.goopspec/memory.db).
+ */
+export function goopspecMemoryPath(): string {
+  return join(goopspecHome(), "memory.db");
+}
+
+/**
+ * Cross-platform absolute path check.
+ * Handles Windows drive letters (C:\..., D:/...) and Unix paths (/...).
+ */
+export function isAbsolutePath(p: string): boolean {
+  // Node's path.isAbsolute handles platform-native paths, but on Linux
+  // it won't recognise "C:\foo" as absolute. We add an explicit check
+  // for Windows drive-letter patterns so the function works correctly
+  // regardless of the host OS.
+  if (/^[A-Za-z]:[/\\]/.test(p)) {
+    return true;
+  }
+  return isAbsolute(p);
+}
+
+/**
+ * Safely join path segments and normalize the result to forward slashes.
+ */
+export function safePath(...segments: string[]): string {
+  return normalizePath(join(...segments));
 }

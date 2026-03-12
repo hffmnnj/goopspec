@@ -23,6 +23,12 @@ import {
   pathExists,
   joinPath,
   resolvePath,
+  normalizePath,
+  goopspecHome,
+  goopspecConfigPath,
+  goopspecMemoryPath,
+  isAbsolutePath,
+  safePath,
 } from "./paths.js";
 
 describe("paths", () => {
@@ -258,6 +264,147 @@ describe("paths", () => {
       } finally {
         rmSync(projectDir, { recursive: true, force: true });
       }
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // Cross-platform path normalization utilities
+  // -------------------------------------------------------------------------
+
+  describe("normalizePath", () => {
+    it("converts Windows backslashes to forward slashes", () => {
+      expect(normalizePath("C:\\Users\\foo\\bar")).toBe("C:/Users/foo/bar");
+    });
+
+    it("leaves Unix paths unchanged", () => {
+      expect(normalizePath("/home/user/foo")).toBe("/home/user/foo");
+    });
+
+    it("leaves WSL paths unchanged", () => {
+      expect(normalizePath("/mnt/c/Users/foo")).toBe("/mnt/c/Users/foo");
+    });
+
+    it("handles double backslashes", () => {
+      expect(normalizePath("C:\\\\Users\\\\foo")).toBe("C://Users//foo");
+    });
+
+    it("handles mixed separators", () => {
+      expect(normalizePath("C:\\Users/foo\\bar")).toBe("C:/Users/foo/bar");
+    });
+
+    it("handles UNC paths", () => {
+      expect(normalizePath("\\\\server\\share\\file")).toBe("//server/share/file");
+    });
+
+    it("handles empty string", () => {
+      expect(normalizePath("")).toBe("");
+    });
+  });
+
+  describe("goopspecHome", () => {
+    it("returns path ending with .goopspec", () => {
+      const home = goopspecHome();
+      expect(home.endsWith(".goopspec")).toBe(true);
+    });
+
+    it("does not end with a trailing slash", () => {
+      const home = goopspecHome();
+      expect(home.endsWith("/")).toBe(false);
+      expect(home.endsWith("\\")).toBe(false);
+    });
+
+    it("uses path.join (contains path separator, not string concat)", () => {
+      // Verify the result is a proper joined path by checking it contains
+      // the home directory as a prefix (path.join would produce this)
+      const home = goopspecHome();
+      const { homedir } = require("node:os");
+      const expected = joinPath(homedir(), ".goopspec");
+      expect(home).toBe(expected);
+    });
+  });
+
+  describe("goopspecConfigPath", () => {
+    it("returns path ending with config.json", () => {
+      const configPath = goopspecConfigPath();
+      expect(configPath.endsWith("config.json")).toBe(true);
+    });
+
+    it("contains .goopspec directory", () => {
+      const configPath = goopspecConfigPath();
+      expect(configPath).toContain(".goopspec");
+    });
+  });
+
+  describe("goopspecMemoryPath", () => {
+    it("returns path ending with memory.db", () => {
+      const memPath = goopspecMemoryPath();
+      expect(memPath.endsWith("memory.db")).toBe(true);
+    });
+
+    it("contains .goopspec directory", () => {
+      const memPath = goopspecMemoryPath();
+      expect(memPath).toContain(".goopspec");
+    });
+  });
+
+  describe("isAbsolutePath", () => {
+    it("recognises Windows drive letter with backslash", () => {
+      expect(isAbsolutePath("C:\\foo")).toBe(true);
+    });
+
+    it("recognises Windows drive letter with forward slash", () => {
+      expect(isAbsolutePath("C:/foo")).toBe(true);
+    });
+
+    it("recognises lowercase Windows drive letter", () => {
+      expect(isAbsolutePath("d:\\bar")).toBe(true);
+    });
+
+    it("recognises Unix absolute path", () => {
+      expect(isAbsolutePath("/foo")).toBe(true);
+    });
+
+    it("recognises Unix root", () => {
+      expect(isAbsolutePath("/")).toBe(true);
+    });
+
+    it("rejects relative path", () => {
+      expect(isAbsolutePath("relative/path")).toBe(false);
+    });
+
+    it("rejects dot-relative path", () => {
+      expect(isAbsolutePath("./relative")).toBe(false);
+    });
+
+    it("rejects bare filename", () => {
+      expect(isAbsolutePath("file.txt")).toBe(false);
+    });
+
+    it("rejects empty string", () => {
+      expect(isAbsolutePath("")).toBe(false);
+    });
+  });
+
+  describe("safePath", () => {
+    it("joins and normalizes to forward slashes", () => {
+      const result = safePath("/base", "sub", "file.txt");
+      expect(result).toBe("/base/sub/file.txt");
+    });
+
+    it("normalizes Windows-style segments", () => {
+      // path.join on Linux keeps forward slashes; safePath normalizes
+      const result = safePath("/base", "sub");
+      expect(result).not.toContain("\\");
+    });
+
+    it("handles single segment", () => {
+      const result = safePath("/only");
+      expect(result).toBe("/only");
+    });
+
+    it("resolves parent references", () => {
+      const result = safePath("/base", "sub", "..", "other");
+      expect(result).toBe("/base/other");
     });
   });
 });
