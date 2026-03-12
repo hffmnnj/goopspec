@@ -7,10 +7,12 @@ import { timing } from "hono/timing";
 import { CliLauncher } from "./orchestration/cli-launcher.js";
 import { WorkflowLifecycleManager } from "./orchestration/lifecycle.js";
 import type { WorkflowLauncher } from "./orchestration/launcher.js";
+import { createAuthRoutes } from "./routes/auth.js";
 import { createItemRoutes } from "./routes/items.js";
 import { createProjectRoutes } from "./routes/projects.js";
 import { createSyncRoutes } from "./routes/sync.js";
 import { createWorkflowRoutes } from "./routes/workflows.js";
+import type { AuthServiceLike } from "./routes/auth.js";
 import { ProjectService } from "./services/project-service.js";
 import type { SseManager } from "./transport/sse.js";
 import type { WsServer } from "./transport/ws-server.js";
@@ -24,6 +26,7 @@ export interface ServerDeps {
   lifecycle?: WorkflowLifecycleManager;
   wsServer?: WsServer;
   sseManager?: SseManager;
+  authService?: AuthServiceLike;
 }
 
 export function createServer(deps: ServerDeps): Hono {
@@ -58,6 +61,7 @@ export function createServer(deps: ServerDeps): Hono {
     return c.json(health);
   });
 
+  app.route("/auth", createAuthRoutes(deps.db, deps.authService));
   app.route("/api/projects", createProjectRoutes(deps.db));
   app.route("/api/projects", createItemRoutes(deps.db));
   app.route("/api/workflows", createWorkflowRoutes(deps.db, lifecycle));

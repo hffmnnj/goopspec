@@ -12,7 +12,9 @@
   },
   "dependencies": {
     "@goopspec/core": "workspace:*",
-    "hono": "^4.11.7"
+    "bcryptjs": "^3.0.2",
+    "hono": "^4.11.7",
+    "jose": "^6.2.1"
   },
   "devDependencies": {
     "@types/bun": "latest",

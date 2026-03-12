@@ -1,5 +1,6 @@
 import type { Database } from "bun:sqlite";
 import {
+  CREATE_AUTH,
   CREATE_PROJECTS,
   CREATE_WORK_ITEMS,
   CREATE_WORK_ITEMS_PROJECT_IDX,
@@ -21,5 +22,6 @@ export function runMigrations(db: Database): void {
     db.exec(CREATE_WORKFLOW_SESSIONS);
     db.exec(CREATE_WORKFLOW_EVENTS);
     db.exec(CREATE_WORKFLOW_EVENTS_SESSION_IDX);
+    db.exec(CREATE_AUTH);
   })();
 }

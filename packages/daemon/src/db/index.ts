@@ -1,6 +1,7 @@
 export { closeDatabase, createTestDatabase, getDatabase } from "./connection.js";
 export { runMigrations } from "./migrations.js";
 export {
+  CREATE_AUTH,
   CREATE_PROJECTS,
   CREATE_WORK_ITEMS,
   CREATE_WORK_ITEMS_PROJECT_IDX,

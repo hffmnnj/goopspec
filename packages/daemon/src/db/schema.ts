@@ -63,6 +63,16 @@ export const CREATE_WORKFLOW_EVENTS_SESSION_IDX = `
   CREATE INDEX IF NOT EXISTS idx_workflow_events_session ON workflow_events(session_id, timestamp)
 `;
 
+export const CREATE_AUTH = `
+  CREATE TABLE IF NOT EXISTS auth (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    password_hash TEXT,
+    jwt_secret TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+  )
+`;
+
 export const SCHEMA_STATEMENTS = [
   CREATE_PROJECTS,
   CREATE_WORK_ITEMS,
@@ -71,4 +81,5 @@ export const SCHEMA_STATEMENTS = [
   CREATE_WORKFLOW_SESSIONS,
   CREATE_WORKFLOW_EVENTS,
   CREATE_WORKFLOW_EVENTS_SESSION_IDX,
+  CREATE_AUTH,
 ] as const;
