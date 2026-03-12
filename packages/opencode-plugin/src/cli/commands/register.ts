@@ -10,6 +10,7 @@ import {
   DaemonApiError,
   DaemonUnavailableError,
 } from "../../features/daemon/client.js";
+import { handleCommandError } from "../command-utils.js";
 import { commandExample, keyValue, statusLine, themedSpinner } from "../components.js";
 import { detectProjectName } from "../detect-project.js";
 import { bold, dim, info, warning } from "../theme.js";
@@ -131,8 +132,6 @@ export async function runRegister(flags: Record<string, string | boolean>): Prom
       console.log();
     }
   } catch (error) {
-    showError(
-      error instanceof Error ? error.message : "An unexpected error occurred",
-    );
+    handleCommandError(error);
   }
 }

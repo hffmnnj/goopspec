@@ -6,32 +6,14 @@ import pc from "picocolors";
 
 import type { DaemonHealth } from "@goopspec/core";
 
-import { statusLine } from "../components.js";
 import { createDaemonClient } from "../../features/daemon/client.js";
 import { getSetupStatus } from "../../features/setup/index.js";
+import { formatUptime } from "../command-utils.js";
+import { statusLine } from "../components.js";
 import { formatTable, sectionHeader, showError, showInfo, showWarning } from "../ui.js";
 
-/**
- * Format an uptime value in seconds to a human-readable string.
- * Returns "Xd Xh Xm", "Xh Xm", "Xm Xs", or "Xs" depending on magnitude.
- */
-export function formatUptime(seconds: number): string {
-  const days = Math.floor(seconds / 86400);
-  const hours = Math.floor((seconds % 86400) / 3600);
-  const minutes = Math.floor((seconds % 3600) / 60);
-  const secs = Math.floor(seconds % 60);
-
-  if (days > 0) {
-    return `${days}d ${hours}h ${minutes}m`;
-  }
-  if (hours > 0) {
-    return `${hours}h ${minutes}m`;
-  }
-  if (minutes > 0) {
-    return `${minutes}m ${secs}s`;
-  }
-  return `${secs}s`;
-}
+// Re-export for backward compatibility — canonical source is command-utils.ts
+export { formatUptime } from "../command-utils.js";
 
 export async function runStatus(): Promise<void> {
   try {
