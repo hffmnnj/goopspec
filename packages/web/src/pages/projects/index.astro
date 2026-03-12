@@ -1,0 +1,84 @@
+---
+import AppLayout from "../../layouts/AppLayout.astro";
+import { ProjectCard } from "../../components/project-card";
+import { api, ApiError } from "../../lib/api-client";
+import type { Project } from "../../lib/api-client";
+
+interface ProjectWithCounts extends Project {
+  itemCount: number;
+  activeWorkflowCount: number;
+}
+
+let projects: ProjectWithCounts[] = [];
+let error: string | null = null;
+
+try {
+  const [projectsRes, workflowsRes] = await Promise.all([
+    api.projects.list(),
+    api.workflows.list(),
+  ]);
+
+  const allSessions = workflowsRes.sessions;
+
+  const itemCountPromises = projectsRes.projects.map(async (project) => {
+    try {
+      const { items } = await api.items.list(project.id);
+      const activeWorkflows = allSessions.filter(
+        (s) => s.projectId === project.id && (s.status === "running" || s.status === "paused"),
+      );
+      return { ...project, itemCount: items.length, activeWorkflowCount: activeWorkflows.length };
+    } catch {
+      return { ...project, itemCount: 0, activeWorkflowCount: 0 };
+    }
+  });
+
+  projects = await Promise.all(itemCountPromises);
+} catch (err) {
+  error =
+    err instanceof ApiError
+      ? `Failed to load projects (${err.status}): ${err.message}`
+      : "Failed to connect to the daemon. Is it running?";
+}
+---
+
+<AppLayout title="Projects — GoopSpec">
+  <div class="space-y-6">
+    <div>
+      <h1 class="text-3xl font-bold tracking-tight">Projects</h1>
+      <p class="text-muted-foreground mt-1">All registered GoopSpec projects.</p>
+    </div>
+
+    {error ? (
+      <div class="rounded-lg border border-destructive/50 bg-destructive/10 p-4">
+        <p class="text-sm text-destructive">{error}</p>
+      </div>
+    ) : projects.length === 0 ? (
+      <div class="rounded-lg border border-dashed p-8 text-center">
+        <h2 class="text-lg font-semibold">No projects yet</h2>
+        <p class="mt-2 text-sm text-muted-foreground max-w-md mx-auto">
+          Register a project via the daemon API or GoopSpec CLI to get started.
+        </p>
+        <pre class="mt-4 text-xs bg-muted rounded p-3 inline-block text-left">curl -X POST http://localhost:7331/api/projects \
+  -H "Content-Type: application/json" \
+  -d '{"{"}
+  "name": "My Project",
+  "path": "/path/to/project"
+{"}"}'</pre>
+      </div>
+    ) : (
+      <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        {projects.map((project) => (
+          <ProjectCard
+            id={project.id}
+            name={project.name}
+            description={project.description}
+            path={project.path}
+            itemCount={project.itemCount}
+            activeWorkflowCount={project.activeWorkflowCount}
+            updatedAt={project.updatedAt}
+          />
+        ))}
+      </div>
+    )}
+  </div>
+</AppLayout>
