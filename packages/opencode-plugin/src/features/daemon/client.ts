@@ -5,6 +5,8 @@
  * @module features/daemon/client
  */
 
+import { getConfig } from "../../cli/config.js";
+
 const DEFAULT_BASE_URL = "http://localhost:7331";
 const REQUEST_TIMEOUT_MS = 5000;
 
@@ -43,6 +45,13 @@ export class DaemonClient {
 
   constructor(baseUrl: string = DEFAULT_BASE_URL) {
     this.baseUrl = baseUrl.replace(/\/+$/, "");
+  }
+
+  /**
+   * Returns the base URL this client is configured to connect to.
+   */
+  getBaseUrl(): string {
+    return this.baseUrl;
   }
 
   /**
@@ -118,4 +127,9 @@ export class DaemonClient {
       clearTimeout(timer);
     }
   }
+}
+
+export async function createDaemonClient(): Promise<DaemonClient> {
+  const config = await getConfig();
+  return new DaemonClient(config.daemonUrl);
 }
