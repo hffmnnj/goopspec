@@ -1,10 +1,6 @@
-// DAEMON_URL is used server-side (SSR). PUBLIC_DAEMON_URL is used client-side.
-// During SSR, import.meta.env.PUBLIC_* vars are NOT available to the Node process
-// so we check the private DAEMON_URL first (set via env on the server).
-const DAEMON_URL =
-  import.meta.env.DAEMON_URL ??
-  import.meta.env.PUBLIC_DAEMON_URL ??
-  "http://localhost:7331";
+import { getDaemonUrl } from "./config";
+
+const DAEMON_URL = getDaemonUrl();
 
 export class ApiError extends Error {
   constructor(

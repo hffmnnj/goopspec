@@ -118,14 +118,8 @@ export async function checkAuthWithDaemon(
   }
 }
 
-/** Resolve the daemon base URL from env vars with localhost fallback. */
-export function getDaemonUrl(): string {
-  return (
-    import.meta.env.DAEMON_URL ??
-    import.meta.env.PUBLIC_DAEMON_URL ??
-    "http://localhost:7331"
-  );
-}
+// getDaemonUrl is re-exported from config.ts for backward compatibility
+export { getDaemonUrl } from "./config";
 
 /** Check whether a pathname should be auth-guarded. */
 export function requiresAuth(pathname: string): boolean {
