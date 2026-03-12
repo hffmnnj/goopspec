@@ -1,9 +1,8 @@
 #!/usr/bin/env node
 
-import pc from "picocolors";
-
 import { GOOPSPEC_VERSION } from "../core/version.js";
-import { CLI_COMMANDS, type CliArgs, type CliCommand } from "./types.js";
+import { bold, dim, highlight, info, italic, primary, setColorEnabled, warning } from "./theme.js";
+import { CLI_COMMANDS, COMMAND_META, type CliArgs, type CliCommand, type CommandMeta } from "./types.js";
 import { showBanner, showError } from "./ui.js";
 
 function isCliCommand(value: string): value is CliCommand {
@@ -22,6 +21,13 @@ export function parseArgs(argv: string[]): CliArgs {
     if (isFlag(token)) {
       const flagBody = token.slice(2);
       if (!flagBody) {
+        continue;
+      }
+
+      // Wire --no-color before any output
+      if (flagBody === "no-color") {
+        setColorEnabled(false);
+        flags[flagBody] = true;
         continue;
       }
 
@@ -52,20 +58,62 @@ export function parseArgs(argv: string[]): CliArgs {
   };
 }
 
-export function showHelp(): void {
-  const commands = CLI_COMMANDS.map((command) => `  - ${command}`).join("\n");
+// ---------------------------------------------------------------------------
+// Help text — grouped commands with descriptions
+// ---------------------------------------------------------------------------
 
-  console.log(pc.bold(pc.cyan("goopspec")) + pc.gray(" - interactive setup CLI"));
+const GROUP_LABELS: Record<CommandMeta["group"], { title: string; emoji: string }> = {
+  setup: { title: "Setup", emoji: "⚙" },
+  project: { title: "Project", emoji: "📁" },
+  daemon: { title: "Daemon", emoji: "🔮" },
+  tools: { title: "Tools", emoji: "🛠" },
+};
+
+const GROUP_ORDER: CommandMeta["group"][] = ["setup", "project", "daemon", "tools"];
+
+function formatCommandLine(meta: CommandMeta): string {
+  const name = highlight(meta.name.padEnd(12));
+  return `  ${name} ${dim(meta.description)}`;
+}
+
+export function showHelp(): void {
+  // Title
   console.log();
-  console.log(pc.bold("Usage:"));
-  console.log("  goopspec <command> [options]");
+  console.log(`  ${primary("🔮 GoopSpec")} ${dim(`v${GOOPSPEC_VERSION}`)}`);
+  console.log(`  ${dim("Spec-driven development for AI agents")}`);
   console.log();
-  console.log(pc.bold("Commands:"));
-  console.log(commands);
+
+  // Usage
+  console.log(bold("  Usage:"));
+  console.log(`    ${info("goopspec")} ${dim("<command>")} ${dim("[options]")}`);
   console.log();
-  console.log(pc.bold("Options:"));
-  console.log("  --help      Show help");
-  console.log("  --version   Show version");
+
+  // Grouped commands
+  console.log(bold("  Commands:"));
+  console.log();
+
+  for (const group of GROUP_ORDER) {
+    const groupInfo = GROUP_LABELS[group];
+    const commands = COMMAND_META.filter((cmd) => cmd.group === group);
+    if (commands.length === 0) continue;
+
+    console.log(`  ${dim(groupInfo.emoji)} ${bold(groupInfo.title)}`);
+    for (const cmd of commands) {
+      console.log(formatCommandLine(cmd));
+    }
+    console.log();
+  }
+
+  // Global options
+  console.log(bold("  Options:"));
+  console.log(`  ${highlight("--help".padEnd(12))} ${dim("Show help")}`);
+  console.log(`  ${highlight("--version".padEnd(12))} ${dim("Show version")}`);
+  console.log(`  ${highlight("--no-color".padEnd(12))} ${dim("Disable color output")}`);
+  console.log();
+
+  // Tip
+  console.log(italic(dim("  Run 'goopspec <command> --help' for command-specific help")));
+  console.log();
 }
 
 export function showVersion(): void {
@@ -142,6 +190,17 @@ export async function main(): Promise<void> {
           await runInit();
           break;
         }
+        case "register": {
+          const { runRegister } = await import("./commands/register.js");
+          await runRegister(parsed.flags);
+          break;
+        }
+        case "daemon": {
+          const { runDaemon } = await import("./commands/daemon.js");
+          const subcommand = parsed.args[0] ?? "status";
+          await runDaemon(subcommand, parsed.flags);
+          break;
+        }
         case "models": {
           const { runModels } = await import("./commands/models.js");
           await runModels();
@@ -173,7 +232,7 @@ export async function main(): Promise<void> {
           break;
         }
         default:
-          console.log(pc.yellow(`Command '${parsed.command}' not yet implemented`));
+          console.log(warning(`Command '${parsed.command}' not yet implemented`));
           break;
       }
       return;
