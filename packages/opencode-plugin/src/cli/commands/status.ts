@@ -1,11 +1,37 @@
 /**
  * GoopSpec CLI - Status Command
- * Shows current configuration summary
+ * Shows current configuration summary and daemon connection state
  */
 import pc from "picocolors";
 
+import type { DaemonHealth } from "@goopspec/core";
+
+import { statusLine } from "../components.js";
+import { createDaemonClient } from "../../features/daemon/client.js";
 import { getSetupStatus } from "../../features/setup/index.js";
 import { formatTable, sectionHeader, showError, showInfo, showWarning } from "../ui.js";
+
+/**
+ * Format an uptime value in seconds to a human-readable string.
+ * Returns "Xd Xh Xm", "Xh Xm", "Xm Xs", or "Xs" depending on magnitude.
+ */
+export function formatUptime(seconds: number): string {
+  const days = Math.floor(seconds / 86400);
+  const hours = Math.floor((seconds % 86400) / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  const secs = Math.floor(seconds % 60);
+
+  if (days > 0) {
+    return `${days}d ${hours}h ${minutes}m`;
+  }
+  if (hours > 0) {
+    return `${hours}h ${minutes}m`;
+  }
+  if (minutes > 0) {
+    return `${minutes}m ${secs}s`;
+  }
+  return `${secs}s`;
+}
 
 export async function runStatus(): Promise<void> {
   try {
@@ -58,6 +84,25 @@ export async function runStatus(): Promise<void> {
       const rows = configuredAgents.map(([agent, model]) => [agent, model]);
       console.log(formatTable(["Agent", "Model"], rows));
     }
+
+    // ── Daemon section ──────────────────────────────────────────────────
+    sectionHeader("Daemon", "🔮");
+    try {
+      const client = await createDaemonClient();
+      const health = await client.get<DaemonHealth>("/health");
+
+      console.log(statusLine("Connected", "✓", "ok"));
+      console.log(statusLine("Version", health.version, "info"));
+      console.log(statusLine("Uptime", formatUptime(health.uptime), "info"));
+      console.log(statusLine("Projects", String(health.projectCount), "info"));
+      if (health.activeWorkflows > 0) {
+        console.log(statusLine("Active workflows", String(health.activeWorkflows), "info"));
+      }
+    } catch {
+      console.log(statusLine("Connected", "✗ (run: goopspec daemon start)", "error"));
+      console.log(pc.dim("  Daemon: not running"));
+    }
+    console.log();
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     showError(message, "Check file permissions and try again");
