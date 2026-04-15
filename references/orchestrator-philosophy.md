@@ -226,5 +226,15 @@ Enforcement can be configured in the plugin context:
 
 ---
 
+## Related References
+
+For autopilot-specific behavioral rules (delegation-first enforcement, phase guardrails, lazy-autopilot specifics), see the `autopilot-behavior` reference:
+
+```
+goop_reference({ name: "autopilot-behavior" })
+```
+
+---
+
 *Philosophy derived from GoopSpec v0.2.8*
 *"The conductor leads the orchestra but doesn't play the instruments."*

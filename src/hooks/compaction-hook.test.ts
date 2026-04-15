@@ -457,6 +457,146 @@ describe("compaction hook", () => {
   });
 
   // =========================================================================
+  // Conductor Identity Reminder Tests
+  // =========================================================================
+
+  describe("conductor identity reminder", () => {
+    it("injects conductor reminder when autopilot is active and phase is EXECUTE", () => {
+      const hookCtx = createMockPluginContext({
+        testDir,
+        state: {
+          workflow: {
+            phase: "execute",
+            specLocked: true,
+            currentWave: 2,
+            totalWaves: 4,
+            mode: "standard",
+            depth: "standard",
+            researchOptIn: false,
+            acceptanceConfirmed: false,
+            interviewComplete: true,
+            interviewCompletedAt: null,
+            currentPhase: null,
+            lastActivity: new Date().toISOString(),
+            autopilot: true,
+          },
+        },
+      });
+
+      const block = buildWorkflowStateBlock(hookCtx);
+      expect(block).toContain("CONDUCTOR REMINDER");
+      expect(block).toContain("you NEVER write code directly");
+      expect(block).toContain("executor agents via task()");
+    });
+
+    it("injects conductor reminder when autopilot is active and phase is ACCEPT", () => {
+      const hookCtx = createMockPluginContext({
+        testDir,
+        state: {
+          workflow: {
+            phase: "accept",
+            specLocked: true,
+            currentWave: 3,
+            totalWaves: 3,
+            mode: "standard",
+            depth: "standard",
+            researchOptIn: false,
+            acceptanceConfirmed: false,
+            interviewComplete: true,
+            interviewCompletedAt: null,
+            currentPhase: null,
+            lastActivity: new Date().toISOString(),
+            autopilot: true,
+          },
+        },
+      });
+
+      const block = buildWorkflowStateBlock(hookCtx);
+      expect(block).toContain("CONDUCTOR REMINDER");
+      expect(block).toContain("you NEVER write code directly");
+    });
+
+    it("does NOT inject conductor reminder in manual mode even during EXECUTE", () => {
+      const hookCtx = createMockPluginContext({
+        testDir,
+        state: {
+          workflow: {
+            phase: "execute",
+            specLocked: true,
+            currentWave: 1,
+            totalWaves: 3,
+            mode: "standard",
+            depth: "standard",
+            researchOptIn: false,
+            acceptanceConfirmed: false,
+            interviewComplete: true,
+            interviewCompletedAt: null,
+            currentPhase: null,
+            lastActivity: new Date().toISOString(),
+            autopilot: false,
+          },
+        },
+      });
+
+      const block = buildWorkflowStateBlock(hookCtx);
+      expect(block).not.toContain("CONDUCTOR REMINDER");
+    });
+
+    it("does NOT inject conductor reminder when autopilot is active but phase is PLAN", () => {
+      const hookCtx = createMockPluginContext({
+        testDir,
+        state: {
+          workflow: {
+            phase: "plan",
+            specLocked: false,
+            currentWave: 0,
+            totalWaves: 0,
+            mode: "standard",
+            depth: "standard",
+            researchOptIn: false,
+            acceptanceConfirmed: false,
+            interviewComplete: false,
+            interviewCompletedAt: null,
+            currentPhase: null,
+            lastActivity: new Date().toISOString(),
+            autopilot: true,
+          },
+        },
+      });
+
+      const block = buildWorkflowStateBlock(hookCtx);
+      expect(block).not.toContain("CONDUCTOR REMINDER");
+    });
+
+    it("injects conductor reminder when lazyAutopilot is active and phase is EXECUTE", () => {
+      const hookCtx = createMockPluginContext({
+        testDir,
+        state: {
+          workflow: {
+            phase: "execute",
+            specLocked: true,
+            currentWave: 1,
+            totalWaves: 2,
+            mode: "standard",
+            depth: "standard",
+            researchOptIn: false,
+            acceptanceConfirmed: false,
+            interviewComplete: true,
+            interviewCompletedAt: null,
+            currentPhase: null,
+            lastActivity: new Date().toISOString(),
+            lazyAutopilot: true,
+          },
+        },
+      });
+
+      const block = buildWorkflowStateBlock(hookCtx);
+      expect(block).toContain("CONDUCTOR REMINDER");
+      expect(block).toContain("executor agents via task()");
+    });
+  });
+
+  // =========================================================================
   // Task 2.3: Spec Content Injection Tests
   // =========================================================================
 
