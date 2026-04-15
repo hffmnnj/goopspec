@@ -1,40 +1,29 @@
 {
   "name": "goopspec",
   "version": "0.2.9",
+  "private": true,
   "description": "A spec-driven development plugin for OpenCode with user-guided planning, wave execution, and verification",
   "type": "module",
-  "main": "dist/index.js",
-  "types": "dist/index.d.ts",
-  "bin": {
-    "goopspec": "dist/cli.js"
-  },
-  "exports": {
-    ".": {
-      "import": "./dist/index.js",
-      "types": "./dist/index.d.ts"
-    }
-  },
-  "files": [
-    "dist",
-    "commands",
-    "agents",
-    "references",
-    "templates",
-    "skills",
-    "README.md"
-  ],
   "scripts": {
-    "build": "bun build ./src/index.ts --outdir ./dist --target bun && bun build ./src/features/memory/worker/index.ts --outdir ./dist/worker --target bun && bun build ./src/cli/index.ts --outfile ./dist/cli.js --target node --format esm",
-    "dev": "bun build ./src/index.ts --outdir ./dist --target bun --watch",
-    "build:cli": "bun build ./src/cli/index.ts --outfile ./dist/cli.js --target node --format esm",
-    "build:worker": "bun build ./src/features/memory/worker/index.ts --outdir ./dist/worker --target bun",
-    "lint": "eslint src/",
-    "typecheck": "bunx tsc --noEmit",
+    "build": "bun run --cwd packages/opencode-plugin build",
+    "build:workspaces": "bun run build:core && bun run build:plugin && bun run build:daemon",
+    "build:core": "echo 'core placeholder'",
+    "build:plugin": "bun run --cwd packages/opencode-plugin build",
+    "build:daemon": "echo 'daemon placeholder'",
+    "dev": "bun --filter @goopspec/opencode-plugin run dev",
+    "lint": "eslint packages/opencode-plugin/src/",
+    "typecheck": "bun run --cwd packages/opencode-plugin typecheck",
+    "typecheck:all": "bun run --cwd packages/core typecheck && bun run --cwd packages/opencode-plugin typecheck",
     "clean": "node -e \"const fs=require('fs');fs.rmSync('dist',{recursive:true,force:true})\"",
-    "test": "bun test",
+    "test": "bun test --cwd packages/opencode-plugin",
+    "test:all": "bun test packages/",
+    "packages": "bun pm pkg get workspaces",
     "version:bump": "bun scripts/version-bump.ts",
     "prepublishOnly": "bun run build"
   },
+  "workspaces": [
+    "packages/*"
+  ],
   "keywords": [
     "opencode",
     "plugin",
@@ -50,24 +39,6 @@
   ],
   "author": "James",
   "license": "MIT",
-  "dependencies": {
-    "@clack/prompts": "^0.8.2",
-    "@huggingface/transformers": "^3.8.1",
-    "@opencode-ai/plugin": "^1.1.44",
-    "@opencode-ai/sdk": "^1.1.44",
-    "hono": "^4.11.7",
-    "onnxruntime-node": "^1.24.1",
-    "picocolors": "^1.1.1",
-    "sqlite-vec": "^0.1.7-alpha.2",
-    "zod": "^4.1.8"
-  },
-  "optionalDependencies": {
-    "sqlite-vec-darwin-arm64": "0.1.7-alpha.2",
-    "sqlite-vec-darwin-x64": "0.1.7-alpha.2",
-    "sqlite-vec-linux-x64": "0.1.7-alpha.2",
-    "sqlite-vec-linux-arm64": "0.1.7-alpha.2",
-    "sqlite-vec-windows-x64": "0.1.7-alpha.2"
-  },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@types/node": "^22.13.9",
@@ -75,9 +46,6 @@
     "eslint": "^10.0.0",
     "typescript": "^5.8.2",
     "typescript-eslint": "^8.54.0"
-  },
-  "peerDependencies": {
-    "@opencode-ai/plugin": "^1.1.0"
   },
   "engines": {
     "bun": ">=1.0.0"

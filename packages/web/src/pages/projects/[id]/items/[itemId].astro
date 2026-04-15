@@ -1,0 +1,165 @@
+---
+import AppLayout from "../../../../layouts/AppLayout.astro";
+import { Breadcrumb } from "../../../../components/breadcrumb";
+import { SpawnWorkflowButton } from "../../../../components/spawn-workflow-button";
+import { api, ApiError } from "../../../../lib/api-client";
+import type { Project, WorkItem } from "../../../../lib/api-client";
+
+const { id, itemId } = Astro.params;
+
+if (!id || !itemId) {
+  return Astro.redirect("/");
+}
+
+let project: Project | null = null;
+let item: WorkItem | null = null;
+let error: string | null = null;
+
+try {
+  const [projectRes, itemRes] = await Promise.all([
+    api.projects.get(id),
+    api.items.get(id, itemId),
+  ]);
+  project = projectRes;
+  item = itemRes;
+} catch (err) {
+  if (err instanceof ApiError && err.status === 404) {
+    return Astro.redirect(`/projects/${id}`);
+  }
+  error =
+    err instanceof ApiError
+      ? `Failed to load item (${err.status}): ${err.message}`
+      : "Failed to connect to the daemon. Is it running?";
+}
+
+const priorityStyles: Record<string, string> = {
+  critical: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200",
+  high: "bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200",
+  medium: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200",
+  low: "bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-300",
+};
+
+const statusLabels: Record<string, string> = {
+  backlog: "Backlog",
+  todo: "To Do",
+  in_progress: "In Progress",
+  review: "Review",
+  done: "Done",
+};
+
+const typeLabels: Record<string, string> = {
+  feature: "Feature",
+  bug: "Bug",
+  chore: "Chore",
+};
+
+function formatDate(dateStr: string): string {
+  return new Date(dateStr).toLocaleString();
+}
+
+const badgeBase = "inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold";
+---
+
+<AppLayout title={item ? `${item.title} — GoopSpec` : "Work Item — GoopSpec"}>
+  <div class="space-y-6">
+    <Breadcrumb
+      items={[
+        { label: "Dashboard", href: "/" },
+        { label: project?.name ?? "Project", href: `/projects/${id}` },
+        { label: item?.title ?? "Item" },
+      ]}
+    />
+
+    {error ? (
+      <div class="rounded-lg border border-destructive/50 bg-destructive/10 p-4">
+        <p class="text-sm text-destructive">{error}</p>
+      </div>
+    ) : item ? (
+      <div class="max-w-2xl space-y-6">
+        {/* Header */}
+        <div>
+          <div class="flex items-start justify-between gap-4">
+            <h1 class="text-2xl font-bold tracking-tight">{item.title}</h1>
+            <SpawnWorkflowButton
+              client:load
+              projectId={id}
+              workItemId={itemId}
+              itemTitle={item.title}
+            />
+          </div>
+          <div class="mt-3 flex flex-wrap items-center gap-2">
+            <span class={`${badgeBase} text-foreground`}>
+              {typeLabels[item.type] ?? item.type}
+            </span>
+            <span class={`${badgeBase} text-foreground`}>
+              {statusLabels[item.status] ?? item.status}
+            </span>
+            <span class={`${badgeBase} border-0 ${priorityStyles[item.priority] ?? ""}`}>
+              {item.priority}
+            </span>
+          </div>
+        </div>
+
+        {/* Description */}
+        {item.description ? (
+          <div class="space-y-1.5">
+            <h2 class="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
+              Description
+            </h2>
+            <div class="rounded-md border bg-muted/30 p-4">
+              <p class="text-sm whitespace-pre-wrap">{item.description}</p>
+            </div>
+          </div>
+        ) : (
+          <div class="space-y-1.5">
+            <h2 class="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
+              Description
+            </h2>
+            <p class="text-sm text-muted-foreground italic">No description provided.</p>
+          </div>
+        )}
+
+        {/* Tags */}
+        <div class="space-y-1.5">
+          <h2 class="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
+            Tags
+          </h2>
+          {item.tags.length > 0 ? (
+            <div class="flex flex-wrap gap-1.5">
+              {item.tags.map((tag) => (
+                <span class={`${badgeBase} text-foreground`}>{tag}</span>
+              ))}
+            </div>
+          ) : (
+            <p class="text-sm text-muted-foreground italic">No tags.</p>
+          )}
+        </div>
+
+        {/* Metadata */}
+        <div class="space-y-1.5">
+          <h2 class="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
+            Details
+          </h2>
+          <dl class="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+            <dt class="text-muted-foreground">Created</dt>
+            <dd>{formatDate(item.createdAt)}</dd>
+            <dt class="text-muted-foreground">Updated</dt>
+            <dd>{formatDate(item.updatedAt)}</dd>
+            <dt class="text-muted-foreground">ID</dt>
+            <dd class="font-mono text-xs">{item.id}</dd>
+          </dl>
+        </div>
+
+        {/* Back link */}
+        <div>
+          <a
+            href={`/projects/${id}`}
+            class="text-sm text-primary hover:underline"
+          >
+            &larr; Back to project
+          </a>
+        </div>
+      </div>
+    ) : null}
+  </div>
+</AppLayout>

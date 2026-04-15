@@ -1,0 +1,87 @@
+{
+  "name": "@goopspec/opencode-plugin",
+  "version": "0.2.9",
+  "description": "A spec-driven development plugin for OpenCode with user-guided planning, wave execution, and verification",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "bin": {
+    "goopspec": "dist/cli.js"
+  },
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "files": [
+    "dist",
+    "commands",
+    "agents",
+    "references",
+    "templates",
+    "skills"
+  ],
+  "scripts": {
+    "build": "bun build ./src/index.ts --outdir ./dist --target bun && bun build ./src/features/memory/worker/index.ts --outdir ./dist/worker --target bun && bun build ./src/cli/index.ts --outfile ./dist/cli.js --target node --format esm",
+    "dev": "bun build ./src/index.ts --outdir ./dist --target bun --watch",
+    "test": "bun test",
+    "typecheck": "bunx tsc --noEmit"
+  },
+  "keywords": [
+    "opencode",
+    "plugin",
+    "spec-driven",
+    "task-management",
+    "agent-orchestration",
+    "gsd",
+    "productivity",
+    "task-continuation",
+    "enforced-continuation",
+    "goopspec",
+    "cli"
+  ],
+  "author": "James",
+  "license": "MIT",
+  "dependencies": {
+    "@clack/prompts": "^0.8.2",
+    "@goopspec/core": "workspace:*",
+    "@huggingface/transformers": "^3.8.1",
+    "@opencode-ai/plugin": "^1.1.44",
+    "@opencode-ai/sdk": "^1.1.44",
+    "hono": "^4.11.7",
+    "onnxruntime-node": "^1.24.1",
+    "picocolors": "^1.1.1",
+    "sqlite-vec": "^0.1.7-alpha.2",
+    "zod": "^4.1.8"
+  },
+  "optionalDependencies": {
+    "sqlite-vec-darwin-arm64": "0.1.7-alpha.2",
+    "sqlite-vec-darwin-x64": "0.1.7-alpha.2",
+    "sqlite-vec-linux-x64": "0.1.7-alpha.2",
+    "sqlite-vec-linux-arm64": "0.1.7-alpha.2",
+    "sqlite-vec-windows-x64": "0.1.7-alpha.2"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@types/node": "^22.13.9",
+    "bun-types": "latest",
+    "eslint": "^10.0.0",
+    "typescript": "^5.8.2",
+    "typescript-eslint": "^8.54.0"
+  },
+  "peerDependencies": {
+    "@opencode-ai/plugin": "^1.1.0"
+  },
+  "engines": {
+    "bun": ">=1.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/hffmnnj/opencode-goopspec.git"
+  },
+  "bugs": {
+    "url": "https://github.com/hffmnnj/opencode-goopspec/issues"
+  },
+  "homepage": "https://github.com/hffmnnj/opencode-goopspec#readme"
+}

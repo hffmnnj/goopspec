@@ -4,6 +4,11 @@
 .references/
 test-results.txt
 
+# Daemon SQLite runtime database
+*.db
+*.db-shm
+*.db-wal
+
 # Logs
 logs
 *.log
@@ -100,6 +105,9 @@ dist
 # vuepress v2.x temp and cache directory
 .temp
 .cache
+
+# Astro generated types
+.astro/
 
 # Sveltekit cache directory
 .svelte-kit/

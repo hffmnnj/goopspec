@@ -1,0 +1,224 @@
+---
+import Layout from "../layouts/Layout.astro";
+import { LoginForm } from "../components/login-form";
+import { getDaemonUrl } from "../lib/auth";
+import "../styles/globals.css";
+
+const daemonUrl = getDaemonUrl();
+const hasError = Astro.url.searchParams.has("error");
+
+// Check auth status — redirect if already authenticated or no password required
+try {
+  const statusRes = await fetch(`${daemonUrl}/auth/status`, {
+    headers: { Cookie: Astro.request.headers.get("cookie") ?? "" },
+  });
+
+  if (statusRes.ok) {
+    const status = await statusRes.json();
+
+    if (!status.hasPassword) {
+      return Astro.redirect("/");
+    }
+
+    if (status.authenticated) {
+      return Astro.redirect("/");
+    }
+  }
+} catch {
+  // Daemon unreachable — show login page anyway so user sees the form
+}
+
+// Resolve the public daemon URL for the client-side form
+const publicDaemonUrl =
+  import.meta.env.PUBLIC_DAEMON_URL ?? "http://localhost:7331";
+---
+
+<Layout title="Sign In — GoopSpec">
+  <div class="login-page">
+    {/* Subtle constellation dots */}
+    <div class="constellation" aria-hidden="true">
+      <div class="dot dot-1"></div>
+      <div class="dot dot-2"></div>
+      <div class="dot dot-3"></div>
+      <div class="dot dot-4"></div>
+      <div class="dot dot-5"></div>
+      <div class="dot dot-6"></div>
+      <div class="dot dot-7"></div>
+      <div class="dot dot-8"></div>
+    </div>
+
+    <main class="login-container">
+      {/* Branding */}
+      <div class="login-brand">
+        <div class="crystal-icon" aria-hidden="true">🔮</div>
+        <h1 class="brand-name">GoopSpec</h1>
+        <p class="brand-tagline">spec-driven development</p>
+      </div>
+
+      {/* Login card */}
+      <div class="login-card">
+        <LoginForm
+          client:load
+          daemonUrl={publicDaemonUrl}
+          initialError={hasError}
+        />
+      </div>
+    </main>
+  </div>
+</Layout>
+
+<style>
+  .login-page {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    overflow: hidden;
+    background: radial-gradient(
+        ellipse at 30% 20%,
+        rgba(217, 70, 239, 0.08) 0%,
+        transparent 50%
+      ),
+      radial-gradient(
+        ellipse at 70% 80%,
+        rgba(168, 85, 247, 0.06) 0%,
+        transparent 50%
+      ),
+      hsl(var(--background));
+  }
+
+  :global(.dark) .login-page {
+    background: radial-gradient(
+        ellipse at 30% 20%,
+        rgba(217, 70, 239, 0.12) 0%,
+        transparent 50%
+      ),
+      radial-gradient(
+        ellipse at 70% 80%,
+        rgba(168, 85, 247, 0.08) 0%,
+        transparent 50%
+      ),
+      hsl(var(--background));
+  }
+
+  /* Constellation dots */
+  .constellation {
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+  }
+
+  .dot {
+    position: absolute;
+    border-radius: 50%;
+    background: rgba(217, 70, 239, 0.25);
+  }
+
+  :global(.dark) .dot {
+    background: rgba(217, 70, 239, 0.35);
+  }
+
+  .dot-1 { width: 3px; height: 3px; top: 12%; left: 18%; }
+  .dot-2 { width: 2px; height: 2px; top: 28%; left: 72%; }
+  .dot-3 { width: 4px; height: 4px; top: 45%; left: 8%; }
+  .dot-4 { width: 2px; height: 2px; top: 62%; left: 85%; }
+  .dot-5 { width: 3px; height: 3px; top: 78%; left: 32%; }
+  .dot-6 { width: 2px; height: 2px; top: 15%; left: 55%; }
+  .dot-7 { width: 3px; height: 3px; top: 88%; left: 68%; }
+  .dot-8 { width: 2px; height: 2px; top: 35%; left: 42%; }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .dot {
+      animation: twinkle 4s ease-in-out infinite;
+    }
+    .dot-1 { animation-delay: 0s; }
+    .dot-2 { animation-delay: 0.7s; }
+    .dot-3 { animation-delay: 1.4s; }
+    .dot-4 { animation-delay: 2.1s; }
+    .dot-5 { animation-delay: 2.8s; }
+    .dot-6 { animation-delay: 0.35s; }
+    .dot-7 { animation-delay: 1.75s; }
+    .dot-8 { animation-delay: 3.15s; }
+  }
+
+  @keyframes twinkle {
+    0%, 100% { opacity: 0.3; }
+    50% { opacity: 1; }
+  }
+
+  .login-container {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: 100%;
+    max-width: 400px;
+    padding: 2rem 1.5rem;
+  }
+
+  .login-brand {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    margin-bottom: 2rem;
+    text-align: center;
+  }
+
+  .crystal-icon {
+    font-size: 3rem;
+    line-height: 1;
+    margin-bottom: 0.75rem;
+    filter: drop-shadow(0 0 12px rgba(217, 70, 239, 0.4));
+  }
+
+  .brand-name {
+    font-size: 1.75rem;
+    font-weight: 700;
+    letter-spacing: -0.025em;
+    color: hsl(var(--foreground));
+  }
+
+  .brand-tagline {
+    margin-top: 0.25rem;
+    font-size: 0.875rem;
+    color: hsl(var(--muted-foreground));
+    letter-spacing: 0.05em;
+  }
+
+  .login-card {
+    width: 100%;
+    padding: 1.5rem;
+    border-radius: 0.75rem;
+    border: 1px solid hsl(var(--border));
+    background: hsl(var(--card));
+    box-shadow:
+      0 0 0 1px rgba(217, 70, 239, 0.05),
+      0 4px 24px rgba(0, 0, 0, 0.06);
+  }
+
+  :global(.dark) .login-card {
+    box-shadow:
+      0 0 0 1px rgba(217, 70, 239, 0.1),
+      0 4px 24px rgba(0, 0, 0, 0.3);
+  }
+
+  @media (min-width: 640px) {
+    .login-container {
+      padding: 3rem 2rem;
+    }
+
+    .login-card {
+      padding: 2rem;
+    }
+
+    .crystal-icon {
+      font-size: 3.5rem;
+    }
+
+    .brand-name {
+      font-size: 2rem;
+    }
+  }
+</style>

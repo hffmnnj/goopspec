@@ -1,0 +1,163 @@
+@import "tailwindcss";
+
+@theme {
+  --color-primary: #22c55e;
+  --color-primary-foreground: #ffffff;
+}
+
+/*
+ * Responsive Breakpoints (mobile-first)
+ * ──────────────────────────────────────
+ * Base styles target mobile (<640px).
+ * Use min-width media queries to layer on enhancements:
+ *
+ *   sm:  640px  — large phones / small tablets
+ *   md:  768px  — tablets (portrait)
+ *   lg:  1024px — laptops / tablets (landscape)
+ *   xl:  1280px — desktops
+ *
+ * Foldable devices:
+ *   884px — unfolded state (e.g. Pixel 9 Pro Fold)
+ *   @media (horizontal-viewport-segments: 2) — spanning mode
+ */
+
+:root {
+  --background: 0 0% 100%;
+  --foreground: 222.2 84% 4.9%;
+  --card: 0 0% 100%;
+  --card-foreground: 222.2 84% 4.9%;
+  --popover: 0 0% 100%;
+  --popover-foreground: 222.2 84% 4.9%;
+  --primary: 142.1 76.2% 36.3%;
+  --primary-foreground: 355.7 100% 97.3%;
+  --secondary: 210 40% 96.1%;
+  --secondary-foreground: 222.2 47.4% 11.2%;
+  --muted: 210 40% 96.1%;
+  --muted-foreground: 215.4 16.3% 46.9%;
+  --accent: 210 40% 96.1%;
+  --accent-foreground: 222.2 47.4% 11.2%;
+  --destructive: 0 84.2% 60.2%;
+  --destructive-foreground: 210 40% 98%;
+  --border: 214.3 31.8% 91.4%;
+  --input: 214.3 31.8% 91.4%;
+  --ring: 142.1 76.2% 36.3%;
+  --radius: 0.5rem;
+  --sidebar-background: 0 0% 98%;
+  --sidebar-foreground: 240 5.3% 26.1%;
+  --sidebar-primary: 142.1 76.2% 36.3%;
+  --sidebar-primary-foreground: 0 0% 100%;
+  --sidebar-accent: 240 4.8% 95.9%;
+  --sidebar-accent-foreground: 240 5.9% 10%;
+  --sidebar-border: 220 13% 91%;
+  --sidebar-ring: 142.1 76.2% 36.3%;
+
+  /* Touch target minimum (WCAG / Material Design guideline) */
+  --min-touch-target: 44px;
+}
+
+.dark {
+  --background: 222.2 84% 4.9%;
+  --foreground: 210 40% 98%;
+  --card: 222.2 84% 4.9%;
+  --card-foreground: 210 40% 98%;
+  --popover: 222.2 84% 4.9%;
+  --popover-foreground: 210 40% 98%;
+  --primary: 142.1 70.6% 45.3%;
+  --primary-foreground: 144.9 80.4% 10%;
+  --secondary: 217.2 32.6% 17.5%;
+  --secondary-foreground: 210 40% 98%;
+  --muted: 217.2 32.6% 17.5%;
+  --muted-foreground: 215 20.2% 65.1%;
+  --accent: 217.2 32.6% 17.5%;
+  --accent-foreground: 210 40% 98%;
+  --destructive: 0 62.8% 30.6%;
+  --destructive-foreground: 210 40% 98%;
+  --border: 217.2 32.6% 17.5%;
+  --input: 217.2 32.6% 17.5%;
+  --ring: 142.1 70.6% 45.3%;
+  --sidebar-background: 240 5.9% 10%;
+  --sidebar-foreground: 240 4.8% 95.9%;
+  --sidebar-primary: 142.1 70.6% 45.3%;
+  --sidebar-primary-foreground: 0 0% 100%;
+  --sidebar-accent: 240 3.7% 15.9%;
+  --sidebar-accent-foreground: 240 4.8% 95.9%;
+  --sidebar-border: 240 3.7% 15.9%;
+  --sidebar-ring: 142.1 70.6% 45.3%;
+}
+
+@layer base {
+  *,
+  *::before,
+  *::after {
+    box-sizing: border-box;
+    border-color: hsl(var(--border));
+  }
+
+  html {
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+  }
+
+  body {
+    min-height: 100dvh;
+    font-size: 16px;
+    overflow-x: hidden;
+    background-color: hsl(var(--background));
+    color: hsl(var(--foreground));
+  }
+
+  /* Reduce 300ms tap delay on interactive elements */
+  button,
+  a,
+  [role="button"],
+  input,
+  select,
+  textarea,
+  label[for] {
+    touch-action: manipulation;
+  }
+
+  /* Enforce minimum touch targets for accessibility */
+  button,
+  a,
+  [role="button"],
+  input[type="checkbox"],
+  input[type="radio"] {
+    min-height: var(--min-touch-target);
+  }
+}
+
+/* Adjacent touch target spacing utility */
+.touch-target-group > * + * {
+  margin-block-start: 8px;
+}
+
+/*
+ * Foldable device support
+ * ───────────────────────
+ * Unfolded state (~884px): 2-column grid, not squeezed 3-column.
+ * Spanning mode: content respects the fold/hinge area.
+ */
+@media (min-width: 640px) and (max-width: 884px) {
+  .responsive-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (min-width: 884px) and (max-width: 1023px) {
+  .responsive-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (horizontal-viewport-segments: 2) {
+  .responsive-grid {
+    grid-template-columns: repeat(2, 1fr);
+    column-gap: env(viewport-segment-right 0 0, 0px);
+  }
+
+  .fold-aware {
+    padding-inline: env(viewport-segment-left 0 0, 0px)
+      env(viewport-segment-right 1 0, 0px);
+  }
+}

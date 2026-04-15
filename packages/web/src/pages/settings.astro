@@ -1,0 +1,96 @@
+---
+import AppLayout from "../layouts/AppLayout.astro";
+
+let daemonUrl = "http://localhost:7331";
+try {
+  // Try to detect configured daemon URL
+  daemonUrl =
+    import.meta.env.DAEMON_URL ??
+    import.meta.env.PUBLIC_DAEMON_URL ??
+    "http://localhost:7331";
+} catch {}
+---
+
+<AppLayout title="Settings — GoopSpec">
+  <div class="space-y-6 max-w-2xl">
+    <div>
+      <h1 class="text-3xl font-bold tracking-tight">Settings</h1>
+      <p class="text-muted-foreground mt-1">Configuration and connection settings.</p>
+    </div>
+
+    <!-- Daemon Connection -->
+    <section class="rounded-lg border bg-card p-6 space-y-4">
+      <h2 class="text-lg font-semibold">Daemon Connection</h2>
+
+      <dl class="space-y-3 text-sm">
+        <div class="flex justify-between">
+          <dt class="text-muted-foreground">Daemon URL</dt>
+          <dd class="font-mono">{daemonUrl}</dd>
+        </div>
+        <div class="flex justify-between">
+          <dt class="text-muted-foreground">Health endpoint</dt>
+          <dd>
+            <a href={`${daemonUrl}/health`} target="_blank" rel="noopener" class="text-primary hover:underline font-mono text-xs">
+              {daemonUrl}/health ↗
+            </a>
+          </dd>
+        </div>
+      </dl>
+
+      <p class="text-xs text-muted-foreground">
+        To change the daemon URL, restart the web panel with the <code class="bg-muted rounded px-1">DAEMON_URL</code> environment variable set.
+      </p>
+    </section>
+
+    <!-- Environment -->
+    <section class="rounded-lg border bg-card p-6 space-y-4">
+      <h2 class="text-lg font-semibold">Environment Variables</h2>
+      <table class="w-full text-sm">
+        <thead>
+          <tr class="border-b">
+            <th class="text-left py-2 text-muted-foreground font-medium">Variable</th>
+            <th class="text-left py-2 text-muted-foreground font-medium">Default</th>
+            <th class="text-left py-2 text-muted-foreground font-medium">Description</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y">
+          <tr>
+            <td class="py-2 font-mono text-xs">DAEMON_URL</td>
+            <td class="py-2 font-mono text-xs text-muted-foreground">http://localhost:7331</td>
+            <td class="py-2 text-muted-foreground text-xs">Server-side daemon URL (SSR data fetching)</td>
+          </tr>
+          <tr>
+            <td class="py-2 font-mono text-xs">PUBLIC_DAEMON_URL</td>
+            <td class="py-2 font-mono text-xs text-muted-foreground">http://localhost:7331</td>
+            <td class="py-2 text-muted-foreground text-xs">Client-side daemon URL (WebSocket, SSE)</td>
+          </tr>
+          <tr>
+            <td class="py-2 font-mono text-xs">GOOPSPEC_DAEMON_PORT</td>
+            <td class="py-2 font-mono text-xs text-muted-foreground">7331</td>
+            <td class="py-2 text-muted-foreground text-xs">Daemon HTTP port</td>
+          </tr>
+          <tr>
+            <td class="py-2 font-mono text-xs">GOOPSPEC_DAEMON_DB</td>
+            <td class="py-2 font-mono text-xs text-muted-foreground">.goopspec-daemon.db</td>
+            <td class="py-2 text-muted-foreground text-xs">SQLite database file path</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <!-- Register project quick action -->
+    <section class="rounded-lg border bg-card p-6 space-y-3">
+      <h2 class="text-lg font-semibold">Register a Project</h2>
+      <p class="text-sm text-muted-foreground">
+        Use the daemon API to register a project directory with GoopSpec.
+      </p>
+      <pre class="text-xs bg-muted rounded p-3 overflow-x-auto">curl -X POST {daemonUrl}/api/projects \
+  -H "Content-Type: application/json" \
+  -d '{"{"}
+  "name": "My Project",
+  "path": "/absolute/path/to/project",
+  "description": "Optional description"
+{"}"}'</pre>
+    </section>
+  </div>
+</AppLayout>

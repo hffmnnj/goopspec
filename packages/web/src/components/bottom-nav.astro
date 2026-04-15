@@ -1,0 +1,63 @@
+---
+interface Props {
+  currentPath: string;
+}
+
+const { currentPath } = Astro.props;
+
+const navItems = [
+  {
+    label: "Dashboard",
+    href: "/",
+    icon: `<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>`,
+  },
+  {
+    label: "Projects",
+    href: "/projects",
+    icon: `<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></svg>`,
+  },
+  {
+    label: "Settings",
+    href: "/settings",
+    icon: `<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>`,
+  },
+];
+
+function isActive(href: string): boolean {
+  if (href === "/") return currentPath === "/";
+  return currentPath === href || currentPath.startsWith(href + "/");
+}
+---
+
+<nav
+  class="fixed bottom-0 left-0 right-0 z-50 border-t border-border bg-background md:hidden"
+  aria-label="Mobile navigation"
+>
+  <ul class="flex items-stretch justify-around" role="list">
+    {navItems.map((item) => {
+      const active = isActive(item.href);
+      return (
+        <li class="flex-1">
+          <a
+            href={item.href}
+            class:list={[
+              "flex flex-col items-center justify-center gap-1 py-2 text-xs font-medium transition-colors min-h-[56px]",
+              active
+                ? "text-primary"
+                : "text-muted-foreground hover:text-foreground",
+            ]}
+            aria-current={active ? "page" : undefined}
+          >
+            <span class:list={[
+              "flex items-center justify-center w-11 h-7 rounded-full transition-colors",
+              active ? "bg-primary/10" : "",
+            ]}>
+              <Fragment set:html={item.icon} />
+            </span>
+            <span>{item.label}</span>
+          </a>
+        </li>
+      );
+    })}
+  </ul>
+</nav>

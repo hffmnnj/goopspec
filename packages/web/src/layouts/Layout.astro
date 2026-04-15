@@ -1,0 +1,44 @@
+---
+interface Props {
+  title?: string;
+  description?: string;
+}
+
+const { title = "GoopSpec", description = "GoopSpec workflow management and issue tracker" } = Astro.props;
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content={description} />
+
+    <link rel="icon" type="image/svg+xml" href="/icons/icon-192.svg" />
+    <link rel="manifest" href="/manifest.json" />
+    <meta name="theme-color" content="#22c55e" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="GoopSpec" />
+    <link rel="apple-touch-icon" href="/icons/icon-192.svg" />
+
+    <title>{title}</title>
+
+    <script is:inline>
+      const theme = localStorage.getItem("theme") ??
+        (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+      document.documentElement.classList.toggle("dark", theme === "dark");
+    </script>
+  </head>
+  <body class="min-h-screen bg-background text-foreground antialiased">
+    <slot />
+
+    <script is:inline>
+      if ("serviceWorker" in navigator) {
+        window.addEventListener("load", () => {
+          navigator.serviceWorker.register("/sw.js").catch(() => {});
+        });
+      }
+    </script>
+  </body>
+</html>

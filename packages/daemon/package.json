@@ -1,0 +1,23 @@
+{
+  "name": "@goopspec/daemon",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "scripts": {
+    "build": "bun run typecheck && bun build src/index.ts --outdir dist --target bun",
+    "dev": "bun run --watch src/index.ts",
+    "test": "bun test",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@goopspec/core": "workspace:*",
+    "bcryptjs": "^3.0.2",
+    "hono": "^4.11.7",
+    "jose": "^6.2.1"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "typescript": "^5.8.3"
+  }
+}
