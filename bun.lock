@@ -13,16 +13,6 @@
         "typescript-eslint": "^8.54.0",
       },
     },
-    "packages/core": {
-      "name": "@goopspec/core",
-      "version": "0.1.0",
-      "dependencies": {
-        "zod": "^4.1.8",
-      },
-      "devDependencies": {
-        "typescript": "^5.8.3",
-      },
-    },
     "packages/opencode-plugin": {
       "name": "@goopspec/opencode-plugin",
       "version": "1.0.0",
@@ -75,8 +65,6 @@
     "@eslint/object-schema": ["@eslint/object-schema@3.0.1", "", {}, "sha512-P9cq2dpr+LU8j3qbLygLcSZrl2/ds/pUpfnHNNuk5HW7mnngHs+6WSq5C9mO3rqRX8A1poxqLTC9cu0KOyJlBg=="],
 
     "@eslint/plugin-kit": ["@eslint/plugin-kit@0.6.0", "", { "dependencies": { "@eslint/core": "^1.1.0", "levn": "^0.4.1" } }, "sha512-bIZEUzOI1jkhviX2cp5vNyXQc6olzb2ohewQubuYlMXZ2Q/XjBO0x0XhGPvc9fjSIiUN0vw+0hq53BJ4eQSJKQ=="],
-
-    "@goopspec/core": ["@goopspec/core@workspace:packages/core"],
 
     "@goopspec/opencode-plugin": ["@goopspec/opencode-plugin@workspace:packages/opencode-plugin"],
 

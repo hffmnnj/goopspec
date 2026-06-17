@@ -5,72 +5,59 @@ Guidelines for AI agents working in this codebase.
 ## Build & Test Commands
 
 ```bash
-bun install                              # Install all workspace dependencies
-bun run build                            # Build all packages
-bun run typecheck                        # Type check all packages
-bun test                                 # Run all tests (all packages)
-
-# Per-package commands
-bun run --cwd packages/core build        # Build @goopspec/core
-bun run --cwd packages/daemon build      # Build @goopspec/daemon
-bun run --cwd packages/opencode-plugin build  # Build @goopspec/opencode-plugin
-bun run --cwd packages/web build         # Build @goopspec/web (Astro)
-bun run --cwd packages/web dev           # Dev server for web panel
+bun install                                          # Install workspace dependencies
+bun run --cwd packages/opencode-plugin build         # Build the plugin
+bun run --cwd packages/opencode-plugin typecheck     # Type check the plugin
+bun run --cwd packages/opencode-plugin test           # Run all plugin tests
+bun run --cwd packages/opencode-plugin lint          # Run Biome lint on src
+bun run --cwd packages/opencode-plugin lint:fix       # Fix Biome issues in src
+bun run --cwd packages/opencode-plugin format        # Format src with Biome
 
 # Testing
-bun test packages/core/                  # Test core package
-bun test packages/daemon/                # Test daemon package
-bun test packages/opencode-plugin/       # Test plugin package
+bun test packages/opencode-plugin/                   # Test plugin package
 bun test packages/opencode-plugin/src/tools/goop-status/index.test.ts  # Single file
-bun test --filter "goop_status"          # Tests matching pattern
-bun test --watch                         # Watch mode
+bun test --filter "goop_status"                       # Tests matching pattern
+bun test --watch                                      # Watch mode
 ```
 
 ## Project Structure
 
 ```
 packages/
-├── core/            # @goopspec/core — shared types, Zod schemas, API contracts
-├── daemon/          # @goopspec/daemon — 24/7 Hono server, SQLite, WS, SSE
-├── opencode-plugin/ # @goopspec/opencode-plugin — MCP tools, skills, hooks
-└── web/             # @goopspec/web — Astro SSR web panel
+└── opencode-plugin/       # @goopspec/opencode-plugin — MCP tools, hooks, and orchestration logic
 
 packages/opencode-plugin/src/
-├── core/           # Types, config, resolver
-├── tools/          # MCP tool implementations
-├── hooks/          # OpenCode plugin hooks
-├── features/       # Feature modules (memory, state, routing, daemon client)
-├── agents/         # Agent definitions and prompt sections
-├── shared/         # Utilities (logger, paths, ui)
-└── test-utils.ts   # Shared test utilities
+├── core/                  # Types, config, resolver
+├── tools/                 # MCP tool implementations
+├── hooks/                 # OpenCode plugin hooks
+├── features/              # Feature modules (memory, state, routing, model-routing)
+├── shared/                # Utilities (logger, paths)
+├── test-utils.ts          # Shared test utilities
+└── index.ts               # Plugin entry point
 
-agents/             # Agent markdown definitions
-commands/           # Slash command definitions
-skills/             # Loadable skill modules
-references/         # Reference documentation
-templates/          # File templates
+agents/                    # 13 agent markdown definitions
+commands/                  # 9 slash command definitions
+references/                # 12 consolidated reference documents
+templates/                 # File templates
 ```
 
 ## Packages
 
 | Package | Purpose |
 |---------|---------|
-| `@goopspec/core` | Shared types (`Project`, `WorkItem`, `WorkflowSession`, `WorkflowEvent`, `DaemonHealth`), Zod schemas, WS message types, `generateId` |
-| `@goopspec/daemon` | Always-on Hono HTTP server (port 7331), SQLite persistence via `bun:sqlite`, Bun-native WebSocket rooms, SSE event stream, workflow orchestration |
-| `@goopspec/opencode-plugin` | MCP tools, slash commands, skills, hooks — the OpenCode plugin entry point |
-| `@goopspec/web` | Astro v5 SSR web panel with React islands (Shadcn/ui), Tailwind v4, PWA support |
+| `@goopspec/opencode-plugin` | MCP tools, slash commands, hooks, and in-process orchestration — the OpenCode plugin entry point |
 
 ## Code Style
 
 ### TypeScript Configuration
 - **Target**: ES2022, **Module**: NodeNext
-- **Strict mode** enabled with noUnusedLocals, noUnusedParameters, noImplicitReturns
+- **Strict mode** enabled with `noUnusedLocals`, `noUnusedParameters`, `noImplicitReturns`
 - Use `.js` extension for all local imports (ESM requirement)
 
 ### Import Order
 ```typescript
 // 1. External imports
-import { tool, type ToolDefinition } from "@Claude-ai/plugin/tool";
+import { tool, type ToolDefinition } from "@opencode-ai/plugin/tool";
 // 2. Internal imports with .js extension
 import type { PluginContext } from "../../core/types.js";
 import { log, logError } from "../shared/logger.js";
@@ -147,35 +134,16 @@ describe("goop_status tool", () => {
 ```
 
 ### Mock Factories (test-utils.ts)
-- `setupTestEnvironment(prefix)` - Temp dir with .goopspec structure
+- `setupTestEnvironment(prefix)` - Temp dir with `.goopspec` structure
 - `createMockPluginContext(opts)` - Full plugin context mock
 - `createMockToolContext(opts)` - Tool execution context mock
 - `createMockStateManager(state)` - State manager mock
 
 ## Implementation Patterns
 
-### UI Pattern (Clack)
-Use the shared UI wrapper for consistent, interactive feedback.
-
-```typescript
-import { ui } from "../shared/ui.js";
-
-// Status spinners
-await ui.spinner("Analyzing dependency graph", async () => {
-  await heavyOperation();
-  return "Graph built";
-});
-
-// Interactive prompts
-const confirm = await ui.confirm("Do you want to proceed?");
-
-// Notes and Logs
-ui.note("Analysis Complete", "Found 3 potential issues.");
-```
-
 ### Tool Pattern
 ```typescript
-import { tool, type ToolDefinition } from "@Claude-ai/plugin/tool";
+import { tool, type ToolDefinition } from "@opencode-ai/plugin/tool";
 import type { PluginContext, ToolContext } from "../../core/types.js";
 
 export function createMyTool(ctx: PluginContext): ToolDefinition {
@@ -187,7 +155,7 @@ export function createMyTool(ctx: PluginContext): ToolDefinition {
     async execute(args, _context: ToolContext): Promise<string> {
       // 1. Memory Check (Memory-First)
       const memory = await ctx.memory.search(args.param);
-      
+
       // 2. Execution
       const state = ctx.stateManager.getState();
       return "result";
@@ -201,12 +169,10 @@ export function createMyTool(ctx: PluginContext): ToolDefinition {
 export function createMyHook(ctx: PluginContext) {
   return {
     name: "my-hook",
-    async postToolUse(params: {
-      toolName: string;
-      result: unknown;
-      sessionId: string;
-    }): Promise<{ inject?: string } | void> {
-      // Hook logic
+    hooks: {
+      "experimental.chat.system.transform": async (params) => {
+        // Hook logic
+      },
     },
   };
 }
@@ -215,18 +181,18 @@ export function createMyHook(ctx: PluginContext) {
 ## Key Rules
 
 1. **Memory-First** - Always check memory/state before action. Persist learnings after.
-2. **Interactive UI** - Use `ui` helpers (Clack) for all user interaction. Never use raw `console.log`.
+2. **Use OpenCode plugin APIs** - Prefer OpenCode plugin SDK helpers for user interaction.
 3. **Graceful degradation** - Never crash the plugin, return fallback results.
 4. **Co-locate tests** - Test files next to implementation.
 5. **Use test-utils** - Leverage shared mock factories.
-6. **ESM imports** - Always use .js extension for local imports.
-7. **Explicit types** - Avoid `any`, define interfaces in core/types.ts.
+6. **ESM imports** - Always use `.js` extension for local imports.
+7. **Explicit types** - Avoid `any`, define interfaces in `core/types.ts`.
 8. **Minimal comments** - Only document non-obvious logic.
 9. **Atomic commits** - Keep changes focused and small.
 
 ## Gotchas (Auto)
 
-<!-- Last verified: 2026-03-11 — git-worktree-multi-session milestone -->
+<!-- Last verified: 2026-06-17 — GoopSpec 1.0.0 plugin-only structure -->
 
 - **Bun `mock.module()` replaces the entire module globally.** When mocking `../../features/worktree/git.js` in a tool test, spread the real module into the mock (`const real = await import(...); mock.module(..., () => ({ ...real, fn: mockFn }))`) — otherwise named exports disappear and other tests in the same run fail with "Export named 'X' not found".
 
@@ -236,10 +202,6 @@ export function createMyHook(ctx: PluginContext) {
 
 - **`GOOPSPEC_DEBUG=true` enables verbose logging** via `log()` in `src/shared/logger.ts`. Without it, `log()` calls are no-ops. Only `logError()` always logs.
 
-- **Tailwind v4 + Astro: use `@tailwindcss/vite`, NOT `@astrojs/tailwind`.** The `@astrojs/tailwind` integration is incompatible with Tailwind v4. Add `tailwindcss()` from `@tailwindcss/vite` directly to `astro.config.ts` vite plugins array.
+- **Memory is in-process via `bun:sqlite`.** The memory feature runs inside the plugin process using SQLite with FTS5 + LIKE fallback. There is no separate worker process and no `port-37777` service.
 
-- **Daemon WebSocket uses Bun native transport, NOT hono/ws.** WebSocket handling is wired through `Bun.serve`'s `websocket` config option (`packages/daemon/src/transport/ws-server.ts`). Do not attempt to use a Hono WebSocket adapter — it is not used here.
-
-- **Daemon SSE uses Web Streams API (`ReadableStream`), not a library.** The SSE endpoint (`packages/daemon/src/transport/sse.ts`) streams events via `ReadableStream` + `ReadableStreamDefaultController`. No third-party SSE library is used.
-
-- **Daemon transport tests use mock WebSocket objects — do NOT start real servers.** Unit tests for `rooms.ts`, `ws-server.ts`, and `sse.ts` inject mock objects. Starting a real `Bun.serve` instance in tests causes port conflicts and flakiness.
+- **Knowledge lives in `references/`, not `skills/`.** GoopSpec 1.0.0 removed the skills feature. Use `goop_reference` to load the 12 consolidated reference documents.
