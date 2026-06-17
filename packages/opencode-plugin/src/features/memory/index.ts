@@ -1,0 +1,351 @@
+/**
+ * In-process memory system backed by bun:sqlite with FTS5 full-text search.
+ *
+ * Implements the MemoryManager interface from core/types.ts.
+ * No separate worker process, no port — purely in-process.
+ */
+
+import { Database } from "bun:sqlite";
+
+import type {
+  MemoryEntry,
+  MemoryManager,
+  MemorySaveInput,
+  MemorySearchOptions,
+  MemorySearchResult,
+} from "../../core/types.js";
+import { initSchema } from "./schema.js";
+import type { FtsSearchRow, MemoryManagerOptions, MemoryRow } from "./types.js";
+
+/** Named parameter bindings accepted by bun:sqlite. */
+type NamedBindings = Record<string, string | bigint | number | boolean | null>;
+
+// ---------------------------------------------------------------------------
+// Row ↔ MemoryEntry conversion
+// ---------------------------------------------------------------------------
+
+function rowToEntry(row: MemoryRow): MemoryEntry {
+  return {
+    id: row.id,
+    type: row.type as MemoryEntry["type"],
+    title: row.title,
+    content: row.content,
+    facts: safeParse(row.facts),
+    concepts: safeParse(row.concepts),
+    importance: row.importance,
+    sourceFiles: safeParse(row.source_files),
+    createdAt: row.created_at,
+  };
+}
+
+function safeParse(json: string): string[] {
+  try {
+    const parsed: unknown = JSON.parse(json);
+    return Array.isArray(parsed) ? (parsed as string[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+// ---------------------------------------------------------------------------
+// FTS5 query sanitisation
+// ---------------------------------------------------------------------------
+
+/**
+ * Escape a user query for safe use in an FTS5 MATCH expression.
+ *
+ * Strips FTS5 operators, splits on whitespace, wraps each token in
+ * double-quotes with a prefix wildcard, and joins with OR.
+ */
+function sanitiseFtsQuery(raw: string): string {
+  return raw
+    .replace(/[*"(){}:^~<>]/g, " ")
+    .trim()
+    .split(/\s+/)
+    .filter((w) => w.length > 0)
+    .map((w) => `"${w}"*`)
+    .join(" OR ");
+}
+
+// ---------------------------------------------------------------------------
+// SqliteMemoryManager
+// ---------------------------------------------------------------------------
+
+export class SqliteMemoryManager implements MemoryManager {
+  private db: Database;
+  private fts5Enabled: boolean;
+
+  constructor(opts: MemoryManagerOptions) {
+    this.db = new Database(opts.dbPath, { create: true });
+    const result = initSchema(this.db);
+    this.fts5Enabled = result.fts5Enabled;
+  }
+
+  /** Expose FTS5 status for tests / diagnostics. */
+  get hasFts5(): boolean {
+    return this.fts5Enabled;
+  }
+
+  // -----------------------------------------------------------------------
+  // save
+  // -----------------------------------------------------------------------
+
+  async save(input: MemorySaveInput): Promise<MemoryEntry> {
+    try {
+      const importance = clampImportance(input.importance);
+      const now = Math.floor(Date.now() / 1000);
+
+      const row = this.db
+        .query<MemoryRow, NamedBindings>(
+          `INSERT INTO memories (type, title, content, facts, concepts, source_files, importance, created_at)
+           VALUES ($type, $title, $content, $facts, $concepts, $sourceFiles, $importance, $createdAt)
+           RETURNING *`,
+        )
+        .get({
+          $type: input.type,
+          $title: input.title,
+          $content: buildContent(input),
+          $facts: JSON.stringify(input.facts ?? []),
+          $concepts: JSON.stringify(input.concepts ?? []),
+          $sourceFiles: JSON.stringify(input.sourceFiles ?? []),
+          $importance: importance,
+          $createdAt: now,
+        });
+
+      if (!row) {
+        throw new Error("INSERT RETURNING produced no row");
+      }
+
+      return rowToEntry(row);
+    } catch {
+      // Graceful degradation: return a synthetic entry so callers never throw.
+      return fallbackEntry(input);
+    }
+  }
+
+  // -----------------------------------------------------------------------
+  // search
+  // -----------------------------------------------------------------------
+
+  async search(options: MemorySearchOptions): Promise<MemorySearchResult[]> {
+    try {
+      if (!options.query.trim()) return [];
+
+      return this.fts5Enabled ? this.searchFts(options) : this.searchLike(options);
+    } catch {
+      return [];
+    }
+  }
+
+  // -----------------------------------------------------------------------
+  // getById
+  // -----------------------------------------------------------------------
+
+  async getById(id: number): Promise<MemoryEntry | null> {
+    try {
+      const row = this.db
+        .query<MemoryRow, NamedBindings>("SELECT * FROM memories WHERE id = $id")
+        .get({ $id: id });
+      return row ? rowToEntry(row) : null;
+    } catch {
+      return null;
+    }
+  }
+
+  // -----------------------------------------------------------------------
+  // forget (by id)
+  // -----------------------------------------------------------------------
+
+  async forget(id: number): Promise<boolean> {
+    try {
+      const result = this.db
+        .query<MemoryRow, NamedBindings>("DELETE FROM memories WHERE id = $id")
+        .run({ $id: id });
+      return result.changes > 0;
+    } catch {
+      return false;
+    }
+  }
+
+  // -----------------------------------------------------------------------
+  // forgetByQuery
+  // -----------------------------------------------------------------------
+
+  async forgetByQuery(query: string): Promise<number> {
+    try {
+      if (!query.trim()) return 0;
+
+      const matches = await this.search({ query, limit: 100 });
+      if (matches.length === 0) return 0;
+
+      const ids = matches.map((m) => m.memory.id);
+      for (const id of ids) {
+        this.db.query("DELETE FROM memories WHERE id = $id").run({ $id: id });
+      }
+      // Return the count of matched entries we deleted (not result.changes,
+      // which is inflated by FTS5 sync triggers).
+      return ids.length;
+    } catch {
+      return 0;
+    }
+  }
+
+  // -----------------------------------------------------------------------
+  // close
+  // -----------------------------------------------------------------------
+
+  close(): void {
+    try {
+      this.db.close();
+    } catch {
+      // Already closed or never opened — safe to ignore.
+    }
+  }
+
+  // -----------------------------------------------------------------------
+  // Private: FTS5 search
+  // -----------------------------------------------------------------------
+
+  private searchFts(options: MemorySearchOptions): MemorySearchResult[] {
+    const ftsQuery = sanitiseFtsQuery(options.query);
+    if (!ftsQuery) return [];
+
+    const { whereClause, params } = buildFilters(options);
+    const limit = options.limit ?? 10;
+
+    // BM25 weights: title=10, content=5, facts=2, concepts=2
+    const sql = `
+      SELECT m.*, bm25(memories_fts, 10.0, 5.0, 2.0, 2.0) AS rank
+      FROM memories m
+      JOIN memories_fts ON m.id = memories_fts.rowid
+      WHERE memories_fts MATCH '${ftsQuery}' ${whereClause}
+      ORDER BY (ABS(rank) * (m.importance / 10.0)) DESC
+      LIMIT ${limit}
+    `;
+
+    const rows = this.db.query<FtsSearchRow, NamedBindings>(sql).all(params);
+
+    return rows.map((row) => ({
+      memory: rowToEntry(row),
+      score: roundScore(Math.abs(row.rank) * (row.importance / 10)),
+      matchType: "fts" as const,
+    }));
+  }
+
+  // -----------------------------------------------------------------------
+  // Private: LIKE fallback search
+  // -----------------------------------------------------------------------
+
+  private searchLike(options: MemorySearchOptions): MemorySearchResult[] {
+    const pattern = `%${options.query.replace(/%/g, "\\%").replace(/_/g, "\\_")}%`;
+    const { whereClause, params } = buildFilters(options);
+    const limit = options.limit ?? 10;
+
+    params.$pattern = pattern;
+
+    const sql = `
+      SELECT * FROM memories m
+      WHERE (m.title LIKE $pattern ESCAPE '\\' OR m.content LIKE $pattern ESCAPE '\\' OR m.facts LIKE $pattern ESCAPE '\\' OR m.concepts LIKE $pattern ESCAPE '\\')
+      ${whereClause}
+      ORDER BY m.importance DESC, m.created_at DESC
+      LIMIT ${limit}
+    `;
+
+    const rows = this.db.query<MemoryRow, NamedBindings>(sql).all(params);
+
+    return rows.map((row) => ({
+      memory: rowToEntry(row),
+      score: roundScore(row.importance / 10),
+      matchType: "fts" as const, // Report as fts for interface compat
+    }));
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+function clampImportance(raw: number | undefined): number {
+  if (raw == null) return 5;
+  // Support 0-1 scale: scale up to 1-10
+  const scaled = raw > 0 && raw <= 1 ? Math.round(raw * 10) : raw;
+  return Math.max(1, Math.min(10, Math.round(scaled)));
+}
+
+function buildContent(input: MemorySaveInput): string {
+  let content = input.content;
+  if (input.reasoning) {
+    content += `\n\nReasoning: ${input.reasoning}`;
+  }
+  if (input.alternatives?.length) {
+    content += `\n\nAlternatives considered: ${input.alternatives.join(", ")}`;
+  }
+  return content;
+}
+
+function roundScore(n: number): number {
+  return Math.round(n * 100) / 100;
+}
+
+/**
+ * Build WHERE clause fragments and params for type / concept / importance filters.
+ * The returned whereClause always starts with " AND" so it can be appended
+ * after an existing WHERE condition.
+ */
+function buildFilters(options: MemorySearchOptions): {
+  whereClause: string;
+  params: NamedBindings;
+} {
+  const clauses: string[] = [];
+  const params: NamedBindings = {};
+
+  if (options.types?.length) {
+    const placeholders = options.types.map((_, i) => `$filterType${i}`);
+    clauses.push(`m.type IN (${placeholders.join(", ")})`);
+    for (const [i, t] of options.types.entries()) {
+      params[`$filterType${i}`] = t;
+    }
+  }
+
+  if (options.concepts?.length) {
+    const conceptClauses = options.concepts.map((_, i) => `m.concepts LIKE $concept${i}`);
+    clauses.push(`(${conceptClauses.join(" OR ")})`);
+    for (const [i, c] of options.concepts.entries()) {
+      params[`$concept${i}`] = `%${c}%`;
+    }
+  }
+
+  if (options.minImportance != null) {
+    clauses.push("m.importance >= $minImportance");
+    params.$minImportance = options.minImportance;
+  }
+
+  const whereClause = clauses.length > 0 ? ` AND ${clauses.join(" AND ")}` : "";
+  return { whereClause, params };
+}
+
+/**
+ * Produce a synthetic MemoryEntry when the database write fails.
+ * Ensures callers of save() never receive an exception.
+ */
+function fallbackEntry(input: MemorySaveInput): MemoryEntry {
+  return {
+    id: -1,
+    type: input.type,
+    title: input.title,
+    content: input.content,
+    facts: input.facts,
+    concepts: input.concepts,
+    importance: input.importance ?? 5,
+    sourceFiles: input.sourceFiles,
+    createdAt: Math.floor(Date.now() / 1000),
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Factory (convenience)
+// ---------------------------------------------------------------------------
+
+export function createMemoryManager(opts: MemoryManagerOptions): SqliteMemoryManager {
+  return new SqliteMemoryManager(opts);
+}
