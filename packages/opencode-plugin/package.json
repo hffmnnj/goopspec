@@ -17,7 +17,9 @@
     "build": "bun build ./src/index.ts --outdir ./dist --target bun",
     "typecheck": "bunx tsc --noEmit",
     "test": "bun test",
-    "lint": "echo 'lint not yet configured — see Task 2.3'"
+    "lint": "biome check src",
+    "lint:fix": "biome check --write src",
+    "format": "biome format --write src"
   },
   "keywords": [
     "opencode",
@@ -33,6 +35,7 @@
     "zod": "^4.1.8"
   },
   "devDependencies": {
+    "@biomejs/biome": "^1.9.4",
     "@types/node": "^22.13.9",
     "bun-types": "latest",
     "typescript": "^5.8.2"
