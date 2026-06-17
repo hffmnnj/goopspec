@@ -1,30 +1,25 @@
 /**
  * GoopSpec 1.0.0 — OpenCode Plugin Entry Point
  *
- * Plugin shape per installed @opencode-ai/plugin@1.1.47:
- *   Plugin = (input: PluginInput) => Promise<Hooks>
- *
- * The loader discovers named exports that are Plugin functions,
- * or a `server` export. We export both for compatibility.
+ * Assembles the PluginContext, registers all 11 tools and all hooks,
+ * and returns the merged Hooks object to the OpenCode loader.
  */
 
-import type { Hooks, Plugin } from "@opencode-ai/plugin";
+import { createPluginContext } from "./core/context.js";
+import type { Plugin } from "./core/sdk-compat.js";
+import { createHooks } from "./hooks/index.js";
+import { logError } from "./shared/logger.js";
+import { createTools } from "./tools/index.js";
 
-function createFallbackHooks(): Hooks {
-  return {};
-}
-
-const goopspec: Plugin = async (_input) => {
+const goopspec: Plugin = async (input) => {
   try {
-    // Tools, hooks, and features wire in during Waves 3–7
-    const hooks: Hooks = {};
-    return hooks;
+    const ctx = await createPluginContext(input);
+    const hooks = createHooks(ctx);
+    const tools = createTools(ctx);
+    return { ...hooks, tool: { ...(hooks.tool ?? {}), ...tools } };
   } catch (error) {
-    if (error instanceof Error) {
-      // biome-ignore lint/suspicious/noConsole: logError not yet wired; replaced in Wave 3
-      console.error(`[goopspec] Plugin initialization failed: ${error.message}`);
-    }
-    return createFallbackHooks();
+    logError("Plugin initialization failed", error);
+    return {};
   }
 };
 
