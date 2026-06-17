@@ -9,6 +9,7 @@
  */
 
 import type { PluginInput } from "@opencode-ai/plugin";
+import type { SessionManager } from "../features/session/index.js";
 import type {
   AgentRole,
   ExecutorTier,
@@ -61,6 +62,7 @@ export interface PluginContext {
   readonly memory: MemoryManager;
   readonly resolver: ResourceResolver;
   readonly session: SessionInfo;
+  readonly sessionManager: SessionManager;
 }
 
 // ---------------------------------------------------------------------------
@@ -230,6 +232,34 @@ export interface ResourceResolver {
   resolveMany(names: string[]): ResolvedResource[];
   resolveAll(type: ResourceType): ResolvedResource[];
   listNames(type: ResourceType): string[];
+}
+
+// ---------------------------------------------------------------------------
+// Agent model preferences (MH16)
+// ---------------------------------------------------------------------------
+
+/**
+ * Per-role model preference. Describes which model an agent role prefers
+ * and an optional fallback when the preferred model is unavailable.
+ */
+export interface AgentModelPreference {
+  /** The preferred model identifier (e.g. "anthropic/claude-opus-4-6"). */
+  readonly preferred: string;
+  /** Optional fallback model when the preferred is unavailable. */
+  readonly fallback?: string;
+}
+
+/**
+ * Minimal agent definition carrying identity and model preference.
+ *
+ * Used by the routing subsystem to resolve the correct model for dispatch.
+ * Full agent prompt definitions live in the `agents/` directory; this type
+ * captures only the fields relevant to routing and model selection.
+ */
+export interface AgentDefinition {
+  readonly role: AgentRole;
+  readonly model?: string;
+  readonly tier?: ExecutorTier;
 }
 
 // ---------------------------------------------------------------------------
