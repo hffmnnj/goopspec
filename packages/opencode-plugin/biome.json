@@ -3,7 +3,6 @@
   "files": {
     "include": ["src/**"],
     "ignore": [
-      "src_legacy/**",
       "dist/**",
       "node_modules/**",
       "agents/**",

@@ -19,7 +19,6 @@
   },
   "include": ["src/**/*"],
   "exclude": [
-    "src_legacy",
     "node_modules",
     "dist",
     "agents",
