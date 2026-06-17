@@ -1,11 +1,11 @@
-# Test-Driven Development (TDD)
+# Test-Driven Development
 
-Use red -> green -> refactor cycles for behavior-first implementation.
+Red → green → refactor cycles for behavior-first implementation.
 
 ## Core Cycle
 
-1. **Red**: write a failing test.
-2. **Green**: add minimal code to pass.
+1. **Red**: write a failing test that describes expected behavior.
+2. **Green**: add minimal code to make the test pass.
 3. **Refactor**: improve design while keeping tests green.
 
 ## GoopSpec Usage
@@ -18,36 +18,108 @@ Use red -> green -> refactor cycles for behavior-first implementation.
 
 ### Red
 
-- Add focused failing test.
-- Run target test to confirm failure.
+- Add a focused failing test.
+- Run the target test to confirm failure.
+- Commit: `test(phase-plan): add failing test for X`.
 
 ### Green
 
-- Implement minimum behavior.
+- Implement the minimum behavior.
 - Re-run target tests until passing.
+- Commit: `feat(phase-plan): implement X`.
 
 ### Refactor
 
-- Improve names/structure/extraction.
+- Clean up names, structure, duplication.
 - Re-run tests to confirm no regressions.
+- Commit: `refactor(phase-plan): clean up X`.
 
 ## Test Levels
 
-- Unit: function/module behavior
-- Integration: module interactions
-- E2E: critical user flows only
+```
+        /\        E2E Tests (Few)
+       /  \
+      /----\      Integration Tests (Some)
+     /      \
+    /--------\    Unit Tests (Many)
+   /          \
+  /------------\
+```
+
+| Level | Scope | When to Use |
+|-------|-------|-------------|
+| Unit | Function/module | Always |
+| Integration | Module interactions | When components interact |
+| E2E | Critical user flows | Sparingly, for high-value paths |
+
+## Mocking Patterns
+
+```typescript
+// Function mock
+const mockFetch = mock(() => Promise.resolve({ data: [] }));
+
+// Module mock with Bun: preserve named exports from the real module
+const real = await import("./database.js");
+mock.module("./database.js", () => ({ ...real, query: mock(() => Promise.resolve([])) }));
+
+// Time mock
+jest.useFakeTimers();
+jest.advanceTimersByTime(1000);
+```
+
+## Coverage Targets
+
+| Type | Target | Critical Path |
+|------|--------|---------------|
+| Statements | 80% | 95% |
+| Branches | 75% | 90% |
+| Functions | 80% | 95% |
+| Lines | 80% | 95% |
+
+## Test Organization
+
+Co-locate tests with implementation (`*.test.ts` next to `*.ts`). Group integration and E2E tests by domain.
+
+## Fixtures
+
+Keep reusable test data in a `fixtures/` directory near the tests that use it.
 
 ## Best Practices
 
-- descriptive test names
-- Arrange/Act/Assert structure
-- independent tests
-- mock external dependencies for speed
+- Use descriptive test names.
+- Follow Arrange / Act / Assert structure.
+- Keep tests independent.
+- Mock external dependencies for speed.
+- Run the narrowest relevant test first, then the full suite.
 
-## Avoid TDD For
+## When Not to Use TDD
 
-- exploratory prototypes
-- pure configuration work
-- highly visual-only tweaks without stable assertions
+- Exploratory prototypes.
+- Pure configuration work.
+- Highly visual-only tweaks without stable assertions.
 
-*TDD Reference*
+## Snapshot and Performance Tests
+
+Use snapshot tests sparingly for stable output (e.g., rendered markup, generated configs). Update snapshots only after intentional changes.
+
+Performance tests should assert budgets, not micro-optimizations:
+
+```typescript
+it("completes within 100ms", async () => {
+  const start = performance.now();
+  await heavyOperation();
+  expect(performance.now() - start).toBeLessThan(100);
+});
+```
+
+## Verification
+
+Every TDD task must end with:
+
+- Target tests passing.
+- Full suite passing (or a clear reason why not).
+- Commit messages that do not reference internal planning IDs.
+
+---
+
+*TDD v1.0 — GoopSpec Reference*

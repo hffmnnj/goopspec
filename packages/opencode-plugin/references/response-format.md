@@ -1,425 +1,141 @@
-# Agent Response Format
+# Sub-Agent Response Format (MH17)
 
-All GoopSpec subagents MUST return structured responses to the orchestrator using XML envelopes. This enables clean handoffs, progress tracking, and machine-parseable next-step clarity.
+Every GoopSpec sub-agent returns a single markdown-structured response to the orchestrator. The format is intentionally lean: five canonical sections, no XML, no nested metadata tables.
 
-## Core Principles
+## Section Contract
 
-```
-+================================================================+
-|  EVERY RESPONSE MUST ANSWER THREE QUESTIONS:                    |
-|  1. What did I do?                                               |
-|  2. What is the current state?                                   |
-|  3. What should happen next?                                     |
-+================================================================+
-
-+================================================================+
-|  USE XML ENVELOPE FOR MACHINE PARSING.                          |
-|  Keep Markdown content inside for human readability.            |
-|  See references/xml-response-schema.md for full specification.  |
-+================================================================+
-```
-
-## Response Structure
-
-Every subagent response follows this structure:
+A response contains exactly these top-level sections, in this order:
 
 ```markdown
-## [STATUS INDICATOR]
-
-**Agent:** [agent-name]
-**Task:** [task description from prompt]
-**Duration:** [~X minutes]
-
-### Summary
-[1-3 sentences on what was accomplished]
-
-### Work Completed
-
-| Item | Details |
-|------|---------|
-| [Action 1] | [Specifics] |
-| [Action 2] | [Specifics] |
-
-### Files Modified
-- `path/to/file.ts` - [what changed]
-- `path/to/other.ts` - [what changed]
-
-### Commits (if applicable)
-- `abc123` - feat(scope): description
-
-### Decisions Made
-- **[Decision]**: [Reasoning]
-
-### Memory Persisted
-- Saved: "[memory title]"
-- Concepts: [tags]
-
-### Current State
-- Phase: [from state.json]
-- Spec locked: [yes/no]
-- Wave: [N of M] (if executing)
-
----
-
-## NEXT STEPS
-
-[Clear guidance for orchestrator]
+## STATUS
+## SUMMARY
+## ARTIFACTS
+## VERIFICATION
+## NEXT
 ```
 
-## Status Indicators
+Each section is introduced by a top-level markdown header `## `. Do not add extra prose, banners, or decorative separators outside these sections. The body under each header must stay terse.
 
-Use these exact headers:
+### `## STATUS`
 
-| Status | Header | When |
-|--------|--------|------|
-| Complete | `## TASK COMPLETE` | Work finished successfully |
-| Partial | `## TASK PARTIAL` | Some progress, more needed |
-| Blocked | `## TASK BLOCKED` | Cannot proceed, need help. **STOP processing immediately.** |
-| Failed | `## TASK FAILED` | Cannot complete task |
-| Checkpoint | `## CHECKPOINT REACHED` | Need user decision/verification |
+A single word/line, one of:
 
-**BLOCKED Status Semantics:**
-When returning BLOCKED status, agents MUST:
-- Stop processing immediately
-- Do not continue with further instructions
-- Return BLOCKED response with clear blocker description
-- Include recovery action (which command to run)
+- `complete` — task finished and verified.
+- `partial` — progress made; the task needs continuation.
+- `blocked` — cannot continue without a decision or missing information.
 
-## Next Steps Format
+### `## SUMMARY`
 
-The "NEXT STEPS" section is MANDATORY. Use this format:
+One to three plain-language sentences describing what was accomplished (or why it is blocked). Include the agent role and the task outcome. Do not restate status or list every file detail here.
 
-### For Orchestrator (Most Common)
+### `## ARTIFACTS`
+
+A bullet list of files created or modified. Each bullet is a single line with the relative path and a one-line note, separated by an em-dash or a dash.
 
 ```markdown
-## NEXT STEPS
-
-**For Orchestrator:**
-1. [Immediate next action]
-2. [Follow-up action if applicable]
-
-**Suggested delegation:**
-- Agent: `goop-[agent]`
-- Task: "[specific task description]"
+- src/auth/service.ts — added JWT signing helpers
+- src/auth/service.test.ts — added signing tests
 ```
 
-### When User Action Needed
+If no files changed, write exactly:
 
 ```markdown
-## NEXT STEPS
-
-**User action required:**
-- [What user needs to do]
-
-**After user completes:**
-- Run: `/goop-[command]`
-- Or: Orchestrator continues with [task]
+- none
 ```
 
-### When Work Is Complete
+### `## VERIFICATION`
+
+A single line stating what was checked and the result. Prefer exact commands.
 
 ```markdown
-## NEXT STEPS
-
-**Wave [N] complete.** Ready to proceed.
-
-**Options:**
-1. Continue to Wave [N+1]: [brief description]
-2. Run verification: `bun test`
-3. Review changes before proceeding
-
-**Recommended:** [specific recommendation]
+bun test packages/core/src/auth/ — 12 passed, 0 failed
+bun run typecheck — no errors
 ```
 
-## Agent-Specific Formats
-
-### goop-executor-{tier}
+If verification is not applicable (e.g., pure research), write:
 
 ```markdown
-## TASK COMPLETE
-
-**Agent:** goop-executor-{tier}
-**Task:** [task from BLUEPRINT.md]
-**Duration:** ~X minutes
-
-### Summary
-Implemented [feature] following existing patterns. All tests pass.
-
-### Work Completed
-
-| Task | Status | Commit |
-|------|--------|--------|
-| [Task 1] | Done | `abc123` |
-| [Task 2] | Done | `def456` |
-
-### Files Modified
-- `src/feature/index.ts` - Added main implementation
-- `src/feature/index.test.ts` - Added unit tests
-
-### Commits
-- `abc123` - feat(feature): add main implementation
-- `def456` - test(feature): add unit tests
-
-### Verification
-- [x] `bun test` - All 42 tests pass
-- [x] `bun run typecheck` - No errors
-- [x] Manual verification - Works as expected
-
-### Decisions Made
-- **Used X over Y**: Consistent with existing patterns in `src/other/`
-
-### Memory Persisted
-- Saved: "Implemented [feature] using [pattern]"
-- Concepts: [feature, pattern, typescript]
-
-### Current State
-- Phase: execute
-- Wave: 2 of 3
-- Tasks remaining: 4
-
----
-
-## NEXT STEPS
-
-**For Orchestrator:**
-Wave 2 Task 1 complete. Continue with Task 2.
-
-**Next task:**
-- Task 2.2: [name from BLUEPRINT.md]
-- Agent: `goop-executor-{tier}`
-- Files: `src/next/file.ts`
+n/a
 ```
 
-### goop-researcher
+### `## NEXT`
 
-```markdown
-## TASK COMPLETE
+A concise handoff to the orchestrator. When status is `complete`, state the next task or delegate. When status is `blocked`, list the blocker(s) and what is needed to unblock. When status is `partial`, state what remains.
 
-**Agent:** goop-researcher
-**Task:** Research [topic]
-**Duration:** ~X minutes
-**Sources:** N analyzed
+## Rules
 
-### Summary
-Researched [topic]. Found [key insight]. Recommend [approach].
+- Omit nothing: all five sections must be present, even if empty (`none` or `n/a`).
+- Keep terse: one line per artifact, one line per verification, one to three lines for NEXT.
+- No prose padding: do not write introductions, conclusions, or explanations outside the sections.
+- No XML tags, tables, or code fences for metadata.
+- Use markdown headers only; section order is fixed.
+- Functional em-dashes only; do not use emojis.
 
-### Key Findings
+## Orchestrator Parsing Guidance
 
-| Category | Finding | Confidence |
-|----------|---------|------------|
-| [Area 1] | [Finding] | High |
-| [Area 2] | [Finding] | Medium |
+Parse by top-level markdown headers. Match the regular expression:
 
-### Recommendations
-1. **Use [X]** - [rationale]
-2. **Avoid [Y]** - [rationale]
-3. **Consider [Z]** - [when applicable]
-
-### Files Created
-- `.goopspec/RESEARCH.md` - Full research findings
-
-### Memory Persisted
-- Saved: "Research: [topic]"
-- Facts: ["fact 1", "fact 2"]
-- Concepts: [topic, technology, domain]
-
----
-
-## NEXT STEPS
-
-**Research complete.** Ready to inform planning.
-
-**For Orchestrator:**
-1. Review RESEARCH.md with user
-2. Proceed to `/goop-plan` to confirm and lock the specification
-3. Or request additional research on [gap area]
+```regex
+^## (STATUS|SUMMARY|ARTIFACTS|VERIFICATION|NEXT)
 ```
 
-### goop-verifier
+The section body is everything up to the next matching `## ` header or end-of-response.
 
-```markdown
-## VERIFICATION COMPLETE
+- Extract `STATUS` to route the workflow.
+- Detect `blocked` immediately to trigger Rule 4 escalation.
+- Read `ARTIFACTS` to update the work log.
+- Read `VERIFICATION` to decide if acceptance checks are satisfied.
+- Read `NEXT` to determine the following action or the unblock requirement.
 
-**Agent:** goop-verifier
-**Scope:** [what was verified]
-**Result:** [PASSED | GAPS FOUND | SECURITY ISSUE]
+Because sections are declared by simple headers, a regex-based splitter can reconstruct the envelope without an XML parser.
 
-### Verification Summary
+## Example: Executor Task (Code Change)
 
-| Requirement | Status | Evidence |
-|-------------|--------|----------|
-| [Must-have 1] | PASS | [proof] |
-| [Must-have 2] | FAIL | [gap detail] |
+## STATUS
+complete
 
-### Security Audit
-- [x] No hardcoded secrets
-- [x] Input validation present
-- [ ] **ISSUE:** [security concern]
+## SUMMARY
+Implemented the in-process memory manager using `bun:sqlite` with FTS5. Saves, searches, and deletes entries without a worker process.
 
-### Gaps Found (if any)
+## ARTIFACTS
+- src/features/memory/index.ts — memory manager with save/search/forget
+- src/features/memory/schema.ts — SQLite table and FTS5 definitions
+- src/features/memory/index.test.ts — manager unit tests
 
-**Gap 1: [Title]**
-- Expected: [from SPEC.md]
-- Actual: [what code does]
-- Fix: [specific remediation]
+## VERIFICATION
+bun test packages/opencode-plugin/src/features/memory/ — 9 passed, 0 failed
 
-### Memory Persisted
-- Saved: "Verification: [scope]"
-- Concepts: [verification, security, quality]
+## NEXT
+Continue to Wave 4 Task 4.5: build memory_search and memory_save tools using this manager.
 
----
+## Example: Researcher Task (Findings)
 
-## NEXT STEPS
+## STATUS
+complete
 
-**[If PASSED]:**
-Ready for acceptance. Run `/goop-accept`.
+## SUMMARY
+Compared the stable and beta OpenCode SDK hook APIs. Two hooks changed signatures and one event was renamed; the rest are viable unchanged.
 
-**[If GAPS FOUND]:**
-1. Fix gaps before proceeding
-2. Delegate to `goop-executor-{tier}` with specific fixes
-3. Re-verify after fixes
+## ARTIFACTS
+- .research/sdk-divergence-report.md — stable-vs-beta diff with migration notes
+- .research/hook-feasibility-report.md — per-hook viability verdicts
 
-**[If SECURITY ISSUE]:**
-STOP. Address security issues before any further work.
-- Issue: [description]
-- Severity: [Critical/High/Medium]
-- Action: [remediation]
-```
+## VERIFICATION
+n/a
 
-### goop-explorer
+## NEXT
+Hand to Wave 5 planner to redesign the two changed hooks before hook implementation begins.
 
-```markdown
-## EXPLORATION COMPLETE
+## Writing for Clarity
 
-**Agent:** goop-explorer
-**Scope:** [what was mapped]
-**Duration:** ~X minutes
+The response format is terse by design. Keep the same discipline in every agent output:
 
-### Codebase Summary
-- **Stack:** [language, framework, runtime]
-- **Structure:** [architecture pattern]
-- **Size:** N files, M directories
+- Write for the orchestrator, not for general readers.
+- One idea per sentence.
+- Use active voice.
+- Avoid filler, emojis, and decorative separators.
+- Proofread before returning.
 
-### Key Discoveries
+## Why This Replaces XML
 
-| Area | Finding |
-|------|---------|
-| Entry points | [files] |
-| Patterns | [patterns found] |
-| Conventions | [naming, style] |
-| Concerns | [issues noted] |
-
-### Directory Map
-```
-project/
-├── src/           # [description]
-├── tests/         # [description]
-└── config/        # [description]
-```
-
-### Memory Persisted
-- Saved: "Codebase map: [project]"
-- Concepts: [stack, patterns, structure]
-
----
-
-## NEXT STEPS
-
-**Exploration complete.** Codebase mapped.
-
-**For Orchestrator:**
-1. Use findings to inform BLUEPRINT.md
-2. Note conventions for executor guidance
-3. Address concerns: [list if any]
-```
-
-## Checkpoint Format
-
-When a checkpoint is needed (user decision, verification, or manual action):
-
-```markdown
-## CHECKPOINT REACHED
-
-**Agent:** [agent-name]
-**Type:** [decision | verify | action]
-**Task:** [current task]
-**Progress:** [N/M tasks complete]
-
-### Completed So Far
-
-| Task | Status | Details |
-|------|--------|---------|
-| [Task 1] | Done | [summary] |
-| [Task 2] | Done | [summary] |
-
-### Current Task
-**Task [N]:** [name]
-**Status:** Awaiting [decision/verification/action]
-
-### Checkpoint Details
-
-**[For decision checkpoints]:**
-| Option | Pros | Cons |
-|--------|------|------|
-| A: [option] | [benefits] | [tradeoffs] |
-| B: [option] | [benefits] | [tradeoffs] |
-
-**[For verification checkpoints]:**
-- URL to check: [url]
-- What to verify: [criteria]
-- Expected behavior: [description]
-
-**[For action checkpoints]:**
-- What you need to do: [action]
-- I'll verify by: [check]
-
----
-
-## AWAITING
-
-**[For decision]:** Select option A or B
-**[For verification]:** Type "approved" or describe issues
-**[For action]:** Type "done" when complete
-```
-
-## XML Envelope Requirement
-
-**All responses MUST end with an XML envelope.** The Markdown content provides human readability; the XML provides machine-parseable structure for the orchestrator.
-
-See `references/xml-response-schema.md` for the complete specification.
-
-**Minimal XML envelope:**
-
-```xml
-<goop_report version="0.2.8">
-  <status>COMPLETE</status>
-  <agent>goop-[type]</agent>
-  <summary>Brief summary</summary>
-  <handoff>
-    <ready>true</ready>
-    <next_action agent="goop-[type]">Next task</next_action>
-  </handoff>
-</goop_report>
-```
-
-## Anti-Patterns
-
-**NEVER return:**
-- "Done" (no context)
-- "It works now" (no verification)
-- Responses without XML envelope
-- Responses without NEXT STEPS
-- Unstructured text walls
-- Missing status indicators
-
-**ALWAYS include:**
-- Clear status header (Markdown)
-- Summary of work
-- Files touched
-- Memory persistence
-- NEXT STEPS section
-- XML envelope at the end
-
----
-
-*Response Format v0.2.8*
+The old XML envelope carried heavy tag tax, nested elements, and duplicated state fields. The markdown-header format preserves the same semantics — status, artifacts, verification, next steps — while dropping the structural overhead. It is still machine-parseable by regex over `## ` headers, easier to read in chat logs, and cheaper in token budget without arbitrary size caps.

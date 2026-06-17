@@ -1,250 +1,101 @@
 # Discovery Interview
 
-The Discovery Interview is a mandatory gate before planning. It ensures requirements are "nailed down" before any work begins.
+Mandatory gate before planning. Captures six categories of requirements so the contract is built on a solid foundation.
 
 ## Core Principle
 
-```
-+================================================================+
-|  NO PLANNING WITHOUT DISCOVERY.                                 |
-|  The interview ensures we build the RIGHT thing.                |
-|  Skipping discovery leads to scope creep and rework.            |
-+================================================================+
-```
+> No planning without discovery. The interview ensures we build the right thing.
 
 ## When to Run
 
-- **Required before**: `/goop-plan`
-- **Triggered by**: `/goop-discuss`
-- **Output**: `.goopspec/REQUIREMENTS.md`
-- **State update**: `interview_complete: true` in state.json
+- Triggered by `/goop-discuss`.
+- Required before `/goop-plan`.
+- Output: `.goopspec/<workflowId>/REQUIREMENTS.md`.
+- State update: `interview_complete: true`.
 
 ## The Six Questions
 
-Every discovery interview MUST answer these questions:
-
 ### 1. Vision (The What)
-```
-What are you trying to build?
+
 - What problem does this solve?
 - Who is this for?
 - What does success look like?
-```
 
-**Good answer**: "A JWT-based authentication system that allows users to securely log in, maintains sessions, and protects API routes. Success = users can sign up, log in, and access protected resources."
-
-**Bad answer**: "Auth stuff"
+Good answer: "A JWT-based auth system that lets users sign up, log in, and access protected resources."
+Bad answer: "Auth stuff."
 
 ### 2. Must-Haves (The Contract)
-```
-What are the non-negotiable requirements?
+
 - What MUST be delivered for this to be complete?
 - What are the acceptance criteria?
-```
 
-**Good answer**:
-- User registration with email/password
-- Login returns JWT token
-- Protected routes reject invalid tokens
-- Tokens expire after 24 hours
-- Password reset via email
-
-**Bad answer**: "It should work"
+Every must-have must be specific, testable, and traced to tasks in the blueprint.
 
 ### 3. Constraints (The Boundaries)
-```
-What are the technical and practical constraints?
-- What stack/frameworks are we using?
-- What are the performance requirements?
-- What's the timeline?
-- What existing code must we integrate with?
-```
 
-**Good answer**: "Must use existing Express.js backend, PostgreSQL for storage, jose library for JWT (already in package.json), must not break existing session middleware."
-
-**Bad answer**: "None"
+- Stack, frameworks, versions.
+- Performance or scale targets.
+- Timeline and resources.
+- Existing code to integrate with.
 
 ### 4. Out of Scope (The Guardrails)
-```
-What are we explicitly NOT building?
-- What features are deferred to later?
-- What approaches are we avoiding?
-```
 
-**Good answer**:
-- OAuth/social login (future phase)
-- Multi-factor authentication (future phase)
-- Rate limiting (handled by API gateway)
-- User profile management (separate feature)
+- Features deferred to later phases.
+- Approaches explicitly avoided.
 
-**Bad answer**: "Everything else I guess"
+If out of scope is empty, scope creep is inevitable.
 
 ### 5. Assumptions (The Baseline)
-```
-What are we assuming to be true?
-- What existing functionality are we relying on?
-- What decisions have already been made?
-```
 
-**Good answer**:
-- Database is already set up with users table
-- Email service is available via existing utility
-- Frontend will handle token storage (not our concern)
-- HTTPS is handled at infrastructure level
+- Existing functionality being relied on.
+- Decisions already made.
+- External dependencies treated as stable.
 
-**Bad answer**: "Standard stuff"
+For each assumption, capture the impact if it turns out to be false.
 
 ### 6. Risks (The Unknowns)
-```
-What could go wrong?
-- What are we uncertain about?
-- What might change?
-- What dependencies could block us?
-```
 
-**Good answer**:
-- Risk: Password hashing library may have breaking changes
-  - Mitigation: Pin exact version, test migration path
-- Risk: Token refresh logic may conflict with existing session
-  - Mitigation: Research existing session code first
-- Risk: Email service rate limits may affect password reset
-  - Mitigation: Add retry logic with backoff
+- What could go wrong or block work?
+- What dependencies are uncertain?
 
-**Bad answer**: "None, it'll be fine"
+Every risk needs impact, likelihood, and mitigation.
 
 ## Interview Flow
 
-### Step 1: Open-Ended Discovery
-Ask broad questions to understand intent:
-- "What are you trying to accomplish?"
-- "Why is this needed now?"
-- "Who will use this?"
+1. **Setup**: check state, detect existing docs, offer branch creation, set research depth and autopilot mode.
+2. **Workflow ID creation**: infer a kebab-case `workflowId` from the vision, create and bind it via `goop_state` before writing any docs.
+3. **Open-ended discovery**: ask broad questions about intent and users.
+4. **Structured questioning**: use the `question` tool for each category, with practical option seeds and a custom-answer path.
+5. **Probe for specifics**: convert vague answers into concrete targets.
+6. **Summarize and confirm**: present the six answers back to the user.
+7. **Lock discovery**: write `REQUIREMENTS.md`, set `interview_complete: true`, save to memory.
 
-### Step 2: Structured Discovery Questions
+## Structured Question Policy
 
-Use the `question` tool for each discovery category. Offer practical option seeds and always include a custom-answer path. Adapt option labels to the user's project context when possible.
+- All short-answer interactions during discovery MUST use the `question` tool.
+- Use free-form text only for open-ended detail and follow-up probing.
+- Mark exactly one option as `(Recommended)` per `question` call.
+- Present 10 or fewer options per `question` call; split large lists into batched calls with `(1 of N)` headers.
+- Use `multiple: true` for collecting must-haves, risks, constraints, and out-of-scope items.
 
-#### Vision — Structured Entry Point
+## Memory-Aware Questioning
 
-```
-question({
-  header: "Project Vision",
-  question: "What kind of project is this?",
-  options: [
-    "New feature for an existing app",
-    "Bug fix or improvement to existing behavior",
-    "New standalone project or service",
-    "Refactor or migration of existing code",
-    "Type your own answer"
-  ]
-})
-```
+Before asking anything:
 
-After the user selects a project type, follow up conversationally to gather the problem statement, target users, and success criteria. Use free-form for the detailed vision narrative.
+1. `memory_search({ query: "[topic] preference" })`
+2. If high-confidence memory exists, recall it lightly: "I see you prefer X. Still true?"
+3. If no memory exists, ask and save the answer with `memory_note` or `memory_save`.
 
-#### Must-Haves — Progressive Collection
+## Lazy Autopilot Interview Behavior
 
-```
-question({
-  header: "Must-Haves",
-  question: "What's the next requirement for this to be complete?",
-  options: [
-    "Add a new must-have requirement",
-    "Review what we have so far",
-    "That covers the must-haves",
-    "Type your own answer"
-  ]
-})
-```
+When `workflow.lazyAutopilot == true`:
 
-Loop: when the user selects "Add a new must-have", prompt for detail in free-form. On "Review what we have so far", present the collected list and ask if anything is missing. Continue until "That covers the must-haves" is selected.
-
-#### Constraints — Category Groups
-
-```
-question({
-  header: "Constraints",
-  question: "Are there technical or practical constraints to consider?",
-  options: [
-    "Stack or framework requirements",
-    "Performance or scalability targets",
-    "Timeline or resource limits",
-    "Must integrate with existing code",
-    "No specific constraints",
-    "Type your own answer"
-  ]
-})
-```
-
-For each selected category, follow up with specifics in free-form. Multiple categories can be explored in sequence.
-
-#### Out of Scope — Curated Exclusions
-
-```
-question({
-  header: "Out of Scope",
-  question: "What should we explicitly exclude from this work?",
-  options: [
-    "Features deferred to a future phase",
-    "Alternative approaches we're not pursuing",
-    "Edge cases we'll handle later",
-    "Infrastructure or deployment changes",
-    "Type your own answer"
-  ]
-})
-```
-
-Probe for at least one concrete exclusion. Use free-form follow-ups to capture specifics.
-
-#### Assumptions — Common Categories
-
-```
-question({
-  header: "Assumptions",
-  question: "What are we assuming to be true for this work?",
-  options: [
-    "Existing infrastructure or services are available",
-    "Certain code or APIs already work as expected",
-    "External dependencies are stable",
-    "Team or user behavior follows a known pattern",
-    "Type your own answer"
-  ]
-})
-```
-
-For each assumption, ask what happens if it turns out to be false. Capture the "if false" impact alongside the assumption.
-
-#### Risks — Prompted Categories
-
-```
-question({
-  header: "Risks",
-  question: "What could go wrong or block this work?",
-  options: [
-    "Technical complexity or unknowns",
-    "Dependency on external systems or teams",
-    "Breaking changes to existing behavior",
-    "Timeline or scope pressure",
-    "Type your own answer"
-  ]
-})
-```
-
-For each identified risk, follow up with impact, likelihood, and mitigation in free-form. Challenge "no risks" answers — there are always risks.
-
-### Step 3: Summarize and Confirm
-Present back:
-- Vision statement
-- Must-haves list
-- Constraints list
-- Out of scope list
-- Assumptions list
-- Risks with mitigations
-
-### Step 4: Lock Discovery
-- Generate REQUIREMENTS.md
-- Update state.json with `interview_complete: true`
-- Inform user: "Discovery complete. Run `/goop-plan` to create blueprint."
+- Skip the interactive six-question interview.
+- Infer all six categories directly from the user's initial prompt.
+- Do not use the `question` tool.
+- Infer a `feat/kebab-case` branch name and create it silently.
+- Generate `REQUIREMENTS.md` directly.
+- Proceed to `/goop-plan` immediately without a confirmation gate.
 
 ## REQUIREMENTS.md Template
 
@@ -254,131 +105,58 @@ Present back:
 **Generated:** [date]
 **Status:** Locked
 
----
-
 ## Vision
-
-[Vision statement - what and why]
-
----
+[What and why]
 
 ## Must-Haves
-
-These are non-negotiable. The feature is incomplete without ALL of these:
-
 - [ ] [Requirement 1]
 - [ ] [Requirement 2]
-- [ ] [Requirement 3]
-
----
 
 ## Constraints
-
 ### Technical
 - [Constraint 1]
-- [Constraint 2]
 
 ### Practical
 - [Timeline, budget, resources]
 
----
-
 ## Out of Scope
-
-Explicitly excluded from this work:
-
-- [Item 1] - [reason/future phase]
-- [Item 2] - [reason/future phase]
-
----
+- [Item 1] — [reason/future phase]
 
 ## Assumptions
-
-We are assuming:
-
-- [Assumption 1]
-- [Assumption 2]
-
----
+- [Assumption 1] — If false: [Impact]
 
 ## Risks & Mitigations
-
 | Risk | Impact | Likelihood | Mitigation |
 |------|--------|------------|------------|
-| [Risk 1] | [H/M/L] | [H/M/L] | [Plan] |
-| [Risk 2] | [H/M/L] | [H/M/L] | [Plan] |
-
----
+| [Risk 1] | H/M/L | H/M/L | [Plan] |
 
 *Discovery interview completed. Ready for /goop-plan.*
 ```
 
-## Enforcement
+## Validation Rules
 
-### Pre-Plan Gate
-When `/goop-plan` is invoked:
+The interview is not complete if:
 
-```
-1. Check state.json for interview_complete
-2. If false or missing:
-   - REFUSE to proceed
-   - Display: "Discovery interview required. Run /goop-discuss first."
-3. If true:
-   - Load REQUIREMENTS.md
-   - Proceed with planning
-```
+- Vision is vague (< 2 sentences).
+- Must-haves is empty.
+- Out of scope is empty.
+- No risks are identified.
 
-### Validation Rules
-Interview is NOT complete if:
-- Vision is vague (< 2 sentences)
-- Must-haves is empty
-- Out of scope is empty (everything has scope limits)
-- No risks identified (there are always risks)
+## Skip Conditions
 
-### Skip Conditions
-Discovery MAY be skipped only for:
-- `/goop-quick` small tasks (single file, < 30 min work)
-- Bug fixes with clear reproduction steps
-- Documentation-only changes
+Discovery may be skipped only for:
+
+- `/goop-quick` small tasks (single file, < 30 min).
+- Bug fixes with clear reproduction steps.
+- Documentation-only changes.
 
 ## Anti-Patterns
 
-### Bad: Rushing Through
-```
-Q: What are you building?
-A: "Just some auth stuff"
-                           <- NOT ENOUGH
-```
-
-### Bad: No Scope Limits
-```
-Q: What's out of scope?
-A: "Nothing, we'll figure it out"
-                           <- SCOPE CREEP INCOMING
-```
-
-### Bad: No Risks
-```
-Q: What could go wrong?
-A: "Nothing, it's straightforward"
-                           <- FAMOUS LAST WORDS
-```
-
-### Good: Specific and Bounded
-```
-Q: What are you building?
-A: "JWT auth with login/logout, 24h token expiry, refresh tokens, 
-    protected route middleware. Uses existing users table."
-
-Q: What's out of scope?
-A: "OAuth (phase 2), MFA (phase 3), rate limiting (infra handles it)"
-
-Q: Risks?
-A: "Token refresh may conflict with existing session - need to check 
-    session.ts first. Also email service has rate limits."
-```
+- Rushing through with one-sentence answers.
+- Leaving out of scope undefined.
+- Claiming there are no risks.
+- Asking in plain text without the `question` tool.
 
 ---
 
-*Discovery Interview Protocol v0.2.8*
-*"Nail the spec before you write the code."*
+*Discovery Interview v1.0 — GoopSpec Reference*

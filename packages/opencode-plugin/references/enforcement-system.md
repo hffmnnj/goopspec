@@ -1,211 +1,195 @@
-# Orchestration Enforcement System
+# Enforcement System
 
-GoopSpec enforces workflow rules through a layered enforcement system. This document describes how enforcement works and how to configure it.
-
-## Overview
-
-The enforcement system transforms GoopSpec from a "suggestions-based" system into an **enforced workflow** where:
-- Commands trigger actual state transitions
-- Documents are scaffolded automatically
-- Phase gates block progression until requirements are met
-- The orchestrator is forced to delegate code work
+Hook-based enforcement that turns GoopSpec from suggestions into an enforced workflow.
 
 ## Components
 
-### 1. Phase Context Builder
+### Phase Context Builder
 
-**Location:** `src/features/enforcement/phase-context.ts`
+Generates phase-specific `MUST DO` / `MUST NOT DO` rules for injection into system prompts.
 
-Generates phase-specific enforcement rules for injection into system prompts.
+Key functions:
 
-**Key Functions:**
-- `buildPhaseEnforcement(phase, state)` - Generates MUST DO / MUST NOT DO lists
-- `buildStateContext(state)` - Generates current state information
-- `buildEnforcementContext(state)` - Combines both for system prompt injection
-- `isOperationAllowed(phase, operation)` - Checks if operation is valid in phase
+- `buildPhaseEnforcement(phase, state)`
+- `buildStateContext(state)`
+- `buildEnforcementContext(state)`
+- `isOperationAllowed(phase, operation)`
 
-### 2. Document Scaffolder
+### Document Scaffolder
 
-**Location:** `src/features/enforcement/scaffolder.ts`
+Creates phase directory structure with templated documents.
 
-Automatically creates phase directory structure with templated documents.
+Key functions:
 
-**Key Functions:**
-- `scaffoldPhaseDocuments(ctx, phaseName, phase)` - Creates `.goopspec/phases/[name]/` with documents
-- `checkPhaseDocuments(ctx, phaseName, phase)` - Validates required documents exist
-- `getPhaseDir(ctx, phaseName)` - Returns phase directory path
+- `scaffoldPhaseDocuments(ctx, phaseName, phase)`
+- `checkPhaseDocuments(ctx, phaseName, phase)`
 
-**Document Types:**
-| Type | File | Required In |
-|------|------|-------------|
-| spec | SPEC.md | plan, research, specify, execute, accept |
-| blueprint | BLUEPRINT.md | specify, execute, accept |
-| chronicle | CHRONICLE.md | plan, research, specify, execute, accept |
-| research | RESEARCH.md | research, specify |
+Required documents by phase:
 
-### 3. Validators
+| Type | Required In |
+|------|-------------|
+| `SPEC.md` | plan, research, specify, execute, accept |
+| `BLUEPRINT.md` | specify, execute, accept |
+| `CHRONICLE.md` | plan, research, specify, execute, accept |
+| `RESEARCH.md` | research, specify |
 
-**Location:** `src/features/enforcement/validators.ts`
+### Validators
 
-Validates operations against current workflow phase.
+Validate operations against the current phase.
 
-**Key Functions:**
-- `validateWriteOperation(phase, filePath)` - Checks if file write is allowed
-- `validatePhaseTransition(ctx, from, to)` - Validates transition preconditions
-- `isImplementationFile(filePath)` - Detects code vs config files
+Key functions:
 
-**Protected Directories:**
-- `src/`, `lib/`, `app/`, `apps/`
-- `packages/`, `server/`, `client/`
+- `validateWriteOperation(phase, filePath)`
+- `validatePhaseTransition(ctx, from, to)`
+- `isImplementationFile(filePath)`
+
+Protected implementation directories include `src/`, `lib/`, `app/`, `apps/`, `packages/`, `server/`, `client/`.
 
 ## Hooks
 
 ### System Transform Hook
 
-**Location:** `src/hooks/system-transform.ts`
-
 Injects enforcement context into every system prompt:
-- Current phase and state information
-- Phase-specific MUST DO / MUST NOT DO rules
-- Delegation reminders in execute phase
-- Memory context for continuity
+
+- Current phase and state.
+- Phase-specific `MUST DO` / `MUST NOT DO` rules.
+- Delegation reminders in execute phase.
+- Memory context for continuity.
 
 ### Command Processor Hook
 
-**Location:** `src/hooks/command-processor.ts`
+Processes `/goop-*` slash commands, triggers state transitions, scaffolds phase documents, and logs to ADL.
 
-Processes `/goop-*` slash commands:
-- Triggers state transitions (e.g., `/goop-plan` → plan phase)
-- Scaffolds phase documents automatically
-- Logs command processing to ADL
-
-**Command Mappings:**
 | Command | Target Phase |
 |---------|--------------|
-| /goop-plan | plan |
-| /goop-discuss | plan |
-| /goop-research | research |
-| /goop-execute | execute |
-| /goop-accept | accept (then idle after completion) |
+| `/goop-discuss` | plan (discovery) |
+| `/goop-plan` | plan |
+| `/goop-research` | research |
+| `/goop-execute` | execute |
+| `/goop-accept` | accept |
 
 ### Orchestrator Enforcement Hook
 
-**Location:** `src/hooks/orchestrator-enforcement.ts`
-
-Enforces delegation rules for the orchestrator agent:
-
-**Code Blocking:**
-- Blocks `edit`/`write` on code files for orchestrator
-- Allows planning files (`.goopspec/`, `.md`, `.json`)
-- Injects delegation guidance when blocked
-
-**Delegation Enforcement:**
-- Enforces direct `task()` delegation with rich prompts
-- Validates prompt includes required sections (intent, context, constraints, verification)
-- Tracks delegations per session
+- Blocks `edit`/`write` on implementation files for the orchestrator.
+- Allows planning files (`.goopspec/`, `.md`, `.json`).
+- Enforces direct `task()` delegation with rich prompts.
+- Tracks delegations per session.
 
 ## Phase Rules
 
 ### Plan Phase
-**MUST DO:**
-- Ask clarifying questions
-- Create SPEC.md with must-haves, nice-to-haves, out-of-scope
-- Get user confirmation before proceeding
 
-**MUST NOT DO:**
-- Write ANY implementation code
-- Use write/edit tools on src/ files
-- Skip requirement gathering
+MUST DO:
+
+- Ask clarifying questions.
+- Create `SPEC.md` with must-haves, nice-to-haves, out of scope.
+- Get user confirmation before proceeding.
+
+MUST NOT DO:
+
+- Write implementation code.
+- Edit files in `src/`.
+- Skip requirement gathering.
 
 ### Research Phase
-**MUST DO:**
-- Read SPEC.md to understand requirements
-- Create RESEARCH.md with findings
-- Document trade-offs and recommendations
 
-**MUST NOT DO:**
-- Write implementation code
-- Modify source files
+MUST DO:
+
+- Read `SPEC.md`.
+- Create `RESEARCH.md` with findings.
+- Document trade-offs and recommendations.
+
+MUST NOT DO:
+
+- Write implementation code.
+- Modify source files.
 
 ### Specify Phase
-**MUST DO:**
-- Create BLUEPRINT.md with wave-based plan
-- Map all must-haves to specific tasks
-- Get user confirmation to lock specification
 
-**MUST NOT DO:**
-- Write implementation code
-- Proceed without locked specification
+MUST DO:
+
+- Create `BLUEPRINT.md` with wave-based plan.
+- Map all must-haves to tasks.
+- Get user confirmation to lock specification.
+
+MUST NOT DO:
+
+- Write implementation code.
+- Proceed without locked specification.
 
 ### Execute Phase
-**MUST DO:**
-- DELEGATE all code work using `task()` tool
-- Track progress in CHRONICLE.md
-- Follow wave order
-- Save checkpoints at wave boundaries
 
-**MUST NOT DO:**
-- Write code directly
-- Use 'delegate' tool (use 'task' instead)
-- Skip verification steps
+MUST DO:
+
+- Delegate all code work via `task()`.
+- Track progress in `CHRONICLE.md`.
+- Follow wave order.
+- Save checkpoints at wave boundaries.
+
+MUST NOT DO:
+
+- Write code directly.
+- Skip verification.
 
 ### Accept Phase
-**MUST DO:**
-- Verify ALL must-haves from SPEC.md
-- Run all tests
-- Get explicit user acceptance
 
-**MUST NOT DO:**
-- Mark complete without verification
-- Skip user confirmation
+MUST DO:
 
-## Configuration
+- Verify all must-haves.
+- Run tests.
+- Get explicit user acceptance.
 
-Enforcement is enabled by default. No configuration currently required.
+MUST NOT DO:
 
-Future configuration options (planned):
-```json
-{
-  "enforcement": {
-    "level": "strict",  // assist | warn | strict
-    "codeBlocking": true,
-    "delegationEnforcement": true
-  }
-}
-```
+- Mark complete without verification.
+- Skip user confirmation.
+
+## Context Injection
+
+Project-level knowledge flows automatically to every agent via `PROJECT_KNOWLEDGE_BASE.md`.
+
+### What to Include
+
+- Stack choices (runtime, framework, libraries).
+- Naming conventions.
+- Commit format.
+- Major architectural decisions.
+- Known gotchas.
+
+### What to Exclude
+
+- Sensitive data (API keys, passwords).
+- Temporary workarounds.
+- Personal preferences.
+- Speculation.
+
+### Injection Points
+
+- Every subagent reads `PROJECT_KNOWLEDGE_BASE.md` before starting work.
+- Orchestrator prompts include relevant context sections.
+- `memory_search` augments injected knowledge with task-specific memories.
+
+### Maintenance
+
+The memory-distiller agent updates `PROJECT_KNOWLEDGE_BASE.md` after major decisions, pattern discoveries, gotcha discoveries, and at session end.
 
 ## Troubleshooting
 
 ### "Cannot write to file" errors
-The orchestrator is blocked from writing code files. Delegate to goop-executor-{tier}:
-```
-task({
-  subagent_type: "goop-executor-high",
-  description: "Implement feature X",
-  prompt: "..."
-})
-```
+
+Delegate to `goop-executor-{tier}`. The orchestrator is blocked from writing implementation files.
 
 ### Phase transition rejected
+
 Ensure required documents exist before transitioning:
-- `execute` requires SPEC.md
-- `accept` requires SPEC.md, BLUEPRINT.md, CHRONICLE.md
+
+- `execute` requires `SPEC.md`.
+- `accept` requires `SPEC.md`, `BLUEPRINT.md`, and `CHRONICLE.md`.
 
 ### Commands not triggering state changes
-Verify the command is processed by checking ADL.md for logged entries.
 
-### Enforcement context not appearing
-Ensure memory injection is enabled in config:
-```json
-{
-  "memory": {
-    "injection": {
-      "enabled": true
-    }
-  }
-}
-```
+Verify the command is processed by checking `ADL.md` for logged entries.
 
 ---
 
-*GoopSpec v0.2.8 - Enforcement System Documentation*
+*Enforcement System v1.0 — GoopSpec Reference*
