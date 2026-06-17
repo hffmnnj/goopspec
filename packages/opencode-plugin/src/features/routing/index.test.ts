@@ -498,6 +498,104 @@ describe("detectAutoDelegation — no match", () => {
 });
 
 // ---------------------------------------------------------------------------
+// classify() — MH18 required test cases
+// ---------------------------------------------------------------------------
+
+describe("route — MH18 required research intents", () => {
+  it("routes 'research the best state management library' to researcher", () => {
+    const r = route("research the best state management library");
+    expect(r.agent).toBe("researcher");
+    expect(r.tier).toBeUndefined();
+  });
+
+  it("routes 'investigate and compare auth providers' to researcher", () => {
+    const r = route("investigate and compare auth providers");
+    expect(r.agent).toBe("researcher");
+  });
+});
+
+describe("route — MH18 required debug intents", () => {
+  it("routes 'debug why the login fails' to debugger", () => {
+    const r = route("debug why the login fails");
+    expect(r.agent).toBe("debugger");
+    expect(r.tier).toBeUndefined();
+  });
+
+  it("routes 'fix the failing test' to debugger", () => {
+    const r = route("fix the failing test");
+    expect(r.agent).toBe("debugger");
+  });
+
+  it("routes 'find the root cause of this crash' to debugger", () => {
+    const r = route("find the root cause of this crash");
+    expect(r.agent).toBe("debugger");
+  });
+});
+
+describe("route — MH18 control: executor intents must NOT route to researcher/debugger", () => {
+  it("routes 'implement a new API endpoint' to an executor tier", () => {
+    const r = route("implement a new API endpoint");
+    expect(r.agent).not.toBe("researcher");
+    expect(r.agent).not.toBe("debugger");
+    expect(r.tier).toBeDefined();
+  });
+
+  it("routes 'build the user registration feature' to an executor tier", () => {
+    const r = route("build the user registration feature");
+    expect(r.agent).not.toBe("researcher");
+    expect(r.agent).not.toBe("debugger");
+    expect(r.tier).toBeDefined();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// detectAutoDelegation() — MH18 required test cases
+// ---------------------------------------------------------------------------
+
+describe("detectAutoDelegation — MH18 required cases", () => {
+  it("detects 'research the best state management library' as research", () => {
+    const r = detectAutoDelegation("research the best state management library");
+    expect(r.detected).toBe(true);
+    expect(r.agent).toBe("researcher");
+    expect(r.intent).toBe("research");
+  });
+
+  it("detects 'investigate and compare auth providers' as research", () => {
+    const r = detectAutoDelegation("investigate and compare auth providers");
+    expect(r.detected).toBe(true);
+    expect(r.agent).toBe("researcher");
+    expect(r.intent).toBe("research");
+  });
+
+  it("detects 'debug why the login fails' as debug", () => {
+    const r = detectAutoDelegation("debug why the login fails");
+    expect(r.detected).toBe(true);
+    expect(r.agent).toBe("debugger");
+    expect(r.intent).toBe("debug");
+  });
+
+  it("detects 'fix the failing test' as debug", () => {
+    const r = detectAutoDelegation("fix the failing test");
+    expect(r.detected).toBe(true);
+    expect(r.agent).toBe("debugger");
+    expect(r.intent).toBe("debug");
+  });
+
+  it("detects 'find the root cause of this crash' as debug", () => {
+    const r = detectAutoDelegation("find the root cause of this crash");
+    expect(r.detected).toBe(true);
+    expect(r.agent).toBe("debugger");
+    expect(r.intent).toBe("debug");
+  });
+
+  it("does NOT auto-delegate 'implement a new API endpoint'", () => {
+    const r = detectAutoDelegation("implement a new API endpoint");
+    expect(r.detected).toBe(false);
+    expect(r.agent).toBeUndefined();
+  });
+});
+
+// ---------------------------------------------------------------------------
 // ROUTING_CATEGORIES — structural checks
 // ---------------------------------------------------------------------------
 

@@ -75,6 +75,22 @@ Route by task intent:
 | Documentation / README | `goop-writer` |
 | Debugging / root cause | `goop-debugger` |
 
+## Auto-Delegation
+
+Research and debug intents are auto-dispatched — no `/goop-research` or `/goop-debug` slash commands exist.
+
+When a user prompt matches a research or debug intent, use `detectAutoDelegation()` from the routing subsystem to detect the intent and delegate directly:
+
+| User says | Detected intent | Delegate to |
+|-----------|----------------|-------------|
+| "research the best state management library" | research | `goop-researcher` |
+| "investigate and compare auth providers" | research | `goop-researcher` |
+| "debug why the login fails" | debug | `goop-debugger` |
+| "fix the failing test" | debug | `goop-debugger` |
+| "find the root cause of this crash" | debug | `goop-debugger` |
+
+If `detectAutoDelegation()` returns `detected: false`, fall back to the normal phase workflow and delegation table.
+
 ## Gate Enforcement
 
 Check before proceeding:

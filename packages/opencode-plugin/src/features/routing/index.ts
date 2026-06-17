@@ -52,9 +52,9 @@ export function route(description: string, options?: ClassifierOptions): Routing
 /** Signals that indicate a research intent. */
 const RESEARCH_INTENTS: readonly RegExp[] = [
   /\bresearch\b/i,
-  /\binvestigate\s+options?\b/i,
+  /\binvestigate\s+(?:options?|and\s+compare)\b/i,
   /\bexplore\s+options?\b/i,
-  /\bcompare\s+(?:alternatives|approaches|libraries|frameworks)\b/i,
+  /\bcompare\s+(?:alternatives|approaches|libraries|frameworks|providers|tools)\b/i,
   /\bevaluate\s+(?:approaches|options|tools)\b/i,
   /\bfeasibility\b/i,
   /\bspike\b/i,
@@ -69,7 +69,8 @@ const RESEARCH_INTENTS: readonly RegExp[] = [
 /** Signals that indicate a debug intent. */
 const DEBUG_INTENTS: readonly RegExp[] = [
   /\bdebug\b/i,
-  /\bfix\s+(?:bug|error|issue|crash)\b/i,
+  /\bfix\s+(?:bug|error|issue|crash|failing)\b/i,
+  /\bfailing\s+test/i,
   /\btroubleshoot\b/i,
   /\broot\s+cause\b/i,
   /\bwhy\b[\s\S]{0,30}\b(?:failing|broken|crashing)\b/i,
