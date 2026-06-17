@@ -33,6 +33,7 @@ import type {
   StateManager,
   WorkflowState,
 } from "./core/types.js";
+import { createSessionManager } from "./features/session/index.js";
 
 // Re-export types that tests commonly need alongside the factories.
 export type { GoopState, MemoryEntry, PluginContext, StateManager, ToolContext, WorkflowState };
@@ -452,6 +453,7 @@ export function createMockPluginContext(opts: MockPluginContextOptions = {}): Pl
     memory: createMockMemory(opts.memories ?? []),
     resolver: createMockResolver(opts.resources ?? []),
     session,
+    sessionManager: createSessionManager(),
   };
 }
 
