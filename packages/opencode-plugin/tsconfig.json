@@ -3,9 +3,11 @@
   "compilerOptions": {
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
+    "target": "ES2022",
     "lib": ["ES2022"],
     "rootDir": "./src",
     "outDir": "./dist",
+    "declaration": true,
     "declarationMap": true,
     "sourceMap": true,
     "resolveJsonModule": true,
@@ -16,5 +18,13 @@
     "types": ["bun-types"]
   },
   "include": ["src/**/*"],
-  "exclude": ["node_modules", "dist", "**/*.test.ts"]
+  "exclude": [
+    "src_legacy",
+    "node_modules",
+    "dist",
+    "agents",
+    "commands",
+    "references",
+    "skills"
+  ]
 }
