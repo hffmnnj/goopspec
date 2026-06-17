@@ -1,0 +1,561 @@
+/**
+ * GoopSpec Setup Feature — Simplified for 1.0.0 (plugin-only).
+ *
+ * Provides project detection, .goopspec initialisation, config management,
+ * per-role model routing, verification, status, and reset.
+ *
+ * Dropped from 0.2.x: daemon setup, web panel setup, memory-worker setup,
+ * MCP installation, platform/dependency detection, distillation config.
+ * Memory is now in-process via bun:sqlite — no external worker.
+ *
+ * @module features/setup
+ */
+
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { basename, join } from "node:path";
+
+import { AGENT_ROLES, GOOPSPEC_DIR, STATE_SCHEMA_VERSION } from "../../core/constants.js";
+import type { AgentRole } from "../../core/constants.js";
+import type { GoopState, StateManager } from "../../core/types.js";
+
+// ---------------------------------------------------------------------------
+// Constants
+// ---------------------------------------------------------------------------
+
+const CONFIG_FILENAME = "config.json";
+
+/** Default model recommendations per agent role (MH16). */
+export const DEFAULT_MODEL_MAP: Record<AgentRole, string> = {
+  orchestrator: "anthropic/claude-opus-4-6",
+  "executor-low": "anthropic/claude-sonnet-4-6",
+  "executor-medium": "anthropic/claude-sonnet-4-6",
+  "executor-high": "anthropic/claude-opus-4-6",
+  "executor-frontend-low": "anthropic/claude-sonnet-4-6",
+  "executor-frontend-high": "anthropic/claude-opus-4-6",
+  planner: "anthropic/claude-opus-4-6",
+  verifier: "anthropic/claude-sonnet-4-6",
+  researcher: "anthropic/claude-sonnet-4-6",
+  explorer: "anthropic/claude-sonnet-4-6",
+  debugger: "anthropic/claude-sonnet-4-6",
+  tester: "anthropic/claude-sonnet-4-6",
+  writer: "anthropic/claude-sonnet-4-6",
+};
+
+// ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
+
+/** Persisted project-level config stored in `.goopspec/config.json`. */
+export interface GoopConfig {
+  projectName?: string;
+  defaultModel?: string;
+  agentModels?: Partial<Record<string, string>>;
+  memoryEnabled?: boolean;
+  gitignoreGoopspec?: boolean;
+}
+
+/** Result of environment detection. */
+export interface DetectResult {
+  hasGoopspecDir: boolean;
+  hasStateFile: boolean;
+  hasConfigFile: boolean;
+  hasPackageJson: boolean;
+  projectName: string | undefined;
+  detectedStack: string[];
+  goopspecDir: string;
+}
+
+/** Result of a verification check. */
+export interface VerifyCheck {
+  name: string;
+  passed: boolean;
+  message: string;
+  fix?: string;
+}
+
+export interface VerifyResult {
+  success: boolean;
+  checks: VerifyCheck[];
+}
+
+export interface ResetResult {
+  success: boolean;
+  reset: string[];
+  preserved: string[];
+  errors: string[];
+}
+
+export interface InitResult {
+  success: boolean;
+  created: string[];
+  errors: string[];
+}
+
+export interface SetupStatusResult {
+  initialized: boolean;
+  projectName: string | undefined;
+  config: GoopConfig | null;
+  stateVersion: number | null;
+  activeWorkflow: string | null;
+  phase: string | null;
+}
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+function goopDir(projectDir: string): string {
+  return join(projectDir, GOOPSPEC_DIR);
+}
+
+function configPath(projectDir: string): string {
+  return join(goopDir(projectDir), CONFIG_FILENAME);
+}
+
+function statePath(projectDir: string): string {
+  return join(goopDir(projectDir), "state.json");
+}
+
+function safeReadJson<T>(filePath: string): T | null {
+  try {
+    if (!existsSync(filePath)) return null;
+    return JSON.parse(readFileSync(filePath, "utf-8")) as T;
+  } catch {
+    return null;
+  }
+}
+
+function safeWriteJson(filePath: string, data: unknown): void {
+  const dir = join(filePath, "..");
+  if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+  writeFileSync(filePath, JSON.stringify(data, null, 2), "utf-8");
+}
+
+// ---------------------------------------------------------------------------
+// Detect
+// ---------------------------------------------------------------------------
+
+/**
+ * Inspect the project directory and report what exists.
+ * Detects package.json stack hints (runtime, framework, test runner).
+ */
+export function detect(projectDir: string): DetectResult {
+  const gd = goopDir(projectDir);
+  const pkgPath = join(projectDir, "package.json");
+  const hasPackageJson = existsSync(pkgPath);
+
+  let projectName: string | undefined;
+  const detectedStack: string[] = [];
+
+  if (hasPackageJson) {
+    try {
+      const pkg = JSON.parse(readFileSync(pkgPath, "utf-8")) as Record<string, unknown>;
+      projectName = typeof pkg.name === "string" ? pkg.name : undefined;
+
+      const allDeps = {
+        ...(typeof pkg.dependencies === "object" && pkg.dependencies !== null
+          ? (pkg.dependencies as Record<string, string>)
+          : {}),
+        ...(typeof pkg.devDependencies === "object" && pkg.devDependencies !== null
+          ? (pkg.devDependencies as Record<string, string>)
+          : {}),
+      };
+
+      // Runtime
+      if (
+        allDeps.bun ||
+        existsSync(join(projectDir, "bun.lockb")) ||
+        existsSync(join(projectDir, "bun.lock"))
+      ) {
+        detectedStack.push("bun");
+      } else {
+        detectedStack.push("node");
+      }
+
+      // Language
+      if (allDeps.typescript || existsSync(join(projectDir, "tsconfig.json"))) {
+        detectedStack.push("typescript");
+      }
+
+      // Frameworks
+      const frameworkHints: [string, string][] = [
+        ["next", "Next.js"],
+        ["react", "React"],
+        ["vue", "Vue"],
+        ["svelte", "Svelte"],
+        ["express", "Express"],
+        ["hono", "Hono"],
+        ["astro", "Astro"],
+      ];
+      for (const [dep, label] of frameworkHints) {
+        if (allDeps[dep]) detectedStack.push(label);
+      }
+
+      // Test runners
+      const testHints: [string, string][] = [
+        ["vitest", "Vitest"],
+        ["jest", "Jest"],
+      ];
+      for (const [dep, label] of testHints) {
+        if (allDeps[dep]) detectedStack.push(label);
+      }
+    } catch {
+      // Ignore parse errors
+    }
+  }
+
+  if (!projectName) {
+    projectName = basename(projectDir);
+  }
+
+  return {
+    hasGoopspecDir: existsSync(gd),
+    hasStateFile: existsSync(statePath(projectDir)),
+    hasConfigFile: existsSync(configPath(projectDir)),
+    hasPackageJson,
+    projectName,
+    detectedStack,
+    goopspecDir: gd,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Init
+// ---------------------------------------------------------------------------
+
+/**
+ * Initialise `.goopspec/` directory structure, state.json, and config.json.
+ *
+ * Uses the provided StateManager to create state (so it goes through the
+ * standard atomic-write path). Config is written directly.
+ */
+export function init(
+  projectDir: string,
+  stateManager: StateManager,
+  opts: {
+    projectName?: string;
+    defaultModel?: string;
+    agentModels?: Record<string, string>;
+    memoryEnabled?: boolean;
+    gitignoreGoopspec?: boolean;
+  } = {},
+): InitResult {
+  const result: InitResult = { success: true, created: [], errors: [] };
+  const gd = goopDir(projectDir);
+
+  try {
+    // Create directory structure
+    const dirs = [gd, join(gd, "default"), join(gd, "checkpoints")];
+    for (const dir of dirs) {
+      if (!existsSync(dir)) {
+        mkdirSync(dir, { recursive: true });
+        result.created.push(dir);
+      }
+    }
+
+    // Initialise state via StateManager (creates state.json atomically)
+    const state = stateManager.getState();
+    if (!state.workflows.default) {
+      stateManager.createWorkflow("default");
+    }
+    result.created.push(statePath(projectDir));
+
+    // Write config
+    const detected = detect(projectDir);
+    const config: GoopConfig = {
+      projectName: opts.projectName ?? detected.projectName,
+      defaultModel: opts.defaultModel,
+      agentModels: opts.agentModels,
+      memoryEnabled: opts.memoryEnabled ?? true,
+      gitignoreGoopspec: opts.gitignoreGoopspec,
+    };
+    safeWriteJson(configPath(projectDir), config);
+    result.created.push(configPath(projectDir));
+
+    // Optionally add .goopspec/ to .gitignore
+    if (opts.gitignoreGoopspec) {
+      ensureGitignoreEntry(projectDir);
+    }
+  } catch (error: unknown) {
+    result.success = false;
+    result.errors.push(error instanceof Error ? error.message : String(error));
+  }
+
+  return result;
+}
+
+// ---------------------------------------------------------------------------
+// Config read/write
+// ---------------------------------------------------------------------------
+
+/** Read the project config, or null if it doesn't exist / is invalid. */
+export function readConfig(projectDir: string): GoopConfig | null {
+  return safeReadJson<GoopConfig>(configPath(projectDir));
+}
+
+/** Write (overwrite) the project config. */
+export function writeConfig(projectDir: string, config: GoopConfig): void {
+  safeWriteJson(configPath(projectDir), config);
+}
+
+/** Merge partial updates into the existing config. */
+export function updateConfig(projectDir: string, updates: Partial<GoopConfig>): GoopConfig {
+  const existing = readConfig(projectDir) ?? {};
+  const merged: GoopConfig = {
+    ...existing,
+    ...updates,
+    // Deep-merge agentModels
+    agentModels:
+      updates.agentModels !== undefined
+        ? { ...(existing.agentModels ?? {}), ...updates.agentModels }
+        : existing.agentModels,
+  };
+  writeConfig(projectDir, merged);
+  return merged;
+}
+
+// ---------------------------------------------------------------------------
+// Models (MH16 — per-role model routing)
+// ---------------------------------------------------------------------------
+
+/**
+ * Return the effective model map: defaults merged with user overrides from config.
+ */
+export function getEffectiveModelMap(projectDir: string): Record<string, string> {
+  const config = readConfig(projectDir);
+  const base: Record<string, string> = { ...DEFAULT_MODEL_MAP };
+
+  if (config?.defaultModel) {
+    for (const role of AGENT_ROLES) {
+      base[role] = config.defaultModel;
+    }
+  }
+
+  if (config?.agentModels) {
+    for (const [role, model] of Object.entries(config.agentModels)) {
+      if (model) base[role] = model;
+    }
+  }
+
+  return base;
+}
+
+/**
+ * Format model configuration for display.
+ */
+export function formatModelInfo(projectDir: string): string {
+  const effective = getEffectiveModelMap(projectDir);
+  const config = readConfig(projectDir);
+  const lines: string[] = [
+    "# Agent Model Configuration",
+    "",
+    "Per-role model routing allows cost/quality optimisation across agent tiers.",
+    "",
+    "## Current Configuration",
+    "",
+    "| Agent Role | Model | Source |",
+    "|------------|-------|--------|",
+  ];
+
+  for (const role of AGENT_ROLES) {
+    const model = effective[role] ?? "unknown";
+    const isOverride = config?.agentModels?.[role] != null;
+    const isDefault = config?.defaultModel != null && !isOverride;
+    const source = isOverride ? "config override" : isDefault ? "default model" : "built-in";
+    lines.push(`| ${role} | \`${model}\` | ${source} |`);
+  }
+
+  lines.push("");
+  lines.push("## Usage");
+  lines.push("");
+  lines.push("Set per-role models via `goop_setup`:");
+  lines.push("```");
+  lines.push('goop_setup(action: "models", agentModels: {');
+  lines.push('  "executor-low": "anthropic/claude-sonnet-4-6",');
+  lines.push('  "executor-high": "anthropic/claude-opus-4-6"');
+  lines.push("})");
+  lines.push("```");
+  lines.push("");
+  lines.push("Or set a blanket default:");
+  lines.push("```");
+  lines.push('goop_setup(action: "models", defaultModel: "anthropic/claude-sonnet-4-6")');
+  lines.push("```");
+
+  return lines.join("\n");
+}
+
+// ---------------------------------------------------------------------------
+// Verify
+// ---------------------------------------------------------------------------
+
+/** Run health checks on the setup. */
+export function verify(projectDir: string): VerifyResult {
+  const checks: VerifyCheck[] = [];
+  const gd = goopDir(projectDir);
+
+  // 1. Directory
+  const hasDir = existsSync(gd);
+  checks.push({
+    name: "Directory Structure",
+    passed: hasDir,
+    message: hasDir ? ".goopspec/ exists" : ".goopspec/ not found",
+    fix: hasDir ? undefined : 'Run goop_setup(action: "init")',
+  });
+
+  // 2. State file
+  const hasState = existsSync(statePath(projectDir));
+  checks.push({
+    name: "State File",
+    passed: hasState,
+    message: hasState ? "state.json exists" : "state.json not found",
+    fix: hasState ? undefined : 'Run goop_setup(action: "init")',
+  });
+
+  // 3. State version
+  if (hasState) {
+    const state = safeReadJson<GoopState>(statePath(projectDir));
+    const correctVersion = state?.version === STATE_SCHEMA_VERSION;
+    checks.push({
+      name: "State Version",
+      passed: correctVersion,
+      message: correctVersion
+        ? `v${STATE_SCHEMA_VERSION} (current)`
+        : `Expected v${STATE_SCHEMA_VERSION}, got v${state?.version ?? "unknown"}`,
+      fix: correctVersion ? undefined : 'Run goop_setup(action: "reset") to recreate',
+    });
+  }
+
+  // 4. Config file
+  const hasConfig = existsSync(configPath(projectDir));
+  checks.push({
+    name: "Config File",
+    passed: hasConfig,
+    message: hasConfig ? "config.json exists" : "config.json not found",
+    fix: hasConfig ? undefined : 'Run goop_setup(action: "init")',
+  });
+
+  // 5. Config validity
+  if (hasConfig) {
+    const config = safeReadJson<GoopConfig>(configPath(projectDir));
+    const valid = config !== null && typeof config === "object";
+    checks.push({
+      name: "Config Validity",
+      passed: valid,
+      message: valid ? "config.json is valid JSON" : "config.json is invalid",
+      fix: valid ? undefined : 'Run goop_setup(action: "reset") to recreate',
+    });
+  }
+
+  // 6. Memory enabled
+  const config = readConfig(projectDir);
+  const memEnabled = config?.memoryEnabled !== false;
+  checks.push({
+    name: "Memory System",
+    passed: memEnabled,
+    message: memEnabled ? "Memory enabled (in-process bun:sqlite)" : "Memory disabled in config",
+    fix: memEnabled ? undefined : 'Set memoryEnabled: true in goop_setup(action: "init")',
+  });
+
+  const allPassed = checks.every((c) => c.passed);
+  return { success: allPassed, checks };
+}
+
+// ---------------------------------------------------------------------------
+// Status
+// ---------------------------------------------------------------------------
+
+/** Get a summary of the current setup. */
+export function getStatus(projectDir: string): SetupStatusResult {
+  const config = readConfig(projectDir);
+  const state = safeReadJson<GoopState>(statePath(projectDir));
+
+  return {
+    initialized: existsSync(goopDir(projectDir)) && existsSync(statePath(projectDir)),
+    projectName: config?.projectName ?? state?.activeWorkflowId,
+    config,
+    stateVersion: state?.version ?? null,
+    activeWorkflow: state?.activeWorkflowId ?? null,
+    phase: state?.workflows?.[state?.activeWorkflowId ?? ""]?.phase ?? null,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Reset
+// ---------------------------------------------------------------------------
+
+/** Reset config and optionally state/data. */
+export function reset(
+  projectDir: string,
+  opts: { preserveData?: boolean; confirmed?: boolean } = {},
+): ResetResult {
+  const result: ResetResult = { success: true, reset: [], preserved: [], errors: [] };
+
+  if (!opts.confirmed) {
+    result.success = false;
+    result.errors.push("Reset requires confirmed: true");
+    return result;
+  }
+
+  const gd = goopDir(projectDir);
+
+  try {
+    // Always reset config
+    if (existsSync(configPath(projectDir))) {
+      const freshConfig: GoopConfig = { memoryEnabled: true };
+      safeWriteJson(configPath(projectDir), freshConfig);
+      result.reset.push(configPath(projectDir));
+    }
+
+    if (opts.preserveData !== false) {
+      // Preserve state and data, only reset config
+      if (existsSync(statePath(projectDir))) {
+        result.preserved.push(statePath(projectDir));
+      }
+      const checkpointsDir = join(gd, "checkpoints");
+      if (existsSync(checkpointsDir)) {
+        result.preserved.push(checkpointsDir);
+      }
+    } else {
+      // Full destructive reset
+      if (existsSync(statePath(projectDir))) {
+        rmSync(statePath(projectDir));
+        result.reset.push(statePath(projectDir));
+      }
+      const checkpointsDir = join(gd, "checkpoints");
+      if (existsSync(checkpointsDir)) {
+        rmSync(checkpointsDir, { recursive: true, force: true });
+        result.reset.push(checkpointsDir);
+      }
+    }
+  } catch (error: unknown) {
+    result.success = false;
+    result.errors.push(error instanceof Error ? error.message : String(error));
+  }
+
+  return result;
+}
+
+// ---------------------------------------------------------------------------
+// Gitignore helper
+// ---------------------------------------------------------------------------
+
+/** Ensure `.goopspec/` is in the project's `.gitignore`. */
+export function ensureGitignoreEntry(projectDir: string): void {
+  const gitignorePath = join(projectDir, ".gitignore");
+  const entry = ".goopspec/";
+
+  if (!existsSync(gitignorePath)) {
+    writeFileSync(gitignorePath, `${entry}\n`, "utf-8");
+    return;
+  }
+
+  const content = readFileSync(gitignorePath, "utf-8");
+  const alreadyPresent = content
+    .split(/\r?\n/)
+    .some((line) => line.trim().replace(/\/+$/, "") === ".goopspec");
+
+  if (alreadyPresent) return;
+
+  const separator = content.length > 0 && !content.endsWith("\n") ? "\n" : "";
+  writeFileSync(gitignorePath, `${content}${separator}${entry}\n`, "utf-8");
+}
