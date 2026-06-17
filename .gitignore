@@ -2,6 +2,7 @@
 .goopspec/
 .opencode/
 .references/
+.research/
 test-results.txt
 
 # Daemon SQLite runtime database
