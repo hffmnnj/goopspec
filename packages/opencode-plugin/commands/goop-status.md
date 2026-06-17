@@ -1,64 +1,42 @@
 ---
 name: goop-status
-description: Show current GoopSpec status and next steps
+description: Show current GoopSpec workflow status and next step
+agent: orchestrator
 ---
 
 # /goop-status
 
-**Show project status.** View progress, active phase, gates, and suggested next command.
+Display the current workflow state and suggest the next command.
 
-## Immediate Action
+## Immediate action
 
-**STOP. Execute this tool call NOW before reading anything else:**
+Call the status tool directly:
+
 ```
-goop_reference({ name: "status-process" })
+goop_status({ verbose: true })
 ```
 
-**Then display the status dashboard from that reference.** Do not process user messages until you have loaded and understood the protocol.
+## What to show
 
-## Quick Summary
+- Active workflow and phase.
+- Gate status: `interviewComplete`, `specLocked`, `allWavesComplete`.
+- Current wave and total waves.
+- Pending blockers or deviations.
+- Suggested next command based on state.
 
-Read-only operation that shows current workflow state.
+## Suggested next commands
 
-### Tools Used
-
-| Tool | Purpose |
-|------|---------|
-| `goop_status` | Primary tool - retrieves full workflow state |
-| `memory_search` | Optionally find recent context |
-| `goop_reference` | Load detailed display templates |
-
-### Data Sources
-
-| Source | Information |
-|--------|-------------|
-| `goop_state` | Phase, locks, timestamps |
-| `REQUIREMENTS.md` | Interview status |
-| `SPEC.md` | Must-haves, lock status |
-| `BLUEPRINT.md` | Waves, tasks, traceability |
-| `CHRONICLE.md` | Progress, decisions, blockers |
-| `HANDOFF.md` | Last session context |
-
-### Command Suggestions
-
-| State | Suggested |
-|-------|-----------|
-| No project | `/goop-discuss` |
+| State | Next command |
+|-------|--------------|
+| No `.goopspec` | `/goop-setup` |
 | Interview incomplete | `/goop-discuss` |
-| Interview done, no spec | `/goop-plan` |
-| Spec draft | `/goop-plan` |
+| Interview done, no locked spec | `/goop-plan` |
 | Spec locked | `/goop-execute` |
 | Executing | `/goop-execute` |
-| All tasks done | `/goop-accept` |
-| Accepted | Ready for next milestone |
+| All waves complete | `/goop-accept` |
+| Accepted | `/goop-discuss` |
 
-## Success Criteria
+## Anti-patterns
 
-- [ ] Phase correctly identified
-- [ ] Gate status accurately shown
-- [ ] Progress clearly displayed
-- [ ] Next command suggested based on state
-
----
-
-*Load `goop_reference({ name: "status-process" })` for full display templates.*
+- Guess state instead of reading it.
+- Suggest a command that the current gate does not allow.
