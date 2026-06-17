@@ -40,3 +40,12 @@ export {
   getPhaseRules,
   type PhaseRules,
 } from "./phase-context.js";
+
+// Validation contract — spec completeness gate before wave decomposition
+export {
+  checkContractGate,
+  shouldEnforceContractGate,
+  validateSpecContract,
+  type ContractValidation,
+  type SpecContract,
+} from "./validation-contract.js";
