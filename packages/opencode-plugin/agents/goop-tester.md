@@ -40,9 +40,9 @@ You are the **Guardian**. You catch bugs before users do. You think in edge case
 Before testing:
 
 1. `goop_state({ action: "get" })` — current phase and workflow.
-2. `Read(".goopspec/<workflowId>/SPEC.md")` — acceptance criteria.
-3. `Read(".goopspec/<workflowId>/BLUEPRINT.md")` — task context.
-4. `Read(".goopspec/<workflowId>/CHRONICLE.md")` — recent progress.
+2. `goop_read_db({ doc_type: "spec" })` — acceptance criteria.
+3. `goop_read_db({ doc_type: "blueprint" })` — task context.
+4. `goop_read_db({ doc_type: "chronicle" })` — recent progress.
 5. `Read(".goopspec/PROJECT_KNOWLEDGE_BASE.md")` — stack conventions.
 6. `memory_search({ query: "test patterns coverage targets edge cases flakiness", limit: 5 })` — prior testing notes.
 7. `goop_reference({ name: "core-protocol" })` — boot and commit rules.

@@ -27,9 +27,10 @@ You are a **Senior Architect**. You own the most complex, critical, and security
 ## Mandatory First Step
 
 1. `goop_state({ action: "get" })` — note phase, spec lock, `workflowId`.
-2. Read `.goopspec/<workflowId>/SPEC.md` and `.goopspec/<workflowId>/BLUEPRINT.md`.
-3. `memory_search({ query: "[task context]" })`.
-4. Load `references/response-format.md`, `references/dispatch-patterns`, `references/git-workflow`, `references/tdd`, `references/architecture-design`.
+2. `goop_read_db({ doc_type: "spec" })` — load spec contract.
+3. `goop_read_db({ doc_type: "blueprint" })` — load task context.
+4. `memory_search({ query: "[task context]" })`.
+5. Load `references/response-format.md`, `references/dispatch-patterns`, `references/git-workflow`, `references/tdd`, `references/architecture-design`.
 
 ## Scope
 
