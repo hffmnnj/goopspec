@@ -8,15 +8,15 @@
 
 import { Database } from "bun:sqlite";
 
-import { initSchema } from "./schema.js";
 import { runMigrations } from "./migrations.js";
+import { initSchema } from "./schema.js";
 import type {
-  WorkflowRow,
-  EventRow,
+  DocType,
   DocumentRow,
+  EventRow,
   FieldNoteRow,
   FtsNoteSearchRow,
-  DocType,
+  WorkflowRow,
 } from "./types.js";
 
 /** Named parameter bindings accepted by bun:sqlite. */
@@ -262,14 +262,16 @@ export class GoopSpecDB {
     if (!ftsQuery) return [];
 
     const { whereClause, params } = this.buildNoteFilters(opts);
+    params.$ftsQuery = ftsQuery;
+    params.$limit = limit;
 
     const sql = `
       SELECT fn.*, bm25(field_notes_fts, 10.0, 5.0, 2.0) AS rank
       FROM field_notes fn
       JOIN field_notes_fts ON fn.rowid = field_notes_fts.rowid
-      WHERE field_notes_fts MATCH '${ftsQuery}' ${whereClause}
+      WHERE field_notes_fts MATCH $ftsQuery ${whereClause}
       ORDER BY (ABS(rank) * (fn.importance / 10.0)) DESC
-      LIMIT ${limit}
+      LIMIT $limit
     `;
 
     const rows = this.db.query<FtsNoteSearchRow, NamedBindings>(sql).all(params);
@@ -286,6 +288,7 @@ export class GoopSpecDB {
     limit: number,
   ): FieldNoteRow[] {
     const { whereClause, params } = this.buildNoteFilters(opts);
+    params.$limit = limit;
 
     let matchClause = "";
     if (query.trim()) {
@@ -298,7 +301,7 @@ export class GoopSpecDB {
       SELECT fn.* FROM field_notes fn
       WHERE ${matchClause} 1=1 ${whereClause}
       ORDER BY fn.importance DESC, fn.created_at DESC
-      LIMIT ${limit}
+      LIMIT $limit
     `;
 
     return this.db.query<FieldNoteRow, NamedBindings>(sql).all(params);

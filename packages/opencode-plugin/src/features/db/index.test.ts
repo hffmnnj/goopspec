@@ -17,13 +17,14 @@ describe("GoopSpecDB", () => {
       const tables = ["workflows", "events", "documents", "field_notes"];
 
       for (const table of tables) {
+        // biome-ignore lint/complexity/useLiteralKeys: accessing private property for test
         const row = db["db"]
           .query<{ name: string }, []>(
             `SELECT name FROM sqlite_master WHERE type='table' AND name='${table}'`,
           )
           .get();
         expect(row).not.toBeNull();
-        expect(row!.name).toBe(table);
+        expect(row?.name).toBe(table);
       }
 
       db.close();
@@ -38,11 +39,12 @@ describe("GoopSpecDB", () => {
 
     it("records schema version 1", () => {
       const db = new GoopSpecDB(":memory:");
+      // biome-ignore lint/complexity/useLiteralKeys: accessing private property for test
       const row = db["db"]
         .query<{ version: number }, []>("SELECT version FROM schema_version WHERE version = 1")
         .get();
       expect(row).not.toBeNull();
-      expect(row!.version).toBe(1);
+      expect(row?.version).toBe(1);
       db.close();
     });
 
@@ -66,8 +68,8 @@ describe("GoopSpecDB", () => {
       const row = db.getWorkflow("wf-1");
 
       expect(row).not.toBeNull();
-      expect(row!.id).toBe("wf-1");
-      expect(JSON.parse(row!.state)).toEqual(state);
+      expect(row?.id).toBe("wf-1");
+      expect(JSON.parse(row?.state ?? "{}")).toEqual(state);
       db.close();
     });
 
@@ -107,7 +109,7 @@ describe("GoopSpecDB", () => {
       db.upsertWorkflow("wf-up", { phase: "execute" });
 
       const row = db.getWorkflow("wf-up");
-      expect(JSON.parse(row!.state)).toEqual({ phase: "execute" });
+      expect(JSON.parse(row?.state ?? "{}")).toEqual({ phase: "execute" });
       // Should still be one row, not two
       expect(db.getAllWorkflows().length).toBe(1);
       db.close();
@@ -187,9 +189,9 @@ describe("GoopSpecDB", () => {
 
       const doc = db.getDocument("wf-1", "spec");
       expect(doc).not.toBeNull();
-      expect(doc!.content).toBe("# Spec Content");
-      expect(doc!.workflow_id).toBe("wf-1");
-      expect(doc!.doc_type).toBe("spec");
+      expect(doc?.content).toBe("# Spec Content");
+      expect(doc?.workflow_id).toBe("wf-1");
+      expect(doc?.doc_type).toBe("spec");
       db.close();
     });
 
@@ -199,7 +201,7 @@ describe("GoopSpecDB", () => {
       db.upsertDocument("wf-1", "spec", "# Version 2");
 
       const doc = db.getDocument("wf-1", "spec");
-      expect(doc!.content).toBe("# Version 2");
+      expect(doc?.content).toBe("# Version 2");
 
       // Should be one doc, not two
       const all = db.getAllDocuments("wf-1");
@@ -260,8 +262,8 @@ describe("GoopSpecDB", () => {
 
       const note = db.getNoteById("fn_20260618_abcd1234");
       expect(note).not.toBeNull();
-      expect(note!.title).toBe("SQLite FTS5 patterns");
-      expect(note!.importance).toBe(7);
+      expect(note?.title).toBe("SQLite FTS5 patterns");
+      expect(note?.importance).toBe(7);
       db.close();
     });
 
@@ -271,9 +273,9 @@ describe("GoopSpecDB", () => {
 
       const note = db.getNoteById(baseNote.id);
       expect(note).not.toBeNull();
-      expect(note!.id).toBe(baseNote.id);
-      expect(note!.body).toBe(baseNote.body);
-      expect(note!.source_agent).toBe("goop-researcher");
+      expect(note?.id).toBe(baseNote.id);
+      expect(note?.body).toBe(baseNote.body);
+      expect(note?.source_agent).toBe("goop-researcher");
       db.close();
     });
 
@@ -355,6 +357,46 @@ describe("GoopSpecDB", () => {
       db.close();
     });
 
+    it("handles apostrophes in search query without SQL error", () => {
+      const db = new GoopSpecDB(":memory:");
+      db.saveNote({
+        ...baseNote,
+        id: "fn_20260618_apos0001",
+        title: "It's a test note",
+        body: "This note's body contains apostrophes and it's fine.",
+      });
+
+      // FTS path: should not throw on apostrophe
+      const ftsResults = db.searchNotes("it's a test");
+      expect(ftsResults.length).toBeGreaterThanOrEqual(0);
+
+      // LIKE fallback path: should not throw on apostrophe
+      const likeResults = db.searchNotes("it's", { tags: ["sqlite"] });
+      expect(likeResults.length).toBeGreaterThanOrEqual(0);
+
+      db.close();
+    });
+
+    it("handles special characters in search query without SQL error", () => {
+      const db = new GoopSpecDB(":memory:");
+      db.saveNote(baseNote);
+
+      const specialQueries = [
+        "test' OR 1=1 --",
+        'test" OR 1=1 --',
+        "test); DROP TABLE field_notes; --",
+        "test*(){}:^~<>",
+        "",
+        "   ",
+      ];
+
+      for (const q of specialQueries) {
+        expect(() => db.searchNotes(q)).not.toThrow();
+      }
+
+      db.close();
+    });
+
     it("searchNotes with empty query and tags returns results (LIKE fallback)", () => {
       const db = new GoopSpecDB(":memory:");
       db.saveNote(baseNote);
@@ -391,6 +433,7 @@ describe("GoopSpecDB", () => {
 
       // Manually re-run migrations via the internal DB handle
       const { runMigrations } = await import("./migrations.js");
+      // biome-ignore lint/complexity/useLiteralKeys: accessing private property for test
       runMigrations(db["db"]);
 
       expect(db.getSchemaVersion()).toBe(1);
