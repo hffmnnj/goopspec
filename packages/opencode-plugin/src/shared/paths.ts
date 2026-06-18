@@ -17,6 +17,11 @@ export function getMemoryDbPath(projectDir: string): string {
   return join(projectDir, GOOPSPEC_DIR, "memory.db");
 }
 
+/** Absolute path to the GoopSpec unified SQLite database for a project. */
+export function getDbPath(projectDir: string): string {
+  return join(projectDir, GOOPSPEC_DIR, "goopspec.db");
+}
+
 /**
  * Resolve the plugin package root (the directory containing `references/`,
  * `templates/`, `agents/`, etc.).
