@@ -10,8 +10,8 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 import type { MemoryManager } from "../../core/types.js";
-import { GoopSpecDB } from "../db/index.js";
 import { createMockMemory, setupTestEnvironment } from "../../test-utils.js";
+import { GoopSpecDB } from "../db/index.js";
 import { archiveWorkflow, extractLearnings, generateRetrospective, listArchived } from "./index.js";
 
 // ---------------------------------------------------------------------------

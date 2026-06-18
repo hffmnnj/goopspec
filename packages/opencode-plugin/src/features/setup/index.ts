@@ -17,9 +17,9 @@ import { basename, join } from "node:path";
 import { AGENT_ROLES, GOOPSPEC_DIR } from "../../core/constants.js";
 import type { AgentRole } from "../../core/constants.js";
 import type { StateManager } from "../../core/types.js";
+import { getDbPath } from "../../shared/paths.js";
 import { GoopSpecDB } from "../db/index.js";
 import { CURRENT_SCHEMA_VERSION } from "../db/migrations.js";
-import { getDbPath } from "../../shared/paths.js";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -519,9 +519,7 @@ function readStateFromDb(dbPath: string): {
 
     // Active workflow ID is stored in a special _meta row
     const metaRow = db.getWorkflow("_meta");
-    const meta = metaRow
-      ? (JSON.parse(metaRow.state) as { activeWorkflowId?: string })
-      : null;
+    const meta = metaRow ? (JSON.parse(metaRow.state) as { activeWorkflowId?: string }) : null;
     const activeWorkflow = meta?.activeWorkflowId ?? null;
 
     // Phase of the active workflow
