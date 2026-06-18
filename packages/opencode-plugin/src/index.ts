@@ -7,14 +7,14 @@
 
 import { createPluginContext } from "./core/context.js";
 import type { Plugin } from "./core/sdk-compat.js";
-import { createHooks } from "./hooks/index.js";
+import { DEFAULT_HOOK_FACTORIES, createHooks } from "./hooks/index.js";
 import { logError } from "./shared/logger.js";
 import { createTools } from "./tools/index.js";
 
 const goopspec: Plugin = async (input) => {
   try {
     const ctx = await createPluginContext(input);
-    const hooks = createHooks(ctx);
+    const hooks = createHooks(ctx, [...DEFAULT_HOOK_FACTORIES]);
     const tools = createTools(ctx);
     return { ...hooks, tool: { ...(hooks.tool ?? {}), ...tools } };
   } catch (error) {

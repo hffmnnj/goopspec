@@ -196,7 +196,10 @@ describe("createCommentCheckerHook", () => {
     );
 
     const output = { title: "Wrote file", output: "File written successfully", metadata: {} };
-    await hooks["tool.execute.after"]?.({ tool: "write", sessionID: "s1", callID }, output);
+    await hooks["tool.execute.after"]?.(
+      { tool: "write", sessionID: "s1", callID, args: {} },
+      output,
+    );
 
     expect(output.output).toContain("Comment Quality Notice");
     expect(output.output).toContain("threshold");
@@ -220,7 +223,10 @@ describe("createCommentCheckerHook", () => {
     );
 
     const output = { title: "Wrote file", output: "File written successfully", metadata: {} };
-    await hooks["tool.execute.after"]?.({ tool: "write", sessionID: "s1", callID }, output);
+    await hooks["tool.execute.after"]?.(
+      { tool: "write", sessionID: "s1", callID, args: {} },
+      output,
+    );
 
     expect(output.output).not.toContain("Comment Quality Notice");
   });
@@ -235,7 +241,10 @@ describe("createCommentCheckerHook", () => {
     );
 
     const output = { title: "Read file", output: "file contents", metadata: {} };
-    await hooks["tool.execute.after"]?.({ tool: "read", sessionID: "s1", callID }, output);
+    await hooks["tool.execute.after"]?.(
+      { tool: "read", sessionID: "s1", callID, args: {} },
+      output,
+    );
 
     expect(output.output).not.toContain("Comment Quality Notice");
   });
@@ -250,7 +259,10 @@ describe("createCommentCheckerHook", () => {
     );
 
     const output = { title: "Wrote file", output: "File written successfully", metadata: {} };
-    await hooks["tool.execute.after"]?.({ tool: "write", sessionID: "s1", callID }, output);
+    await hooks["tool.execute.after"]?.(
+      { tool: "write", sessionID: "s1", callID, args: {} },
+      output,
+    );
 
     expect(output.output).not.toContain("Comment Quality Notice");
   });
@@ -267,7 +279,10 @@ describe("createCommentCheckerHook", () => {
     );
 
     const output = { title: "Wrote file", output: "File written successfully", metadata: {} };
-    await hooks["tool.execute.after"]?.({ tool: "mcp_Write", sessionID: "s1", callID }, output);
+    await hooks["tool.execute.after"]?.(
+      { tool: "mcp_Write", sessionID: "s1", callID, args: {} },
+      output,
+    );
 
     expect(output.output).toContain("Comment Quality Notice");
   });
@@ -282,7 +297,10 @@ describe("createCommentCheckerHook", () => {
     );
 
     const output = { title: "Error", output: "Error: file not found", metadata: {} };
-    await hooks["tool.execute.after"]?.({ tool: "write", sessionID: "s1", callID }, output);
+    await hooks["tool.execute.after"]?.(
+      { tool: "write", sessionID: "s1", callID, args: {} },
+      output,
+    );
 
     expect(output.output).not.toContain("Comment Quality Notice");
   });
@@ -305,7 +323,10 @@ describe("createCommentCheckerHook", () => {
     );
 
     const output = { title: "Wrote file", output: "File written successfully", metadata: {} };
-    await hooks["tool.execute.after"]?.({ tool: "write", sessionID: "s1", callID }, output);
+    await hooks["tool.execute.after"]?.(
+      { tool: "write", sessionID: "s1", callID, args: {} },
+      output,
+    );
 
     expect(output.output).toContain("low-value comment");
   });
@@ -320,7 +341,10 @@ describe("createCommentCheckerHook", () => {
     );
 
     const output = { title: "Edited file", output: "File edited successfully", metadata: {} };
-    await hooks["tool.execute.after"]?.({ tool: "edit", sessionID: "s1", callID }, output);
+    await hooks["tool.execute.after"]?.(
+      { tool: "edit", sessionID: "s1", callID, args: {} },
+      output,
+    );
 
     expect(output.output).toContain("Comment Quality Notice");
   });
@@ -330,7 +354,7 @@ describe("createCommentCheckerHook", () => {
 
     const output = { title: "test", output: "ok", metadata: {} };
     await hooks["tool.execute.after"]?.(
-      { tool: "write", sessionID: "s1", callID: "orphan" },
+      { tool: "write", sessionID: "s1", callID: "orphan", args: {} },
       output,
     );
 

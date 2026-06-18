@@ -23,20 +23,39 @@ import { readFileSync } from "node:fs";
 // Re-exports from @opencode-ai/plugin (main entry)
 // ---------------------------------------------------------------------------
 
-export type { Hooks, Plugin, PluginInput, ProviderContext } from "@opencode-ai/plugin";
+export type {
+  Config,
+  Hooks,
+  Plugin,
+  PluginInput,
+  PluginModule,
+  PluginOptions,
+  ProviderContext,
+  ProviderHook,
+  AuthOAuthResult,
+  WorkspaceInfo,
+  WorkspaceTarget,
+  WorkspaceAdapter,
+} from "@opencode-ai/plugin";
 
 // ---------------------------------------------------------------------------
 // Re-exports from @opencode-ai/plugin/tool
 // ---------------------------------------------------------------------------
 
 export { tool } from "@opencode-ai/plugin/tool";
-export type { ToolContext, ToolDefinition } from "@opencode-ai/plugin/tool";
+export type {
+  ToolAttachment,
+  ToolContext,
+  ToolDefinition,
+  ToolResult,
+} from "@opencode-ai/plugin/tool";
 
 // ---------------------------------------------------------------------------
 // Re-exports from @opencode-ai/sdk (types used by the plugin surface)
 // ---------------------------------------------------------------------------
 
 export type {
+  AgentConfig,
   Config as SdkConfig,
   Event as SdkEvent,
   Message as SdkMessage,

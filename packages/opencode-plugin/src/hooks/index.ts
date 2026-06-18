@@ -8,6 +8,16 @@
  */
 
 import type { PluginContext } from "../core/types.js";
+import { agentRegistrationFactory } from "./agent-registration.js";
+import { createAutoProgressionHook } from "./auto-progression.js";
+import { chatMessageFactory } from "./chat-message.js";
+import { createCommandProcessorHook } from "./command-processor.js";
+import { commentCheckerFactory } from "./comment-checker.js";
+import { createCompactionHook } from "./compaction-hook.js";
+import { createEventHandlerHook } from "./event-handler.js";
+import { orchestratorEnforcementFactory } from "./orchestrator-enforcement.js";
+import { systemTransformFactory } from "./system-transform.js";
+import { toolLifecycleHookFactory } from "./tool-lifecycle.js";
 import type { HookEventName, HookFactory, Hooks } from "./types.js";
 import { chainHandlers } from "./utils.js";
 
@@ -17,6 +27,7 @@ import { chainHandlers } from "./utils.js";
 // ---------------------------------------------------------------------------
 
 const HANDLER_EVENT_NAMES: readonly HookEventName[] = [
+  "config",
   "event",
   "chat.message",
   "chat.params",
@@ -24,9 +35,13 @@ const HANDLER_EVENT_NAMES: readonly HookEventName[] = [
   "permission.ask",
   "command.execute.before",
   "tool.execute.before",
+  "shell.env",
+  "tool.definition",
   "tool.execute.after",
   "experimental.chat.messages.transform",
   "experimental.chat.system.transform",
+  "experimental.compaction.autocontinue",
+  "experimental.provider.small_model",
   "experimental.session.compacting",
   "experimental.text.complete",
 ] as const;
@@ -38,7 +53,30 @@ const HANDLER_EVENT_NAMES: readonly HookEventName[] = [
 const hookFactories: HookFactory[] = [];
 
 /**
- * Register a hook factory. Called by individual hook modules (5.2–5.9)
+ * The full set of hooks shipped with GoopSpec, assembled explicitly.
+ *
+ * The plugin entry point passes this to `createHooks` so the wiring is
+ * declarative and testable. `createHooks(ctx, [])` deliberately stays empty —
+ * callers opt in to the default hooks by passing this array.
+ *
+ * Some hook modules export only a `create*Hook` function (creator and factory
+ * are the same); they are referenced directly here.
+ */
+export const DEFAULT_HOOK_FACTORIES: readonly HookFactory[] = [
+  agentRegistrationFactory,
+  systemTransformFactory,
+  chatMessageFactory,
+  commentCheckerFactory,
+  createCommandProcessorHook,
+  orchestratorEnforcementFactory,
+  toolLifecycleHookFactory,
+  createAutoProgressionHook,
+  createEventHandlerHook,
+  createCompactionHook,
+];
+
+/**
+ * Register a hook factory. Called by individual hook modules
  * to add themselves to the registry.
  */
 export function registerHookFactory(factory: HookFactory): void {

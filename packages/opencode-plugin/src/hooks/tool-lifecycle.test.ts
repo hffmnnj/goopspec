@@ -173,7 +173,7 @@ describe("createToolLifecycleHook after handler", () => {
       output: "result",
       metadata: {} as Record<string, unknown>,
     };
-    await afterHook({ tool: "goop_state", sessionID: "s1", callID: "c10" }, output);
+    await afterHook({ tool: "goop_state", sessionID: "s1", callID: "c10", args: {} }, output);
   });
 
   it("injects durationMs into metadata when before was called first", async () => {
@@ -188,7 +188,7 @@ describe("createToolLifecycleHook after handler", () => {
       output: "ok",
       metadata: {} as Record<string, unknown>,
     };
-    await afterHook({ tool: "goop_status", sessionID: "s1", callID }, output);
+    await afterHook({ tool: "goop_status", sessionID: "s1", callID, args: {} }, output);
 
     expect(output.metadata.durationMs).toBeDefined();
     expect(typeof output.metadata.durationMs).toBe("number");
@@ -205,7 +205,7 @@ describe("createToolLifecycleHook after handler", () => {
       { args: { action: "transition", phase: "execute" } },
     );
     await afterHook(
-      { tool: "goop_state", sessionID: "s1", callID },
+      { tool: "goop_state", sessionID: "s1", callID, args: {} },
       { title: "state", output: "transitioned", metadata: {} as Record<string, unknown> },
     );
 
@@ -227,7 +227,7 @@ describe("createToolLifecycleHook after handler", () => {
 
     await beforeHook({ tool: "goop_status", sessionID: "s1", callID }, { args: {} });
     await afterHook(
-      { tool: "goop_status", sessionID: "s1", callID },
+      { tool: "goop_status", sessionID: "s1", callID, args: {} },
       { title: "status", output: "ok", metadata: {} as Record<string, unknown> },
     );
 
@@ -242,7 +242,7 @@ describe("createToolLifecycleHook after handler", () => {
 
     await beforeHook({ tool: "goop_state", sessionID: "s1", callID }, { args: { action: "get" } });
     await afterHook(
-      { tool: "goop_state", sessionID: "s1", callID },
+      { tool: "goop_state", sessionID: "s1", callID, args: {} },
       { title: "state", output: "state data", metadata: {} as Record<string, unknown> },
     );
 
@@ -276,7 +276,7 @@ describe("createToolLifecycleHook after handler", () => {
 
     const start = Date.now();
     await afterHook(
-      { tool: "goop_state", sessionID: "s1", callID },
+      { tool: "goop_state", sessionID: "s1", callID, args: {} },
       { title: "state", output: "locked", metadata: {} as Record<string, unknown> },
     );
     const elapsed = Date.now() - start;
@@ -305,7 +305,7 @@ describe("createToolLifecycleHook after handler", () => {
       { args: { action: "transition", phase: "plan" } },
     );
     await afterHook(
-      { tool: "goop_state", sessionID: "s1", callID },
+      { tool: "goop_state", sessionID: "s1", callID, args: {} },
       { title: "state", output: "transitioned", metadata: {} as Record<string, unknown> },
     );
 
@@ -327,7 +327,7 @@ describe("createToolLifecycleHook after handler", () => {
       { args: { action: "append", description: "Changed API structure" } },
     );
     await afterHook(
-      { tool: "goop_adl", sessionID: "s1", callID },
+      { tool: "goop_adl", sessionID: "s1", callID, args: {} },
       { title: "adl", output: "appended", metadata: {} as Record<string, unknown> },
     );
 
@@ -349,7 +349,7 @@ describe("createToolLifecycleHook after handler", () => {
       { args: { action: "save", id: "wave-3-complete" } },
     );
     await afterHook(
-      { tool: "goop_checkpoint", sessionID: "s1", callID },
+      { tool: "goop_checkpoint", sessionID: "s1", callID, args: {} },
       { title: "checkpoint", output: "saved", metadata: {} as Record<string, unknown> },
     );
 

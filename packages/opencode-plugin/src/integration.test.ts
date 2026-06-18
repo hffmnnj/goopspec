@@ -50,6 +50,9 @@ function createMockPluginInput(directory: string): PluginInput {
     directory,
     worktree: directory,
     serverUrl: new URL("http://localhost:0"),
+    experimental_workspace: {
+      register: () => {},
+    },
     $: (async () => ({
       stdout: Buffer.from(""),
       stderr: Buffer.from(""),
