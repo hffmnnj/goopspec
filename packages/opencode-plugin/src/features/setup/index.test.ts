@@ -236,7 +236,7 @@ describe("setup feature", () => {
 
     afterEach(() => {
       if (origGlobalPath === undefined) {
-        delete process.env.GOOPSPEC_GLOBAL_CONFIG_PATH;
+        Reflect.deleteProperty(process.env, "GOOPSPEC_GLOBAL_CONFIG_PATH");
       } else {
         process.env.GOOPSPEC_GLOBAL_CONFIG_PATH = origGlobalPath;
       }
@@ -578,7 +578,7 @@ describe("setup feature", () => {
 
     afterEach(() => {
       if (origEnv === undefined) {
-        delete process.env.GOOPSPEC_GLOBAL_CONFIG_PATH;
+        Reflect.deleteProperty(process.env, "GOOPSPEC_GLOBAL_CONFIG_PATH");
       } else {
         process.env.GOOPSPEC_GLOBAL_CONFIG_PATH = origEnv;
       }

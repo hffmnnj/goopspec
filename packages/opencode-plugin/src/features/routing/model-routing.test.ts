@@ -45,7 +45,7 @@ describe("resolveModelForRole", () => {
 
   afterEach(() => {
     if (origGlobalConfigPath === undefined) {
-      delete process.env.GOOPSPEC_GLOBAL_CONFIG_PATH;
+      Reflect.deleteProperty(process.env, "GOOPSPEC_GLOBAL_CONFIG_PATH");
     } else {
       process.env.GOOPSPEC_GLOBAL_CONFIG_PATH = origGlobalConfigPath;
     }
@@ -124,7 +124,7 @@ describe("resolveModelForTier", () => {
 
   afterEach(() => {
     if (origGlobalConfigPath === undefined) {
-      delete process.env.GOOPSPEC_GLOBAL_CONFIG_PATH;
+      Reflect.deleteProperty(process.env, "GOOPSPEC_GLOBAL_CONFIG_PATH");
     } else {
       process.env.GOOPSPEC_GLOBAL_CONFIG_PATH = origGlobalConfigPath;
     }
@@ -222,7 +222,7 @@ describe("buildModelPreferenceMap", () => {
 
   afterEach(() => {
     if (origGlobalConfigPath === undefined) {
-      delete process.env.GOOPSPEC_GLOBAL_CONFIG_PATH;
+      Reflect.deleteProperty(process.env, "GOOPSPEC_GLOBAL_CONFIG_PATH");
     } else {
       process.env.GOOPSPEC_GLOBAL_CONFIG_PATH = origGlobalConfigPath;
     }
@@ -285,7 +285,7 @@ describe("resolution chain (integration)", () => {
 
   afterEach(() => {
     if (origGlobalConfigPath === undefined) {
-      delete process.env.GOOPSPEC_GLOBAL_CONFIG_PATH;
+      Reflect.deleteProperty(process.env, "GOOPSPEC_GLOBAL_CONFIG_PATH");
     } else {
       process.env.GOOPSPEC_GLOBAL_CONFIG_PATH = origGlobalConfigPath;
     }
