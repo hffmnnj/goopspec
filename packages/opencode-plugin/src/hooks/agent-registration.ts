@@ -15,7 +15,7 @@ import type { Config } from "../core/sdk-compat.js";
 import type { PluginContext } from "../core/types.js";
 import { loadAgentConfigs, loadCommandConfigs } from "../features/agents/index.js";
 import { loadMergedConfig } from "../features/setup/index.js";
-import { log } from "../shared/logger.js";
+import { log, logError } from "../shared/logger.js";
 import { getPackageRoot } from "../shared/paths.js";
 import type { HookFactory, Hooks } from "./types.js";
 
@@ -33,11 +33,22 @@ export function createAgentRegistrationHook(ctx: PluginContext): Partial<Hooks> 
         const role = name.replace(/^goop-/, "");
         const roleOverride = mergedConfig.agentModels?.[role];
         if (roleOverride) {
+          if (!roleOverride.includes("/")) {
+            logError(
+              `Agent model override for "${name}" is missing provider prefix: "${roleOverride}". Expected format: "provider/model-name".`,
+            );
+          }
           agentConfig.model = roleOverride;
         } else if (mergedConfig.defaultModel) {
           agentConfig.model = mergedConfig.defaultModel;
         }
         // else: keep the markdown frontmatter default
+
+        // Apply thinkingBudget override from config
+        const budgetOverride = mergedConfig.agentThinkingBudgets?.[role];
+        if (budgetOverride !== undefined) {
+          (agentConfig as Record<string, unknown>).thinkingBudget = budgetOverride;
+        }
       }
 
       const agentNames = Object.keys(agents);

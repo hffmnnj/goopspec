@@ -17,8 +17,8 @@ import { basename, join } from "node:path";
 import { AGENT_ROLES, GOOPSPEC_DIR, STATE_SCHEMA_VERSION } from "../../core/constants.js";
 import type { AgentRole } from "../../core/constants.js";
 import type { GoopState, StateManager } from "../../core/types.js";
+import { log, logError } from "../../shared/logger.js";
 import { getGlobalConfigPath, getProjectGoopspecJsonPath } from "../../shared/paths.js";
-import { log } from "../../shared/logger.js";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -52,6 +52,7 @@ export interface GoopConfig {
   projectName?: string;
   defaultModel?: string;
   agentModels?: Partial<Record<string, string>>;
+  agentThinkingBudgets?: Partial<Record<string, number>>;
   memoryEnabled?: boolean;
   gitignoreGoopspec?: boolean;
 }
@@ -348,12 +349,27 @@ export function normalizeConfig(raw: Record<string, unknown>): GoopConfig {
   // Old format: agents (goop-prefixed → { model, temperature }) — only if agentModels absent
   if (raw.agents && typeof raw.agents === "object" && !config.agentModels) {
     config.agentModels = {};
-    for (const [agentName, agentConfig] of Object.entries(
-      raw.agents as Record<string, unknown>,
-    )) {
+    for (const [agentName, agentConfig] of Object.entries(raw.agents as Record<string, unknown>)) {
       if (agentConfig && typeof agentConfig === "object" && "model" in agentConfig) {
         const role = agentName.replace(/^goop-/, "");
-        config.agentModels[role] = (agentConfig as { model: string }).model;
+        const model = (agentConfig as { model: string }).model;
+
+        // Expand partial tier names to valid AGENT_ROLES
+        const partialExpansions: Record<string, string[]> = {
+          "executor-frontend": ["executor-frontend-high", "executor-frontend-low"],
+          executor: ["executor-medium"],
+        };
+        const expanded = partialExpansions[role] ?? [role];
+
+        for (const r of expanded) {
+          if ((AGENT_ROLES as readonly string[]).includes(r)) {
+            config.agentModels[r] = model;
+          } else {
+            logError(
+              `normalizeConfig: unknown agent role "${r}" (from "${agentName}") — skipping. Valid roles: ${AGENT_ROLES.join(", ")}`,
+            );
+          }
+        }
       }
     }
   }
@@ -366,6 +382,10 @@ export function normalizeConfig(raw: Record<string, unknown>): GoopConfig {
       if (!config.agentModels.orchestrator) {
         config.agentModels.orchestrator = orch.model;
       }
+    }
+    if (typeof orch.thinkingBudget === "number") {
+      if (!config.agentThinkingBudgets) config.agentThinkingBudgets = {};
+      config.agentThinkingBudgets.orchestrator = orch.thinkingBudget;
     }
   }
 
@@ -402,6 +422,10 @@ export function loadMergedConfig(projectDir: string): GoopConfig {
           normalized.agentModels !== undefined
             ? { ...(merged.agentModels ?? {}), ...normalized.agentModels }
             : merged.agentModels,
+        agentThinkingBudgets:
+          normalized.agentThinkingBudgets !== undefined
+            ? { ...(merged.agentThinkingBudgets ?? {}), ...normalized.agentThinkingBudgets }
+            : merged.agentThinkingBudgets,
       };
     } catch {
       log(`loadMergedConfig: skipping unreadable file ${filePath}`);

@@ -502,6 +502,68 @@ describe("setup feature", () => {
       expect(result.agentModels?.orchestrator).toBeUndefined();
       expect(result.agentModels?.["executor-low"]).toBe("valid-model");
     });
+
+    it("expands goop-executor-frontend to both frontend tiers", () => {
+      const result = normalizeConfig({
+        agents: {
+          "goop-executor-frontend": { model: "anthropic/claude-opus-4-6", temperature: 0.1 },
+        },
+      });
+      expect(result.agentModels?.["executor-frontend-high"]).toBe("anthropic/claude-opus-4-6");
+      expect(result.agentModels?.["executor-frontend-low"]).toBe("anthropic/claude-opus-4-6");
+      // The partial name should not appear as a key
+      expect(result.agentModels?.["executor-frontend"]).toBeUndefined();
+    });
+
+    it("expands goop-executor (plain) to executor-medium", () => {
+      const result = normalizeConfig({
+        agents: {
+          "goop-executor": { model: "anthropic/claude-sonnet-4-6", temperature: 0.3 },
+        },
+      });
+      expect(result.agentModels?.["executor-medium"]).toBe("anthropic/claude-sonnet-4-6");
+      // The partial name should not appear as a key
+      expect(result.agentModels?.executor).toBeUndefined();
+    });
+
+    it("skips and logs unknown agent roles like goop-designer", () => {
+      const errors: string[] = [];
+      const origError = console.error;
+      console.error = (...args: unknown[]) => {
+        errors.push(args.map(String).join(" "));
+      };
+      try {
+        const result = normalizeConfig({
+          agents: {
+            "goop-designer": { model: "anthropic/claude-opus-4-6" },
+            "goop-orchestrator": { model: "anthropic/claude-opus-4-6" },
+          },
+        });
+        // designer should be skipped
+        expect(result.agentModels?.designer).toBeUndefined();
+        // orchestrator should still be present
+        expect(result.agentModels?.orchestrator).toBe("anthropic/claude-opus-4-6");
+        // An error should have been logged for designer
+        expect(errors.some((e) => e.includes("designer"))).toBe(true);
+      } finally {
+        console.error = origError;
+      }
+    });
+
+    it("preserves orchestrator.thinkingBudget in agentThinkingBudgets", () => {
+      const result = normalizeConfig({
+        orchestrator: { model: "anthropic/claude-opus-4-6", thinkingBudget: 32000 },
+      });
+      expect(result.agentThinkingBudgets?.orchestrator).toBe(32000);
+      expect(result.agentModels?.orchestrator).toBe("anthropic/claude-opus-4-6");
+    });
+
+    it("ignores non-numeric thinkingBudget values", () => {
+      const result = normalizeConfig({
+        orchestrator: { model: "anthropic/claude-opus-4-6", thinkingBudget: "not-a-number" },
+      });
+      expect(result.agentThinkingBudgets).toBeUndefined();
+    });
   });
 
   // =========================================================================
@@ -689,6 +751,30 @@ describe("setup feature", () => {
       expect(map.orchestrator).toBe("project-orch-model");
       // Other roles still get defaults
       expect(map["executor-low"]).toBe("anthropic/claude-sonnet-4-6");
+    });
+
+    it("deep-merges agentThinkingBudgets across sources", () => {
+      const freshDir = join(testDir, "merge-thinking-budgets");
+      mkdirSync(join(freshDir, ".goopspec"), { recursive: true });
+      const globalPath = join(freshDir, "global-goopspec.json");
+      process.env.GOOPSPEC_GLOBAL_CONFIG_PATH = globalPath;
+
+      writeFileSync(
+        globalPath,
+        JSON.stringify({
+          orchestrator: { model: "anthropic/claude-opus-4-6", thinkingBudget: 16000 },
+        }),
+      );
+      writeFileSync(
+        join(freshDir, "goopspec.json"),
+        JSON.stringify({
+          orchestrator: { model: "anthropic/claude-opus-4-6", thinkingBudget: 32000 },
+        }),
+      );
+
+      const result = loadMergedConfig(freshDir);
+      // Project root (highest priority) should win
+      expect(result.agentThinkingBudgets?.orchestrator).toBe(32000);
     });
   });
 });
