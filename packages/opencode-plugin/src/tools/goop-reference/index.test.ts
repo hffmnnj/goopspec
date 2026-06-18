@@ -160,7 +160,8 @@ describe("goop_reference tool", () => {
       expect(result).toContain("## Reference: git-workflow");
       expect(result).toContain("## Reference: deviation-rules");
       // Sections are separated by ---
-      const separatorCount = (result.match(/\n---\n/g) ?? []).length;
+      const text = typeof result === "string" ? result : result.output;
+      const separatorCount = (text.match(/\n---\n/g) ?? []).length;
       expect(separatorCount).toBe(2);
     });
 

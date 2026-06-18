@@ -12,6 +12,8 @@ import {
   getEffectiveModelMap,
   getStatus,
   init,
+  loadMergedConfig,
+  normalizeConfig,
   readConfig,
   reset,
   updateConfig,
@@ -225,6 +227,21 @@ describe("setup feature", () => {
   // =========================================================================
 
   describe("models", () => {
+    const origGlobalPath = process.env.GOOPSPEC_GLOBAL_CONFIG_PATH;
+
+    beforeEach(() => {
+      // Isolate from the real global config so built-in defaults are predictable.
+      process.env.GOOPSPEC_GLOBAL_CONFIG_PATH = join(testDir, "nonexistent-global.json");
+    });
+
+    afterEach(() => {
+      if (origGlobalPath === undefined) {
+        delete process.env.GOOPSPEC_GLOBAL_CONFIG_PATH;
+      } else {
+        process.env.GOOPSPEC_GLOBAL_CONFIG_PATH = origGlobalPath;
+      }
+    });
+
     it("DEFAULT_MODEL_MAP covers all agent roles", () => {
       const roles = [
         "orchestrator",
@@ -419,6 +436,348 @@ describe("setup feature", () => {
       const content = readFileSync(join(freshDir, ".gitignore"), "utf-8");
       const matches = content.match(/\.goopspec/g);
       expect(matches?.length).toBe(1);
+    });
+  });
+
+  // =========================================================================
+  // normalizeConfig
+  // =========================================================================
+
+  describe("normalizeConfig", () => {
+    it("passes through new-format agentModels unchanged", () => {
+      const result = normalizeConfig({
+        defaultModel: "openai/gpt-4o",
+        agentModels: { orchestrator: "anthropic/claude-opus-4-6", "executor-low": "model-x" },
+      });
+      expect(result.defaultModel).toBe("openai/gpt-4o");
+      expect(result.agentModels?.orchestrator).toBe("anthropic/claude-opus-4-6");
+      expect(result.agentModels?.["executor-low"]).toBe("model-x");
+    });
+
+    it("normalizes old agents format — strips goop- prefix", () => {
+      const result = normalizeConfig({
+        agents: {
+          "goop-orchestrator": { model: "anthropic/claude-opus-4-6", temperature: 0.1 },
+          "goop-executor-low": { model: "anthropic/claude-sonnet-4-6", temperature: 0.2 },
+        },
+      });
+      expect(result.agentModels?.orchestrator).toBe("anthropic/claude-opus-4-6");
+      expect(result.agentModels?.["executor-low"]).toBe("anthropic/claude-sonnet-4-6");
+    });
+
+    it("agentModels wins over agents when both present", () => {
+      const result = normalizeConfig({
+        agentModels: { orchestrator: "new-model" },
+        agents: { "goop-orchestrator": { model: "old-model", temperature: 0.1 } },
+      });
+      expect(result.agentModels?.orchestrator).toBe("new-model");
+    });
+
+    it("normalizes old orchestrator.model top-level field", () => {
+      const result = normalizeConfig({
+        orchestrator: { model: "anthropic/claude-opus-4-6" },
+      });
+      expect(result.agentModels?.orchestrator).toBe("anthropic/claude-opus-4-6");
+    });
+
+    it("orchestrator.model does not override agentModels.orchestrator", () => {
+      const result = normalizeConfig({
+        agentModels: { orchestrator: "preferred-model" },
+        orchestrator: { model: "fallback-model" },
+      });
+      expect(result.agentModels?.orchestrator).toBe("preferred-model");
+    });
+
+    it("ignores unknown keys without crashing", () => {
+      const result = normalizeConfig({
+        unknownKey: "value",
+        anotherUnknown: { nested: true },
+        defaultModel: "openai/gpt-4o",
+      });
+      expect(result.defaultModel).toBe("openai/gpt-4o");
+      expect((result as Record<string, unknown>).unknownKey).toBeUndefined();
+    });
+
+    it("skips non-string model values in agentModels", () => {
+      const result = normalizeConfig({
+        agentModels: { orchestrator: 42, "executor-low": "valid-model" },
+      });
+      expect(result.agentModels?.orchestrator).toBeUndefined();
+      expect(result.agentModels?.["executor-low"]).toBe("valid-model");
+    });
+
+    it("expands goop-executor-frontend to both frontend tiers", () => {
+      const result = normalizeConfig({
+        agents: {
+          "goop-executor-frontend": { model: "anthropic/claude-opus-4-6", temperature: 0.1 },
+        },
+      });
+      expect(result.agentModels?.["executor-frontend-high"]).toBe("anthropic/claude-opus-4-6");
+      expect(result.agentModels?.["executor-frontend-low"]).toBe("anthropic/claude-opus-4-6");
+      // The partial name should not appear as a key
+      expect(result.agentModels?.["executor-frontend"]).toBeUndefined();
+    });
+
+    it("expands goop-executor (plain) to executor-medium", () => {
+      const result = normalizeConfig({
+        agents: {
+          "goop-executor": { model: "anthropic/claude-sonnet-4-6", temperature: 0.3 },
+        },
+      });
+      expect(result.agentModels?.["executor-medium"]).toBe("anthropic/claude-sonnet-4-6");
+      // The partial name should not appear as a key
+      expect(result.agentModels?.executor).toBeUndefined();
+    });
+
+    it("skips and logs unknown agent roles like goop-designer", () => {
+      const errors: string[] = [];
+      const origError = console.error;
+      console.error = (...args: unknown[]) => {
+        errors.push(args.map(String).join(" "));
+      };
+      try {
+        const result = normalizeConfig({
+          agents: {
+            "goop-designer": { model: "anthropic/claude-opus-4-6" },
+            "goop-orchestrator": { model: "anthropic/claude-opus-4-6" },
+          },
+        });
+        // designer should be skipped
+        expect(result.agentModels?.designer).toBeUndefined();
+        // orchestrator should still be present
+        expect(result.agentModels?.orchestrator).toBe("anthropic/claude-opus-4-6");
+        // An error should have been logged for designer
+        expect(errors.some((e) => e.includes("designer"))).toBe(true);
+      } finally {
+        console.error = origError;
+      }
+    });
+
+    it("preserves orchestrator.thinkingBudget in agentThinkingBudgets", () => {
+      const result = normalizeConfig({
+        orchestrator: { model: "anthropic/claude-opus-4-6", thinkingBudget: 32000 },
+      });
+      expect(result.agentThinkingBudgets?.orchestrator).toBe(32000);
+      expect(result.agentModels?.orchestrator).toBe("anthropic/claude-opus-4-6");
+    });
+
+    it("ignores non-numeric thinkingBudget values", () => {
+      const result = normalizeConfig({
+        orchestrator: { model: "anthropic/claude-opus-4-6", thinkingBudget: "not-a-number" },
+      });
+      expect(result.agentThinkingBudgets).toBeUndefined();
+    });
+  });
+
+  // =========================================================================
+  // loadMergedConfig
+  // =========================================================================
+
+  describe("loadMergedConfig", () => {
+    const origEnv = process.env.GOOPSPEC_GLOBAL_CONFIG_PATH;
+
+    afterEach(() => {
+      if (origEnv === undefined) {
+        delete process.env.GOOPSPEC_GLOBAL_CONFIG_PATH;
+      } else {
+        process.env.GOOPSPEC_GLOBAL_CONFIG_PATH = origEnv;
+      }
+    });
+
+    it("returns empty config when no config files exist", () => {
+      const freshDir = join(testDir, "no-configs");
+      mkdirSync(join(freshDir, ".goopspec"), { recursive: true });
+      process.env.GOOPSPEC_GLOBAL_CONFIG_PATH = join(freshDir, "nonexistent-global.json");
+
+      const result = loadMergedConfig(freshDir);
+      expect(result).toEqual({});
+    });
+
+    it("reads from project root goopspec.json", () => {
+      const freshDir = join(testDir, "project-root-config");
+      mkdirSync(join(freshDir, ".goopspec"), { recursive: true });
+      process.env.GOOPSPEC_GLOBAL_CONFIG_PATH = join(freshDir, "nonexistent-global.json");
+
+      writeFileSync(
+        join(freshDir, "goopspec.json"),
+        JSON.stringify({ defaultModel: "openai/gpt-4o", projectName: "my-app" }),
+      );
+
+      const result = loadMergedConfig(freshDir);
+      expect(result.defaultModel).toBe("openai/gpt-4o");
+      expect(result.projectName).toBe("my-app");
+    });
+
+    it("reads from global config path", () => {
+      const freshDir = join(testDir, "global-config");
+      mkdirSync(join(freshDir, ".goopspec"), { recursive: true });
+      const globalPath = join(freshDir, "global-goopspec.json");
+      process.env.GOOPSPEC_GLOBAL_CONFIG_PATH = globalPath;
+
+      writeFileSync(globalPath, JSON.stringify({ defaultModel: "global-model" }));
+
+      const result = loadMergedConfig(freshDir);
+      expect(result.defaultModel).toBe("global-model");
+    });
+
+    it("project root overrides internal config", () => {
+      const freshDir = join(testDir, "priority-project-over-internal");
+      mkdirSync(join(freshDir, ".goopspec"), { recursive: true });
+      process.env.GOOPSPEC_GLOBAL_CONFIG_PATH = join(freshDir, "nonexistent-global.json");
+
+      writeFileSync(
+        join(freshDir, ".goopspec", "config.json"),
+        JSON.stringify({ defaultModel: "internal-model" }),
+      );
+      writeFileSync(
+        join(freshDir, "goopspec.json"),
+        JSON.stringify({ defaultModel: "project-model" }),
+      );
+
+      const result = loadMergedConfig(freshDir);
+      expect(result.defaultModel).toBe("project-model");
+    });
+
+    it("internal config overrides global config", () => {
+      const freshDir = join(testDir, "priority-internal-over-global");
+      mkdirSync(join(freshDir, ".goopspec"), { recursive: true });
+      const globalPath = join(freshDir, "global-goopspec.json");
+      process.env.GOOPSPEC_GLOBAL_CONFIG_PATH = globalPath;
+
+      writeFileSync(globalPath, JSON.stringify({ defaultModel: "global-model" }));
+      writeFileSync(
+        join(freshDir, ".goopspec", "config.json"),
+        JSON.stringify({ defaultModel: "internal-model" }),
+      );
+
+      const result = loadMergedConfig(freshDir);
+      expect(result.defaultModel).toBe("internal-model");
+    });
+
+    it("merges agentModels across sources — higher priority wins per role", () => {
+      const freshDir = join(testDir, "merge-agent-models");
+      mkdirSync(join(freshDir, ".goopspec"), { recursive: true });
+      const globalPath = join(freshDir, "global-goopspec.json");
+      process.env.GOOPSPEC_GLOBAL_CONFIG_PATH = globalPath;
+
+      writeFileSync(
+        globalPath,
+        JSON.stringify({ agentModels: { orchestrator: "global-orch", "executor-low": "global-low" } }),
+      );
+      writeFileSync(
+        join(freshDir, "goopspec.json"),
+        JSON.stringify({ agentModels: { orchestrator: "project-orch" } }),
+      );
+
+      const result = loadMergedConfig(freshDir);
+      expect(result.agentModels?.orchestrator).toBe("project-orch");
+      expect(result.agentModels?.["executor-low"]).toBe("global-low");
+    });
+
+    it("normalizes old agents format from project root goopspec.json", () => {
+      const freshDir = join(testDir, "old-format-project");
+      mkdirSync(join(freshDir, ".goopspec"), { recursive: true });
+      process.env.GOOPSPEC_GLOBAL_CONFIG_PATH = join(freshDir, "nonexistent-global.json");
+
+      writeFileSync(
+        join(freshDir, "goopspec.json"),
+        JSON.stringify({
+          agents: {
+            "goop-orchestrator": { model: "anthropic/claude-opus-4-6", temperature: 0.1 },
+            "goop-executor-low": { model: "anthropic/claude-sonnet-4-6", temperature: 0.2 },
+          },
+        }),
+      );
+
+      const result = loadMergedConfig(freshDir);
+      expect(result.agentModels?.orchestrator).toBe("anthropic/claude-opus-4-6");
+      expect(result.agentModels?.["executor-low"]).toBe("anthropic/claude-sonnet-4-6");
+    });
+
+    it("normalizes old orchestrator.model field", () => {
+      const freshDir = join(testDir, "old-orch-model");
+      mkdirSync(join(freshDir, ".goopspec"), { recursive: true });
+      process.env.GOOPSPEC_GLOBAL_CONFIG_PATH = join(freshDir, "nonexistent-global.json");
+
+      writeFileSync(
+        join(freshDir, "goopspec.json"),
+        JSON.stringify({ orchestrator: { model: "anthropic/claude-opus-4-6" } }),
+      );
+
+      const result = loadMergedConfig(freshDir);
+      expect(result.agentModels?.orchestrator).toBe("anthropic/claude-opus-4-6");
+    });
+
+    it("mixed old and new format — agentModels wins over agents", () => {
+      const freshDir = join(testDir, "mixed-format");
+      mkdirSync(join(freshDir, ".goopspec"), { recursive: true });
+      process.env.GOOPSPEC_GLOBAL_CONFIG_PATH = join(freshDir, "nonexistent-global.json");
+
+      writeFileSync(
+        join(freshDir, "goopspec.json"),
+        JSON.stringify({
+          agentModels: { orchestrator: "new-model" },
+          agents: { "goop-orchestrator": { model: "old-model", temperature: 0.1 } },
+        }),
+      );
+
+      const result = loadMergedConfig(freshDir);
+      expect(result.agentModels?.orchestrator).toBe("new-model");
+    });
+
+    it("skips invalid JSON files gracefully", () => {
+      const freshDir = join(testDir, "invalid-json");
+      mkdirSync(join(freshDir, ".goopspec"), { recursive: true });
+      process.env.GOOPSPEC_GLOBAL_CONFIG_PATH = join(freshDir, "nonexistent-global.json");
+
+      writeFileSync(join(freshDir, "goopspec.json"), "{ not valid json }");
+      writeFileSync(
+        join(freshDir, ".goopspec", "config.json"),
+        JSON.stringify({ defaultModel: "fallback-model" }),
+      );
+
+      const result = loadMergedConfig(freshDir);
+      expect(result.defaultModel).toBe("fallback-model");
+    });
+
+    it("getEffectiveModelMap uses merged config from all sources", () => {
+      const freshDir = join(testDir, "effective-merged");
+      mkdirSync(join(freshDir, ".goopspec"), { recursive: true });
+      process.env.GOOPSPEC_GLOBAL_CONFIG_PATH = join(freshDir, "nonexistent-global.json");
+
+      writeFileSync(
+        join(freshDir, "goopspec.json"),
+        JSON.stringify({ agentModels: { orchestrator: "project-orch-model" } }),
+      );
+
+      const map = getEffectiveModelMap(freshDir);
+      expect(map.orchestrator).toBe("project-orch-model");
+      // Other roles still get defaults
+      expect(map["executor-low"]).toBe("anthropic/claude-sonnet-4-6");
+    });
+
+    it("deep-merges agentThinkingBudgets across sources", () => {
+      const freshDir = join(testDir, "merge-thinking-budgets");
+      mkdirSync(join(freshDir, ".goopspec"), { recursive: true });
+      const globalPath = join(freshDir, "global-goopspec.json");
+      process.env.GOOPSPEC_GLOBAL_CONFIG_PATH = globalPath;
+
+      writeFileSync(
+        globalPath,
+        JSON.stringify({
+          orchestrator: { model: "anthropic/claude-opus-4-6", thinkingBudget: 16000 },
+        }),
+      );
+      writeFileSync(
+        join(freshDir, "goopspec.json"),
+        JSON.stringify({
+          orchestrator: { model: "anthropic/claude-opus-4-6", thinkingBudget: 32000 },
+        }),
+      );
+
+      const result = loadMergedConfig(freshDir);
+      // Project root (highest priority) should win
+      expect(result.agentThinkingBudgets?.orchestrator).toBe(32000);
     });
   });
 });

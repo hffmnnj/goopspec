@@ -234,7 +234,7 @@ describe("createHooks", () => {
       const hooks = createHooks(ctx, [f1, f2]);
       const output = { title: "test", output: "original", metadata: {} };
       await hooks["tool.execute.after"]?.(
-        { tool: "goop_state", sessionID: "s1", callID: "c1" },
+        { tool: "goop_state", sessionID: "s1", callID: "c1", args: {} },
         output,
       );
 

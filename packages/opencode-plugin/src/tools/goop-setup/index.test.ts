@@ -25,9 +25,10 @@ describe("goop_setup tool", () => {
 
   afterEach(() => cleanup());
 
-  function exec(args: Record<string, unknown>): Promise<string> {
+  async function exec(args: Record<string, unknown>): Promise<string> {
     const toolDef = createGoopSetupTool(ctx);
-    return toolDef.execute(args, createMockToolContext({ directory: testDir }));
+    const result = await toolDef.execute(args, createMockToolContext({ directory: testDir }));
+    return typeof result === "string" ? result : result.output;
   }
 
   // =========================================================================

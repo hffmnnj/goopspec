@@ -10,7 +10,6 @@
  * @module hooks/command-processor
  */
 
-import type { SdkPart } from "../core/sdk-compat.js";
 import type { PluginContext } from "../core/types.js";
 import type { HookFactory, Hooks } from "./types.js";
 import { safeHandler } from "./utils.js";
@@ -26,16 +25,6 @@ export function isGoopspecCommand(command: string): boolean {
 /** Compact context line for injection into command output. */
 export function buildPrimingText(workflowId: string, phase: string): string {
   return `[GoopSpec] Active workflow: ${workflowId} | Phase: ${phase}`;
-}
-
-function createTextPart(sessionId: string, text: string): SdkPart {
-  return {
-    id: `goopspec-primer-${Date.now()}`,
-    sessionID: sessionId,
-    messageID: "goopspec-command-processor",
-    type: "text" as const,
-    text,
-  } as SdkPart;
 }
 
 /**
@@ -70,17 +59,12 @@ function ensureWorkflowBinding(ctx: PluginContext, _sessionId: string): void {
  * Non-GoopSpec commands are ignored. Never throws.
  */
 export const createCommandProcessorHook: HookFactory = (ctx: PluginContext): Partial<Hooks> => {
-  const handler: NonNullable<Hooks["command.execute.before"]> = async (input, output) => {
+  const handler: NonNullable<Hooks["command.execute.before"]> = async (input, _output) => {
     const { command, sessionID } = input;
 
     if (!isGoopspecCommand(command)) return;
 
     ensureWorkflowBinding(ctx, sessionID);
-
-    const workflow = ctx.stateManager.getActiveWorkflow();
-    const workflowId = ctx.stateManager.getActiveWorkflowId();
-    const primingText = buildPrimingText(workflowId, workflow.phase);
-    output.parts.push(createTextPart(sessionID, primingText));
   };
 
   return {
