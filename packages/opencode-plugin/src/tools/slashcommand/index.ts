@@ -17,11 +17,11 @@
 
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
-import { fileURLToPath } from "node:url";
 
 import { tool } from "../../core/sdk-compat.js";
 import type { ToolContext, ToolDefinition } from "../../core/sdk-compat.js";
 import type { PluginContext } from "../../core/types.js";
+import { getPackageRoot } from "../../shared/paths.js";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -53,10 +53,11 @@ const KEPT_COMMANDS = [
  * Strategy (in order):
  * 1. `ctx.sdk.directory` — the project root where the plugin is running.
  *    Commands may live at `<project>/.goopspec/commands/` (project overrides).
- * 2. Package root — the `commands/` directory shipped with the plugin package.
- *    Resolved relative to this source file: `../../commands/` from `src/tools/slashcommand/`.
+ * 2. Package root — the `commands/` directory shipped with the plugin package,
+ *    resolved via the shared `getPackageRoot()` helper which is robust across
+ *    both the source tree and the single-file bundled `dist/index.js`.
  *
- * Returns the first directory that exists and contains `.md` files.
+ * Returns the first directory that exists.
  */
 function resolveCommandsDir(projectDir: string): string {
   // Check for project-local command overrides first
@@ -66,11 +67,7 @@ function resolveCommandsDir(projectDir: string): string {
   }
 
   // Fall back to the package-bundled commands directory.
-  // __dirname equivalent for ESM: derive from import.meta.url
-  const thisFile = fileURLToPath(import.meta.url);
-  // src/tools/slashcommand/index.ts → ../../.. → package root → commands/
-  const packageRoot = join(thisFile, "..", "..", "..", "..");
-  return join(packageRoot, "commands");
+  return join(getPackageRoot(), "commands");
 }
 
 // ---------------------------------------------------------------------------

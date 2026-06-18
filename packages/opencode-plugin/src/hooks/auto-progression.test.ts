@@ -7,11 +7,11 @@ import {
 import { createAutoProgressionHook } from "./auto-progression.js";
 import type { Hooks } from "./types.js";
 
-type ToolAfterInput = { tool: string; sessionID: string; callID: string };
+type ToolAfterInput = { tool: string; sessionID: string; callID: string; args: unknown };
 type ToolAfterOutput = { title: string; output: string; metadata: unknown };
 
 function makeInput(tool = "goop_state"): ToolAfterInput {
-  return { tool, sessionID: "s1", callID: "c1" };
+  return { tool, sessionID: "s1", callID: "c1", args: {} };
 }
 
 function makeOutput(text = "ok"): ToolAfterOutput {

@@ -34,12 +34,21 @@ function writeConfig(projectDir: string, config: Record<string, unknown>): void 
 
 describe("resolveModelForRole", () => {
   let testDir: string;
+  let origGlobalConfigPath: string | undefined;
 
   beforeEach(() => {
     testDir = createTempDir();
+    // Isolate from real global config
+    origGlobalConfigPath = process.env.GOOPSPEC_GLOBAL_CONFIG_PATH;
+    process.env.GOOPSPEC_GLOBAL_CONFIG_PATH = join(testDir, "nonexistent-global.json");
   });
 
   afterEach(() => {
+    if (origGlobalConfigPath === undefined) {
+      delete process.env.GOOPSPEC_GLOBAL_CONFIG_PATH;
+    } else {
+      process.env.GOOPSPEC_GLOBAL_CONFIG_PATH = origGlobalConfigPath;
+    }
     if (existsSync(testDir)) {
       rmSync(testDir, { recursive: true, force: true });
     }
@@ -105,12 +114,20 @@ describe("resolveModelForRole", () => {
 
 describe("resolveModelForTier", () => {
   let testDir: string;
+  let origGlobalConfigPath: string | undefined;
 
   beforeEach(() => {
     testDir = createTempDir();
+    origGlobalConfigPath = process.env.GOOPSPEC_GLOBAL_CONFIG_PATH;
+    process.env.GOOPSPEC_GLOBAL_CONFIG_PATH = join(testDir, "nonexistent-global.json");
   });
 
   afterEach(() => {
+    if (origGlobalConfigPath === undefined) {
+      delete process.env.GOOPSPEC_GLOBAL_CONFIG_PATH;
+    } else {
+      process.env.GOOPSPEC_GLOBAL_CONFIG_PATH = origGlobalConfigPath;
+    }
     if (existsSync(testDir)) {
       rmSync(testDir, { recursive: true, force: true });
     }
@@ -195,12 +212,20 @@ describe("withFallback", () => {
 
 describe("buildModelPreferenceMap", () => {
   let testDir: string;
+  let origGlobalConfigPath: string | undefined;
 
   beforeEach(() => {
     testDir = createTempDir();
+    origGlobalConfigPath = process.env.GOOPSPEC_GLOBAL_CONFIG_PATH;
+    process.env.GOOPSPEC_GLOBAL_CONFIG_PATH = join(testDir, "nonexistent-global.json");
   });
 
   afterEach(() => {
+    if (origGlobalConfigPath === undefined) {
+      delete process.env.GOOPSPEC_GLOBAL_CONFIG_PATH;
+    } else {
+      process.env.GOOPSPEC_GLOBAL_CONFIG_PATH = origGlobalConfigPath;
+    }
     if (existsSync(testDir)) {
       rmSync(testDir, { recursive: true, force: true });
     }
@@ -250,12 +275,20 @@ describe("buildModelPreferenceMap", () => {
 
 describe("resolution chain (integration)", () => {
   let testDir: string;
+  let origGlobalConfigPath: string | undefined;
 
   beforeEach(() => {
     testDir = createTempDir();
+    origGlobalConfigPath = process.env.GOOPSPEC_GLOBAL_CONFIG_PATH;
+    process.env.GOOPSPEC_GLOBAL_CONFIG_PATH = join(testDir, "nonexistent-global.json");
   });
 
   afterEach(() => {
+    if (origGlobalConfigPath === undefined) {
+      delete process.env.GOOPSPEC_GLOBAL_CONFIG_PATH;
+    } else {
+      process.env.GOOPSPEC_GLOBAL_CONFIG_PATH = origGlobalConfigPath;
+    }
     if (existsSync(testDir)) {
       rmSync(testDir, { recursive: true, force: true });
     }

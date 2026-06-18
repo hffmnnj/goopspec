@@ -95,7 +95,7 @@ describe("createCommandProcessorHook", () => {
     expect(typeof hooks["command.execute.before"]).toBe("function");
   });
 
-  it("injects a priming part for GoopSpec commands", async () => {
+  it("does not inject parts (system-transform handles context injection)", async () => {
     const handler = getHandler(ctx);
 
     const input = {
@@ -107,11 +107,7 @@ describe("createCommandProcessorHook", () => {
 
     await handler(input, output);
 
-    expect(output.parts.length).toBe(1);
-    const part = output.parts[0] as { type: string; text: string };
-    expect(part.type).toBe("text");
-    expect(part.text).toContain("default");
-    expect(part.text).toContain("execute");
+    expect(output.parts.length).toBe(0);
   });
 
   it("ignores non-GoopSpec commands", async () => {
@@ -245,8 +241,6 @@ describe("createCommandProcessorHook", () => {
     await handler(input, output);
 
     expect(ctx.stateManager.getActiveWorkflowId()).toBe("my-feature");
-    const part = output.parts[0] as { text: string };
-    expect(part.text).toContain("my-feature");
-    expect(part.text).toContain("plan");
+    expect(output.parts.length).toBe(0);
   });
 });

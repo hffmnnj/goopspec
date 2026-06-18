@@ -22,6 +22,7 @@ export type { Hooks };
  * so that TypeScript can use it as an index constraint in generics.
  */
 export type HookEventName =
+  | "config"
   | "event"
   | "chat.message"
   | "chat.params"
@@ -29,9 +30,13 @@ export type HookEventName =
   | "permission.ask"
   | "command.execute.before"
   | "tool.execute.before"
+  | "shell.env"
+  | "tool.definition"
   | "tool.execute.after"
   | "experimental.chat.messages.transform"
   | "experimental.chat.system.transform"
+  | "experimental.compaction.autocontinue"
+  | "experimental.provider.small_model"
   | "experimental.session.compacting"
   | "experimental.text.complete";
 
