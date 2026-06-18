@@ -35,6 +35,7 @@ import type {
   WorkflowState,
 } from "../../core/types.js";
 import type { TaskMode, WorkflowDepth } from "../../core/types.js";
+import { log } from "../../shared/logger.js";
 import type { GoopSpecDB } from "../db/index.js";
 import { migrateToV2, needsMigration } from "./migrations.js";
 import {
@@ -43,7 +44,6 @@ import {
   createDefaultWorkflowState,
   isValidTransition,
 } from "./schema.js";
-import { log } from "../../shared/logger.js";
 
 // Re-export schema utilities for external consumers.
 export { createDefaultState, createDefaultWorkflowState } from "./schema.js";
@@ -483,7 +483,7 @@ export function createStateManager(opts: CreateStateManagerOptions): StateManage
       maybeImportAdl(wfId);
 
       const events = db.getEvents(wfId, "adl");
-      if (events.length === 0) return ADL_HEADER + "\n";
+      if (events.length === 0) return `${ADL_HEADER}\n`;
 
       let markdown = ADL_HEADER;
       for (const event of events) {
