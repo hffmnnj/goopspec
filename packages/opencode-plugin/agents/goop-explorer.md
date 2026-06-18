@@ -40,7 +40,7 @@ Before exploring:
 3. `goop_read_db({ doc_types: ["spec", "blueprint"] })` — load requirements and task context.
 5. `Read(".goopspec/PROJECT_KNOWLEDGE_BASE.md")` — known conventions.
 6. `memory_search({ query: "[project] entrypoints integration points patterns", limit: 5 })`.
-6. Load `references/architecture-design.md` and `references/response-format.md`.
+6. Load `references/field-notes-protocol.md`, `references/architecture-design.md`, and `references/response-format.md`.
 
 If the exploration scope is undefined, return `blocked`.
 

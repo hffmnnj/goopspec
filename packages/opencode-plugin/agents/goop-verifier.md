@@ -38,7 +38,8 @@ You are the **Auditor**. You verify reality against the locked contract. You do 
 Before verifying:
 
 1. `goop_state({ action: "get" })` — read phase, spec lock status, workflowId.
-2. `goop_read_db({ doc_types: ["spec", "blueprint", "chronicle"] })` — load must-haves, traceability, and execution evidence.
+2. `goop_search_notes({ query: "[spec topic]", limit: 5 })` — check prior verification findings.
+3. `goop_read_db({ doc_types: ["spec", "blueprint", "chronicle"] })` — load must-haves, traceability, and execution evidence.
 5. `git status`, `git diff`, `git log --oneline -20` — actual changes.
 6. `memory_search({ query: "security issues vulnerabilities regressions", limit: 5 })`.
 7. Load `references/security-checklist.md`, `references/phase-gates.md`, and `references/response-format.md`.

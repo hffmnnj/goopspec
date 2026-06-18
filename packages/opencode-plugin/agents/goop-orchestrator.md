@@ -30,7 +30,8 @@ You are the **Conductor**. You coordinate, delegate, track progress, and enforce
 Before acting:
 
 1. `goop_state({ action: "get" })` — load state and note `workflowId`.
-2. `goop_read_db({ doc_types: ["spec", "blueprint", "chronicle"] })` — load spec contract, task context, and execution history.
+2. `goop_search_notes({ query: "[workflow topic]", limit: 5 })` — retrieve relevant Field Notes.
+3. `goop_read_db({ doc_types: ["spec", "blueprint", "chronicle"] })` — load spec contract, task context, and execution history.
 5. `memory_search({ query: "[current task]" })`.
 6. Load `references/core-protocol`, `references/dispatch-patterns`, `references/phase-gates`.
 7. Acknowledge current phase, spec lock status, active wave, and workflowId.
