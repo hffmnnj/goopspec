@@ -65,6 +65,21 @@ export class GoopSpecDB {
     }
   }
 
+  /**
+   * Return the highest applied schema version, or null if the
+   * schema_version table is empty or unreadable.
+   */
+  getSchemaVersion(): number | null {
+    try {
+      const row = this.db
+        .query<{ v: number | null }, []>("SELECT MAX(version) as v FROM schema_version")
+        .get();
+      return row?.v ?? null;
+    } catch {
+      return null;
+    }
+  }
+
   // -----------------------------------------------------------------------
   // Workflows
   // -----------------------------------------------------------------------

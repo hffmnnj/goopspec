@@ -14,9 +14,12 @@
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { basename, join } from "node:path";
 
-import { AGENT_ROLES, GOOPSPEC_DIR, STATE_SCHEMA_VERSION } from "../../core/constants.js";
+import { AGENT_ROLES, GOOPSPEC_DIR } from "../../core/constants.js";
 import type { AgentRole } from "../../core/constants.js";
-import type { GoopState, StateManager } from "../../core/types.js";
+import type { StateManager } from "../../core/types.js";
+import { GoopSpecDB } from "../db/index.js";
+import { CURRENT_SCHEMA_VERSION } from "../db/migrations.js";
+import { getDbPath } from "../../shared/paths.js";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -210,7 +213,7 @@ export function detect(projectDir: string): DetectResult {
 
   return {
     hasGoopspecDir: existsSync(gd),
-    hasStateFile: existsSync(statePath(projectDir)),
+    hasStateFile: existsSync(getDbPath(projectDir)),
     hasConfigFile: existsSync(configPath(projectDir)),
     hasPackageJson,
     projectName,
@@ -253,12 +256,23 @@ export function init(
       }
     }
 
-    // Initialise state via StateManager (creates state.json atomically)
+    // Initialise state via StateManager
     const state = stateManager.getState();
     if (!state.workflows.default) {
       stateManager.createWorkflow("default");
     }
-    result.created.push(statePath(projectDir));
+
+    // Ensure goopspec.db exists on disk (verify/getStatus read it directly)
+    const dbPath = getDbPath(projectDir);
+    if (!existsSync(dbPath)) {
+      const db = new GoopSpecDB(dbPath);
+      db.upsertWorkflow("_meta", { activeWorkflowId: state.activeWorkflowId });
+      for (const [id, wf] of Object.entries(state.workflows)) {
+        db.upsertWorkflow(id, wf);
+      }
+      db.close();
+    }
+    result.created.push(dbPath);
 
     // Write config
     const detected = detect(projectDir);
@@ -402,25 +416,33 @@ export function verify(projectDir: string): VerifyResult {
     fix: hasDir ? undefined : 'Run goop_setup(action: "init")',
   });
 
-  // 2. State file
-  const hasState = existsSync(statePath(projectDir));
+  // 2. State database
+  const dbPath = getDbPath(projectDir);
+  const hasDb = existsSync(dbPath);
   checks.push({
-    name: "State File",
-    passed: hasState,
-    message: hasState ? "state.json exists" : "state.json not found",
-    fix: hasState ? undefined : 'Run goop_setup(action: "init")',
+    name: "State Database",
+    passed: hasDb,
+    message: hasDb ? "goopspec.db exists" : "goopspec.db not found",
+    fix: hasDb ? undefined : 'Run goop_setup(action: "init")',
   });
 
   // 3. State version
-  if (hasState) {
-    const state = safeReadJson<GoopState>(statePath(projectDir));
-    const correctVersion = state?.version === STATE_SCHEMA_VERSION;
+  if (hasDb) {
+    let schemaVersion: number | null = null;
+    try {
+      const db = new GoopSpecDB(dbPath);
+      schemaVersion = db.getSchemaVersion();
+      db.close();
+    } catch {
+      // DB unreadable — version stays null
+    }
+    const correctVersion = schemaVersion === CURRENT_SCHEMA_VERSION;
     checks.push({
       name: "State Version",
       passed: correctVersion,
       message: correctVersion
-        ? `v${STATE_SCHEMA_VERSION} (current)`
-        : `Expected v${STATE_SCHEMA_VERSION}, got v${state?.version ?? "unknown"}`,
+        ? `v${CURRENT_SCHEMA_VERSION} (current)`
+        : `Expected v${CURRENT_SCHEMA_VERSION}, got v${schemaVersion ?? "unknown"}`,
       fix: correctVersion ? undefined : 'Run goop_setup(action: "reset") to recreate',
     });
   }
@@ -467,16 +489,57 @@ export function verify(projectDir: string): VerifyResult {
 /** Get a summary of the current setup. */
 export function getStatus(projectDir: string): SetupStatusResult {
   const config = readConfig(projectDir);
-  const state = safeReadJson<GoopState>(statePath(projectDir));
+  const dbPath = getDbPath(projectDir);
+  const dbInfo = readStateFromDb(dbPath);
 
   return {
-    initialized: existsSync(goopDir(projectDir)) && existsSync(statePath(projectDir)),
-    projectName: config?.projectName ?? state?.activeWorkflowId,
+    initialized: existsSync(goopDir(projectDir)) && existsSync(dbPath),
+    projectName: config?.projectName ?? dbInfo.activeWorkflow ?? undefined,
     config,
-    stateVersion: state?.version ?? null,
-    activeWorkflow: state?.activeWorkflowId ?? null,
-    phase: state?.workflows?.[state?.activeWorkflowId ?? ""]?.phase ?? null,
+    stateVersion: dbInfo.stateVersion,
+    activeWorkflow: dbInfo.activeWorkflow,
+    phase: dbInfo.phase,
   };
+}
+
+/** Read state summary from GoopSpecDB without requiring a full StateManager. */
+function readStateFromDb(dbPath: string): {
+  stateVersion: number | null;
+  activeWorkflow: string | null;
+  phase: string | null;
+} {
+  if (!existsSync(dbPath)) {
+    return { stateVersion: null, activeWorkflow: null, phase: null };
+  }
+
+  let db: GoopSpecDB | null = null;
+  try {
+    db = new GoopSpecDB(dbPath);
+    const stateVersion = db.getSchemaVersion();
+
+    // Active workflow ID is stored in a special _meta row
+    const metaRow = db.getWorkflow("_meta");
+    const meta = metaRow
+      ? (JSON.parse(metaRow.state) as { activeWorkflowId?: string })
+      : null;
+    const activeWorkflow = meta?.activeWorkflowId ?? null;
+
+    // Phase of the active workflow
+    let phase: string | null = null;
+    if (activeWorkflow) {
+      const wfRow = db.getWorkflow(activeWorkflow);
+      if (wfRow) {
+        const wfState = JSON.parse(wfRow.state) as { phase?: string };
+        phase = wfState.phase ?? null;
+      }
+    }
+
+    return { stateVersion, activeWorkflow, phase };
+  } catch {
+    return { stateVersion: null, activeWorkflow: null, phase: null };
+  } finally {
+    db?.close();
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -506,10 +569,12 @@ export function reset(
       result.reset.push(configPath(projectDir));
     }
 
+    const dbFile = getDbPath(projectDir);
+
     if (opts.preserveData !== false) {
       // Preserve state and data, only reset config
-      if (existsSync(statePath(projectDir))) {
-        result.preserved.push(statePath(projectDir));
+      if (existsSync(dbFile)) {
+        result.preserved.push(dbFile);
       }
       const checkpointsDir = join(gd, "checkpoints");
       if (existsSync(checkpointsDir)) {
@@ -517,9 +582,13 @@ export function reset(
       }
     } else {
       // Full destructive reset
+      if (existsSync(dbFile)) {
+        rmSync(dbFile);
+        result.reset.push(dbFile);
+      }
+      // Also clean up legacy state.json if present
       if (existsSync(statePath(projectDir))) {
         rmSync(statePath(projectDir));
-        result.reset.push(statePath(projectDir));
       }
       const checkpointsDir = join(gd, "checkpoints");
       if (existsSync(checkpointsDir)) {

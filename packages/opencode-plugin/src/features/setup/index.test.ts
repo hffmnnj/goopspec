@@ -40,6 +40,8 @@ describe("setup feature", () => {
 
   describe("detect", () => {
     it("detects existing .goopspec directory", () => {
+      // init creates goopspec.db on disk
+      init(testDir, stateManager);
       const result = detect(testDir);
       expect(result.hasGoopspecDir).toBe(true);
       expect(result.hasStateFile).toBe(true);
@@ -339,7 +341,8 @@ describe("setup feature", () => {
     it("reads state version and active workflow", () => {
       init(testDir, stateManager);
       const status = getStatus(testDir);
-      expect(status.stateVersion).toBe(2);
+      // DB schema version is 1 (CURRENT_SCHEMA_VERSION from migrations.ts)
+      expect(status.stateVersion).toBe(1);
       expect(status.activeWorkflow).toBeDefined();
     });
   });
@@ -380,8 +383,8 @@ describe("setup feature", () => {
       const result = reset(testDir, { confirmed: true, preserveData: false });
       expect(result.success).toBe(true);
 
-      // State should be gone
-      expect(existsSync(join(testDir, ".goopspec", "state.json"))).toBe(false);
+      // State DB should be gone
+      expect(existsSync(join(testDir, ".goopspec", "goopspec.db"))).toBe(false);
     });
   });
 

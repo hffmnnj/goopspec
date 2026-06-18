@@ -233,7 +233,7 @@ describe("goop_setup tool", () => {
     it("destructive reset removes state", async () => {
       await exec({ action: "init", projectName: "destructive" });
       await exec({ action: "reset", confirmed: true, preserveData: false });
-      expect(existsSync(join(testDir, ".goopspec", "state.json"))).toBe(false);
+      expect(existsSync(join(testDir, ".goopspec", "goopspec.db"))).toBe(false);
     });
   });
 
