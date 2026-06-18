@@ -1,460 +1,207 @@
 /**
- * Tests for Slash Command Tool - Agent Spawning Feature
+ * Tests for the slashcommand tool.
+ *
+ * Verifies:
+ * - Known command returns its markdown content
+ * - Unknown command returns an error string listing available commands
+ * - Leading-slash tolerance (/goop-plan → goop-plan)
+ * - goop- prefix tolerance (plan → goop-plan)
+ * - No session side-effects (ctx is not mutated)
+ *
  * @module tools/slashcommand/index.test
  */
 
-import { describe, it, expect, beforeEach, afterEach } from "bun:test";
-import { createSlashcommandTool } from "./index.js";
-import { createResourceResolver } from "../../core/resolver.js";
-import { createStateManager } from "../../features/state-manager/manager.js";
+import { afterEach, beforeEach, describe, expect, it } from "bun:test";
+import { mkdirSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+
 import {
+  type PluginContext,
+  createMockPluginContext,
   createMockToolContext,
   setupTestEnvironment,
-  type PluginContext,
 } from "../../test-utils.js";
-import { writeFileSync, mkdirSync, existsSync } from "fs";
-import { join } from "path";
-import { createSession } from "../../features/session/index.js";
+import { createSlashcommandTool } from "./index.js";
 
-// Project root directory (where commands/ exists)
-const PROJECT_DIR = process.cwd();
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
 
-/**
- * Create a context using real resolver for the project
- */
-function createProjectContext(): PluginContext {
-  return {
-    input: {
-      client: {},
-      project: { name: "goopspec" },
-      directory: PROJECT_DIR,
-      worktree: PROJECT_DIR,
-      serverUrl: new URL("http://localhost:3000"),
-    },
-    config: {},
-    resolver: createResourceResolver(PROJECT_DIR),
-    stateManager: createStateManager(PROJECT_DIR, "goopspec"),
-  };
+/** Scaffold a temp commands dir with sample .md files and return a context. */
+function setupCommandsContext(testDir: string): {
+  ctx: PluginContext;
+  commandsDir: string;
+} {
+  const commandsDir = join(testDir, ".goopspec", "commands");
+  mkdirSync(commandsDir, { recursive: true });
+
+  writeFileSync(
+    join(commandsDir, "goop-plan.md"),
+    "# /goop-plan\n\nCreate specification and blueprint.\n",
+  );
+
+  writeFileSync(
+    join(commandsDir, "goop-status.md"),
+    "# /goop-status\n\nShow current workflow status.\n",
+  );
+
+  writeFileSync(
+    join(commandsDir, "goop-execute.md"),
+    "# /goop-execute\n\nBegin wave-based execution.\n",
+  );
+
+  const ctx = createMockPluginContext({ testDir });
+  return { ctx, commandsDir };
 }
 
-/**
- * Create a context with custom commands in test directory
- */
-function createCustomContext(testDir: string): PluginContext {
-  return {
-    input: {
-      client: {},
-      project: { name: "test-project" },
-      directory: testDir,
-      worktree: testDir,
-      serverUrl: new URL("http://localhost:3000"),
-    },
-    config: {},
-    resolver: createResourceResolver(testDir),
-    stateManager: createStateManager(testDir, "test-project"),
-  };
-}
+// ---------------------------------------------------------------------------
+// Tests
+// ---------------------------------------------------------------------------
 
 describe("slashcommand tool", () => {
-  describe("basic functionality (with real commands)", () => {
-    let ctx: PluginContext;
+  let testDir: string;
+  let cleanup: () => void;
+  let ctx: PluginContext;
 
-    beforeEach(() => {
-      ctx = createProjectContext();
-    });
-
-    it("returns command content for valid command", async () => {
-      const tool = createSlashcommandTool(ctx);
-      const result = await tool.execute(
-        { command: "goop-status" },
-        createMockToolContext()
-      );
-      
-      expect(result).toContain("/goop-status Command");
-      expect(result).toContain("Instructions");
-    });
-
-    it("suggests similar commands for typos", async () => {
-      const tool = createSlashcommandTool(ctx);
-      const result = await tool.execute(
-        { command: "goop-stat" },
-        createMockToolContext()
-      );
-      
-      expect(result).toContain("Did you mean");
-      expect(result).toContain("goop-status");
-    });
-
-    it("returns error for unknown command", async () => {
-      const tool = createSlashcommandTool(ctx);
-      const result = await tool.execute(
-        { command: "unknown-command-xyz" },
-        createMockToolContext()
-      );
-      
-      expect(result).toContain("not found");
-    });
+  beforeEach(() => {
+    const env = setupTestEnvironment("slashcommand-test");
+    testDir = env.testDir;
+    cleanup = env.cleanup;
+    ({ ctx } = setupCommandsContext(testDir));
   });
 
-  describe("agent spawning (with custom test commands)", () => {
-    let ctx: PluginContext;
-    let testDir: string;
-    let cleanup: () => void;
+  afterEach(() => cleanup());
 
-    beforeEach(() => {
-      const env = setupTestEnvironment("slashcommand-spawn-test");
-      cleanup = env.cleanup;
-      testDir = env.testDir;
-      
-      // Project overrides go in .goopspec/commands/ (not commands/)
-      const commandsDir = join(testDir, ".goopspec", "commands");
-      mkdirSync(commandsDir, { recursive: true });
-      
-      // Create a test command with spawn enabled
-      writeFileSync(
-        join(commandsDir, "test-spawn.md"),
-        `---
-name: test-spawn
-description: Test spawning agent
-agent: goop-executor
-spawn: true
----
-
-# Test Spawn Command
-
-This command should spawn an agent.
-`
-      );
-      
-      // Create a command without spawn
-      writeFileSync(
-        join(commandsDir, "test-no-spawn.md"),
-        `---
-name: test-no-spawn
-description: Test without spawning
-agent: goop-executor
----
-
-# Test No Spawn Command
-
-This command should NOT spawn an agent.
-`
-      );
-      
-      ctx = createCustomContext(testDir);
-    });
-
-    afterEach(() => cleanup());
-
-    it("includes task invocation for spawn commands", async () => {
-      const tool = createSlashcommandTool(ctx);
-      const result = await tool.execute(
-        { command: "test-spawn" },
-        createMockToolContext()
-      );
-      
-      expect(result).toContain("AUTOMATIC AGENT SPAWN");
-      expect(result).toContain("goop-executor");
-      expect(result).toContain("task({");
-      expect(result).toContain("subagent_type");
-    });
-
-    it("does not include task invocation without spawn flag", async () => {
-      const tool = createSlashcommandTool(ctx);
-      const result = await tool.execute(
-        { command: "test-no-spawn" },
-        createMockToolContext()
-      );
-      
-      expect(result).not.toContain("AUTOMATIC AGENT SPAWN");
-      expect(result).not.toContain("task({");
-    });
-
-    it("includes command arguments in spawn prompt", async () => {
-      const tool = createSlashcommandTool(ctx);
-      const result = await tool.execute(
-        { command: "test-spawn add dark mode to settings" },
-        createMockToolContext()
-      );
-      
-      expect(result).toContain("add dark mode to settings");
-    });
-  });
-
-  describe("immediate action extraction", () => {
-    let ctx: PluginContext;
-
-    beforeEach(() => {
-      ctx = createProjectContext();
-    });
-
-    it("extracts immediate action and puts it at the top", async () => {
-      const tool = createSlashcommandTool(ctx);
-      const result = await tool.execute(
-        { command: "goop-plan" },
-        createMockToolContext()
-      );
-      
-      // Should have MANDATORY section (extracted from STOP-AND-RETURN gate)
-      expect(result).toContain("MANDATORY: Execute Immediately");
-      expect(result).toContain("goop_state({ action: \"get\" })");
-      expect(result).toContain("Do NOT process any user message");
-      
-      // MANDATORY should appear before Full Instructions
-      const mandatoryIndex = result.indexOf("MANDATORY");
-      const instructionsIndex = result.indexOf("## Full Instructions");
-      expect(mandatoryIndex).toBeLessThan(instructionsIndex);
-    });
-
-    it("extracts immediate action from CRLF content", async () => {
-      const env = setupTestEnvironment("slashcommand-crlf-test");
-      try {
-        const commandsDir = join(env.testDir, ".goopspec", "commands");
-        mkdirSync(commandsDir, { recursive: true });
-
-        const crlfContent = [
-          "---",
-          "name: test-crlf",
-          "description: Test CRLF handling",
-          "---",
-          "",
-          "# Test CRLF Command",
-          "",
-          "## Immediate Action",
-          "",
-          "**Execute this:**",
-          "```",
-          'goop_state({ action: "get" })',
-          "```",
-          "",
-          "Rest of instructions.",
-        ].join("\r\n");
-
-        writeFileSync(join(commandsDir, "test-crlf.md"), crlfContent);
-
-        const crlfCtx = createCustomContext(env.testDir);
-        const tool = createSlashcommandTool(crlfCtx);
-        const result = await tool.execute(
-          { command: "test-crlf" },
-          createMockToolContext(),
-        );
-
-        expect(result).toContain("MANDATORY: Execute Immediately");
-        expect(result).toContain('goop_state({ action: "get" })');
-      } finally {
-        env.cleanup();
-      }
-    });
-  });
-
-  describe("real commands with spawn", () => {
-    let ctx: PluginContext;
-
-    beforeEach(() => {
-      ctx = createProjectContext();
-    });
-
-    it("goop-plan does NOT include spawn instruction (orchestrator-driven)", async () => {
-      // goop-plan is now orchestrator-driven: the orchestrator conducts the interview
-      // directly, then spawns agents only for document creation
-      const tool = createSlashcommandTool(ctx);
-      const result = await tool.execute(
-        { command: "goop-plan" },
-        createMockToolContext()
-      );
-      
-      expect(result).not.toContain("AUTOMATIC AGENT SPAWN");
-      expect(result).toContain("# /goop-plan Command");
-      expect(result).toContain("Create specification and blueprint");
-    });
-
-    it("goop-execute includes spawn instruction", async () => {
-      const tool = createSlashcommandTool(ctx);
-      const result = await tool.execute(
-        { command: "goop-execute" },
-        createMockToolContext()
-      );
-      
-      expect(result).not.toContain("AUTOMATIC AGENT SPAWN");
-      expect(result).toContain("goop-executor");
-    });
-
-    it("goop-research includes spawn instruction", async () => {
-      const tool = createSlashcommandTool(ctx);
-      const result = await tool.execute(
-        { command: "goop-research" },
-        createMockToolContext()
-      );
-      
-      expect(result).toContain("AUTOMATIC AGENT SPAWN");
-      expect(result).toContain("goop-researcher");
-    });
-    
-    it("goop-status does NOT include spawn instruction (no spawn flag)", async () => {
-      const tool = createSlashcommandTool(ctx);
-      const result = await tool.execute(
-        { command: "goop-status" },
-        createMockToolContext()
-      );
-      
-      expect(result).not.toContain("AUTOMATIC AGENT SPAWN");
-    });
-  });
-
-  describe("session context", () => {
-    let ctx: PluginContext;
-
-    beforeEach(() => {
-      ctx = createProjectContext();
-    });
-
-    it("includes active session context when bound", async () => {
-      ctx.sessionId = "feature-auth";
-
-      const tool = createSlashcommandTool(ctx);
-      const result = await tool.execute(
-        { command: "goop-status" },
-        createMockToolContext()
-      );
-
-      expect(result).toContain("Session Context");
-      expect(result).toContain("Active Session");
-      expect(result).toContain("feature-auth");
-    });
-
-    it("extracts requested session name for goop-discuss", async () => {
-      const tool = createSlashcommandTool(ctx);
-      const result = await tool.execute(
-        { command: "goop-discuss feat-auth" },
-        createMockToolContext()
-      );
-
-      expect(result).toContain("Session Context");
-      expect(result).toContain("Requested Session");
-      expect(result).toContain("feat-auth");
-    });
-  });
-
-  describe("session lifecycle side-effects", () => {
-    let ctx: PluginContext;
-    let testDir: string;
-    let cleanup: () => void;
-
-    beforeEach(() => {
-      const env = setupTestEnvironment("slashcommand-session-lifecycle");
-      cleanup = env.cleanup;
-      testDir = env.testDir;
-
-      const commandsDir = join(testDir, ".goopspec", "commands");
-      mkdirSync(commandsDir, { recursive: true });
-
-      writeFileSync(
-        join(commandsDir, "goop-discuss.md"),
-        `---
-name: goop-discuss
-description: Start discussion
-argument-hint: "[session-name]"
-phase: discuss
----
-
-# /goop-discuss
-
-Discuss command.
-`,
-      );
-
-      writeFileSync(
-        join(commandsDir, "goop-resume.md"),
-        `---
-name: goop-resume
-description: Resume workflow
----
-
-# /goop-resume
-
-Resume command.
-`,
-      );
-
-      writeFileSync(
-        join(commandsDir, "goop-plan.md"),
-        `---
-name: goop-plan
-description: Plan workflow
-phase: plan
----
-
-# /goop-plan
-
-Plan command.
-`,
-      );
-
-      ctx = createCustomContext(testDir);
-    });
-
-    afterEach(() => cleanup());
-
-    it("creates and binds session for /goop-discuss <name>", async () => {
-      const tool = createSlashcommandTool(ctx);
-      const result = await tool.execute(
-        { command: "goop-discuss feat-auth" },
-        createMockToolContext(),
-      );
-
-      expect(ctx.sessionId).toBe("feat-auth");
-      expect(result).toContain("Created and bound session: feat-auth");
-      expect(existsSync(join(testDir, ".goopspec", "sessions", "feat-auth"))).toBe(true);
-    });
-
-    it("binds existing session for /goop-discuss <name> when already created", async () => {
-      createSession(testDir, "feat-auth");
-
-      const tool = createSlashcommandTool(ctx);
-      const result = await tool.execute(
-        { command: "goop-discuss feat-auth" },
-        createMockToolContext(),
-      );
-
-      expect(ctx.sessionId).toBe("feat-auth");
-      expect(result).toContain("Bound existing session: feat-auth");
-    });
-
-    it("does not create session for /goop-discuss without name", async () => {
-      const tool = createSlashcommandTool(ctx);
-      await tool.execute({ command: "goop-discuss" }, createMockToolContext());
-
-      expect(ctx.sessionId).toBeUndefined();
-      expect(existsSync(join(testDir, ".goopspec", "sessions", "_active.json"))).toBe(false);
-    });
-
-    it("resolves and binds session for /goop-resume when sessions exist", async () => {
-      createSession(testDir, "feat-auth");
-
-      const tool = createSlashcommandTool(ctx);
-      const result = await tool.execute({ command: "goop-resume" }, createMockToolContext());
-
-      expect(ctx.sessionId).toBe("feat-auth");
-      expect(result).toContain("Resolved and bound session: feat-auth");
-    });
-
-    it("falls back normally for /goop-resume when no sessions exist", async () => {
-      const tool = createSlashcommandTool(ctx);
-      const result = await tool.execute({ command: "goop-resume" }, createMockToolContext());
-
-      expect(ctx.sessionId).toBeUndefined();
-      expect(result).not.toContain("Resolved and bound session:");
-      expect(result).toContain("# /goop-resume Command");
-    });
-
-    it("silently resolves and binds session for workflow commands with phase", async () => {
-      createSession(testDir, "feat-auth");
-
+  describe("known command resolution", () => {
+    it("returns markdown content for a known command", async () => {
       const tool = createSlashcommandTool(ctx);
       const result = await tool.execute({ command: "goop-plan" }, createMockToolContext());
 
-      expect(ctx.sessionId).toBe("feat-auth");
-      expect(result).toContain("Resolved session for workflow command: feat-auth");
+      expect(result).toContain("# /goop-plan");
+      expect(result).toContain("Create specification and blueprint");
+    });
+
+    it("returns content for goop-status", async () => {
+      const tool = createSlashcommandTool(ctx);
+      const result = await tool.execute({ command: "goop-status" }, createMockToolContext());
+
+      expect(result).toContain("# /goop-status");
+      expect(result).toContain("Show current workflow status");
+    });
+
+    it("returns content for goop-execute", async () => {
+      const tool = createSlashcommandTool(ctx);
+      const result = await tool.execute({ command: "goop-execute" }, createMockToolContext());
+
+      expect(result).toContain("# /goop-execute");
+    });
+  });
+
+  describe("leading-slash tolerance", () => {
+    it("strips leading slash: /goop-plan → goop-plan", async () => {
+      const tool = createSlashcommandTool(ctx);
+      const result = await tool.execute({ command: "/goop-plan" }, createMockToolContext());
+
+      expect(result).toContain("# /goop-plan");
+      expect(result).not.toContain("not found");
+    });
+
+    it("strips leading slash: /goop-status → goop-status", async () => {
+      const tool = createSlashcommandTool(ctx);
+      const result = await tool.execute({ command: "/goop-status" }, createMockToolContext());
+
+      expect(result).toContain("# /goop-status");
+    });
+  });
+
+  describe("goop- prefix tolerance", () => {
+    it("adds goop- prefix when missing: plan → goop-plan", async () => {
+      const tool = createSlashcommandTool(ctx);
+      const result = await tool.execute({ command: "plan" }, createMockToolContext());
+
+      expect(result).toContain("# /goop-plan");
+      expect(result).not.toContain("not found");
+    });
+
+    it("adds goop- prefix when missing: status → goop-status", async () => {
+      const tool = createSlashcommandTool(ctx);
+      const result = await tool.execute({ command: "status" }, createMockToolContext());
+
+      expect(result).toContain("# /goop-status");
+    });
+  });
+
+  describe("unknown command error", () => {
+    it("returns error string for unknown command", async () => {
+      const tool = createSlashcommandTool(ctx);
+      const result = await tool.execute(
+        { command: "goop-nonexistent-xyz" },
+        createMockToolContext(),
+      );
+
+      expect(result).toContain("not found");
+      expect(result).toContain("Available commands");
+    });
+
+    it("lists available commands in the error", async () => {
+      const tool = createSlashcommandTool(ctx);
+      const result = await tool.execute({ command: "goop-unknown" }, createMockToolContext());
+
+      // Should list the commands we created in the temp dir
+      expect(result).toContain("goop-plan");
+      expect(result).toContain("goop-status");
+    });
+
+    it("returns error for empty command string", async () => {
+      const tool = createSlashcommandTool(ctx);
+      const result = await tool.execute({ command: "" }, createMockToolContext());
+
+      expect(result).toContain("not found");
+      expect(result).toContain("Available commands");
+    });
+  });
+
+  describe("no session side-effects", () => {
+    it("does not mutate ctx after executing a known command", async () => {
+      const tool = createSlashcommandTool(ctx);
+      const stateBefore = JSON.stringify(ctx.stateManager.getState());
+
+      await tool.execute({ command: "goop-plan" }, createMockToolContext());
+
+      const stateAfter = JSON.stringify(ctx.stateManager.getState());
+      expect(stateAfter).toBe(stateBefore);
+    });
+
+    it("does not mutate ctx after executing an unknown command", async () => {
+      const tool = createSlashcommandTool(ctx);
+      const stateBefore = JSON.stringify(ctx.stateManager.getState());
+
+      await tool.execute({ command: "goop-unknown" }, createMockToolContext());
+
+      const stateAfter = JSON.stringify(ctx.stateManager.getState());
+      expect(stateAfter).toBe(stateBefore);
+    });
+
+    it("session info is unchanged after command execution", async () => {
+      const tool = createSlashcommandTool(ctx);
+      const sessionBefore = { ...ctx.session };
+
+      await tool.execute({ command: "/goop-plan" }, createMockToolContext());
+
+      expect(ctx.session.id).toBe(sessionBefore.id);
+      expect(ctx.session.agent).toBe(sessionBefore.agent);
+    });
+  });
+
+  describe("graceful error handling", () => {
+    it("never throws — returns error string on unexpected failure", async () => {
+      // Use a context pointing at a non-existent directory to force a read error
+      const badCtx = createMockPluginContext({ testDir: "/nonexistent/path/xyz" });
+      const tool = createSlashcommandTool(badCtx);
+
+      // Should not throw
+      const result = await tool.execute({ command: "goop-plan" }, createMockToolContext());
+      expect(typeof result).toBe("string");
     });
   });
 });

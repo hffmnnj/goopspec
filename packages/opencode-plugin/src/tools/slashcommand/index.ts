@@ -1,283 +1,170 @@
 /**
  * GoopSpec Slash Command Tool
- * Load and execute slash commands with automatic agent spawning
- * 
- * Commands with `spawn: true` and `agent: <name>` will trigger
- * automatic delegation to the specified agent.
- * 
+ *
+ * Resolves a GoopSpec slash command name to its markdown content from the
+ * `commands/` directory. Returns the raw markdown so the orchestrator can
+ * read and execute the workflow instructions.
+ *
+ * DESIGN INTENT (1.0.0):
+ * This tool is intentionally side-effect-free. It does NOT create sessions,
+ * bind workflows, or mutate any state. Those concerns belong to the session
+ * subsystem and the command-processor hook (Wave 5). Keeping this tool simple
+ * eliminates the stale-session-binding bug present in 0.2.x where the tool
+ * would silently bind to a stale workflow ID.
+ *
  * @module tools/slashcommand
  */
 
-import { tool, type ToolDefinition } from "@opencode-ai/plugin/tool";
-import type { PluginContext, CommandDefinition, ToolContext } from "../../core/types.js";
-import { log } from "../../shared/logger.js";
-import { createSession, resolveSession, setSession } from "../../features/session/index.js";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 
-function parseCommandInput(input: string): { name: string; args: string } {
-  const normalized = input.trim().replace(/^\//, "");
-  const [name = "", ...rest] = normalized.split(/\s+/);
-  return {
-    name: name.toLowerCase(),
-    args: rest.join(" ").trim(),
-  };
-}
+import { tool } from "../../core/sdk-compat.js";
+import type { ToolContext, ToolDefinition } from "../../core/sdk-compat.js";
+import type { PluginContext } from "../../core/types.js";
+
+// ---------------------------------------------------------------------------
+// Constants
+// ---------------------------------------------------------------------------
 
 /**
- * Build description with available commands
+ * The 9 kept commands for GoopSpec 1.0.0.
+ * Used to build the "available commands" list in error messages.
  */
-function buildDescription(ctx: PluginContext): string {
-  const commands = ctx.resolver.resolveAll("command");
-  
-  const commandList = commands
-    .map(c => {
-      const hint = c.frontmatter["argument-hint"] || "";
-      const desc = c.frontmatter.description || "";
-      return `- /${c.name}${hint ? ` ${hint}` : ""}: ${desc}`;
-    })
-    .join("\n");
-  
-  return `Execute a GoopSpec slash command. Available commands:\n\n${commandList}`;
-}
+const KEPT_COMMANDS = [
+  "goop-discuss",
+  "goop-plan",
+  "goop-execute",
+  "goop-accept",
+  "goop-quick",
+  "goop-status",
+  "goop-setup",
+  "goop-help",
+  "goop-amend",
+] as const;
+
+// ---------------------------------------------------------------------------
+// Path resolution
+// ---------------------------------------------------------------------------
 
 /**
- * Create the slashcommand tool
+ * Resolve the absolute path to the `commands/` directory.
+ *
+ * Strategy (in order):
+ * 1. `ctx.sdk.directory` — the project root where the plugin is running.
+ *    Commands may live at `<project>/.goopspec/commands/` (project overrides).
+ * 2. Package root — the `commands/` directory shipped with the plugin package.
+ *    Resolved relative to this source file: `../../commands/` from `src/tools/slashcommand/`.
+ *
+ * Returns the first directory that exists and contains `.md` files.
  */
+function resolveCommandsDir(projectDir: string): string {
+  // Check for project-local command overrides first
+  const projectOverride = join(projectDir, ".goopspec", "commands");
+  if (existsSync(projectOverride)) {
+    return projectOverride;
+  }
+
+  // Fall back to the package-bundled commands directory.
+  // __dirname equivalent for ESM: derive from import.meta.url
+  const thisFile = fileURLToPath(import.meta.url);
+  // src/tools/slashcommand/index.ts → ../../.. → package root → commands/
+  const packageRoot = join(thisFile, "..", "..", "..", "..");
+  return join(packageRoot, "commands");
+}
+
+// ---------------------------------------------------------------------------
+// Command name normalisation
+// ---------------------------------------------------------------------------
+
+/**
+ * Normalise a raw command input to a bare command name.
+ *
+ * Handles:
+ * - Leading `/` strip: `/goop-plan` → `goop-plan`
+ * - `goop-` prefix tolerance: `plan` → `goop-plan`
+ * - Trailing arguments are ignored (only the first token is used)
+ * - Case-insensitive
+ */
+function normaliseCommandName(input: string): string {
+  const token = input.trim().split(/\s+/)[0] ?? "";
+  const stripped = token.replace(/^\//, "").toLowerCase();
+
+  // If the user typed a bare name without the `goop-` prefix, add it.
+  if (!stripped.startsWith("goop-") && stripped.length > 0) {
+    return `goop-${stripped}`;
+  }
+
+  return stripped;
+}
+
+// ---------------------------------------------------------------------------
+// Command discovery
+// ---------------------------------------------------------------------------
+
+/**
+ * List all available command names from the commands directory.
+ * Returns bare names without the `.md` extension.
+ */
+function listAvailableCommands(commandsDir: string): string[] {
+  try {
+    if (!existsSync(commandsDir)) return [...KEPT_COMMANDS];
+    return readdirSync(commandsDir)
+      .filter((f) => f.endsWith(".md"))
+      .map((f) => f.slice(0, -3))
+      .sort();
+  } catch {
+    return [...KEPT_COMMANDS];
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Tool factory
+// ---------------------------------------------------------------------------
+
 export function createSlashcommandTool(ctx: PluginContext): ToolDefinition {
-  // Cache description
-  let cachedDescription: string | null = null;
-  
-  const getDescription = () => {
-    if (!cachedDescription) {
-      cachedDescription = buildDescription(ctx);
-    }
-    return cachedDescription;
-  };
-  
+  const availableList = KEPT_COMMANDS.map((c) => `/${c}`).join(", ");
   return tool({
-    get description() {
-      return getDescription();
-    },
+    description: `Execute a GoopSpec slash command. Resolves the command name to its markdown instructions from the commands/ directory and returns the content. Available commands: ${availableList}`,
     args: {
-      command: tool.schema.string(),
+      command: tool.schema
+        .string()
+        .describe(
+          'Command name to execute, e.g. "/goop-plan" or "goop-plan". Leading slash and goop- prefix are both optional.',
+        ),
     },
-    async execute(args, _context: ToolContext): Promise<string> {
-      const commands = ctx.resolver.resolveAll("command");
-      const parsedInput = parseCommandInput(args.command);
-      const cmdName = parsedInput.name;
-      const cmdArgs = parsedInput.args;
-      const requestedSessionName = cmdName === "goop-discuss" && cmdArgs ? cmdArgs.split(/\s+/)[0] : undefined;
-      const sessionOperationNotes: string[] = [];
-      
-      // Find matching command
-      const command = commands.find(
-        c => c.name.toLowerCase() === cmdName
-      );
-      
-      if (!command) {
-        // Try partial match
-        const partialMatches = commands.filter(
-          c => c.name.toLowerCase().includes(cmdName)
-        );
-        
-        if (partialMatches.length > 0) {
-          const suggestions = partialMatches.map(c => `/${c.name}`).join(", ");
-          return `Command "/${cmdName}" not found. Did you mean: ${suggestions}?`;
-        }
-        
-        const available = commands.map(c => `/${c.name}`).join(", ");
-        return `Command "/${cmdName}" not found.\n\nAvailable commands: ${available}`;
-      }
+    async execute(args: { command: string }, _context: ToolContext): Promise<string> {
+      try {
+        const commandsDir = resolveCommandsDir(ctx.sdk.directory);
+        const name = normaliseCommandName(args.command);
 
-      if (cmdName === "goop-discuss" && requestedSessionName) {
-        try {
-          createSession(ctx.input.directory, requestedSessionName);
-          setSession(ctx, requestedSessionName);
-          sessionOperationNotes.push(`- Created and bound session: ${requestedSessionName}`);
-        } catch (error) {
-          const message = error instanceof Error ? error.message : String(error);
-          if (message.includes("already exists") || message.includes("already exists for")) {
-            try {
-              setSession(ctx, requestedSessionName);
-              sessionOperationNotes.push(`- Bound existing session: ${requestedSessionName}`);
-            } catch (bindError) {
-              const bindMessage = bindError instanceof Error ? bindError.message : String(bindError);
-              return `Failed to bind session "${requestedSessionName}": ${bindMessage}`;
-            }
-          } else if (message.includes("Invalid session ID")) {
-            return `Invalid session name "${requestedSessionName}". Use kebab-case (2-50 chars, lowercase letters, numbers, and hyphens).`;
-          } else {
-            return `Failed to create session "${requestedSessionName}": ${message}`;
-          }
+        if (!name) {
+          const available = listAvailableCommands(commandsDir);
+          return buildUnknownCommandError("(empty)", available);
         }
-      } else if (cmdName === "goop-resume") {
-        const resolvedSessionId = await resolveSession(ctx);
-        if (resolvedSessionId) {
-          try {
-            setSession(ctx, resolvedSessionId);
-            sessionOperationNotes.push(`- Resolved and bound session: ${resolvedSessionId}`);
-          } catch (error) {
-            const message = error instanceof Error ? error.message : String(error);
-            return `Failed to bind resolved session "${resolvedSessionId}": ${message}`;
-          }
-        }
-      } else if (command.frontmatter.phase && !ctx.sessionId) {
-        const resolvedSessionId = await resolveSession(ctx, { silent: true });
-        if (resolvedSessionId) {
-          try {
-            setSession(ctx, resolvedSessionId);
-            sessionOperationNotes.push(`- Resolved session for workflow command: ${resolvedSessionId}`);
-          } catch (error) {
-            const message = error instanceof Error ? error.message : String(error);
-            return `Failed to bind resolved session "${resolvedSessionId}": ${message}`;
-          }
-        }
-      }
-      
-      // Build command output
-      const cmdDef: CommandDefinition = {
-        name: command.name,
-        description: command.frontmatter.description as string || "",
-        argumentHint: command.frontmatter["argument-hint"] as string | undefined,
-        model: command.frontmatter.model as string | undefined,
-        agent: command.frontmatter.agent as string | undefined,
-        content: command.body,
-      };
-      
-      // Check if command should spawn an agent
-      const shouldSpawn = command.frontmatter.spawn === true;
-      const spawnAgent = cmdDef.agent;
-      
-      // Check for immediate action in command content (supports both legacy ## Immediate Action and ### STOP-AND-RETURN)
-      const immediateActionMatch = cmdDef.content.match(/(?:## Immediate Action|### STOP-AND-RETURN)[\s\S]*?```\r?\n([\s\S]*?)\r?\n```/);
-      const immediateAction = immediateActionMatch ? immediateActionMatch[1].trim() : null;
-      
-      const lines = [
-        `# /${cmdDef.name} Command`,
-        "",
-      ];
-      
-      // Add MANDATORY EXECUTION NOTICE at the very top
-      if (immediateAction) {
-        lines.push("## ⚠️ MANDATORY: Execute Immediately");
-        lines.push("");
-        lines.push("**Before reading anything else, execute this tool call:**");
-        lines.push("");
-        lines.push("```");
-        lines.push(immediateAction);
-        lines.push("```");
-        lines.push("");
-        lines.push("**Do NOT process any user message until you have executed the above.**");
-        lines.push("");
-        lines.push("---");
-        lines.push("");
-      }
-      
-      if (cmdDef.description) {
-        lines.push(`**Description:** ${cmdDef.description}`, "");
-      }
-      
-      if (cmdDef.argumentHint) {
-        lines.push(`**Usage:** /${cmdDef.name} ${cmdDef.argumentHint}`, "");
-      }
-      
-      if (cmdDef.model) {
-        lines.push(`**Model:** ${cmdDef.model}`, "");
-      }
-      
-      if (cmdDef.agent) {
-        lines.push(`**Agent:** ${cmdDef.agent}`, "");
-      }
 
-      if (ctx.sessionId || requestedSessionName) {
-        lines.push("## Session Context", "");
-        for (const note of sessionOperationNotes) {
-          lines.push(note);
+        const filePath = join(commandsDir, `${name}.md`);
+
+        if (!existsSync(filePath)) {
+          const available = listAvailableCommands(commandsDir);
+          return buildUnknownCommandError(name, available);
         }
-        if (sessionOperationNotes.length > 0) {
-          lines.push("");
-        }
-        if (ctx.sessionId) {
-          lines.push(`- **Active Session:** ${ctx.sessionId}`);
-        }
-        if (requestedSessionName) {
-          lines.push(`- **Requested Session:** ${requestedSessionName}`);
-        }
-        lines.push("");
+
+        const content = readFileSync(filePath, "utf-8");
+        return content;
+      } catch (error: unknown) {
+        const msg = error instanceof Error ? error.message : String(error);
+        return `Error resolving command "${args.command}": ${msg}`;
       }
-      
-      lines.push("---", "", "## Full Instructions", "", cmdDef.content);
-      
-      // Add Next Steps section from frontmatter
-      const nextStep = command.frontmatter["next-step"] as string | undefined;
-      const nextCommand = command.frontmatter["next-command"] as string | undefined;
-      const alternatives = command.frontmatter["alternatives"] as Array<{command: string; when: string}> | undefined;
-      
-      if (nextStep || nextCommand || alternatives) {
-        lines.push("");
-        lines.push("---");
-        lines.push("");
-        lines.push("## ➡️ Next Steps");
-        lines.push("");
-        
-        if (nextStep && nextCommand) {
-          lines.push(`**When this phase is complete:** ${nextStep}`);
-          lines.push("");
-          lines.push(`👉 Run \`${nextCommand}\` to proceed`);
-          lines.push("");
-        }
-        
-        if (alternatives && alternatives.length > 0) {
-          lines.push("**Alternatives:**");
-          for (const alt of alternatives) {
-            lines.push(`- \`${alt.command}\` - ${alt.when}`);
-          }
-          lines.push("");
-        }
-      }
-      
-      // If command should spawn agent, append task invocation
-      if (shouldSpawn && spawnAgent) {
-        log("Slash command triggers agent spawn", {
-          command: cmdDef.name,
-          agent: spawnAgent,
-        });
-        
-        lines.push("");
-        lines.push("---");
-        lines.push("");
-        lines.push("## 🚀 AUTOMATIC AGENT SPAWN");
-        lines.push("");
-        lines.push(`This command spawns the **${spawnAgent}** agent to handle the work.`);
-        lines.push("");
-        lines.push("**Execute immediately:**");
-        lines.push("");
-        lines.push("```");
-        lines.push("task({");
-        lines.push(`  subagent_type: "${spawnAgent}",`);
-        lines.push(`  description: "${cmdDef.description}",`);
-        lines.push("  prompt: `");
-        lines.push(`    Execute /${cmdDef.name}${cmdArgs ? ` for: ${cmdArgs}` : ""}`);
-        lines.push("");
-        lines.push("    Context:");
-        lines.push("    - Read .goopspec/SPEC.md if it exists");
-        lines.push("    - Read .goopspec/BLUEPRINT.md if it exists");
-        lines.push("    - Search memory for relevant context");
-        if (ctx.sessionId) {
-          lines.push(`    - Active session is ${ctx.sessionId}; use session-scoped .goopspec paths`);
-        }
-        if (requestedSessionName) {
-          lines.push(`    - /goop-discuss requested session name: ${requestedSessionName}`);
-        }
-        lines.push("");
-        lines.push("    Follow the instructions above and return a structured response.");
-        lines.push("  `");
-        lines.push("})");
-        lines.push("```");
-        lines.push("");
-        lines.push("**Do not skip this step.** The command requires agent execution.");
-      }
-      
-      return lines.join("\n");
     },
   });
+}
+
+// ---------------------------------------------------------------------------
+// Error formatting
+// ---------------------------------------------------------------------------
+
+function buildUnknownCommandError(name: string, available: string[]): string {
+  const list = available.map((c) => `  - /${c}`).join("\n");
+  return `Command "/${name}" not found.\n\nAvailable commands:\n${list}\n\nUsage: pass the command name with or without the leading slash, e.g. "goop-plan" or "/goop-plan".`;
 }

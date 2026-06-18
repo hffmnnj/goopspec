@@ -6,7 +6,7 @@
 
 **Stop the AI chaos. Ship what you actually want.**
 
-[![Version](https://img.shields.io/badge/version-0.2.9-blue?style=for-the-badge)](https://github.com/hffmnnj/opencode-goopspec)
+[![Version](https://img.shields.io/badge/version-1.0.0-blue?style=for-the-badge)](https://github.com/hffmnnj/opencode-goopspec)
 [![Bun](https://img.shields.io/badge/Bun-1.0+-f97316?style=for-the-badge&logo=bun&logoColor=white)](https://bun.sh)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.8-3178c6?style=for-the-badge&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
 [![Tests](https://img.shields.io/badge/tests-1660%20passing-22c55e?style=for-the-badge)](./TEST-SUMMARY.md)
@@ -614,30 +614,20 @@ bun run build
 
 ```
 goopspec/
-├── agents/           # Agent markdown definitions
-├── commands/         # Command markdown definitions
-├── references/       # Reference documentation
-├── skills/           # Loadable skill modules
-├── templates/        # File templates
-└── src/
-    ├── agents/       # Agent factory
-    ├── cli/          # Standalone CLI (goopspec command)
-    │   └── commands/ # CLI subcommands (init, models, memory, etc.)
-    ├── core/         # Core types and config
-    ├── features/     # Feature modules
-    │   ├── archive/
-    │   ├── enforcement/
-    │   ├── memory/
-    │   ├── mode-detection/
-    │   ├── parallel-research/
-    │   ├── routing/
-    │   ├── setup/
-    │   ├── state-manager/
-    │   └── workflow-memory/
-    ├── hooks/        # OpenCode hooks
-    ├── plugin-handlers/
-    ├── shared/       # Utilities
-    └── tools/        # MCP tools
+├── packages/
+│   └── opencode-plugin/    # @goopspec/opencode-plugin
+│       ├── agents/         # Agent markdown definitions
+│       ├── commands/       # Command markdown definitions
+│       ├── references/     # Reference documentation
+│       ├── templates/      # File templates
+│       └── src/
+│           ├── core/       # Types, config, context
+│           ├── features/   # Feature modules
+│           ├── hooks/      # OpenCode hooks
+│           ├── shared/     # Utilities
+│           └── tools/      # MCP tools
+├── scripts/                # Version bump, test count
+└── .github/                # CI workflows, issue templates
 ```
 
 ---
@@ -652,8 +642,7 @@ MIT License. See [LICENSE](./LICENSE) for details.
 
 GoopSpec builds on ideas from:
 - [OpenCode](https://opencode.ai) - The AI coding assistant platform
-- GSD (Get Stuff Done) - Structured task execution patterns
-- oh-my-opencode - Plugin architecture patterns
+- Structured task execution and spec-driven development patterns
 
 ---
 

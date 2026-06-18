@@ -1,257 +1,367 @@
-/**
- * Tests for goop_reference tool
- */
-
-import { describe, it, expect, beforeEach, afterEach } from "bun:test";
-import { createGoopReferenceTool } from "./index.js";
+import { afterEach, beforeEach, describe, expect, it } from "bun:test";
+import type { ResolvedResource } from "../../core/types.js";
 import {
+  type PluginContext,
   createMockPluginContext,
   createMockToolContext,
-  createMockResource,
   setupTestEnvironment,
 } from "../../test-utils.js";
-import type { PluginContext, ResolvedResource } from "../../core/types.js";
+import { createGoopReferenceTool } from "./index.js";
+
+// ---------------------------------------------------------------------------
+// Seed data
+// ---------------------------------------------------------------------------
+
+const SAMPLE_REFERENCES: ResolvedResource[] = [
+  {
+    name: "executor-core",
+    type: "reference",
+    content: [
+      "# Executor Core Protocol",
+      "",
+      "## Scope",
+      "",
+      "Use this reference for all code implementation tasks.",
+      "",
+      "## Commit Format",
+      "",
+      "Use `type(scope): description` format.",
+      "",
+      "## Anti-Patterns",
+      "",
+      "Never start without loading state.",
+    ].join("\n"),
+  },
+  {
+    name: "git-workflow",
+    type: "reference",
+    content: [
+      "# Git Workflow",
+      "",
+      "## Branch Naming",
+      "",
+      "Format: `type/short-description`",
+      "",
+      "## Commit Messages",
+      "",
+      "Follow conventional commits.",
+    ].join("\n"),
+  },
+  {
+    name: "deviation-rules",
+    type: "reference",
+    content: [
+      "# Deviation Rules",
+      "",
+      "## Rule 1: Bugs",
+      "",
+      "Fix immediately without asking.",
+      "",
+      "## Rule 4: Architectural Changes",
+      "",
+      "STOP and ask user.",
+    ].join("\n"),
+  },
+  {
+    name: "agent-prompt",
+    type: "template",
+    content: "# Agent Prompt Template\n\nYou are a {{role}} agent.",
+  },
+];
+
+// ---------------------------------------------------------------------------
+// Test suite
+// ---------------------------------------------------------------------------
 
 describe("goop_reference tool", () => {
   let ctx: PluginContext;
   let cleanup: () => void;
-  let testDir: string;
-
-  const testReference: ResolvedResource = createMockResource({
-    name: "test-protocol",
-    type: "reference",
-    frontmatter: {
-      name: "test-protocol",
-      description: "A test protocol for unit testing",
-      category: "testing",
-    },
-    body: `# Test Protocol
-
-## Overview
-This is a test protocol.
-
-## Steps
-1. Step one
-2. Step two
-
-## Verification
-Check that it works.`,
-  });
-
-  const securityReference: ResolvedResource = createMockResource({
-    name: "security-checklist",
-    type: "reference",
-    frontmatter: {
-      name: "security-checklist",
-      description: "Security verification checklist",
-    },
-    body: `# Security Checklist
-
-## Authentication
-- [ ] Passwords hashed
-- [ ] Sessions secure
-
-## Authorization
-- [ ] Routes protected
-- [ ] Data access controlled`,
-  });
-
-  const specTemplate: ResolvedResource = createMockResource({
-    name: "spec",
-    type: "template",
-    frontmatter: {
-      name: "spec",
-      description: "SPEC.md template for requirements",
-    },
-    body: `# SPEC: [Feature Name]
-
-## Must Haves
-- [ ] Requirement 1
-- [ ] Requirement 2
-
-## Should Haves
-- [ ] Nice to have 1
-
-## Out of Scope
-- Not doing X`,
-  });
 
   beforeEach(() => {
-    const env = setupTestEnvironment("goop-reference");
+    const env = setupTestEnvironment("goop-reference-test");
     cleanup = env.cleanup;
-    testDir = env.testDir;
-    
     ctx = createMockPluginContext({
-      testDir,
-      resources: [testReference, securityReference, specTemplate],
+      testDir: env.testDir,
+      resources: SAMPLE_REFERENCES,
     });
   });
 
-  afterEach(() => {
-    cleanup();
-  });
+  afterEach(() => cleanup());
 
-  describe("list mode", () => {
-    it("lists all references and templates when called with list: true", async () => {
-      const tool = createGoopReferenceTool(ctx);
-      const result = await tool.execute({ list: true }, createMockToolContext());
-      
-      expect(result).toContain("Available References");
-      expect(result).toContain("test-protocol");
-      expect(result).toContain("security-checklist");
-      expect(result).toContain("Available Templates");
-      expect(result).toContain("spec");
-    });
+  // -------------------------------------------------------------------------
+  // Single-load
+  // -------------------------------------------------------------------------
 
-    it("lists only references when type is 'reference'", async () => {
-      const tool = createGoopReferenceTool(ctx);
-      const result = await tool.execute({ list: true, type: "reference" }, createMockToolContext());
-      
-      expect(result).toContain("Available References");
-      expect(result).toContain("test-protocol");
-      expect(result).not.toContain("Available Templates");
-    });
-
-    it("lists only templates when type is 'template'", async () => {
-      const tool = createGoopReferenceTool(ctx);
-      const result = await tool.execute({ list: true, type: "template" }, createMockToolContext());
-      
-      expect(result).toContain("Available Templates");
-      expect(result).toContain("spec");
-      expect(result).not.toContain("Available References");
-    });
-
-    it("shows list when no arguments provided", async () => {
-      const tool = createGoopReferenceTool(ctx);
-      const result = await tool.execute({}, createMockToolContext());
-      
-      expect(result).toContain("Available");
-    });
-
-    it("shows descriptions in list", async () => {
-      const tool = createGoopReferenceTool(ctx);
-      const result = await tool.execute({ list: true }, createMockToolContext());
-      
-      expect(result).toContain("A test protocol");
-      expect(result).toContain("SPEC.md template");
-    });
-  });
-
-  describe("load specific resource", () => {
+  describe("single-load", () => {
     it("loads a reference by name", async () => {
       const tool = createGoopReferenceTool(ctx);
-      const result = await tool.execute({ name: "test-protocol" }, createMockToolContext());
-      
-      expect(result).toContain("Reference: test-protocol");
-      expect(result).toContain("A test protocol");
-      expect(result).toContain("Step one");
-      expect(result).toContain("Step two");
+      const result = await tool.execute({ name: "executor-core" }, createMockToolContext());
+
+      expect(result).toContain("## Reference: executor-core");
+      expect(result).toContain("Executor Core Protocol");
+      expect(result).toContain("**Type:** reference");
     });
 
-    it("loads a template by name", async () => {
+    it("loads a template by name and type", async () => {
       const tool = createGoopReferenceTool(ctx);
-      const result = await tool.execute({ name: "spec" }, createMockToolContext());
-      
-      expect(result).toContain("Template: spec");
-      expect(result).toContain("Must Haves");
-      expect(result).toContain("Should Haves");
+      const result = await tool.execute(
+        { name: "agent-prompt", type: "template" },
+        createMockToolContext(),
+      );
+
+      expect(result).toContain("## Reference: agent-prompt");
+      expect(result).toContain("**Type:** template");
+      expect(result).toContain("Agent Prompt Template");
     });
 
-    it("returns error for non-existent resource", async () => {
+    it("falls back to other type when primary type misses", async () => {
+      const tool = createGoopReferenceTool(ctx);
+      // Request as reference, but it's a template — should fallback
+      const result = await tool.execute({ name: "agent-prompt" }, createMockToolContext());
+
+      expect(result).toContain("Agent Prompt Template");
+    });
+
+    it("returns not-found message for unknown name", async () => {
       const tool = createGoopReferenceTool(ctx);
       const result = await tool.execute({ name: "nonexistent" }, createMockToolContext());
-      
-      expect(result).toContain("not found");
-      expect(result).toContain("Available references");
-    });
 
-    it("shows metadata when loading", async () => {
-      const tool = createGoopReferenceTool(ctx);
-      const result = await tool.execute({ name: "test-protocol" }, createMockToolContext());
-      
-      expect(result).toContain("**Description:**");
-      expect(result).toContain("**Category:**");
-      expect(result).toContain("testing");
+      expect(result).toContain("not found");
+      expect(result).toContain("list: true");
     });
   });
+
+  // -------------------------------------------------------------------------
+  // Multi-load (MH10)
+  // -------------------------------------------------------------------------
+
+  describe("multi-load (MH10)", () => {
+    it("loads multiple references in one call", async () => {
+      const tool = createGoopReferenceTool(ctx);
+      const result = await tool.execute(
+        { names: ["executor-core", "git-workflow"] },
+        createMockToolContext(),
+      );
+
+      expect(result).toContain("## Reference: executor-core");
+      expect(result).toContain("Executor Core Protocol");
+      expect(result).toContain("## Reference: git-workflow");
+      expect(result).toContain("Git Workflow");
+    });
+
+    it("loads three references with separator between them", async () => {
+      const tool = createGoopReferenceTool(ctx);
+      const result = await tool.execute(
+        { names: ["executor-core", "git-workflow", "deviation-rules"] },
+        createMockToolContext(),
+      );
+
+      expect(result).toContain("## Reference: executor-core");
+      expect(result).toContain("## Reference: git-workflow");
+      expect(result).toContain("## Reference: deviation-rules");
+      // Sections are separated by ---
+      const separatorCount = (result.match(/\n---\n/g) ?? []).length;
+      expect(separatorCount).toBe(2);
+    });
+
+    it("reports not-found names alongside found ones", async () => {
+      const tool = createGoopReferenceTool(ctx);
+      const result = await tool.execute(
+        { names: ["executor-core", "nonexistent-ref", "git-workflow"] },
+        createMockToolContext(),
+      );
+
+      expect(result).toContain("## Reference: executor-core");
+      expect(result).toContain("## Reference: git-workflow");
+      expect(result).toContain("## Not Found");
+      expect(result).toContain("`nonexistent-ref`");
+    });
+
+    it("returns all-not-found message when none resolve", async () => {
+      const tool = createGoopReferenceTool(ctx);
+      const result = await tool.execute({ names: ["fake-a", "fake-b"] }, createMockToolContext());
+
+      expect(result).toContain("Not Found");
+      expect(result).toContain("`fake-a`");
+      expect(result).toContain("`fake-b`");
+    });
+
+    it("handles empty names array gracefully", async () => {
+      const tool = createGoopReferenceTool(ctx);
+      // Empty array should fall through to help text
+      const result = await tool.execute({ names: [] }, createMockToolContext());
+
+      expect(result).toContain("goop_reference");
+    });
+
+    it("applies section extraction to multi-load", async () => {
+      const tool = createGoopReferenceTool(ctx);
+      const result = await tool.execute(
+        { names: ["executor-core", "git-workflow"], section: "Commit Format" },
+        createMockToolContext(),
+      );
+
+      // executor-core has "Commit Format" section
+      expect(result).toContain("## Commit Format");
+      expect(result).toContain("type(scope): description");
+
+      // git-workflow does NOT have "Commit Format" — should show full content with note
+      expect(result).toContain('Section "Commit Format" not found in git-workflow');
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // List mode
+  // -------------------------------------------------------------------------
+
+  describe("list mode", () => {
+    it("lists all references and templates", async () => {
+      const tool = createGoopReferenceTool(ctx);
+      const result = await tool.execute({ list: true }, createMockToolContext());
+
+      expect(result).toContain("## Available references");
+      expect(result).toContain("- executor-core");
+      expect(result).toContain("- git-workflow");
+      expect(result).toContain("- deviation-rules");
+      expect(result).toContain("## Available templates");
+      expect(result).toContain("- agent-prompt");
+    });
+
+    it("lists only references when type filter is applied", async () => {
+      const tool = createGoopReferenceTool(ctx);
+      const result = await tool.execute({ list: true, type: "reference" }, createMockToolContext());
+
+      expect(result).toContain("## Available references");
+      expect(result).toContain("- executor-core");
+      expect(result).not.toContain("agent-prompt");
+    });
+
+    it("lists only templates when type filter is applied", async () => {
+      const tool = createGoopReferenceTool(ctx);
+      const result = await tool.execute({ list: true, type: "template" }, createMockToolContext());
+
+      expect(result).toContain("## Available templates");
+      expect(result).toContain("- agent-prompt");
+      expect(result).not.toContain("executor-core");
+    });
+
+    it("returns empty message when no resources of type exist", async () => {
+      const emptyCtx = createMockPluginContext({
+        resources: [],
+      });
+      const tool = createGoopReferenceTool(emptyCtx);
+      const result = await tool.execute({ list: true, type: "template" }, createMockToolContext());
+
+      expect(result).toContain("No templates found");
+    });
+
+    it("returns empty message when no resources exist at all", async () => {
+      const emptyCtx = createMockPluginContext({
+        resources: [],
+      });
+      const tool = createGoopReferenceTool(emptyCtx);
+      const result = await tool.execute({ list: true }, createMockToolContext());
+
+      expect(result).toContain("No references or templates found");
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // Section extraction
+  // -------------------------------------------------------------------------
 
   describe("section extraction", () => {
     it("extracts a specific section from a reference", async () => {
       const tool = createGoopReferenceTool(ctx);
       const result = await tool.execute(
-        { name: "test-protocol", section: "Steps" },
-        createMockToolContext()
+        { name: "executor-core", section: "Scope" },
+        createMockToolContext(),
       );
-      
-      expect(result).toContain("Steps");
-      expect(result).toContain("Step one");
-      expect(result).toContain("Step two");
+
+      expect(result).toContain("## Scope");
+      expect(result).toContain("Use this reference for all code implementation tasks.");
+      // Should NOT contain content from other sections
+      expect(result).not.toContain("## Anti-Patterns");
     });
 
-    it("extracts a section from a template", async () => {
+    it("extracts last section correctly", async () => {
       const tool = createGoopReferenceTool(ctx);
       const result = await tool.execute(
-        { name: "spec", section: "Must Haves" },
-        createMockToolContext()
+        { name: "executor-core", section: "Anti-Patterns" },
+        createMockToolContext(),
       );
-      
-      expect(result).toContain("Must Haves");
-      expect(result).toContain("Requirement 1");
+
+      expect(result).toContain("## Anti-Patterns");
+      expect(result).toContain("Never start without loading state.");
     });
 
-    it("returns error for non-existent section", async () => {
+    it("returns full content with note when section not found", async () => {
       const tool = createGoopReferenceTool(ctx);
       const result = await tool.execute(
-        { name: "test-protocol", section: "NonExistent" },
-        createMockToolContext()
+        { name: "executor-core", section: "Nonexistent Section" },
+        createMockToolContext(),
       );
-      
-      expect(result).toContain("not found");
+
+      expect(result).toContain('Section "Nonexistent Section" not found');
+      expect(result).toContain("Executor Core Protocol");
+    });
+
+    it("section matching is case-insensitive", async () => {
+      const tool = createGoopReferenceTool(ctx);
+      const result = await tool.execute(
+        { name: "executor-core", section: "scope" },
+        createMockToolContext(),
+      );
+
+      expect(result).toContain("## Scope");
+      expect(result).toContain("Use this reference for all code implementation tasks.");
     });
   });
 
-  describe("type filtering", () => {
-    it("respects type filter when loading", async () => {
+  // -------------------------------------------------------------------------
+  // Edge cases & error handling
+  // -------------------------------------------------------------------------
+
+  describe("edge cases", () => {
+    it("shows help when no arguments provided", async () => {
       const tool = createGoopReferenceTool(ctx);
-      
-      // Should find reference
-      const refResult = await tool.execute(
-        { name: "test-protocol", type: "reference" },
-        createMockToolContext()
-      );
-      expect(refResult).toContain("Reference: test-protocol");
-      
-      // Should find template
-      const tmplResult = await tool.execute(
-        { name: "spec", type: "template" },
-        createMockToolContext()
-      );
-      expect(tmplResult).toContain("Template: spec");
+      const result = await tool.execute({}, createMockToolContext());
+
+      expect(result).toContain("goop_reference");
+      expect(result).toContain("Usage");
     });
 
-    it("returns not found when type doesn't match", async () => {
-      const tool = createGoopReferenceTool(ctx);
-      
-      // Reference with template type should not find
-      const result = await tool.execute(
-        { name: "test-protocol", type: "template" },
-        createMockToolContext()
-      );
-      expect(result).toContain("not found");
-    });
-  });
+    it("never throws from execute", async () => {
+      // Create a context with a resolver that throws
+      const brokenCtx: PluginContext = {
+        ...ctx,
+        resolver: {
+          resolve: () => {
+            throw new Error("resolver exploded");
+          },
+          resolveMany: () => {
+            throw new Error("resolver exploded");
+          },
+          resolveAll: () => {
+            throw new Error("resolver exploded");
+          },
+          listNames: () => {
+            throw new Error("resolver exploded");
+          },
+        },
+      };
 
-  describe("empty state", () => {
-    it("handles no resources gracefully", async () => {
-      const emptyCtx = createMockPluginContext({
-        testDir,
-        resources: [],
-      });
-      
-      const tool = createGoopReferenceTool(emptyCtx);
-      const result = await tool.execute({ list: true }, createMockToolContext());
-      
-      expect(result).toContain("No references or templates found");
+      const tool = createGoopReferenceTool(brokenCtx);
+      const result = await tool.execute({ name: "anything" }, createMockToolContext());
+
+      expect(result).toContain("Error loading reference");
+      expect(result).toContain("resolver exploded");
+    });
+
+    it("has a description", () => {
+      const tool = createGoopReferenceTool(ctx);
+      expect(tool.description).toBeTruthy();
+      expect(tool.description).toContain("multi");
     });
   });
 });

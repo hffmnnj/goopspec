@@ -1,82 +1,44 @@
 ---
 name: goop-quick
-description: Fast-track a small task
+description: Fast-track a small, well-defined task
+agent: orchestrator
 phase: quick
-next-step: "After verification, confirm completion with the user"
-next-command: null
+next-step: "Confirm completion with the user"
 ---
 
 # /goop-quick
 
-**Execute small tasks fast.** Abbreviated workflow for simple changes.
+Run a small task without a full discovery/spec contract. Use only when the task is truly small and safe.
 
-## Usage
+## Load references
 
-```bash
-/goop-quick [task description]
+```
+goop_reference({ name: "phase-gates" })
+goop_reference({ name: "core-protocol" })
 ```
 
-### Load Process
+## Qualify
 
-**Execute this tool call NOW before reading anything else:**
-```
-goop_state({ action: "get" })
-```
+Quick mode is appropriate when the task is:
 
-**Then load:** `goop_reference({ name: "quick-process" })`
+- A single file, or at most 3 tightly coupled files.
+- Clear, unambiguous intent.
+- No architectural decisions.
+- Estimated under 30 minutes.
+- No new dependencies.
 
-## Quick Summary
+If it does not qualify, switch to `/goop-discuss`.
 
-**Bypass formal planning for small, well-defined tasks.** Still maintains safety guarantees.
+## Steps
 
-### Tools Used
+1. Capture one-line intent and one success criterion.
+2. Log the bypass decision to `ADL.md` via `goop_adl`.
+3. Delegate to the appropriate executor tier.
+4. Create an atomic commit.
+5. Verify the fix.
+6. Ask the user to confirm completion.
 
-| Tool | Purpose |
-|------|---------|
-| `goop_status` | Check current state |
-| `goop_state` | Set quick mode (NEVER edit state.json directly) |
-| `memory_search` | Find relevant prior context |
-| `memory_save` | Persist any discoveries |
-| `goop_adl` | Log the quick fix decision |
-| `goop_reference` | Load detailed process |
+## Anti-patterns
 
-### Process Overview
-
-1. **Qualify** — Verify task is truly "quick" (single concern, known location)
-2. **Capture** — One-line plan, one success criterion
-3. **Execute** — Implement with atomic commit
-4. **Verify** — Confirm fix works, ask user to accept
-
-### Quick Criteria
-
-Quick mode works best for tasks that are:
-- Single file OR tightly coupled files (max 3)
-- Clear, unambiguous intent
-- No architectural decisions required
-- Estimated < 15 minutes of work
-- No new dependencies needed
-
-## Output
-
-| File | Purpose |
-|------|---------|
-| Source files | Implementation |
-| Commit | Atomic change |
-| `.goopspec/ADL.md` | Quick fix logged |
-
-## Success Criteria
-
-- [ ] Intent captured in one sentence
-- [ ] Success criterion defined before execution
-- [ ] Atomic commit created
-- [ ] Fix verified working
-- [ ] User confirmed acceptance
-
-## Anti-Patterns
-
-**DON'T:** Skip verification, skip the ADL log entry
-**DO:** Verify before declaring done, document in ADL, keep changes focused
-
----
-
-*Load `goop_reference({ name: "quick-process" })` for full process details.*
+- Use quick mode for ambiguous or multi-wave work.
+- Skip verification or the ADL log.

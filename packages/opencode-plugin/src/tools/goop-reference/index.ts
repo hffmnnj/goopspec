@@ -1,204 +1,180 @@
 /**
- * GoopSpec Reference Tool
- * Load references and templates for injection into agent context
- * 
- * References provide specialized knowledge (protocols, checklists, patterns)
- * Templates provide standardized document structures (SPEC.md, BLUEPRINT.md, etc.)
- * 
- * @module tools/goop-reference
+ * goop_reference — Load reference documents and templates.
+ *
+ * Supports single-name, multi-name (MH10), listing, type filtering,
+ * and section extraction. Multi-reference loading reduces tool-call
+ * count by returning multiple documents in one response.
  */
 
-import { tool, type ToolDefinition } from "@opencode-ai/plugin/tool";
-import type { PluginContext, ResolvedResource, ToolContext } from "../../core/types.js";
-import { GOOPSPEC_VERSION } from "../../core/version.js";
-
-type ReferenceCategory = "reference" | "template";
-
-function appendVersionFooter(content: string): string {
-  const trimmedContent = content.trimEnd();
-  return `${trimmedContent}\n\n*GoopSpec v${GOOPSPEC_VERSION}*`;
-}
+import { RESOURCE_TYPES } from "../../core/constants.js";
+import type { ResourceType } from "../../core/constants.js";
+import { tool } from "../../core/sdk-compat.js";
+import type { ToolDefinition } from "../../core/sdk-compat.js";
+import type { PluginContext, ResolvedResource } from "../../core/types.js";
 
 /**
- * Format resource info for listing
+ * Extract a named section (## heading) from markdown content.
+ *
+ * Returns the section body (including the heading line) or `null` if
+ * the heading is not found. Matching is case-insensitive.
  */
-function formatResourceInfo(resource: ResolvedResource, _category: ReferenceCategory): string {
-  const desc = resource.frontmatter.description 
-    ? `: ${resource.frontmatter.description}`
-    : "";
-  const categoryTag = resource.frontmatter.category 
-    ? ` (${resource.frontmatter.category})`
-    : "";
-  return `- **${resource.name}**${desc}${categoryTag}`;
-}
+function extractSection(content: string, sectionName: string): string | null {
+  const lines = content.split("\n");
+  const target = sectionName.toLowerCase();
+  let startIdx = -1;
+  let startLevel = 0;
 
-/**
- * Get section from frontmatter
- */
-function getSection(resource: ResolvedResource, section?: string): string | null {
-  if (!section) return null;
-  
-  // Try frontmatter first
-  const sectionLower = section.toLowerCase();
-  for (const [key, value] of Object.entries(resource.frontmatter)) {
-    if (key.toLowerCase() === sectionLower && typeof value === "string") {
-      return value;
-    }
-  }
-  
-  // Try finding section in body by heading
-  const lines = resource.body.split("\n");
-  let capturing = false;
-  let capturedLines: string[] = [];
-  const sectionPattern = new RegExp(`^##?\\s*${section}`, "i");
-  
-  for (const line of lines) {
-    if (sectionPattern.test(line)) {
-      capturing = true;
-      capturedLines = [line];
-      continue;
-    }
-    
-    if (capturing) {
-      // Stop at next heading of same or higher level
-      if (/^##?\s/.test(line) && !line.startsWith("###")) {
-        break;
+  for (let i = 0; i < lines.length; i++) {
+    const match = lines[i].match(/^(#{1,6})\s+(.+)/);
+    if (!match) continue;
+
+    const level = match[1].length;
+    const heading = match[2].trim().toLowerCase();
+
+    if (startIdx === -1) {
+      if (heading === target) {
+        startIdx = i;
+        startLevel = level;
       }
-      capturedLines.push(line);
+    } else if (level <= startLevel) {
+      return lines.slice(startIdx, i).join("\n").trimEnd();
     }
   }
-  
-  return capturedLines.length > 0 ? capturedLines.join("\n").trim() : null;
+
+  if (startIdx !== -1) {
+    return lines.slice(startIdx).join("\n").trimEnd();
+  }
+
+  return null;
 }
 
 /**
- * Create the goop_reference tool
+ * Format a single resolved resource for output.
  */
+function formatResource(resource: ResolvedResource, section?: string): string {
+  const header = `## Reference: ${resource.name}`;
+  const typeTag = `**Type:** ${resource.type}`;
+
+  if (section) {
+    const extracted = extractSection(resource.content, section);
+    if (extracted) {
+      return `${header}\n${typeTag}\n\n${extracted}`;
+    }
+    return `${header}\n${typeTag}\n\n> Section "${section}" not found in ${resource.name}. Returning full content.\n\n${resource.content}`;
+  }
+
+  return `${header}\n${typeTag}\n\n${resource.content}`;
+}
+
 export function createGoopReferenceTool(ctx: PluginContext): ToolDefinition {
   return tool({
-    description: "Load GoopSpec references or templates, list available resources, or extract a specific section from a resource.",
+    description:
+      "Load reference documents or templates. Supports loading multiple references in one call (pass `names` array) to reduce tool-call count. Use `list: true` to see available references.",
     args: {
-      name: tool.schema.string().optional(),
-      type: tool.schema.enum(["reference", "template", "all"]).optional(),
-      section: tool.schema.string().optional(),
-      list: tool.schema.boolean().optional(),
+      name: tool.schema.string().optional().describe("Single reference name to load"),
+      names: tool.schema
+        .array(tool.schema.string())
+        .optional()
+        .describe("Array of reference names to load in one call (multi-load)"),
+      type: tool.schema
+        .enum(RESOURCE_TYPES)
+        .optional()
+        .describe("Filter by resource type: reference or template"),
+      list: tool.schema.boolean().optional().describe("List available reference names"),
+      section: tool.schema
+        .string()
+        .optional()
+        .describe("Extract a specific section (## heading) from the resource"),
     },
-    async execute(args, _context: ToolContext): Promise<string> {
-      const resourceType = args.type || "all";
-      
-      // List resources
-      if (args.list || !args.name) {
-        const lines: string[] = [];
-        
-        if (resourceType === "all" || resourceType === "reference") {
-          const refs = ctx.resolver.resolveAll("reference");
-          if (refs.length > 0) {
-            lines.push("# Available References\n");
-            lines.push("*Protocols, checklists, and patterns for agents*\n");
-            for (const ref of refs) {
-              lines.push(formatResourceInfo(ref, "reference"));
+    async execute(args): Promise<string> {
+      try {
+        const resolver = ctx.resolver;
+
+        // --- List mode ---
+        if (args.list) {
+          const resourceType: ResourceType | undefined = args.type;
+          if (resourceType) {
+            const names = resolver.listNames(resourceType);
+            if (names.length === 0) {
+              return `No ${resourceType}s found.`;
             }
-            lines.push("");
+            return `## Available ${resourceType}s\n\n${names.map((n) => `- ${n}`).join("\n")}`;
           }
-        }
-        
-        if (resourceType === "all" || resourceType === "template") {
-          const templates = ctx.resolver.resolveAll("template");
-          if (templates.length > 0) {
-            lines.push("# Available Templates\n");
-            lines.push("*Document structures for GoopSpec artifacts*\n");
-            for (const tmpl of templates) {
-              lines.push(formatResourceInfo(tmpl, "template"));
+
+          // List all types
+          const sections: string[] = [];
+          for (const rt of RESOURCE_TYPES) {
+            const names = resolver.listNames(rt);
+            if (names.length > 0) {
+              sections.push(`## Available ${rt}s\n\n${names.map((n) => `- ${n}`).join("\n")}`);
             }
-            lines.push("");
           }
+          return sections.length > 0
+            ? sections.join("\n\n---\n\n")
+            : "No references or templates found.";
         }
-        
-        if (lines.length === 0) {
-          return "No references or templates found.";
+
+        // --- Multi-load mode (MH10) ---
+        if (args.names && args.names.length > 0) {
+          const resolved = resolver.resolveMany(args.names);
+          const resolvedNames = new Set(resolved.map((r) => r.name));
+          const notFound = args.names.filter((n) => !resolvedNames.has(n));
+
+          const parts: string[] = [];
+
+          for (const resource of resolved) {
+            parts.push(formatResource(resource, args.section));
+          }
+
+          if (notFound.length > 0) {
+            parts.push(
+              `## Not Found\n\nThe following references were not found: ${notFound.map((n) => `\`${n}\``).join(", ")}`,
+            );
+          }
+
+          if (parts.length === 0) {
+            return `No references found for: ${args.names.map((n) => `\`${n}\``).join(", ")}`;
+          }
+
+          return parts.join("\n\n---\n\n");
         }
-        
-        lines.push("---");
-        lines.push("Use `goop_reference({ name: \"resource-name\" })` to load content.");
-        lines.push("Use `goop_reference({ name: \"resource-name\", section: \"Section Name\" })` to extract a specific section.");
-        
-        return appendVersionFooter(lines.join("\n"));
-      }
-      
-      // Load specific resource
-      const name = args.name;
-      
-      // Try reference first, then template
-      let resource: ResolvedResource | null = null;
-      let foundType: ReferenceCategory = "reference";
-      
-      if (resourceType === "all" || resourceType === "reference") {
-        resource = ctx.resolver.resolve("reference", name);
-        if (resource) foundType = "reference";
-      }
-      
-      if (!resource && (resourceType === "all" || resourceType === "template")) {
-        resource = ctx.resolver.resolve("template", name);
-        if (resource) foundType = "template";
-      }
-      
-      if (!resource) {
-        const availableRefs = ctx.resolver.resolveAll("reference").map(r => r.name);
-        const availableTemplates = ctx.resolver.resolveAll("template").map(t => t.name);
-        
+
+        // --- Single-load mode ---
+        if (args.name) {
+          const resourceType: ResourceType = args.type ?? "reference";
+          const resource = resolver.resolve(resourceType, args.name);
+
+          if (!resource) {
+            // Try the other type as fallback
+            const fallbackType: ResourceType =
+              resourceType === "reference" ? "template" : "reference";
+            const fallback = resolver.resolve(fallbackType, args.name);
+            if (fallback) {
+              return formatResource(fallback, args.section);
+            }
+            return `Reference "${args.name}" not found. Use \`list: true\` to see available references.`;
+          }
+
+          return formatResource(resource, args.section);
+        }
+
+        // --- No arguments: show help ---
         return [
-          `Resource "${name}" not found.`,
+          "## goop_reference",
           "",
-          "**Available references:**",
-          availableRefs.join(", ") || "(none)",
+          "Load reference documents or templates.",
           "",
-          "**Available templates:**",
-          availableTemplates.join(", ") || "(none)",
+          "**Usage:**",
+          '- `name: "executor-core"` — Load a single reference',
+          '- `names: ["executor-core", "git-workflow"]` — Load multiple references (MH10)',
+          "- `list: true` — List available references",
+          '- `type: "template"` — Filter by type',
+          '- `section: "Commit Format"` — Extract a specific section',
         ].join("\n");
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        return `Error loading reference: ${message}`;
       }
-      
-      // Extract section if requested
-      if (args.section) {
-        const sectionContent = getSection(resource, args.section);
-        if (sectionContent) {
-            return appendVersionFooter([
-              `# ${resource.name} - ${args.section}`,
-              "",
-              `*Extracted from ${foundType}: ${resource.name}*`,
-              "",
-              "---",
-              "",
-              sectionContent,
-            ].join("\n"));
-        } else {
-          return [
-            `Section "${args.section}" not found in ${resource.name}.`,
-            "",
-            "**Available content:**",
-            resource.body.slice(0, 500) + (resource.body.length > 500 ? "..." : ""),
-          ].join("\n");
-        }
-      }
-      
-      // Return full content
-      const lines = [
-        `# ${foundType === "reference" ? "Reference" : "Template"}: ${resource.frontmatter.name || resource.name}`,
-        "",
-      ];
-      
-      if (resource.frontmatter.description) {
-        lines.push(`**Description:** ${resource.frontmatter.description}`, "");
-      }
-      
-      if (resource.frontmatter.category) {
-        lines.push(`**Category:** ${resource.frontmatter.category}`, "");
-      }
-      
-      lines.push(`**Version:** ${GOOPSPEC_VERSION}`, "");
-      
-      lines.push("---", "", resource.body);
-      
-      return appendVersionFooter(lines.join("\n"));
     },
   });
 }

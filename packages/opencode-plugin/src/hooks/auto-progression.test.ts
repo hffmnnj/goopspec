@@ -1,218 +1,268 @@
-/**
- * Tests for Auto-Progression Hook
- * @module hooks/auto-progression.test
- */
-
-import { describe, it, expect, beforeEach, afterEach } from "bun:test";
+import { afterEach, beforeEach, describe, expect, it, spyOn } from "bun:test";
 import {
-  createAutoProgressionHook,
-  checkProgressionConditions,
-} from "./auto-progression.js";
-import {
+  createDefaultWorkflowState,
   createMockPluginContext,
   setupTestEnvironment,
-  type PluginContext,
 } from "../test-utils.js";
-import { writeFileSync, mkdirSync } from "fs";
-import { join } from "path";
+import { createAutoProgressionHook } from "./auto-progression.js";
+import type { Hooks } from "./types.js";
 
-describe("auto-progression hooks", () => {
-  let ctx: PluginContext;
+type ToolAfterInput = { tool: string; sessionID: string; callID: string };
+type ToolAfterOutput = { title: string; output: string; metadata: unknown };
+
+function makeInput(tool = "goop_state"): ToolAfterInput {
+  return { tool, sessionID: "s1", callID: "c1" };
+}
+
+function makeOutput(text = "ok"): ToolAfterOutput {
+  return { title: "result", output: text, metadata: {} };
+}
+
+describe("auto-progression hook", () => {
   let cleanup: () => void;
   let testDir: string;
 
   beforeEach(() => {
-    const env = setupTestEnvironment("auto-progression-test");
+    const env = setupTestEnvironment("auto-prog");
     cleanup = env.cleanup;
     testDir = env.testDir;
-    ctx = createMockPluginContext({ testDir });
   });
 
   afterEach(() => cleanup());
 
-  describe("checkProgressionConditions", () => {
-    it("returns current state correctly", () => {
-      const conditions = checkProgressionConditions(ctx);
-      
-      expect(conditions.currentPhase).toBe("idle");
-      expect(conditions.specLocked).toBe(false);
-      expect(conditions.wavesComplete).toBe(false);
-      expect(conditions.acceptanceConfirmed).toBe(false);
+  // -----------------------------------------------------------------------
+  // 1. Progresses execute → accept when currentWave >= totalWaves
+  // -----------------------------------------------------------------------
+
+  it("transitions execute → accept when currentWave >= totalWaves", async () => {
+    const ctx = createMockPluginContext({
+      testDir,
+      state: {
+        workflows: {
+          default: createDefaultWorkflowState({
+            phase: "execute",
+            currentWave: 3,
+            totalWaves: 3,
+            specLocked: true,
+          }),
+        },
+      },
     });
 
-    it("detects when can progress to execute", () => {
-      // Set up conditions for specify → execute
-      ctx.stateManager.transitionPhase("plan", true);
-      ctx.stateManager.transitionPhase("research", true);
-      ctx.stateManager.transitionPhase("specify", true);
-      ctx.stateManager.lockSpec();
-      
-      // Create BLUEPRINT.md
-      const goopspecDir = join(testDir, ".goopspec");
-      mkdirSync(goopspecDir, { recursive: true });
-      writeFileSync(join(goopspecDir, "BLUEPRINT.md"), "# Blueprint");
-      
-      const conditions = checkProgressionConditions(ctx);
-      
-      expect(conditions.currentPhase).toBe("specify");
-      expect(conditions.specLocked).toBe(true);
-      expect(conditions.canProgressToExecute).toBe(true);
-    });
+    const hooks = createAutoProgressionHook(ctx);
+    const handler = hooks["tool.execute.after"] as NonNullable<Hooks["tool.execute.after"]>;
+    const output = makeOutput();
 
-    it("detects when can progress to accept", () => {
-      // Set up conditions for execute → accept
-      ctx.stateManager.transitionPhase("plan", true);
-      ctx.stateManager.transitionPhase("execute", true);
-      ctx.stateManager.updateWaveProgress(3, 3);
-      
-      const conditions = checkProgressionConditions(ctx);
-      
-      expect(conditions.currentPhase).toBe("execute");
-      expect(conditions.wavesComplete).toBe(true);
-      expect(conditions.canProgressToAccept).toBe(true);
-    });
+    await handler(makeInput(), output);
 
-    it("detects when can progress to idle", () => {
-      // Set up conditions for accept → idle
-      ctx.stateManager.transitionPhase("plan", true);
-      ctx.stateManager.transitionPhase("accept", true);
-      ctx.stateManager.confirmAcceptance();
-      
-      const conditions = checkProgressionConditions(ctx);
-      
-      expect(conditions.currentPhase).toBe("accept");
-      expect(conditions.acceptanceConfirmed).toBe(true);
-      expect(conditions.canProgressToIdle).toBe(true);
-    });
+    expect(ctx.stateManager.getActiveWorkflow().phase).toBe("accept");
+    expect(output.output).toContain("accept");
   });
 
-  describe("createAutoProgressionHook", () => {
-    it("creates tool.execute.after hook", () => {
-      const hooks = createAutoProgressionHook(ctx);
-      expect(hooks["tool.execute.after"]).toBeDefined();
-      expect(typeof hooks["tool.execute.after"]).toBe("function");
+  it("transitions when currentWave exceeds totalWaves", async () => {
+    const ctx = createMockPluginContext({
+      testDir,
+      state: {
+        workflows: {
+          default: createDefaultWorkflowState({
+            phase: "execute",
+            currentWave: 5,
+            totalWaves: 3,
+            specLocked: true,
+          }),
+        },
+      },
     });
+
+    const hooks = createAutoProgressionHook(ctx);
+    const handler = hooks["tool.execute.after"] as NonNullable<Hooks["tool.execute.after"]>;
+    const output = makeOutput();
+
+    await handler(makeInput(), output);
+
+    expect(ctx.stateManager.getActiveWorkflow().phase).toBe("accept");
   });
 
-  describe("auto-progression: specify → execute", () => {
-    it("auto-progresses when spec locked and blueprint exists", async () => {
-      // Set up conditions
-      ctx.stateManager.transitionPhase("plan", true);
-      ctx.stateManager.transitionPhase("research", true);
-      ctx.stateManager.transitionPhase("specify", true);
-      ctx.stateManager.lockSpec();
-      
-      // Create BLUEPRINT.md
-      const goopspecDir = join(testDir, ".goopspec");
-      mkdirSync(goopspecDir, { recursive: true });
-      writeFileSync(join(goopspecDir, "BLUEPRINT.md"), "# Blueprint");
-      
-      const hooks = createAutoProgressionHook(ctx);
-      const output = { title: "Test", output: "Original output", metadata: {} };
-      
-      await hooks["tool.execute.after"](
-        { tool: "slashcommand", sessionID: "test", callID: "call" },
-        output
-      );
-      
-      // Should have progressed
-      expect(ctx.stateManager.getState().workflow.phase).toBe("execute");
-      expect(output.output).toContain("Auto-Progression");
-      expect(output.output).toContain("specify → execute");
+  // -----------------------------------------------------------------------
+  // 2. Does NOT progress when currentWave < totalWaves
+  // -----------------------------------------------------------------------
+
+  it("does NOT progress when currentWave < totalWaves", async () => {
+    const ctx = createMockPluginContext({
+      testDir,
+      state: {
+        workflows: {
+          default: createDefaultWorkflowState({
+            phase: "execute",
+            currentWave: 2,
+            totalWaves: 5,
+            specLocked: true,
+          }),
+        },
+      },
     });
 
-    it("does not progress without locked spec", async () => {
-      ctx.stateManager.transitionPhase("plan", true);
-      ctx.stateManager.transitionPhase("research", true);
-      ctx.stateManager.transitionPhase("specify", true);
-      // NOT locking spec
-      
-      const hooks = createAutoProgressionHook(ctx);
-      const output = { title: "Test", output: "Original", metadata: {} };
-      
-      await hooks["tool.execute.after"](
-        { tool: "slashcommand", sessionID: "test", callID: "call" },
-        output
-      );
-      
-      expect(ctx.stateManager.getState().workflow.phase).toBe("specify");
-    });
+    const hooks = createAutoProgressionHook(ctx);
+    const handler = hooks["tool.execute.after"] as NonNullable<Hooks["tool.execute.after"]>;
+    const output = makeOutput();
+
+    await handler(makeInput(), output);
+
+    expect(ctx.stateManager.getActiveWorkflow().phase).toBe("execute");
+    expect(output.output).toBe("ok");
   });
 
-  describe("auto-progression: execute → accept", () => {
-    it("auto-progresses when all waves complete", async () => {
-      ctx.stateManager.transitionPhase("plan", true);
-      ctx.stateManager.transitionPhase("execute", true);
-      ctx.stateManager.updateWaveProgress(3, 3);
-      
-      const hooks = createAutoProgressionHook(ctx);
-      const output = { title: "Test", output: "Original", metadata: {} };
-      
-      await hooks["tool.execute.after"](
-        { tool: "slashcommand", sessionID: "test", callID: "call" },
-        output
-      );
-      
-      expect(ctx.stateManager.getState().workflow.phase).toBe("accept");
-      expect(output.output).toContain("Auto-Progression");
+  // -----------------------------------------------------------------------
+  // 3. Does NOT re-progress when already in accept phase
+  // -----------------------------------------------------------------------
+
+  it("does NOT re-progress when already in accept phase", async () => {
+    const ctx = createMockPluginContext({
+      testDir,
+      state: {
+        workflows: {
+          default: createDefaultWorkflowState({
+            phase: "accept",
+            currentWave: 3,
+            totalWaves: 3,
+            specLocked: true,
+          }),
+        },
+      },
     });
 
-    it("does not progress when waves incomplete", async () => {
-      ctx.stateManager.transitionPhase("plan", true);
-      ctx.stateManager.transitionPhase("execute", true);
-      ctx.stateManager.updateWaveProgress(1, 3);
-      
-      const hooks = createAutoProgressionHook(ctx);
-      const output = { title: "Test", output: "Original", metadata: {} };
-      
-      await hooks["tool.execute.after"](
-        { tool: "slashcommand", sessionID: "test", callID: "call" },
-        output
-      );
-      
-      expect(ctx.stateManager.getState().workflow.phase).toBe("execute");
-    });
+    const hooks = createAutoProgressionHook(ctx);
+    const handler = hooks["tool.execute.after"] as NonNullable<Hooks["tool.execute.after"]>;
+    const output = makeOutput();
+
+    await handler(makeInput(), output);
+
+    // Phase stays accept — no double-transition
+    expect(ctx.stateManager.getActiveWorkflow().phase).toBe("accept");
+    expect(output.output).toBe("ok");
   });
 
-  describe("auto-progression: accept → idle", () => {
-    it("auto-progresses when acceptance confirmed", async () => {
-      ctx.stateManager.transitionPhase("plan", true);
-      ctx.stateManager.transitionPhase("accept", true);
-      ctx.stateManager.confirmAcceptance();
-      
-      const hooks = createAutoProgressionHook(ctx);
-      const output = { title: "Test", output: "Original", metadata: {} };
-      
-      await hooks["tool.execute.after"](
-        { tool: "slashcommand", sessionID: "test", callID: "call" },
-        output
-      );
-      
-      expect(ctx.stateManager.getState().workflow.phase).toBe("idle");
-      expect(output.output).toContain("Workflow Complete");
+  // -----------------------------------------------------------------------
+  // 4. Graceful on error — never throws
+  // -----------------------------------------------------------------------
+
+  it("does not throw when stateManager.transitionPhase throws", async () => {
+    const ctx = createMockPluginContext({
+      testDir,
+      state: {
+        workflows: {
+          default: createDefaultWorkflowState({
+            phase: "execute",
+            currentWave: 3,
+            totalWaves: 3,
+          }),
+        },
+      },
     });
 
-    it("resets workflow state after accept → idle", async () => {
-      ctx.stateManager.transitionPhase("plan", true);
-      ctx.stateManager.transitionPhase("accept", true);
-      ctx.stateManager.confirmAcceptance();
-      ctx.stateManager.lockSpec();
-      ctx.stateManager.updateWaveProgress(3, 3);
-      
-      const hooks = createAutoProgressionHook(ctx);
-      const output = { title: "Test", output: "Original", metadata: {} };
-      
-      await hooks["tool.execute.after"](
-        { tool: "slashcommand", sessionID: "test", callID: "call" },
-        output
-      );
-      
-      const state = ctx.stateManager.getState();
-      expect(state.workflow.phase).toBe("idle");
-      expect(state.workflow.specLocked).toBe(false);
-      expect(state.workflow.acceptanceConfirmed).toBe(false);
-      expect(state.workflow.currentWave).toBe(0);
-      expect(state.workflow.totalWaves).toBe(0);
+    // Force transitionPhase to throw
+    const originalTransition = ctx.stateManager.transitionPhase;
+    (ctx.stateManager as { transitionPhase: typeof originalTransition }).transitionPhase = () => {
+      throw new Error("simulated failure");
+    };
+
+    const consoleSpy = spyOn(console, "error").mockImplementation(() => {});
+
+    const hooks = createAutoProgressionHook(ctx);
+    const handler = hooks["tool.execute.after"] as NonNullable<Hooks["tool.execute.after"]>;
+    const output = makeOutput();
+
+    // Should not throw — safeHandler catches
+    await handler(makeInput(), output);
+
+    // Phase unchanged since transition failed
+    expect(ctx.stateManager.getActiveWorkflow().phase).toBe("execute");
+    consoleSpy.mockRestore();
+  });
+
+  // -----------------------------------------------------------------------
+  // 5. Ignores when totalWaves = 0 (uninitialised)
+  // -----------------------------------------------------------------------
+
+  it("ignores when totalWaves is 0", async () => {
+    const ctx = createMockPluginContext({
+      testDir,
+      state: {
+        workflows: {
+          default: createDefaultWorkflowState({
+            phase: "execute",
+            currentWave: 0,
+            totalWaves: 0,
+          }),
+        },
+      },
     });
+
+    const hooks = createAutoProgressionHook(ctx);
+    const handler = hooks["tool.execute.after"] as NonNullable<Hooks["tool.execute.after"]>;
+    const output = makeOutput();
+
+    await handler(makeInput(), output);
+
+    expect(ctx.stateManager.getActiveWorkflow().phase).toBe("execute");
+    expect(output.output).toBe("ok");
+  });
+
+  // -----------------------------------------------------------------------
+  // 6. Ignores non-execute phases (idle, plan, discuss)
+  // -----------------------------------------------------------------------
+
+  it("ignores when phase is not execute", async () => {
+    for (const phase of ["idle", "plan", "discuss"] as const) {
+      const ctx = createMockPluginContext({
+        testDir,
+        state: {
+          workflows: {
+            default: createDefaultWorkflowState({
+              phase,
+              currentWave: 3,
+              totalWaves: 3,
+            }),
+          },
+        },
+      });
+
+      const hooks = createAutoProgressionHook(ctx);
+      const handler = hooks["tool.execute.after"] as NonNullable<Hooks["tool.execute.after"]>;
+      const output = makeOutput();
+
+      await handler(makeInput(), output);
+
+      expect(ctx.stateManager.getActiveWorkflow().phase).toBe(phase);
+    }
+  });
+
+  // -----------------------------------------------------------------------
+  // 7. ADL entry is appended on successful progression
+  // -----------------------------------------------------------------------
+
+  it("appends ADL entry on successful progression", async () => {
+    const ctx = createMockPluginContext({
+      testDir,
+      state: {
+        workflows: {
+          default: createDefaultWorkflowState({
+            phase: "execute",
+            currentWave: 4,
+            totalWaves: 4,
+            specLocked: true,
+          }),
+        },
+      },
+    });
+
+    const hooks = createAutoProgressionHook(ctx);
+    const handler = hooks["tool.execute.after"] as NonNullable<Hooks["tool.execute.after"]>;
+
+    await handler(makeInput(), makeOutput());
+
+    const adl = ctx.stateManager.getADL();
+    expect(adl).toContain("Auto-progression");
+    expect(adl).toContain("accept");
   });
 });

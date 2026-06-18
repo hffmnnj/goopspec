@@ -1,222 +1,203 @@
 /**
- * GoopSpec Spec Tool
- * Read and validate SPEC.md and PLAN.md files
- * 
+ * goop_spec tool — read, list, or validate SPEC.md and BLUEPRINT.md.
+ *
+ * Reads workflow-scoped documents from `.goopspec/<workflowId>/`.
+ * Validation checks for required sections and traceability mapping.
+ *
  * @module tools/goop-spec
  */
 
-import { tool, type ToolDefinition } from "@opencode-ai/plugin/tool";
-import { existsSync, readFileSync, readdirSync } from "fs";
-import { join, basename } from "path";
-import type { PluginContext, ToolContext } from "../../core/types.js";
-import { parseFrontmatter } from "../../shared/frontmatter.js";
-import { getProjectGoopspecDir } from "../../shared/paths.js";
+import { existsSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 
-/**
- * Sanitize phase name to prevent path traversal attacks
- * Only allows alphanumeric characters, hyphens, and underscores
- */
-function sanitizePhaseName(phase: string): { valid: boolean; sanitized: string; error?: string } {
-  // Check for path traversal attempts
-  if (phase.includes("..") || phase.includes("/") || phase.includes("\\")) {
-    return { valid: false, sanitized: "", error: "Invalid phase name: path traversal not allowed" };
-  }
-  
-  // Extract just the basename to be extra safe
-  const sanitized = basename(phase);
-  
-  // Only allow safe characters
-  if (!/^[a-zA-Z0-9_-]+$/.test(sanitized)) {
-    return { valid: false, sanitized: "", error: "Invalid phase name: only alphanumeric, hyphens, and underscores allowed" };
-  }
-  
-  // Verify the sanitized path stays within the expected directory
-  if (sanitized !== phase) {
-    return { valid: false, sanitized: "", error: "Invalid phase name: contains invalid characters" };
-  }
-  
-  return { valid: true, sanitized };
+import { GOOPSPEC_DIR } from "../../core/constants.js";
+import { tool } from "../../core/sdk-compat.js";
+import type { ToolContext, ToolDefinition } from "../../core/sdk-compat.js";
+import type { PluginContext } from "../../core/types.js";
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+/** Resolve the document directory for the active workflow. */
+function resolveDocDir(ctx: PluginContext): string {
+  const wfId = ctx.stateManager.getActiveWorkflowId();
+  const base = join(ctx.sdk.directory, GOOPSPEC_DIR);
+  return wfId === "default" ? base : join(base, wfId);
 }
 
-/**
- * List all phases
- */
-function listPhases(goopspecDir: string): string {
-  const phasesDir = join(goopspecDir, "phases");
-  
-  if (!existsSync(phasesDir)) {
-    return "No phases found. Use /goop-plan to create a phase.";
+/** Safely read a file, returning null on any failure. */
+function safeRead(filePath: string): string | null {
+  try {
+    if (!existsSync(filePath)) return null;
+    return readFileSync(filePath, "utf-8");
+  } catch {
+    return null;
   }
-  
-  const phases = readdirSync(phasesDir, { withFileTypes: true })
-    .filter(d => d.isDirectory())
-    .map(d => d.name);
-  
-  if (phases.length === 0) {
-    return "No phases found. Use /goop-plan to create a phase.";
+}
+
+// ---------------------------------------------------------------------------
+// Actions
+// ---------------------------------------------------------------------------
+
+function listWorkflowDocs(ctx: PluginContext): string {
+  const goopDir = join(ctx.sdk.directory, GOOPSPEC_DIR);
+  if (!existsSync(goopDir)) {
+    return "No .goopspec directory found. Run `/goop-setup` first.";
   }
-  
-  const lines = ["# Available Phases\n"];
-  for (const phase of phases) {
-    const phaseDir = join(phasesDir, phase);
-    const hasSpec = existsSync(join(phaseDir, "SPEC.md"));
-    const hasPlan = existsSync(join(phaseDir, "PLAN.md"));
-    lines.push(`- **${phase}**: ${hasSpec ? "SPEC" : ""} ${hasPlan ? "PLAN" : ""}`);
+
+  const wfIds = ctx.stateManager.listWorkflowIds();
+  if (wfIds.length === 0) {
+    return "No workflows found.";
   }
-  
+
+  const activeId = ctx.stateManager.getActiveWorkflowId();
+  const lines = ["# Workflow Documents\n"];
+
+  for (const id of wfIds) {
+    const dir = id === "default" ? goopDir : join(goopDir, id);
+    const hasSpec = existsSync(join(dir, "SPEC.md"));
+    const hasPlan = existsSync(join(dir, "BLUEPRINT.md"));
+    const marker = id === activeId ? " ← active" : "";
+    lines.push(
+      `- **${id}**${marker}: ${hasSpec ? "SPEC.md" : ""}${hasSpec && hasPlan ? " · " : ""}${hasPlan ? "BLUEPRINT.md" : ""}${!hasSpec && !hasPlan ? "(no docs)" : ""}`,
+    );
+  }
+
   return lines.join("\n");
 }
 
-/**
- * Read spec/plan files for a phase
- */
-function readPhaseFiles(goopspecDir: string, phase: string, file: string): string {
-  const phaseDir = join(goopspecDir, "phases", phase);
-  
-  if (!existsSync(phaseDir)) {
-    return `Phase "${phase}" not found. Use 'list' to see available phases.`;
-  }
-  
+function readDocs(ctx: PluginContext, file: string): string {
+  const docDir = resolveDocDir(ctx);
   const output: string[] = [];
-  
+
   if (file === "spec" || file === "both") {
-    const specPath = join(phaseDir, "SPEC.md");
-    if (existsSync(specPath)) {
-      const content = readFileSync(specPath, "utf-8");
+    const content = safeRead(join(docDir, "SPEC.md"));
+    if (content) {
       output.push("# SPEC.md\n");
       output.push(content);
     } else {
-      output.push("SPEC.md not found for this phase.");
+      output.push("SPEC.md not found for the active workflow.");
     }
   }
-  
+
   if (file === "plan" || file === "both") {
-    const planPath = join(phaseDir, "PLAN.md");
-    if (existsSync(planPath)) {
-      const content = readFileSync(planPath, "utf-8");
+    const content = safeRead(join(docDir, "BLUEPRINT.md"));
+    if (content) {
       if (output.length > 0) output.push("\n---\n");
-      output.push("# PLAN.md\n");
+      output.push("# BLUEPRINT.md\n");
       output.push(content);
     } else {
-      output.push("PLAN.md not found for this phase.");
+      output.push("BLUEPRINT.md not found for the active workflow.");
     }
   }
-  
+
   return output.join("\n");
 }
 
-/**
- * Validate spec/plan files
- */
-function validatePhaseFiles(goopspecDir: string, phase: string): string {
-  const phaseDir = join(goopspecDir, "phases", phase);
-  
-  if (!existsSync(phaseDir)) {
-    return `Phase "${phase}" not found.`;
-  }
-  
+/** Required sections for SPEC.md validation. */
+const SPEC_REQUIRED_SECTIONS = ["Must-Haves", "Out of Scope", "Acceptance Criteria"] as const;
+
+/** Required sections for BLUEPRINT.md validation. */
+const BLUEPRINT_REQUIRED_SECTIONS = ["Wave", "Spec Mapping"] as const;
+
+function validateDocs(ctx: PluginContext): string {
+  const docDir = resolveDocDir(ctx);
   const issues: string[] = [];
-  const lines = [`# Validation for Phase: ${phase}\n`];
-  
-  // Validate SPEC.md
-  const specPath = join(phaseDir, "SPEC.md");
-  if (existsSync(specPath)) {
-    const content = readFileSync(specPath, "utf-8");
-    const { data } = parseFrontmatter(content);
-    
-    if (!data.phase) issues.push("SPEC.md: Missing 'phase' in frontmatter");
-    if (!data.title) issues.push("SPEC.md: Missing 'title' in frontmatter");
-    if (!data.status) issues.push("SPEC.md: Missing 'status' in frontmatter");
-    
-    lines.push("## SPEC.md");
-    lines.push(`- Phase: ${data.phase || "MISSING"}`);
-    lines.push(`- Title: ${data.title || "MISSING"}`);
-    lines.push(`- Status: ${data.status || "MISSING"}`);
+  const lines = [`# Validation — ${ctx.stateManager.getActiveWorkflowId()}\n`];
+
+  // --- SPEC.md ---
+  const specContent = safeRead(join(docDir, "SPEC.md"));
+  lines.push("## SPEC.md\n");
+  if (specContent) {
+    for (const section of SPEC_REQUIRED_SECTIONS) {
+      if (!specContent.includes(section)) {
+        issues.push(`SPEC.md: Missing required section "${section}"`);
+      }
+    }
+    const hasMustHaves = /^###?\s+MH\d+/m.test(specContent);
+    if (!hasMustHaves) {
+      issues.push("SPEC.md: No must-have items found (expected MH1, MH2, …)");
+    }
+    lines.push(`- Found: ${specContent.length} chars`);
+    lines.push(`- Must-have items: ${hasMustHaves ? "Yes" : "No"}`);
   } else {
     issues.push("SPEC.md not found");
-    lines.push("## SPEC.md: NOT FOUND");
+    lines.push("- **NOT FOUND**");
   }
-  
-  // Validate PLAN.md
-  const planPath = join(phaseDir, "PLAN.md");
-  if (existsSync(planPath)) {
-    const content = readFileSync(planPath, "utf-8");
-    const { data, body } = parseFrontmatter(content);
-    
-    if (!data.phase) issues.push("PLAN.md: Missing 'phase' in frontmatter");
-    if (!data.plan) issues.push("PLAN.md: Missing 'plan' in frontmatter");
-    if (!data.type) issues.push("PLAN.md: Missing 'type' in frontmatter");
-    
-    // Check for tasks
-    const hasTasks = body.includes("<task");
-    if (!hasTasks) issues.push("PLAN.md: No <task> elements found");
-    
-    lines.push("\n## PLAN.md");
-    lines.push(`- Phase: ${data.phase || "MISSING"}`);
-    lines.push(`- Plan: ${data.plan || "MISSING"}`);
-    lines.push(`- Type: ${data.type || "MISSING"}`);
-    lines.push(`- Has Tasks: ${hasTasks ? "Yes" : "No"}`);
+
+  // --- BLUEPRINT.md ---
+  const planContent = safeRead(join(docDir, "BLUEPRINT.md"));
+  lines.push("\n## BLUEPRINT.md\n");
+  if (planContent) {
+    for (const section of BLUEPRINT_REQUIRED_SECTIONS) {
+      if (!planContent.includes(section)) {
+        issues.push(`BLUEPRINT.md: Missing required section "${section}"`);
+      }
+    }
+    // Check traceability: at least one MH reference in the plan
+    const hasTraceability = /MH\d+/.test(planContent);
+    if (!hasTraceability) {
+      issues.push("BLUEPRINT.md: No traceability references to must-haves (MH1, MH2, …)");
+    }
+    lines.push(`- Found: ${planContent.length} chars`);
+    lines.push(`- Traceability: ${hasTraceability ? "Yes" : "No"}`);
   } else {
-    issues.push("PLAN.md not found");
-    lines.push("\n## PLAN.md: NOT FOUND");
+    issues.push("BLUEPRINT.md not found");
+    lines.push("- **NOT FOUND**");
   }
-  
-  // Summary
-  lines.push("\n## Validation Result");
+
+  // --- Summary ---
+  lines.push("\n## Result\n");
   if (issues.length === 0) {
-    lines.push("**VALID** - No issues found.");
+    lines.push("**VALID** — No issues found.");
   } else {
-    lines.push("**ISSUES FOUND:**");
+    lines.push("**ISSUES FOUND:**\n");
     for (const issue of issues) {
       lines.push(`- ${issue}`);
     }
   }
-  
+
   return lines.join("\n");
 }
 
-/**
- * Create the goop_spec tool
- */
+// ---------------------------------------------------------------------------
+// Tool factory
+// ---------------------------------------------------------------------------
+
 export function createGoopSpecTool(ctx: PluginContext): ToolDefinition {
   return tool({
-    description: "Read, list, or validate SPEC.md and PLAN.md files for GoopSpec phases",
+    description: "Read, list, or validate SPEC.md and BLUEPRINT.md files for GoopSpec phases",
     args: {
       action: tool.schema.enum(["read", "list", "validate"]),
-      phase: tool.schema.string().optional(),
       file: tool.schema.enum(["spec", "plan", "both"]).optional(),
+      phase: tool.schema.string().optional(),
     },
-    async execute(args, _context: ToolContext): Promise<string> {
-      const goopspecDir = getProjectGoopspecDir(ctx.input.directory);
-      
-      switch (args.action) {
-        case "list":
-          return listPhases(goopspecDir);
-        
-        case "read": {
-          if (!args.phase) {
-            return "Error: 'phase' is required for read action.";
-          }
-          const readSanitize = sanitizePhaseName(args.phase);
-          if (!readSanitize.valid) {
-            return `Error: ${readSanitize.error}`;
-          }
-          return readPhaseFiles(goopspecDir, readSanitize.sanitized, args.file || "both");
+    async execute(
+      args: {
+        action: "read" | "list" | "validate";
+        file?: "spec" | "plan" | "both";
+        phase?: string;
+      },
+      _context: ToolContext,
+    ): Promise<string> {
+      try {
+        switch (args.action) {
+          case "list":
+            return listWorkflowDocs(ctx);
+
+          case "read":
+            return readDocs(ctx, args.file ?? "both");
+
+          case "validate":
+            return validateDocs(ctx);
+
+          default:
+            return "Unknown action. Use: read, list, or validate.";
         }
-        
-        case "validate": {
-          if (!args.phase) {
-            return "Error: 'phase' is required for validate action.";
-          }
-          const validateSanitize = sanitizePhaseName(args.phase);
-          if (!validateSanitize.valid) {
-            return `Error: ${validateSanitize.error}`;
-          }
-          return validatePhaseFiles(goopspecDir, validateSanitize.sanitized);
-        }
-        
-        default:
-          return "Unknown action.";
+      } catch (error) {
+        const msg = error instanceof Error ? error.message : String(error);
+        return `Error in goop_spec: ${msg}`;
       }
     },
   });

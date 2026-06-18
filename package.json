@@ -1,22 +1,16 @@
 {
   "name": "goopspec",
-  "version": "0.2.9",
+  "version": "1.0.0",
   "private": true,
   "description": "A spec-driven development plugin for OpenCode with user-guided planning, wave execution, and verification",
   "type": "module",
   "scripts": {
     "build": "bun run --cwd packages/opencode-plugin build",
-    "build:workspaces": "bun run build:core && bun run build:plugin && bun run build:daemon",
-    "build:core": "echo 'core placeholder'",
-    "build:plugin": "bun run --cwd packages/opencode-plugin build",
-    "build:daemon": "echo 'daemon placeholder'",
-    "dev": "bun --filter @goopspec/opencode-plugin run dev",
-    "lint": "eslint packages/opencode-plugin/src/",
+    "lint": "bun run --cwd packages/opencode-plugin lint",
+    "format": "bun run --cwd packages/opencode-plugin format",
     "typecheck": "bun run --cwd packages/opencode-plugin typecheck",
-    "typecheck:all": "bun run --cwd packages/core typecheck && bun run --cwd packages/opencode-plugin typecheck",
-    "clean": "node -e \"const fs=require('fs');fs.rmSync('dist',{recursive:true,force:true})\"",
+    "clean": "node -e \"const fs=require('fs');fs.rmSync('packages/opencode-plugin/dist',{recursive:true,force:true})\"",
     "test": "bun test --cwd packages/opencode-plugin",
-    "test:all": "bun test packages/",
     "packages": "bun pm pkg get workspaces",
     "version:bump": "bun scripts/version-bump.ts",
     "prepublishOnly": "bun run build"
@@ -30,22 +24,17 @@
     "spec-driven",
     "task-management",
     "agent-orchestration",
-    "gsd",
     "productivity",
     "task-continuation",
     "enforced-continuation",
-    "goopspec",
-    "cli"
+    "goopspec"
   ],
   "author": "James",
   "license": "MIT",
   "devDependencies": {
-    "@eslint/js": "^10.0.1",
     "@types/node": "^22.13.9",
     "bun-types": "latest",
-    "eslint": "^10.0.0",
-    "typescript": "^5.8.2",
-    "typescript-eslint": "^8.54.0"
+    "typescript": "^5.8.2"
   },
   "engines": {
     "bun": ">=1.0.0"

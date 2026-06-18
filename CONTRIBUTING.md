@@ -29,27 +29,35 @@ Useful scripts:
 # Build
 bun run build
 
-# Watch build
-bun run dev
-
 # Type check
 bun run typecheck
 
 # Tests
 bun test
+
+# Lint (via Biome)
+bun run lint
+
+# Format (via Biome)
+bun run format
 ```
 
 ## Project structure
 Common locations:
 
 ```
-agents/        # Agent definitions
-commands/      # Command definitions
-references/    # Reference docs
-skills/        # Skill modules
-templates/     # Templates
-src/           # Core implementation
-tests/         # Test suite
+packages/
+└── opencode-plugin/    # @goopspec/opencode-plugin — the main package
+    ├── agents/         # Agent markdown definitions
+    ├── commands/       # Command markdown definitions
+    ├── references/     # Reference documentation
+    ├── templates/      # File templates
+    └── src/            # TypeScript source
+        ├── core/       # Types, config, context
+        ├── features/   # Feature modules
+        ├── hooks/      # OpenCode hooks
+        ├── shared/     # Utilities
+        └── tools/      # MCP tools
 ```
 
 ## Contribution workflow

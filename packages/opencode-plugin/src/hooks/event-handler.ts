@@ -1,156 +1,74 @@
 /**
- * Event Handler
- * Handles session and system events, captures to memory
- * 
- * @module hooks/event-handler
+ * Event Handler Hook — Session Lifecycle Events
+ *
+ * Listens to the SDK `event` hook and dispatches session lifecycle events
+ * to the SessionManager:
+ *
+ * - `session.created`  → registers the session
+ * - `session.idle`     → marks the session idle
+ * - `session.deleted`  → cleans up the session
+ *
+ * All other event types are silently ignored. Never throws — wrapped
+ * with `safeHandler` for graceful degradation.
  */
 
-import type { Event } from "@opencode-ai/sdk";
+import type { SdkEvent } from "../core/sdk-compat.js";
 import type { PluginContext } from "../core/types.js";
-import { log, logError, logEvent } from "../shared/logger.js";
+import type { HookFactory, Hooks } from "./types.js";
+import { safeHandler } from "./utils.js";
 
-/**
- * Create the event handler
- * 
- * Handles events:
- * - session.created
- * - session.deleted
- * - session.idle
- * - etc.
- */
-export function createEventHandler(ctx: PluginContext) {
-  return async (input: { event: Event }): Promise<void> => {
+// ---------------------------------------------------------------------------
+// Narrow SDK Event union to the session lifecycle members we handle
+// ---------------------------------------------------------------------------
+
+type SessionCreatedEvent = Extract<SdkEvent, { type: "session.created" }>;
+type SessionIdleEvent = Extract<SdkEvent, { type: "session.idle" }>;
+type SessionDeletedEvent = Extract<SdkEvent, { type: "session.deleted" }>;
+
+function isSessionCreated(event: SdkEvent): event is SessionCreatedEvent {
+  return event.type === "session.created";
+}
+
+function isSessionIdle(event: SdkEvent): event is SessionIdleEvent {
+  return event.type === "session.idle";
+}
+
+function isSessionDeleted(event: SdkEvent): event is SessionDeletedEvent {
+  return event.type === "session.deleted";
+}
+
+// ---------------------------------------------------------------------------
+// Hook factory
+// ---------------------------------------------------------------------------
+
+export const createEventHandlerHook: HookFactory = (ctx: PluginContext): Partial<Hooks> => {
+  const handler: NonNullable<Hooks["event"]> = async (input) => {
     const event = input.event;
 
-    // Type guard for event types
-    if (!event || typeof event !== "object") {
+    if (!event || typeof event.type !== "string") return;
+
+    if (isSessionCreated(event)) {
+      ctx.sessionManager.create(event.properties.info.id);
       return;
     }
 
-    // Handle different event types
-    const eventType = "type" in event ? (event as { type: string }).type : "unknown";
-
-    // Log all events to file for debugging
-    logEvent(eventType, { properties: (event as { properties?: unknown }).properties });
-
-    switch (eventType) {
-      case "session.created":
-        await handleSessionCreated(ctx, event as { type: string; properties?: { sessionID?: string } });
-        break;
-      
-      case "session.deleted":
-        await handleSessionDeleted(ctx, event as { type: string; properties?: { sessionID?: string } });
-        break;
-      
-      case "session.idle":
-        await handleSessionIdle(ctx, event as { type: string; properties?: { sessionID?: string } });
-        break;
-      
-      // Ignore other events silently
-      default:
-        break;
+    if (isSessionIdle(event)) {
+      const sessionId = event.properties.sessionID;
+      if (ctx.sessionManager.get(sessionId)) {
+        ctx.sessionManager.markIdle(sessionId);
+      }
+      return;
     }
+
+    if (isSessionDeleted(event)) {
+      ctx.sessionManager.delete(event.properties.info.id);
+      return;
+    }
+
+    // All other event types: silently ignored
   };
-}
 
-/**
- * Handle session created event
- */
-async function handleSessionCreated(
-  ctx: PluginContext,
-  event: { type: string; properties?: { sessionID?: string } }
-): Promise<void> {
-  const sessionID = event.properties?.sessionID;
-  
-  log("Session created", { sessionID });
-
-  // Update workflow status
-  ctx.stateManager.updateWorkflow({
-    lastActivity: new Date().toISOString(),
-  });
-
-  // Track in history
-  ctx.stateManager.appendHistory({
-    timestamp: new Date().toISOString(),
-    type: "phase_change",
-    sessionId: sessionID,
-    data: {
-      event: "session.created",
-    },
-  });
-
-  // Capture session start to memory if enabled
-  if (ctx.memoryManager && ctx.config.memory?.capture?.capturePhaseChanges !== false) {
-    try {
-      await ctx.memoryManager.save({
-        type: "session_summary",
-        title: "Session started",
-        content: `New session started at ${new Date().toISOString()}`,
-        importance: 3,
-        sessionId: sessionID,
-        phase: ctx.stateManager.getState().workflow.phase,
-      });
-    } catch (error) {
-      logError("Failed to capture session start to memory", error);
-    }
-  }
-}
-
-/**
- * Handle session deleted event
- */
-async function handleSessionDeleted(
-  ctx: PluginContext,
-  event: { type: string; properties?: { sessionID?: string } }
-): Promise<void> {
-  const sessionID = event.properties?.sessionID;
-  
-  log("Session deleted", { sessionID });
-
-  // Track in history
-  ctx.stateManager.appendHistory({
-    timestamp: new Date().toISOString(),
-    type: "phase_change",
-    sessionId: sessionID,
-    data: {
-      event: "session.deleted",
-    },
-  });
-
-  // Capture session end summary to memory
-  if (ctx.memoryManager && ctx.config.memory?.capture?.capturePhaseChanges !== false) {
-    try {
-      // Get session summary from recent memories
-      const recentMemories = await ctx.memoryManager.getRecent(5);
-      const summary = recentMemories.length > 0
-        ? `Session completed with ${recentMemories.length} recent activities. Last activity: ${recentMemories[0]?.title ?? "unknown"}`
-        : "Session completed with no tracked activities";
-
-      await ctx.memoryManager.save({
-        type: "session_summary",
-        title: "Session ended",
-        content: summary,
-        importance: 4,
-        sessionId: sessionID,
-        phase: ctx.stateManager.getState().workflow.phase,
-      });
-    } catch (error) {
-      logError("Failed to capture session end to memory", error);
-    }
-  }
-}
-
-/**
- * Handle session idle event
- */
-async function handleSessionIdle(
-  _ctx: PluginContext,
-  event: { type: string; properties?: { sessionID?: string } }
-): Promise<void> {
-  const sessionID = event.properties?.sessionID;
-  
-  log("Session idle", { sessionID });
-
-  // Track in history (optional - may create too many entries)
-  // For now, just log - no state update needed for idle
-}
+  return {
+    event: safeHandler("event-handler", handler),
+  };
+};

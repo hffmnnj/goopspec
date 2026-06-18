@@ -1,103 +1,98 @@
 /**
  * Memory Forget Tool
- * Delete memories by ID or search query
+ *
+ * Deletes memories by ID (immediate) or by search query (requires explicit
+ * confirmation to prevent accidental bulk deletion).
+ *
  * @module tools/memory-forget
  */
 
-import { tool, type ToolDefinition } from "@opencode-ai/plugin/tool";
-import type { PluginContext, ToolContext } from "../../core/types.js";
-import { log } from "../../shared/logger.js";
+import { tool } from "../../core/sdk-compat.js";
+import type { ToolContext, ToolDefinition } from "../../core/sdk-compat.js";
+import type { PluginContext } from "../../core/types.js";
 
-/**
- * Create the memory_forget tool
- */
+// ---------------------------------------------------------------------------
+// Tool factory
+// ---------------------------------------------------------------------------
+
 export function createMemoryForgetTool(ctx: PluginContext): ToolDefinition {
   return tool({
-    description: "Delete memories from persistent storage by ID or query (query deletes require confirmation). WARNING: deletions are irreversible.",
+    description:
+      "Delete memories from persistent storage by ID or query. " +
+      "Query-based deletes require confirm=true to prevent accidental loss. " +
+      "WARNING: deletions are irreversible.",
     args: {
-      id: tool.schema
-        .number()
-        .optional()
-        .describe("Specific memory ID to delete"),
+      id: tool.schema.number().optional().describe("Specific memory ID to delete"),
       query: tool.schema
         .string()
         .optional()
-        .describe("Search query to find and delete matching memories (requires confirmation)"),
+        .describe("Search query to find and delete matching memories (requires confirm=true)"),
       confirm: tool.schema
         .boolean()
         .optional()
         .describe("Set to true to confirm deletion when using query"),
     },
-    async execute(args, _context: ToolContext): Promise<string> {
+    async execute(
+      args: {
+        id?: number;
+        query?: string;
+        confirm?: boolean;
+      },
+      _context: ToolContext,
+    ): Promise<string> {
       try {
-        // Check if memory manager is available
-        if (!ctx.memoryManager) {
-          log("Memory system not initialized, skipping memory-forget");
-          return "Memory system is not configured. Nothing to forget.";
-        }
-
         // Must provide either id or query
         if (args.id === undefined && !args.query) {
           return "Error: Must provide either 'id' or 'query' to delete memories.";
         }
 
-        // Delete by ID
+        // Delete by ID — immediate, no confirmation needed
         if (args.id !== undefined) {
-          const deleted = await ctx.memoryManager.delete(args.id);
-          if (deleted) {
-            return `Memory ${args.id} deleted successfully.`;
-          } else {
-            return `Memory ${args.id} not found.`;
-          }
+          const deleted = await ctx.memory.forget(args.id);
+          return deleted
+            ? `Memory ${args.id} deleted successfully.`
+            : `Memory ${args.id} not found.`;
         }
 
-        // Delete by query
+        // Delete by query — requires confirmation
         if (args.query) {
-          // First, search to show what will be deleted
-          const results = await ctx.memoryManager.search({
+          // Preview what would be deleted
+          const results = await ctx.memory.search({
             query: args.query,
-            limit: 10,
-            includePrivate: true,
+            limit: 20,
           });
 
-          if (!results || results.length === 0) {
+          if (!results.length) {
             return `No memories found matching: "${args.query}"`;
           }
 
-          // If not confirmed, show what would be deleted
+          // Without confirmation, show preview only
           if (!args.confirm) {
-            const lines = [
-              `Found ${results.length} memor${results.length === 1 ? "y" : "ies"} matching: "${args.query}"`,
-              ``,
-              `**Will delete:**`,
+            const lines: string[] = [
+              `Found ${results.length} ${results.length === 1 ? "memory" : "memories"} matching: "${args.query}"`,
+              "",
+              "**Will delete:**",
             ];
 
-            results.forEach((result) => {
-              lines.push(
-                `- [${result.memory.id}] ${result.memory.title} (${result.memory.type})`
-              );
-            });
+            for (const result of results) {
+              lines.push(`- [${result.memory.id}] ${result.memory.title} (${result.memory.type})`);
+            }
 
             lines.push(
-              ``,
-              `To confirm deletion, call memory_forget with query="${args.query}" and confirm=true`
+              "",
+              `To confirm deletion, call memory_forget with query="${args.query}" and confirm=true`,
             );
 
             return lines.join("\n");
           }
 
-          // Confirmed - delete all matching
-          let deletedCount = 0;
-          for (const result of results) {
-            const deleted = await ctx.memoryManager.delete(result.memory.id);
-            if (deleted) deletedCount++;
-          }
-
-          return `Deleted ${deletedCount} memor${deletedCount === 1 ? "y" : "ies"} matching: "${args.query}"`;
+          // Confirmed — use forgetByQuery for bulk deletion
+          const deletedCount = await ctx.memory.forgetByQuery(args.query);
+          return `Deleted ${deletedCount} ${deletedCount === 1 ? "memory" : "memories"} matching: "${args.query}"`;
         }
 
-        return "Error: Unexpected state in memory_forget";
-      } catch (error) {
+        return "Error: Unexpected state in memory_forget.";
+      } catch (error: unknown) {
         const message = error instanceof Error ? error.message : String(error);
         return `Error deleting memory: ${message}`;
       }

@@ -1,59 +1,46 @@
 ---
 name: goop-amend
 description: Propose changes to a locked specification
+agent: orchestrator
+phase: plan/execute
+requires: spec_locked
+next-step: "Return to /goop-execute to implement amended scope"
+next-command: /goop-execute
 ---
 
 # /goop-amend
 
-**Modify a locked specification.** Manage scope creep responsibly.
+Change a locked spec responsibly. A locked contract cannot be edited silently.
 
-## Usage
+## Gate check
 
-```bash
-/goop-amend [description of change]
+Call `goop_state({ action: "get" })`. If `specLocked` is not `true`, return `BLOCKED` with:
+
+> Run `/goop-plan` first.
+
+## Load references
+
+```
+goop_reference({ name: "phase-gates" })
+goop_reference({ name: "core-protocol" })
 ```
 
-## Tools Used
+## Steps
 
-| Tool | Purpose in This Command |
-|------|------------------------|
-| `goop_status` | Check spec is locked |
-| `goop_spec` | Load current spec for amendment |
-| `goop_adl` | Log amendment decision |
-| `memory_decision` | Record amendment rationale |
+1. Load the current spec via `goop_spec`.
+2. Analyze impact: scope added/removed, risk, timeline, affected waves.
+3. Present options via `question`:
+   - **Confirm amendment (Recommended)** → update `SPEC.md` and `BLUEPRINT.md`.
+   - **Defer** → add to a future milestone/task.
+   - **Cancel** → abort.
+4. On confirm:
+   - Append an amendment entry to `SPEC.md`.
+   - Adjust tasks in `BLUEPRINT.md`.
+   - Log to `ADL.md` via `goop_adl`.
+   - Record rationale with `memory_decision`.
+5. If the change adds work, return to `/goop-execute`.
 
-**Hook Support:** `tool.execute.after` updates spec lock state.
+## Anti-patterns
 
----
-
-## How It Works
-
-Once a spec is locked at the end of `/goop-plan` (contract gate), it cannot be silently changed. `/goop-amend` provides a formal process to alter the contract.
-
-### 1. Change Request
-User proposes a change (e.g., "Add password reset button").
-
-### 2. Impact Analysis
-The agent analyzes the impact:
-- **Scope:** Does this add new tasks?
-- **Risk:** Does it break existing work?
-- **Timeline:** How much longer will it take?
-
-### 3. Decision
-The agent presents the impact and asks for confirmation.
-- **Confirm:** Update SPEC.md and BLUEPRINT.md.
-- **Defer:** Add to a future milestone/task.
-- **Cancel:** Abort change.
-
-## Artifacts Updated
-- `SPEC.md`: Adds an "Amendment" entry.
-- `BLUEPRINT.md`: Adds/Removes tasks.
-- `CHRONICLE.md`: Logs the scope change.
-
-## Example
-
-> **User:** `/goop-amend We need a 'Forgot Password' link`
-> **Agent:** "Impact: Adds ~2 hours. Requires new API endpoint.
-> Confirm amendment?"
-> **User:** `confirm`
-> **Agent:** "Spec updated. New tasks added to Wave 2."
+- Edit a locked spec without going through this process.
+- Skip the ADL log or impact analysis.

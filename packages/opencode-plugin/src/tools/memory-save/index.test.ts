@@ -1,287 +1,230 @@
-/**
- * Unit Tests for Memory Save Tool
- * @module tools/memory-save/index.test
- */
+import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 
-import { describe, it, expect, beforeEach, afterEach } from "bun:test";
-import { createMemorySaveTool } from "./index.js";
+import type { PluginContext, ToolContext } from "../../test-utils.js";
 import {
   createMockPluginContext,
   createMockToolContext,
   setupTestEnvironment,
-  type PluginContext,
 } from "../../test-utils.js";
+import { createMemorySaveTool } from "./index.js";
 
 describe("memory_save tool", () => {
   let ctx: PluginContext;
-  let toolContext: ReturnType<typeof createMockToolContext>;
+  let toolCtx: ToolContext;
   let cleanup: () => void;
 
   beforeEach(() => {
-    const env = setupTestEnvironment("memory-save-test");
+    const env = setupTestEnvironment("memory-save");
     cleanup = env.cleanup;
-    ctx = createMockPluginContext({
-      testDir: env.testDir,
-      includeMemory: true,
-    });
-    toolContext = createMockToolContext({ directory: env.testDir });
+    ctx = createMockPluginContext({ testDir: env.testDir });
+    toolCtx = createMockToolContext();
   });
 
-  afterEach(() => {
-    cleanup();
+  afterEach(() => cleanup());
+
+  // -------------------------------------------------------------------------
+  // Basic save (observation — default type)
+  // -------------------------------------------------------------------------
+
+  it("saves an observation with default type and importance", async () => {
+    const tool = createMemorySaveTool(ctx);
+    const result = await tool.execute(
+      { title: "Test observation", content: "Some content" },
+      toolCtx,
+    );
+
+    expect(result).toContain("Memory saved successfully!");
+    expect(result).toContain("**ID:** 1");
+    expect(result).toContain("**Type:** observation");
+    expect(result).toContain("**Importance:** 5/10");
   });
 
-  describe("tool creation", () => {
-    it("creates tool with correct description", () => {
-      const tool = createMemorySaveTool(ctx);
-      
-      expect(tool.description).toContain("memory");
-      expect(tool.description).toContain("persist");
-    });
+  it("saves with explicit type, concepts, facts, sourceFiles", async () => {
+    const tool = createMemorySaveTool(ctx);
+    const result = await tool.execute(
+      {
+        title: "Pattern found",
+        content: "Repository pattern used in src/data/",
+        type: "observation",
+        concepts: ["patterns", "architecture"],
+        facts: ["Uses repository pattern"],
+        sourceFiles: ["src/data/repo.ts"],
+        importance: 8,
+      },
+      toolCtx,
+    );
 
-    it("has required args", () => {
-      const tool = createMemorySaveTool(ctx);
-      
-      expect(tool.args).toHaveProperty("title");
-      expect(tool.args).toHaveProperty("content");
-      expect(tool.args).toHaveProperty("type");
-      expect(tool.args).toHaveProperty("facts");
-      expect(tool.args).toHaveProperty("concepts");
-      expect(tool.args).toHaveProperty("sourceFiles");
-      expect(tool.args).toHaveProperty("importance");
-    });
+    expect(result).toContain("Memory saved successfully!");
+    expect(result).toContain("**Facts:** 1 recorded");
+    expect(result).toContain("**Concepts:** patterns, architecture");
   });
 
-  describe("when memory system is not initialized", () => {
-    it("returns error message", async () => {
-      // Create context without memory manager
-      ctx = createMockPluginContext({
-        testDir: ctx.input.directory,
-        includeMemory: false,
-      });
+  // -------------------------------------------------------------------------
+  // Decision type (absorbs old memory_decision)
+  // -------------------------------------------------------------------------
 
-      const tool = createMemorySaveTool(ctx);
-      const result = await tool.execute({
-        title: "Test",
-        content: "Test content",
-      }, toolContext);
-
-      expect(result).toContain("Memory system is not configured");
-      expect(result).toContain("Note not persisted");
-    });
-  });
-
-  describe("saving memories", () => {
-    it("saves memory with title and content", async () => {
-      const tool = createMemorySaveTool(ctx);
-      const result = await tool.execute({
-        title: "Test Memory",
-        content: "This is the content of my memory.",
-      }, toolContext);
-
-      expect(result).toContain("Memory saved successfully");
-      expect(result).toContain("Test Memory");
-    });
-
-    it("returns memory ID after save", async () => {
-      const tool = createMemorySaveTool(ctx);
-      const result = await tool.execute({
-        title: "Test",
-        content: "Content",
-      }, toolContext);
-
-      expect(result).toContain("**ID:**");
-    });
-
-    it("saves memory with default type observation", async () => {
-      const tool = createMemorySaveTool(ctx);
-      const result = await tool.execute({
-        title: "Observation Test",
-        content: "Observed something",
-      }, toolContext);
-
-      expect(result).toContain("**Type:** observation");
-    });
-  });
-
-  describe("memory types", () => {
-    it("saves decision type", async () => {
-      const tool = createMemorySaveTool(ctx);
-      const result = await tool.execute({
-        title: "Decision",
-        content: "Decided to use React",
+  it("saves a decision with reasoning and alternatives folded into content", async () => {
+    const tool = createMemorySaveTool(ctx);
+    const result = await tool.execute(
+      {
+        title: "Use PostgreSQL for storage",
+        content: "Chose PostgreSQL as the primary database.",
         type: "decision",
-      }, toolContext);
+        reasoning: "Better JSON support and complex query capabilities.",
+        alternatives: ["MySQL", "MongoDB", "SQLite"],
+        concepts: ["database", "architecture"],
+      },
+      toolCtx,
+    );
 
-      expect(result).toContain("**Type:** decision");
-    });
+    expect(result).toContain("Memory saved successfully!");
+    expect(result).toContain("**Type:** decision");
+    // Default importance for decisions is 7
+    expect(result).toContain("**Importance:** 7/10");
+    expect(result).toContain("**Reasoning:** included");
+    expect(result).toContain("**Alternatives:** 3 considered");
+  });
 
-    it("saves note type", async () => {
-      const tool = createMemorySaveTool(ctx);
-      const result = await tool.execute({
-        title: "Note",
-        content: "Just a note",
+  it("auto-generates facts for decisions when none supplied", async () => {
+    const tool = createMemorySaveTool(ctx);
+    await tool.execute(
+      {
+        title: "Use jose for JWT",
+        content: "Selected jose library.",
+        type: "decision",
+        alternatives: ["jsonwebtoken"],
+      },
+      toolCtx,
+    );
+
+    // Verify the mock memory received auto-generated facts
+    const searchResults = await ctx.memory.search({ query: "jose" });
+    expect(searchResults.length).toBe(1);
+    // The stored content should include the alternatives section
+    expect(searchResults[0].memory.content).toContain("## Alternatives Considered");
+    expect(searchResults[0].memory.content).toContain("- jsonwebtoken");
+  });
+
+  it("preserves explicit facts for decisions", async () => {
+    const tool = createMemorySaveTool(ctx);
+    await tool.execute(
+      {
+        title: "Use Vitest",
+        content: "Chose Vitest for testing.",
+        type: "decision",
+        facts: ["Vitest is faster than Jest with Bun"],
+        alternatives: ["Jest"],
+      },
+      toolCtx,
+    );
+
+    const searchResults = await ctx.memory.search({ query: "Vitest" });
+    expect(searchResults.length).toBe(1);
+    expect(searchResults[0].memory.facts).toEqual(["Vitest is faster than Jest with Bun"]);
+  });
+
+  // -------------------------------------------------------------------------
+  // Note type (absorbs old memory_note)
+  // -------------------------------------------------------------------------
+
+  it("saves a note with lower default importance", async () => {
+    const tool = createMemorySaveTool(ctx);
+    const result = await tool.execute(
+      {
+        title: "Auth tests are flaky on CI",
+        content: "Auth tests are flaky on CI",
         type: "note",
-      }, toolContext);
+      },
+      toolCtx,
+    );
 
-      expect(result).toContain("**Type:** note");
-    });
+    expect(result).toContain("Memory saved successfully!");
+    expect(result).toContain("**Type:** note");
+    expect(result).toContain("**Importance:** 4/10");
+  });
 
-    it("saves todo type", async () => {
-      const tool = createMemorySaveTool(ctx);
-      const result = await tool.execute({
-        title: "Todo",
-        content: "Need to refactor this",
+  // -------------------------------------------------------------------------
+  // Todo type
+  // -------------------------------------------------------------------------
+
+  it("saves a todo", async () => {
+    const tool = createMemorySaveTool(ctx);
+    const result = await tool.execute(
+      {
+        title: "Refactor auth middleware",
+        content: "Extract shared auth logic into a helper.",
         type: "todo",
-      }, toolContext);
+      },
+      toolCtx,
+    );
 
-      expect(result).toContain("**Type:** todo");
-    });
+    expect(result).toContain("**Type:** todo");
+    expect(result).toContain("**Importance:** 5/10");
   });
 
-  describe("facts and concepts", () => {
-    it("saves memory with facts", async () => {
-      const tool = createMemorySaveTool(ctx);
-      const result = await tool.execute({
-        title: "Facts Memory",
-        content: "Content",
-        facts: ["Fact 1", "Fact 2", "Fact 3"],
-      }, toolContext);
+  // -------------------------------------------------------------------------
+  // Importance normalisation
+  // -------------------------------------------------------------------------
 
-      expect(result).toContain("**Facts:** 3 recorded");
-    });
+  it("scales 0-1 importance values to 1-10", async () => {
+    const tool = createMemorySaveTool(ctx);
+    const result = await tool.execute(
+      {
+        title: "Scaled importance",
+        content: "Testing 0.8 → 8",
+        importance: 0.8,
+      },
+      toolCtx,
+    );
 
-    it("saves memory with concepts", async () => {
-      const tool = createMemorySaveTool(ctx);
-      const result = await tool.execute({
-        title: "Concepts Memory",
-        content: "Content",
-        concepts: ["react", "typescript", "testing"],
-      }, toolContext);
-
-      expect(result).toContain("**Concepts:**");
-      expect(result).toContain("react");
-      expect(result).toContain("typescript");
-    });
-
-    it("saves memory with source files", async () => {
-      const tool = createMemorySaveTool(ctx);
-      const result = await tool.execute({
-        title: "Files Memory",
-        content: "Content",
-        sourceFiles: ["src/index.ts", "src/utils.ts"],
-      }, toolContext);
-
-      expect(result).toContain("Memory saved");
-    });
+    expect(result).toContain("**Importance:** 8/10");
   });
 
-  describe("importance handling", () => {
-    it("uses default importance of 5", async () => {
-      const tool = createMemorySaveTool(ctx);
-      const result = await tool.execute({
-        title: "Default Importance",
-        content: "Content",
-      }, toolContext);
-
-      expect(result).toContain("**Importance:** 5/10");
-    });
-
-    it("accepts importance 1-10", async () => {
-      const tool = createMemorySaveTool(ctx);
-      const result = await tool.execute({
-        title: "High Importance",
-        content: "Content",
-        importance: 9,
-      }, toolContext);
-
-      expect(result).toContain("**Importance:** 9/10");
-    });
-
-    it("normalizes importance values between 0-1 to 1-10 scale", async () => {
-      const tool = createMemorySaveTool(ctx);
-      const result = await tool.execute({
-        title: "Normalized",
-        content: "Content",
-        importance: 0.8, // Should become 8
-      }, toolContext);
-
-      expect(result).toContain("**Importance:** 8/10");
-    });
-
-    it("rejects importance below 1", async () => {
-      const tool = createMemorySaveTool(ctx);
-      const result = await tool.execute({
-        title: "Invalid",
-        content: "Content",
-        importance: 0,
-      }, toolContext);
-
-      expect(result).toContain("Error");
-      expect(result).toContain("Importance must be between 1 and 10");
-    });
-
-    it("rejects importance above 10", async () => {
-      const tool = createMemorySaveTool(ctx);
-      const result = await tool.execute({
-        title: "Invalid",
-        content: "Content",
+  it("rejects importance outside 1-10 range", async () => {
+    const tool = createMemorySaveTool(ctx);
+    const result = await tool.execute(
+      {
+        title: "Bad importance",
+        content: "Testing",
         importance: 15,
-      }, toolContext);
+      },
+      toolCtx,
+    );
 
-      expect(result).toContain("Error");
-      expect(result).toContain("Importance must be between 1 and 10");
-    });
+    expect(result).toContain("Error: Importance must be between 1 and 10");
   });
 
-  describe("title validation", () => {
-    it("rejects title longer than 100 characters", async () => {
-      const longTitle = "A".repeat(101);
-      
-      const tool = createMemorySaveTool(ctx);
-      const result = await tool.execute({
-        title: longTitle,
+  // -------------------------------------------------------------------------
+  // Validation
+  // -------------------------------------------------------------------------
+
+  it("rejects titles longer than 100 characters", async () => {
+    const tool = createMemorySaveTool(ctx);
+    const result = await tool.execute(
+      {
+        title: "A".repeat(101),
         content: "Content",
-      }, toolContext);
+      },
+      toolCtx,
+    );
 
-      expect(result).toContain("Error");
-      expect(result).toContain("100 characters or less");
-    });
-
-    it("accepts title exactly 100 characters", async () => {
-      const exactTitle = "A".repeat(100);
-      
-      const tool = createMemorySaveTool(ctx);
-      const result = await tool.execute({
-        title: exactTitle,
-        content: "Content",
-      }, toolContext);
-
-      expect(result).toContain("Memory saved");
-    });
+    expect(result).toContain("Error: Title must be 100 characters or less");
   });
 
-  describe("error handling", () => {
-    it("handles save errors gracefully", async () => {
-      // Create a mock that will throw
-      const badCtx = createMockPluginContext({
-        testDir: ctx.input.directory,
-        includeMemory: true,
-      });
-      
-      // Override save to throw
-      badCtx.memoryManager!.save = async () => {
-        throw new Error("Database connection failed");
-      };
+  // -------------------------------------------------------------------------
+  // Error handling
+  // -------------------------------------------------------------------------
 
-      const tool = createMemorySaveTool(badCtx);
-      const result = await tool.execute({
-        title: "Test",
-        content: "Content",
-      }, toolContext);
+  it("returns error message on save failure (never throws)", async () => {
+    // Override memory.save to throw
+    const brokenCtx = createMockPluginContext({ testDir: "/tmp/broken" });
+    brokenCtx.memory.save = async () => {
+      throw new Error("Database locked");
+    };
 
-      expect(result).toContain("Error saving memory");
-      expect(result).toContain("Database connection failed");
-    });
+    const tool = createMemorySaveTool(brokenCtx);
+    const result = await tool.execute({ title: "Test", content: "Content" }, toolCtx);
+
+    expect(result).toContain("Error saving memory: Database locked");
   });
 });

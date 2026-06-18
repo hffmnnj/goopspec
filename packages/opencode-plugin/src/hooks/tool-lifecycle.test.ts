@@ -1,528 +1,384 @@
-/**
- * Tests for Tool Lifecycle Hooks
- * @module hooks/tool-lifecycle.test
- */
-
-import { describe, it, expect, beforeEach } from "bun:test";
-import { tmpdir } from "os";
-import { join } from "path";
-import { createToolLifecycleHooks } from "./tool-lifecycle.js";
-import {
-  createMockPluginContext,
-  createMockMemoryManager,
-} from "../test-utils.js";
+import { afterEach, beforeEach, describe, expect, it, spyOn } from "bun:test";
 import type { PluginContext } from "../core/types.js";
+import { createMockPluginContext, delay, setupTestEnvironment } from "../test-utils.js";
+import {
+  createToolLifecycleHook,
+  isSignificant,
+  toolLifecycleHookFactory,
+} from "./tool-lifecycle.js";
+import type { Hooks } from "./types.js";
 
-describe("createToolLifecycleHooks", () => {
+// ---------------------------------------------------------------------------
+// Helper: extract handlers with safe narrowing (avoids non-null assertions)
+// ---------------------------------------------------------------------------
+
+function getHandlers(ctx: PluginContext): {
+  beforeHook: NonNullable<Hooks["tool.execute.before"]>;
+  afterHook: NonNullable<Hooks["tool.execute.after"]>;
+} {
+  const hooks = createToolLifecycleHook(ctx);
+  const beforeHook = hooks["tool.execute.before"];
+  const afterHook = hooks["tool.execute.after"];
+  if (!beforeHook || !afterHook) {
+    throw new Error("Expected both before and after handlers to be defined");
+  }
+  return { beforeHook, afterHook };
+}
+
+// ---------------------------------------------------------------------------
+// isSignificant
+// ---------------------------------------------------------------------------
+
+describe("isSignificant", () => {
+  it("returns true for goop_state transition", () => {
+    expect(isSignificant("goop_state", { action: "transition", phase: "execute" })).toBe(true);
+  });
+
+  it("returns true for goop_state lock-spec", () => {
+    expect(isSignificant("goop_state", { action: "lock-spec" })).toBe(true);
+  });
+
+  it("returns true for goop_state unlock-spec", () => {
+    expect(isSignificant("goop_state", { action: "unlock-spec" })).toBe(true);
+  });
+
+  it("returns true for goop_state update-wave", () => {
+    expect(
+      isSignificant("goop_state", { action: "update-wave", currentWave: 2, totalWaves: 5 }),
+    ).toBe(true);
+  });
+
+  it("returns true for goop_state complete-interview", () => {
+    expect(isSignificant("goop_state", { action: "complete-interview" })).toBe(true);
+  });
+
+  it("returns true for goop_state confirm-acceptance", () => {
+    expect(isSignificant("goop_state", { action: "confirm-acceptance" })).toBe(true);
+  });
+
+  it("returns true for goop_state set-mode", () => {
+    expect(isSignificant("goop_state", { action: "set-mode", mode: "quick" })).toBe(true);
+  });
+
+  it("returns true for goop_state create-workflow", () => {
+    expect(isSignificant("goop_state", { action: "create-workflow", workflowId: "feat-x" })).toBe(
+      true,
+    );
+  });
+
+  it("returns true for goop_state reset", () => {
+    expect(isSignificant("goop_state", { action: "reset" })).toBe(true);
+  });
+
+  it("returns false for goop_state get (read)", () => {
+    expect(isSignificant("goop_state", { action: "get" })).toBe(false);
+  });
+
+  it("returns false for goop_state list-workflows (read)", () => {
+    expect(isSignificant("goop_state", { action: "list-workflows" })).toBe(false);
+  });
+
+  it("returns false for goop_state with missing action", () => {
+    expect(isSignificant("goop_state", {})).toBe(false);
+  });
+
+  it("returns true for goop_adl append", () => {
+    expect(isSignificant("goop_adl", { action: "append", description: "test" })).toBe(true);
+  });
+
+  it("returns false for goop_adl read", () => {
+    expect(isSignificant("goop_adl", { action: "read" })).toBe(false);
+  });
+
+  it("returns true for goop_checkpoint save", () => {
+    expect(isSignificant("goop_checkpoint", { action: "save", id: "wave-1" })).toBe(true);
+  });
+
+  it("returns false for goop_checkpoint list", () => {
+    expect(isSignificant("goop_checkpoint", { action: "list" })).toBe(false);
+  });
+
+  it("returns false for goop_checkpoint load", () => {
+    expect(isSignificant("goop_checkpoint", { action: "load", id: "wave-1" })).toBe(false);
+  });
+
+  it("returns true for goop_setup (any action)", () => {
+    expect(isSignificant("goop_setup", { action: "init" })).toBe(true);
+    expect(isSignificant("goop_setup", { action: "apply" })).toBe(true);
+  });
+
+  it("returns false for non-significant tools", () => {
+    expect(isSignificant("goop_status", {})).toBe(false);
+    expect(isSignificant("goop_spec", { action: "read" })).toBe(false);
+    expect(isSignificant("goop_reference", { name: "executor-core" })).toBe(false);
+    expect(isSignificant("memory_search", { query: "test" })).toBe(false);
+    expect(isSignificant("memory_save", { title: "test" })).toBe(false);
+    expect(isSignificant("slashcommand", { command: "/goop-status" })).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// createToolLifecycleHook — before handler
+// ---------------------------------------------------------------------------
+
+describe("createToolLifecycleHook before handler", () => {
   let ctx: PluginContext;
-  let testDir: string;
+  let cleanup: () => void;
 
   beforeEach(() => {
-    testDir = join(tmpdir(), `tool-lifecycle-test-${Date.now()}`);
-    ctx = createMockPluginContext({
-      testDir,
-      config: {
-        memory: {
-          enabled: true,
-          capture: {
-            enabled: true,
-            captureToolUse: true,
-            skipTools: ["Read", "Glob", "Grep"],
-            minImportanceThreshold: 4,
-          },
-        },
-      },
-      includeMemory: true,
-    });
+    const env = setupTestEnvironment("tool-lifecycle-bh");
+    cleanup = env.cleanup;
+    ctx = createMockPluginContext({ testDir: env.testDir });
   });
 
-  describe("hook creation", () => {
-    it("creates before and after hooks", () => {
-      const hooks = createToolLifecycleHooks(ctx);
+  afterEach(() => cleanup());
+
+  it("fires without error", async () => {
+    const { beforeHook } = getHandlers(ctx);
+    const output = { args: { action: "get" } };
+    await beforeHook({ tool: "goop_state", sessionID: "s1", callID: "c1" }, output);
+  });
+
+  it("does not mutate the output args", async () => {
+    const { beforeHook } = getHandlers(ctx);
+    const args = { action: "get", extra: "data" };
+    const output = { args };
+    await beforeHook({ tool: "goop_state", sessionID: "s1", callID: "c2" }, output);
+
+    expect(output.args).toBe(args);
+    expect(output.args.action).toBe("get");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// createToolLifecycleHook — after handler
+// ---------------------------------------------------------------------------
+
+describe("createToolLifecycleHook after handler", () => {
+  let ctx: PluginContext;
+  let cleanup: () => void;
+
+  beforeEach(() => {
+    const env = setupTestEnvironment("tool-lifecycle-ah");
+    cleanup = env.cleanup;
+    ctx = createMockPluginContext({ testDir: env.testDir });
+  });
+
+  afterEach(() => cleanup());
+
+  it("fires without error", async () => {
+    const { afterHook } = getHandlers(ctx);
+    const output = {
+      title: "test",
+      output: "result",
+      metadata: {} as Record<string, unknown>,
+    };
+    await afterHook({ tool: "goop_state", sessionID: "s1", callID: "c10" }, output);
+  });
+
+  it("injects durationMs into metadata when before was called first", async () => {
+    const { beforeHook, afterHook } = getHandlers(ctx);
+    const callID = "c-timing-1";
+
+    await beforeHook({ tool: "goop_status", sessionID: "s1", callID }, { args: {} });
+    await delay(5);
+
+    const output = {
+      title: "status",
+      output: "ok",
+      metadata: {} as Record<string, unknown>,
+    };
+    await afterHook({ tool: "goop_status", sessionID: "s1", callID }, output);
+
+    expect(output.metadata.durationMs).toBeDefined();
+    expect(typeof output.metadata.durationMs).toBe("number");
+    expect(output.metadata.durationMs as number).toBeGreaterThanOrEqual(0);
+  });
+
+  it("triggers memory distill for significant tool executions", async () => {
+    const saveSpy = spyOn(ctx.memory, "save");
+    const { beforeHook, afterHook } = getHandlers(ctx);
+    const callID = "c-distill-1";
+
+    await beforeHook(
+      { tool: "goop_state", sessionID: "s1", callID },
+      { args: { action: "transition", phase: "execute" } },
+    );
+    await afterHook(
+      { tool: "goop_state", sessionID: "s1", callID },
+      { title: "state", output: "transitioned", metadata: {} as Record<string, unknown> },
+    );
+
+    await delay(20);
+
+    expect(saveSpy).toHaveBeenCalledTimes(1);
+    const saveArg = saveSpy.mock.calls[0][0];
+    expect(saveArg.type).toBe("observation");
+    expect(saveArg.content).toContain("transition");
+    expect(saveArg.content).toContain("execute");
+    expect(saveArg.concepts).toContain("auto-distill");
+    expect(saveArg.concepts).toContain("goop_state");
+  });
+
+  it("does NOT trigger memory distill for non-significant tools", async () => {
+    const saveSpy = spyOn(ctx.memory, "save");
+    const { beforeHook, afterHook } = getHandlers(ctx);
+    const callID = "c-no-distill-1";
+
+    await beforeHook({ tool: "goop_status", sessionID: "s1", callID }, { args: {} });
+    await afterHook(
+      { tool: "goop_status", sessionID: "s1", callID },
+      { title: "status", output: "ok", metadata: {} as Record<string, unknown> },
+    );
+
+    await delay(20);
+    expect(saveSpy).not.toHaveBeenCalled();
+  });
+
+  it("does NOT trigger memory distill for goop_state get (read)", async () => {
+    const saveSpy = spyOn(ctx.memory, "save");
+    const { beforeHook, afterHook } = getHandlers(ctx);
+    const callID = "c-no-distill-read";
+
+    await beforeHook({ tool: "goop_state", sessionID: "s1", callID }, { args: { action: "get" } });
+    await afterHook(
+      { tool: "goop_state", sessionID: "s1", callID },
+      { title: "state", output: "state data", metadata: {} as Record<string, unknown> },
+    );
+
+    await delay(20);
+    expect(saveSpy).not.toHaveBeenCalled();
+  });
+
+  it("distill is non-blocking — after handler returns before memory.save resolves", async () => {
+    let saveResolved = false;
+
+    ctx.memory.save = async (input) => {
+      await delay(100);
+      saveResolved = true;
+      return {
+        id: 1,
+        type: input.type,
+        title: input.title,
+        content: input.content,
+        importance: input.importance ?? 5,
+        createdAt: Date.now(),
+      };
+    };
+
+    const { beforeHook, afterHook } = getHandlers(ctx);
+    const callID = "c-nonblocking";
+
+    await beforeHook(
+      { tool: "goop_state", sessionID: "s1", callID },
+      { args: { action: "lock-spec" } },
+    );
+
+    const start = Date.now();
+    await afterHook(
+      { tool: "goop_state", sessionID: "s1", callID },
+      { title: "state", output: "locked", metadata: {} as Record<string, unknown> },
+    );
+    const elapsed = Date.now() - start;
+
+    // Handler returns quickly because distill is fire-and-forget
+    expect(elapsed).toBeLessThan(50);
+    expect(saveResolved).toBe(false);
+
+    // Wait for background save to complete
+    await delay(150);
+    expect(saveResolved).toBe(true);
+  });
+
+  it("gracefully handles memory.save rejection without unhandled rejection", async () => {
+    const consoleSpy = spyOn(console, "error").mockImplementation(() => {});
+
+    ctx.memory.save = async () => {
+      throw new Error("memory write failed");
+    };
+
+    const { beforeHook, afterHook } = getHandlers(ctx);
+    const callID = "c-error-handling";
+
+    await beforeHook(
+      { tool: "goop_state", sessionID: "s1", callID },
+      { args: { action: "transition", phase: "plan" } },
+    );
+    await afterHook(
+      { tool: "goop_state", sessionID: "s1", callID },
+      { title: "state", output: "transitioned", metadata: {} as Record<string, unknown> },
+    );
+
+    await delay(20);
+
+    expect(consoleSpy).toHaveBeenCalled();
+    const errorMsg = consoleSpy.mock.calls[0][0] as string;
+    expect(errorMsg).toContain("memory-distill");
+    consoleSpy.mockRestore();
+  });
+
+  it("distills goop_adl append with description", async () => {
+    const saveSpy = spyOn(ctx.memory, "save");
+    const { beforeHook, afterHook } = getHandlers(ctx);
+    const callID = "c-adl-1";
+
+    await beforeHook(
+      { tool: "goop_adl", sessionID: "s1", callID },
+      { args: { action: "append", description: "Changed API structure" } },
+    );
+    await afterHook(
+      { tool: "goop_adl", sessionID: "s1", callID },
+      { title: "adl", output: "appended", metadata: {} as Record<string, unknown> },
+    );
+
+    await delay(20);
+
+    expect(saveSpy).toHaveBeenCalledTimes(1);
+    const saveArg = saveSpy.mock.calls[0][0];
+    expect(saveArg.content).toContain("ADL");
+    expect(saveArg.content).toContain("Changed API structure");
+  });
+
+  it("distills goop_checkpoint save with id", async () => {
+    const saveSpy = spyOn(ctx.memory, "save");
+    const { beforeHook, afterHook } = getHandlers(ctx);
+    const callID = "c-checkpoint-1";
+
+    await beforeHook(
+      { tool: "goop_checkpoint", sessionID: "s1", callID },
+      { args: { action: "save", id: "wave-3-complete" } },
+    );
+    await afterHook(
+      { tool: "goop_checkpoint", sessionID: "s1", callID },
+      { title: "checkpoint", output: "saved", metadata: {} as Record<string, unknown> },
+    );
+
+    await delay(20);
+
+    expect(saveSpy).toHaveBeenCalledTimes(1);
+    const saveArg = saveSpy.mock.calls[0][0];
+    expect(saveArg.content).toContain("Checkpoint saved");
+    expect(saveArg.content).toContain("wave-3-complete");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// toolLifecycleHookFactory
+// ---------------------------------------------------------------------------
+
+describe("toolLifecycleHookFactory", () => {
+  it("returns a Partial<Hooks> with both before and after handlers", () => {
+    const { testDir, cleanup } = setupTestEnvironment("tool-lifecycle-factory");
+    try {
+      const ctx = createMockPluginContext({ testDir });
+      const hooks = toolLifecycleHookFactory(ctx);
+
       expect(hooks["tool.execute.before"]).toBeDefined();
-      expect(hooks["tool.execute.after"]).toBeDefined();
       expect(typeof hooks["tool.execute.before"]).toBe("function");
+      expect(hooks["tool.execute.after"]).toBeDefined();
       expect(typeof hooks["tool.execute.after"]).toBe("function");
-    });
-  });
-
-  describe("tool.execute.before", () => {
-    it("tracks tool call start in history", async () => {
-      let historyEntry: any;
-      ctx.stateManager.appendHistory = (entry) => {
-        historyEntry = entry;
-      };
-
-      const hooks = createToolLifecycleHooks(ctx);
-
-      await hooks["tool.execute.before"](
-        {
-          tool: "Edit",
-          sessionID: "test-session",
-          callID: "call-123",
-        },
-        {
-          args: { filePath: "/test/file.ts" },
-        }
-      );
-
-      expect(historyEntry).toBeDefined();
-      expect(historyEntry.type).toBe("tool_call");
-      expect(historyEntry.data.phase).toBe("before");
-      expect(historyEntry.data.tool).toBe("Edit");
-      expect(historyEntry.data.callID).toBe("call-123");
-    });
-
-    it("stores args for after hook", async () => {
-      const hooks = createToolLifecycleHooks(ctx);
-      const mockMemory = createMockMemoryManager();
-      ctx.memoryManager = mockMemory;
-
-      // Before hook
-      await hooks["tool.execute.before"](
-        {
-          tool: "Edit",
-          sessionID: "test-session",
-          callID: "call-456",
-        },
-        {
-          args: { filePath: "/test/file.ts", oldString: "old", newString: "new" },
-        }
-      );
-
-      // After hook - should have access to stored args
-      await hooks["tool.execute.after"](
-        {
-          tool: "Edit",
-          sessionID: "test-session",
-          callID: "call-456",
-        },
-        {
-          title: "Edited file",
-          output: "Success",
-          metadata: {},
-        }
-      );
-
-      // Memory should be captured with context
-      const recent = await mockMemory.getRecent(1);
-      expect(recent.length).toBeGreaterThan(0);
-    });
-  });
-
-  describe("tool.execute.after", () => {
-    it("tracks tool call completion in history", async () => {
-      const historyEntries: any[] = [];
-      ctx.stateManager.appendHistory = (entry) => {
-        historyEntries.push(entry);
-      };
-
-      const hooks = createToolLifecycleHooks(ctx);
-
-      // Before
-      await hooks["tool.execute.before"](
-        { tool: "Write", sessionID: "test-session", callID: "call-789" },
-        { args: { filePath: "/new/file.ts" } }
-      );
-
-      // After
-      await hooks["tool.execute.after"](
-        { tool: "Write", sessionID: "test-session", callID: "call-789" },
-        { title: "File written", output: "Created file", metadata: {} }
-      );
-
-      const afterEntry = historyEntries.find(e => e.data.phase === "after");
-      expect(afterEntry).toBeDefined();
-      expect(afterEntry.data.tool).toBe("Write");
-      expect(afterEntry.data.title).toBe("File written");
-    });
-
-    it("updates last activity timestamp", async () => {
-      const hooks = createToolLifecycleHooks(ctx);
-      const initialActivity = ctx.stateManager.getState().workflow.lastActivity;
-
-      await new Promise(r => setTimeout(r, 10));
-
-      await hooks["tool.execute.before"](
-        { tool: "Edit", sessionID: "test-session", callID: "call-activity" },
-        { args: {} }
-      );
-
-      await hooks["tool.execute.after"](
-        { tool: "Edit", sessionID: "test-session", callID: "call-activity" },
-        { title: "Done", output: "OK", metadata: {} }
-      );
-
-      const newActivity = ctx.stateManager.getState().workflow.lastActivity;
-      expect(new Date(newActivity).getTime()).toBeGreaterThanOrEqual(
-        new Date(initialActivity).getTime()
-      );
-    });
-
-    it("captures important tool calls to memory", async () => {
-      const mockMemory = createMockMemoryManager();
-      ctx.memoryManager = mockMemory;
-
-      const hooks = createToolLifecycleHooks(ctx);
-
-      await hooks["tool.execute.before"](
-        { tool: "Write", sessionID: "test-session", callID: "call-mem-1" },
-        { args: { filePath: "/new/feature.ts" } }
-      );
-
-      await hooks["tool.execute.after"](
-        { tool: "Write", sessionID: "test-session", callID: "call-mem-1" },
-        { title: "Created feature.ts", output: "File written successfully", metadata: {} }
-      );
-
-      const recent = await mockMemory.getRecent(1);
-      expect(recent.length).toBeGreaterThan(0);
-    });
-
-    it("does not capture skipped tools", async () => {
-      const mockMemory = createMockMemoryManager();
-      ctx.memoryManager = mockMemory;
-
-      const hooks = createToolLifecycleHooks(ctx);
-
-      await hooks["tool.execute.before"](
-        { tool: "Read", sessionID: "test-session", callID: "call-skip-1" },
-        { args: { filePath: "/file.ts" } }
-      );
-
-      await hooks["tool.execute.after"](
-        { tool: "Read", sessionID: "test-session", callID: "call-skip-1" },
-        { title: "Read file", output: "content", metadata: {} }
-      );
-
-      const recent = await mockMemory.getRecent(1);
-      expect(recent.length).toBe(0);
-    });
-
-    it("handles memory save errors gracefully", async () => {
-      const errorMemory = createMockMemoryManager();
-      errorMemory.save = async () => {
-        throw new Error("Save failed");
-      };
-      ctx.memoryManager = errorMemory;
-
-      const hooks = createToolLifecycleHooks(ctx);
-
-      await hooks["tool.execute.before"](
-        { tool: "Edit", sessionID: "test-session", callID: "call-err-1" },
-        { args: { filePath: "/test.ts" } }
-      );
-
-      // Should not throw
-      await expect(
-        hooks["tool.execute.after"](
-          { tool: "Edit", sessionID: "test-session", callID: "call-err-1" },
-          { title: "Edited", output: "Success", metadata: {} }
-        )
-      ).resolves.toBeUndefined();
-    });
-  });
-
-  describe("todo tracking", () => {
-    it("tracks todo counts from todoread tool", async () => {
-      const hooks = createToolLifecycleHooks(ctx);
-
-      await hooks["tool.execute.before"](
-        { tool: "todoread", sessionID: "test-session", callID: "call-todo-1" },
-        { args: {} }
-      );
-
-      await hooks["tool.execute.after"](
-        { tool: "todoread", sessionID: "test-session", callID: "call-todo-1" },
-        {
-          title: "Todos",
-          output: JSON.stringify({
-            todos: [
-              { status: "pending" },
-              { status: "pending" },
-              { status: "in_progress" },
-              { status: "completed" },
-            ],
-          }),
-          metadata: {},
-        }
-      );
-
-      // Should have counted 3 incomplete todos
-    });
-
-    it("tracks todo counts from mcp_todowrite tool", async () => {
-      const hooks = createToolLifecycleHooks(ctx);
-
-      await hooks["tool.execute.before"](
-        { tool: "mcp_todowrite", sessionID: "test-session", callID: "call-todo-2" },
-        { args: {} }
-      );
-
-      await hooks["tool.execute.after"](
-        { tool: "mcp_todowrite", sessionID: "test-session", callID: "call-todo-2" },
-        {
-          title: "Updated todos",
-          output: '{"status":"pending"},{"status":"in_progress"}',
-          metadata: {},
-        }
-      );
-
-      // Should have parsed todo counts
-    });
-
-    it("handles parse errors gracefully", async () => {
-      const hooks = createToolLifecycleHooks(ctx);
-
-      await hooks["tool.execute.before"](
-        { tool: "todoread", sessionID: "test-session", callID: "call-todo-3" },
-        { args: {} }
-      );
-
-      // Should not throw on invalid output
-      await expect(
-        hooks["tool.execute.after"](
-          { tool: "todoread", sessionID: "test-session", callID: "call-todo-3" },
-          { title: "Todos", output: "not valid json", metadata: {} }
-        )
-      ).resolves.toBeUndefined();
-    });
-  });
-
-  describe("comment checking", () => {
-    it("analyzes comments on write operations when enforcement enabled", async () => {
-      const ctxWithEnforcement = createMockPluginContext({
-        testDir,
-        config: {
-          enforcement: "assist",
-        },
-        includeMemory: true,
-      });
-
-      const hooks = createToolLifecycleHooks(ctxWithEnforcement);
-
-      await hooks["tool.execute.before"](
-        { tool: "write", sessionID: "test-session", callID: "call-comment-1" },
-        {
-          args: {
-            filePath: "/test.ts",
-            content: `
-// Comment 1
-// Comment 2
-// Comment 3
-const x = 1;
-            `,
-          },
-        }
-      );
-
-      await hooks["tool.execute.after"](
-        { tool: "write", sessionID: "test-session", callID: "call-comment-1" },
-        { title: "Wrote file", output: "Success", metadata: {} }
-      );
-
-      // Should have analyzed comments (logs warning if excessive)
-    });
-
-    it("skips comment analysis for markdown files", async () => {
-      const ctxWithEnforcement = createMockPluginContext({
-        testDir,
-        config: {
-          enforcement: "assist",
-        },
-        includeMemory: true,
-      });
-
-      const hooks = createToolLifecycleHooks(ctxWithEnforcement);
-
-      await hooks["tool.execute.before"](
-        { tool: "write", sessionID: "test-session", callID: "call-comment-2" },
-        {
-          args: {
-            filePath: "/README.md",
-            content: "# Readme\n\nSome content",
-          },
-        }
-      );
-
-      await hooks["tool.execute.after"](
-        { tool: "write", sessionID: "test-session", callID: "call-comment-2" },
-        { title: "Wrote file", output: "Success", metadata: {} }
-      );
-
-      // Should skip markdown
-    });
-
-    it("skips comment analysis for JSON files", async () => {
-      const ctxWithEnforcement = createMockPluginContext({
-        testDir,
-        config: {
-          enforcement: "assist",
-        },
-        includeMemory: true,
-      });
-
-      const hooks = createToolLifecycleHooks(ctxWithEnforcement);
-
-      await hooks["tool.execute.before"](
-        { tool: "mcp_write", sessionID: "test-session", callID: "call-comment-3" },
-        {
-          args: {
-            filePath: "/config.json",
-            content: '{"key": "value"}',
-          },
-        }
-      );
-
-      await hooks["tool.execute.after"](
-        { tool: "mcp_write", sessionID: "test-session", callID: "call-comment-3" },
-        { title: "Wrote file", output: "Success", metadata: {} }
-      );
-
-      // Should skip JSON
-    });
-
-    it("does not analyze when enforcement is disabled", async () => {
-      const ctxNoEnforcement = createMockPluginContext({
-        testDir,
-        includeMemory: true,
-      });
-      delete (ctxNoEnforcement.config as any).enforcement;
-
-      const hooks = createToolLifecycleHooks(ctxNoEnforcement);
-
-      await hooks["tool.execute.before"](
-        { tool: "write", sessionID: "test-session", callID: "call-comment-4" },
-        {
-          args: {
-            filePath: "/test.ts",
-            content: "// many comments\n".repeat(50),
-          },
-        }
-      );
-
-      await hooks["tool.execute.after"](
-        { tool: "write", sessionID: "test-session", callID: "call-comment-4" },
-        { title: "Wrote file", output: "Success", metadata: {} }
-      );
-
-      // Should not analyze
-    });
-  });
-
-  describe("without memory manager", () => {
-    it("works without memory manager", async () => {
-      const ctxNoMemory = createMockPluginContext({ testDir });
-      delete ctxNoMemory.memoryManager;
-
-      const hooks = createToolLifecycleHooks(ctxNoMemory);
-
-      await hooks["tool.execute.before"](
-        { tool: "Edit", sessionID: "test-session", callID: "call-nomem-1" },
-        { args: { filePath: "/test.ts" } }
-      );
-
-      await expect(
-        hooks["tool.execute.after"](
-          { tool: "Edit", sessionID: "test-session", callID: "call-nomem-1" },
-          { title: "Edited", output: "Success", metadata: {} }
-        )
-      ).resolves.toBeUndefined();
-    });
-  });
-
-  describe("memory distillation", () => {
-    it("uses distill if available on memory manager", async () => {
-      const mockMemory = createMockMemoryManager();
-      let distillCalled = false;
-      (mockMemory as any).distill = async () => {
-        distillCalled = true;
-      };
-      ctx.memoryManager = mockMemory;
-
-      const hooks = createToolLifecycleHooks(ctx);
-
-      await hooks["tool.execute.before"](
-        { tool: "Write", sessionID: "test-session", callID: "call-distill-1" },
-        { args: { filePath: "/test.ts" } }
-      );
-
-      await hooks["tool.execute.after"](
-        { tool: "Write", sessionID: "test-session", callID: "call-distill-1" },
-        { title: "Wrote file", output: "Success", metadata: {} }
-      );
-
-      expect(distillCalled).toBe(true);
-    });
-
-    it("falls back to direct save if distill not available", async () => {
-      const mockMemory = createMockMemoryManager();
-      ctx.memoryManager = mockMemory;
-
-      const hooks = createToolLifecycleHooks(ctx);
-
-      await hooks["tool.execute.before"](
-        { tool: "Edit", sessionID: "test-session", callID: "call-direct-1" },
-        { args: { filePath: "/test.ts" } }
-      );
-
-      await hooks["tool.execute.after"](
-        { tool: "Edit", sessionID: "test-session", callID: "call-direct-1" },
-        { title: "Edited file", output: "Success", metadata: {} }
-      );
-
-      const recent = await mockMemory.getRecent(1);
-      expect(recent.length).toBeGreaterThan(0);
-    });
-  });
-
-  describe("orphaned after hooks", () => {
-    it("handles after hook without corresponding before hook", async () => {
-      const hooks = createToolLifecycleHooks(ctx);
-
-      // Only call after hook (no before)
-      await expect(
-        hooks["tool.execute.after"](
-          { tool: "Edit", sessionID: "test-session", callID: "orphan-call" },
-          { title: "Edited", output: "Success", metadata: {} }
-        )
-      ).resolves.toBeUndefined();
-    });
-  });
-
-  describe("importance filtering", () => {
-    it("does not capture low importance tool calls", async () => {
-      // Set high threshold
-      const ctxHighThreshold = createMockPluginContext({
-        testDir,
-        config: {
-          memory: {
-            enabled: true,
-            capture: {
-              enabled: true,
-              captureToolUse: true,
-              skipTools: [],
-              minImportanceThreshold: 10, // Very high
-            },
-          },
-        },
-        includeMemory: true,
-      });
-
-      const hooks = createToolLifecycleHooks(ctxHighThreshold);
-
-      await hooks["tool.execute.before"](
-        { tool: "Edit", sessionID: "test-session", callID: "call-low-imp" },
-        { args: { filePath: "/test.ts" } }
-      );
-
-      await hooks["tool.execute.after"](
-        { tool: "Edit", sessionID: "test-session", callID: "call-low-imp" },
-        { title: "Edited", output: "OK", metadata: {} }
-      );
-
-      const recent = await ctxHighThreshold.memoryManager!.getRecent(1);
-      expect(recent.length).toBe(0);
-    });
+    } finally {
+      cleanup();
+    }
   });
 });

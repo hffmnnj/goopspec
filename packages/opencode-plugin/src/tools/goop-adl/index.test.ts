@@ -1,280 +1,183 @@
-/**
- * Unit Tests for GoopSpec ADL Tool
- * @module tools/goop-adl/index.test
- */
+import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 
-import { describe, it, expect, beforeEach, afterEach } from "bun:test";
-import { createGoopAdlTool } from "./index.js";
+import type { PluginContext } from "../../test-utils.js";
 import {
   createMockPluginContext,
   createMockToolContext,
   setupTestEnvironment,
-  type PluginContext,
 } from "../../test-utils.js";
+import { createGoopAdlTool } from "./index.js";
 
 describe("goop_adl tool", () => {
   let ctx: PluginContext;
-  let toolContext: ReturnType<typeof createMockToolContext>;
   let cleanup: () => void;
 
   beforeEach(() => {
-    const env = setupTestEnvironment("goop-adl-test");
+    const env = setupTestEnvironment("goop-adl");
     cleanup = env.cleanup;
     ctx = createMockPluginContext({ testDir: env.testDir });
-    toolContext = createMockToolContext({ directory: env.testDir });
   });
 
-  afterEach(() => {
-    cleanup();
-  });
+  afterEach(() => cleanup());
 
-  describe("tool creation", () => {
-    it("creates tool with correct description", () => {
-      const tool = createGoopAdlTool(ctx);
-      
-      expect(tool.description).toContain("Automated Decision Log");
-      expect(tool.description).toContain("read");
-      expect(tool.description).toContain("append");
-    });
+  const toolCtx = createMockToolContext();
 
-    it("has required args", () => {
-      const tool = createGoopAdlTool(ctx);
-      
-      expect(tool.args).toHaveProperty("action");
-      expect(tool.args).toHaveProperty("type");
-      expect(tool.args).toHaveProperty("description");
-      expect(tool.args).toHaveProperty("entry_action");
-      expect(tool.args).toHaveProperty("rule");
-      expect(tool.args).toHaveProperty("files");
-    });
-  });
+  // -----------------------------------------------------------------------
+  // read action
+  // -----------------------------------------------------------------------
 
-  describe("read action", () => {
+  describe("action: read", () => {
     it("returns ADL content", async () => {
       const tool = createGoopAdlTool(ctx);
-      const result = await tool.execute({ action: "read" }, toolContext);
+      const result = await tool.execute({ action: "read" }, toolCtx);
 
-      expect(result).toContain("# Automated Decision Log");
+      // Mock state manager returns a default ADL header
+      expect(result).toContain("Automated Decision Log");
     });
 
-    it("returns appended entries when reading", async () => {
-      ctx.stateManager.appendADL({
-        timestamp: new Date().toISOString(),
-        type: "decision",
-        description: "Test decision",
-        action: "Made a test decision",
-      });
-
+    it("returns appended entries on subsequent read", async () => {
       const tool = createGoopAdlTool(ctx);
-      const result = await tool.execute({ action: "read" }, toolContext);
 
-      expect(result).toContain("Test decision");
-      expect(result).toContain("Made a test decision");
+      await tool.execute(
+        {
+          action: "append",
+          type: "decision",
+          description: "Chose PostgreSQL",
+          entry_action: "Selected PostgreSQL for persistence",
+        },
+        toolCtx,
+      );
+
+      const result = await tool.execute({ action: "read" }, toolCtx);
+      expect(result).toContain("DECISION");
+      expect(result).toContain("Chose PostgreSQL");
     });
   });
 
-  describe("append action", () => {
-    describe("decision type", () => {
-      it("appends decision entry", async () => {
-        const tool = createGoopAdlTool(ctx);
-        const result = await tool.execute({
+  // -----------------------------------------------------------------------
+  // append action
+  // -----------------------------------------------------------------------
+
+  describe("action: append", () => {
+    it("appends a decision entry", async () => {
+      const tool = createGoopAdlTool(ctx);
+      const result = await tool.execute(
+        {
           action: "append",
           type: "decision",
-          description: "Chose React over Vue",
-          entry_action: "Using React for UI framework",
-        }, toolContext);
+          description: "Use jose for JWT",
+          entry_action: "Selected jose over jsonwebtoken for ESM compat",
+        },
+        toolCtx,
+      );
 
-        expect(result).toContain("ADL entry added");
-        expect(result).toContain("DECISION");
-        expect(result).toContain("Chose React over Vue");
-      });
-
-      it("persists decision to ADL", async () => {
-        const tool = createGoopAdlTool(ctx);
-        await tool.execute({
-          action: "append",
-          type: "decision",
-          description: "Test decision",
-          entry_action: "Action taken",
-        }, toolContext);
-
-        const adl = ctx.stateManager.getADL();
-        expect(adl).toContain("Test decision");
-        expect(adl).toContain("Action taken");
-      });
+      expect(result).toContain("ADL entry added");
+      expect(result).toContain("[DECISION]");
+      expect(result).toContain("Use jose for JWT");
     });
 
-    describe("deviation type", () => {
-      it("appends deviation entry", async () => {
-        const tool = createGoopAdlTool(ctx);
-        const result = await tool.execute({
+    it("appends a deviation entry with rule", async () => {
+      const tool = createGoopAdlTool(ctx);
+      const result = await tool.execute(
+        {
           action: "append",
           type: "deviation",
-          description: "Deviated from original plan",
-          entry_action: "Added extra validation",
-        }, toolContext);
+          description: "Fixed missing null check",
+          entry_action: "Added null guard to prevent crash",
+          rule: 1,
+        },
+        toolCtx,
+      );
 
-        expect(result).toContain("DEVIATION");
-      });
-
-      it("includes rule number when provided", async () => {
-        const tool = createGoopAdlTool(ctx);
-        await tool.execute({
-          action: "append",
-          type: "deviation",
-          description: "Applied Rule 2",
-          entry_action: "Added missing error handling",
-          rule: 2,
-        }, toolContext);
-
-        const adl = ctx.stateManager.getADL();
-        expect(adl).toContain("Rule");
-        expect(adl).toContain("2");
-      });
+      expect(result).toContain("ADL entry added");
+      expect(result).toContain("[DEVIATION]");
     });
 
-    describe("observation type", () => {
-      it("appends observation entry", async () => {
-        const tool = createGoopAdlTool(ctx);
-        const result = await tool.execute({
+    it("appends an observation entry with files", async () => {
+      const tool = createGoopAdlTool(ctx);
+      const result = await tool.execute(
+        {
           action: "append",
           type: "observation",
-          description: "Noticed pattern in codebase",
-          entry_action: "Documented for future reference",
-        }, toolContext);
+          description: "Codebase uses repository pattern",
+          entry_action: "Noted for future reference",
+          files: ["src/repos/user.ts", "src/repos/order.ts"],
+        },
+        toolCtx,
+      );
 
-        expect(result).toContain("OBSERVATION");
-      });
+      expect(result).toContain("ADL entry added");
+      expect(result).toContain("[OBSERVATION]");
     });
 
-    describe("with files", () => {
-      it("includes files in entry", async () => {
-        const tool = createGoopAdlTool(ctx);
-        await tool.execute({
-          action: "append",
-          type: "decision",
-          description: "Updated configuration",
-          entry_action: "Modified config files",
-          files: ["config/app.ts", "config/db.ts"],
-        }, toolContext);
-
-        const adl = ctx.stateManager.getADL();
-        expect(adl).toContain("config/app.ts");
-        expect(adl).toContain("config/db.ts");
-      });
-
-      it("handles empty files array", async () => {
-        const tool = createGoopAdlTool(ctx);
-        const result = await tool.execute({
-          action: "append",
-          type: "decision",
-          description: "No files involved",
-          entry_action: "Conceptual decision",
-          files: [],
-        }, toolContext);
-
-        expect(result).toContain("ADL entry added");
-      });
-    });
-
-    describe("validation", () => {
-      it("requires type for append", async () => {
-        const tool = createGoopAdlTool(ctx);
-        const result = await tool.execute({
+    it("requires type for append", async () => {
+      const tool = createGoopAdlTool(ctx);
+      const result = await tool.execute(
+        {
           action: "append",
           description: "Missing type",
-          entry_action: "Some action",
-        }, toolContext);
+          entry_action: "Something",
+        },
+        toolCtx,
+      );
 
-        expect(result).toContain("Error");
-        expect(result).toContain("required");
-      });
+      expect(result).toContain("Error");
+      expect(result).toContain("type");
+    });
 
-      it("requires description for append", async () => {
-        const tool = createGoopAdlTool(ctx);
-        const result = await tool.execute({
+    it("requires description for append", async () => {
+      const tool = createGoopAdlTool(ctx);
+      const result = await tool.execute(
+        {
           action: "append",
           type: "decision",
-          entry_action: "Some action",
-        }, toolContext);
+          entry_action: "Something",
+        },
+        toolCtx,
+      );
 
-        expect(result).toContain("Error");
-        expect(result).toContain("required");
-      });
+      expect(result).toContain("Error");
+      expect(result).toContain("description");
+    });
 
-      it("requires entry_action for append", async () => {
-        const tool = createGoopAdlTool(ctx);
-        const result = await tool.execute({
+    it("requires entry_action for append", async () => {
+      const tool = createGoopAdlTool(ctx);
+      const result = await tool.execute(
+        {
           action: "append",
           type: "decision",
-          description: "Some description",
-        }, toolContext);
+          description: "Some decision",
+        },
+        toolCtx,
+      );
 
-        expect(result).toContain("Error");
-        expect(result).toContain("required");
-      });
-
-      it("requires all three fields for append", async () => {
-        const tool = createGoopAdlTool(ctx);
-        const result = await tool.execute({
-          action: "append",
-        }, toolContext);
-
-        expect(result).toContain("Error");
-        expect(result).toContain("type");
-        expect(result).toContain("description");
-        expect(result).toContain("entry_action");
-      });
+      expect(result).toContain("Error");
+      expect(result).toContain("entry_action");
     });
   });
 
-  describe("multiple entries", () => {
-    it("accumulates multiple entries", async () => {
-      const tool = createGoopAdlTool(ctx);
+  // -----------------------------------------------------------------------
+  // error handling
+  // -----------------------------------------------------------------------
 
-      await tool.execute({
+  it("handles errors gracefully", async () => {
+    const broken = createMockPluginContext({ testDir: "/tmp/nonexistent" });
+    broken.stateManager.appendADL = () => {
+      throw new Error("disk full");
+    };
+
+    const tool = createGoopAdlTool(broken);
+    const result = await tool.execute(
+      {
         action: "append",
         type: "decision",
-        description: "First decision",
-        entry_action: "Action 1",
-      }, toolContext);
+        description: "Test",
+        entry_action: "Test action",
+      },
+      toolCtx,
+    );
 
-      await tool.execute({
-        action: "append",
-        type: "observation",
-        description: "Second observation",
-        entry_action: "Action 2",
-      }, toolContext);
-
-      await tool.execute({
-        action: "append",
-        type: "deviation",
-        description: "Third deviation",
-        entry_action: "Action 3",
-        rule: 3,
-      }, toolContext);
-
-      const adl = ctx.stateManager.getADL();
-      
-      expect(adl).toContain("First decision");
-      expect(adl).toContain("Second observation");
-      expect(adl).toContain("Third deviation");
-    });
-  });
-
-  describe("timestamp", () => {
-    it("includes timestamp in entry", async () => {
-      const tool = createGoopAdlTool(ctx);
-      await tool.execute({
-        action: "append",
-        type: "decision",
-        description: "Timestamped entry",
-        entry_action: "With timestamp",
-      }, toolContext);
-
-      const adl = ctx.stateManager.getADL();
-      // Should contain ISO timestamp format
-      expect(adl).toMatch(/\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/);
-    });
+    expect(result).toContain("Error in goop_adl");
+    expect(result).toContain("disk full");
   });
 });

@@ -1,165 +1,177 @@
 /**
- * System Transform Hook
- * Injects memory context into agent system prompts
- * 
+ * System-transform hook — injects workflow state, phase enforcement rules,
+ * and relevant memories into every LLM call via the
+ * `experimental.chat.system.transform` hook event.
+ *
+ * Implements the balanced prompt strategy (MH7): meaningful context without
+ * bloat. Memory injection is token-budgeted (default ~800 tokens, configurable).
+ *
  * @module hooks/system-transform
  */
 
-import type { PluginContext } from "../core/types.js";
-import { log, logError } from "../shared/logger.js";
-import { createMemoryContextBuilder } from "../features/memory/context-builder.js";
-import { buildEnforcementContext } from "../features/enforcement/index.js";
-import {
-  getSessionGoopspecPath,
-  getWorkflowDir,
-  getWorkflowDocPath,
-} from "../shared/paths.js";
-import { ensurePosixPath } from "../shared/platform.js";
+import type { SdkModel } from "../core/sdk-compat.js";
+import type { MemorySearchResult, PluginContext, WorkflowState } from "../core/types.js";
+import { buildEnforcementContext } from "../features/enforcement/phase-context.js";
+import type { HookFactory, Hooks } from "./types.js";
+import { safeHandler } from "./utils.js";
 
-type SystemTransformInput = {
-  sessionID: string;
-  agent?: string;
-  model?: {
-    providerID: string;
-    modelID: string;
-  };
-};
+// ---------------------------------------------------------------------------
+// Token estimation
+// ---------------------------------------------------------------------------
 
-type SystemTransformOutput = {
-  system: string;
-};
+/** Default token budget for memory injection (~800 tokens ≈ 3200 chars). */
+const DEFAULT_MEMORY_TOKEN_BUDGET = 800;
 
-function normalizePromptPath(path: string): string {
-  return ensurePosixPath(path);
+/**
+ * Rough token estimator: ~4 characters per token.
+ * Good enough for budget enforcement without pulling in a tokenizer.
+ */
+export function estimateTokens(text: string): number {
+  return Math.ceil(text.length / 4);
 }
 
-function buildSessionContextBlock(projectDir: string, workflowId: string, sessionId: string): string {
-  const workflowDir = getWorkflowDir(projectDir, workflowId);
-  const specPath = normalizePromptPath(getWorkflowDocPath(projectDir, workflowId, "SPEC.md"));
-  const blueprintPath = normalizePromptPath(getWorkflowDocPath(projectDir, workflowId, "BLUEPRINT.md"));
-  const chroniclePath = normalizePromptPath(getWorkflowDocPath(projectDir, workflowId, "CHRONICLE.md"));
-  const researchPath = normalizePromptPath(getWorkflowDocPath(projectDir, workflowId, "RESEARCH.md"));
-  const statePath = normalizePromptPath(getSessionGoopspecPath(projectDir, "state.json"));
-  const checkpointsPath = normalizePromptPath(`${workflowDir}/checkpoints`);
-  const historyPath = normalizePromptPath(`${workflowDir}/history`);
+// ---------------------------------------------------------------------------
+// Block builders
+// ---------------------------------------------------------------------------
 
-  return [
-    "<session>",
-    `id: ${sessionId}`,
-    "paths:",
-    `  spec: ${specPath}`,
-    `  blueprint: ${blueprintPath}`,
-    `  chronicle: ${chroniclePath}`,
-    `  research: ${researchPath}`,
-    `  state: ${statePath}`,
-    `  checkpoints: ${checkpointsPath}`,
-    `  history: ${historyPath}`,
-    "</session>",
-  ].join("\n");
+/**
+ * Build a compact state summary block for system prompt injection.
+ *
+ * Includes: phase, workflow ID, key flags (interview, spec-lock, acceptance,
+ * wave progress, autopilot, checkpoint).
+ */
+export function buildStateBlock(workflow: WorkflowState, workflowId: string): string {
+  const lines: string[] = [
+    "<goopspec_state>",
+    `workflow: ${workflowId}`,
+    `phase: ${workflow.phase}`,
+    `mode: ${workflow.mode}`,
+    `spec_locked: ${workflow.specLocked}`,
+    `interview_complete: ${workflow.interviewComplete}`,
+    `acceptance_confirmed: ${workflow.acceptanceConfirmed}`,
+  ];
+
+  if (workflow.totalWaves > 0) {
+    lines.push(`wave_progress: ${workflow.currentWave}/${workflow.totalWaves}`);
+  }
+
+  if (workflow.autopilot) {
+    lines.push(`autopilot: true${workflow.lazyAutopilot ? " (lazy)" : ""}`);
+  }
+
+  if (workflow.checkpoint) {
+    lines.push(`checkpoint: ${workflow.checkpoint}`);
+  }
+
+  lines.push("</goopspec_state>");
+  return lines.join("\n");
 }
 
 /**
- * Create the experimental.chat.system.transform hook
- * 
- * This hook injects relevant memory context into the system prompt
- * before each chat completion request.
+ * Build phase enforcement rules block.
+ *
+ * Delegates to the enforcement subsystem's `buildEnforcementContext` which
+ * produces MUST DO / MUST NOT DO rules for the current phase.
  */
-export function createSystemTransformHook(ctx: PluginContext) {
-  return async (
-    input: SystemTransformInput,
-    output: SystemTransformOutput
-  ): Promise<SystemTransformOutput> => {
-    log("System transform hook triggered", {
-      agent: input.agent,
-      sessionID: input.sessionID,
-    });
+export function buildPhaseRulesBlock(workflow: WorkflowState, workflowId: string): string {
+  return buildEnforcementContext(workflow, workflowId);
+}
 
-    try {
+/**
+ * Build a token-budgeted memory context block from search results.
+ *
+ * Iterates through memories in relevance order, appending each until the
+ * token budget is exhausted. Memories that would exceed the budget are
+ * skipped (not truncated mid-entry) to keep each entry coherent.
+ */
+export function buildMemoryBlock(memories: MemorySearchResult[], tokenBudget: number): string {
+  if (memories.length === 0) return "";
+
+  const lines: string[] = ["<goopspec_memory>"];
+  let tokensUsed = estimateTokens(lines[0]);
+
+  for (const { memory } of memories) {
+    const entry = `- [${memory.type}] ${memory.title}: ${memory.content}`;
+    const entryTokens = estimateTokens(entry);
+
+    if (tokensUsed + entryTokens > tokenBudget) {
+      break;
+    }
+
+    lines.push(entry);
+    tokensUsed += entryTokens;
+  }
+
+  // Only the opening tag — no memories fit within budget
+  if (lines.length === 1) return "";
+
+  lines.push("</goopspec_memory>");
+  return lines.join("\n");
+}
+
+// ---------------------------------------------------------------------------
+// Hook factory
+// ---------------------------------------------------------------------------
+
+/**
+ * Create the system-transform hook factory.
+ *
+ * Assembles a context block from workflow state, phase rules, and relevant
+ * memories, then pushes it onto `output.system` (each entry becomes a
+ * system message in the LLM call).
+ *
+ * Wrapped with `safeHandler` — on any error, nothing is injected and the
+ * LLM call proceeds unmodified.
+ */
+export function createSystemTransformHook(ctx: PluginContext): Partial<Hooks> {
+  const handler = safeHandler(
+    "system-transform",
+    async (
+      _input: { sessionID?: string; model: SdkModel },
+      output: { system: string[] },
+    ): Promise<void> => {
       const state = ctx.stateManager.getState();
-      const enforcementContext = buildEnforcementContext(state);
-      const activeWorkflowId =
-        ctx.stateManager.getActiveWorkflowId()
-        || (typeof ctx.workflowId === "string" ? ctx.workflowId.trim() : "")
-        || "default";
-      const sessionContext =
-        typeof ctx.sessionId === "string" && ctx.sessionId.trim().length > 0
-          ? buildSessionContextBlock(
-            ctx.input.directory,
-            activeWorkflowId,
-            ctx.sessionId.trim(),
-          )
-          : "";
+      const workflowId = state.activeWorkflowId;
+      const workflow = state.workflows[workflowId];
 
-      let memoryContext = "";
-      if (ctx.memoryManager && ctx.config.memory?.injection?.enabled !== false) {
-        // Create context builder with config
-        const builder = createMemoryContextBuilder(ctx.memoryManager, {
-          budgetTokens: ctx.config.memory?.injection?.budgetTokens ?? 800,
-          format: (ctx.config.memory?.injection?.format ?? "structured") as "timeline" | "bullets" | "structured",
-          priorityTypes: ctx.config.memory?.injection?.priorityTypes ?? ["decision", "observation", "todo"],
-          includeDecisions: true,
-          includeRecentActivity: true,
-        });
+      if (!workflow) return;
 
-        const currentPhase = state.workflow.phase;
-        if (currentPhase) {
-          memoryContext = await builder.buildPhaseContext(currentPhase);
-        } else {
-          memoryContext = await builder.buildRecentContext(10);
-        }
-      }
+      // 1. State block — always injected
+      const stateBlock = buildStateBlock(workflow, workflowId);
 
-      if (
-        !enforcementContext
-        && (!memoryContext || memoryContext.trim().length === 0)
-        && sessionContext.trim().length === 0
-      ) {
-        log("No enforcement or memory context to inject");
-        return output;
-      }
+      // 2. Phase rules — always injected
+      const phaseRulesBlock = buildPhaseRulesBlock(workflow, workflowId);
 
-      let enhancedSystem = output.system;
-      if (enforcementContext.trim().length > 0) {
-        enhancedSystem = `${enhancedSystem}
+      // 3. Memory block — token-budgeted
+      let memoryBlock = "";
+      const tokenBudget = DEFAULT_MEMORY_TOKEN_BUDGET;
 
-${enforcementContext}`;
-      }
-
-      if (sessionContext.trim().length > 0) {
-        enhancedSystem = `${enhancedSystem}
-
-## Session Context
-
-${sessionContext}`;
-      }
-
-      if (memoryContext.trim().length > 0) {
-        enhancedSystem = `${enhancedSystem}
-
-## Persistent Memory Context
-
-Use these memories for continuity and to avoid repeated mistakes.
-
-${memoryContext}
-
-Use memory tools to save decisions and observations for future sessions.`;
-      }
-
-      log("System context injected", {
-        originalLength: output.system.length,
-        enforcementLength: enforcementContext.length,
-        sessionLength: sessionContext.length,
-        memoryLength: memoryContext.length,
-        enhancedLength: enhancedSystem.length,
+      const searchResults = await ctx.memory.search({
+        query: `${workflow.phase} workflow`,
+        limit: 10,
       });
 
-      return {
-        system: enhancedSystem,
-      };
-    } catch (error) {
-      logError("Failed to inject system context", error);
-      // Return original on error - don't break the system
-      return output;
-    }
+      if (searchResults.length > 0) {
+        memoryBlock = buildMemoryBlock(searchResults, tokenBudget);
+      }
+
+      // Assemble the full context block
+      const parts = [stateBlock, phaseRulesBlock];
+      if (memoryBlock) {
+        parts.push(memoryBlock);
+      }
+
+      const contextBlock = parts.join("\n\n");
+
+      // Push onto output.system — each entry becomes a system message
+      output.system.push(contextBlock);
+    },
+  );
+
+  return {
+    "experimental.chat.system.transform": handler,
   };
 }
+
+/** Satisfies the HookFactory signature for registry integration. */
+export const systemTransformFactory: HookFactory = createSystemTransformHook;

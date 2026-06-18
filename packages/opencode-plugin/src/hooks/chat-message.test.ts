@@ -1,386 +1,225 @@
-/**
- * Tests for Chat Message Hook
- * @module hooks/chat-message.test
- */
-
-import { describe, it, expect, beforeEach } from "bun:test";
-import { tmpdir } from "os";
-import { join } from "path";
-import { createChatMessageHook } from "./chat-message.js";
+import { afterEach, beforeEach, describe, expect, it } from "bun:test";
+import type { SdkPart } from "../core/sdk-compat.js";
 import {
+  type PluginContext,
   createMockPluginContext,
-  createMockMemoryManager,
+  setupTestEnvironment,
 } from "../test-utils.js";
-import type { PluginContext } from "../core/types.js";
+import {
+  chatMessageFactory,
+  createChatMessageHook,
+  extractTextFromParts,
+  isSignificantMessage,
+} from "./chat-message.js";
 
-// Create mock types to avoid dependency on @opencode-ai/sdk types
-function createMockMessage() {
-  return { content: "test" } as any;
-}
+// ---------------------------------------------------------------------------
+// extractTextFromParts
+// ---------------------------------------------------------------------------
 
-function createMockParts(texts: string[]) {
-  return texts.map(text => ({ type: "text", text })) as any[];
-}
+describe("extractTextFromParts", () => {
+  it("extracts text from text parts", () => {
+    const parts = [
+      { type: "text", text: "hello" },
+      { type: "text", text: "world" },
+    ] as SdkPart[];
+    expect(extractTextFromParts(parts)).toBe("hello\nworld");
+  });
 
-function createMockOutput(texts: string[]) {
-  return {
-    message: createMockMessage(),
-    parts: createMockParts(texts),
-  };
-}
+  it("ignores non-text parts", () => {
+    const parts = [
+      { type: "text", text: "hello" },
+      { type: "tool-invocation", toolInvocationId: "x", toolName: "y", state: "result" },
+    ] as SdkPart[];
+    expect(extractTextFromParts(parts)).toBe("hello");
+  });
+
+  it("returns empty string for empty parts array", () => {
+    expect(extractTextFromParts([])).toBe("");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// isSignificantMessage
+// ---------------------------------------------------------------------------
+
+describe("isSignificantMessage", () => {
+  it("returns false for very short messages", () => {
+    expect(isSignificantMessage("hi")).toBe(false);
+    expect(isSignificantMessage("ok")).toBe(false);
+    expect(isSignificantMessage("")).toBe(false);
+  });
+
+  it("returns true for questions", () => {
+    expect(isSignificantMessage("How does this work?")).toBe(true);
+  });
+
+  it("returns true for slash commands", () => {
+    expect(isSignificantMessage("/goop-execute")).toBe(true);
+  });
+
+  it("returns true for long messages (>100 chars)", () => {
+    const long = "a".repeat(101);
+    expect(isSignificantMessage(long)).toBe(true);
+  });
+
+  it("returns true for action keywords", () => {
+    expect(isSignificantMessage("please implement the auth flow")).toBe(true);
+    expect(isSignificantMessage("we need to fix the login bug")).toBe(true);
+    expect(isSignificantMessage("refactor the database layer")).toBe(true);
+    expect(isSignificantMessage("build the user dashboard")).toBe(true);
+  });
+
+  it("returns false for short non-significant messages", () => {
+    expect(isSignificantMessage("sounds good")).toBe(false);
+    expect(isSignificantMessage("yes please")).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// createChatMessageHook
+// ---------------------------------------------------------------------------
 
 describe("createChatMessageHook", () => {
   let ctx: PluginContext;
-  let testDir: string;
+  let cleanup: () => void;
 
   beforeEach(() => {
-    testDir = join(tmpdir(), `chat-message-test-${Date.now()}`);
-    ctx = createMockPluginContext({
-      testDir,
-      config: {
-        memory: {
-          enabled: true,
-          capture: {
-            enabled: true,
-            captureMessages: true,
-            minImportanceThreshold: 4,
-          },
-        },
+    const env = setupTestEnvironment("chat-message-hook");
+    cleanup = env.cleanup;
+    ctx = createMockPluginContext({ testDir: env.testDir });
+  });
+
+  afterEach(() => cleanup());
+
+  it("returns a Partial<Hooks> with chat.message handler", () => {
+    const hooks = createChatMessageHook(ctx);
+    expect(hooks["chat.message"]).toBeDefined();
+    expect(typeof hooks["chat.message"]).toBe("function");
+  });
+
+  it("clears checkpoint on activity", async () => {
+    ctx.stateManager.updateWorkflow({ checkpoint: "old-checkpoint" });
+
+    const hooks = createChatMessageHook(ctx);
+    await hooks["chat.message"]?.(
+      { sessionID: "s1" },
+      {
+        message: { role: "user", content: "hello world test message" } as never,
+        parts: [{ type: "text", text: "hello world test message" }] as SdkPart[],
       },
-      includeMemory: true,
-    });
+    );
+
+    const wf = ctx.stateManager.getActiveWorkflow();
+    expect(wf.checkpoint).toBeUndefined();
   });
 
-  describe("hook creation", () => {
-    it("creates a function", () => {
-      const hook = createChatMessageHook(ctx);
-      expect(typeof hook).toBe("function");
-    });
+  it("captures significant messages to memory", async () => {
+    const hooks = createChatMessageHook(ctx);
+    await hooks["chat.message"]?.(
+      { sessionID: "s1" },
+      {
+        message: { role: "user", content: "" } as never,
+        parts: [{ type: "text", text: "How do I implement authentication?" }] as SdkPart[],
+      },
+    );
 
-    it("uses default config when not provided", () => {
-      const ctxNoConfig = createMockPluginContext({ testDir });
-      const hook = createChatMessageHook(ctxNoConfig);
-      expect(hook).toBeDefined();
-    });
+    const results = await ctx.memory.search({ query: "authentication" });
+    expect(results.length).toBeGreaterThan(0);
+    expect(results[0].memory.type).toBe("note");
+    expect(results[0].memory.importance).toBe(6);
   });
 
-  describe("session tracking", () => {
-    it("updates last activity timestamp", async () => {
-      const hook = createChatMessageHook(ctx);
-      const initialActivity = ctx.stateManager.getState().workflow.lastActivity;
+  it("does not capture short non-significant messages", async () => {
+    const hooks = createChatMessageHook(ctx);
+    await hooks["chat.message"]?.(
+      { sessionID: "s1" },
+      {
+        message: { role: "user", content: "" } as never,
+        parts: [{ type: "text", text: "ok" }] as SdkPart[],
+      },
+    );
 
-      // Wait a bit to ensure timestamp changes
-      await new Promise(r => setTimeout(r, 10));
-
-      const input = {
-        sessionID: "test-session",
-        agent: "test-agent",
-        messageID: "msg-123",
-      };
-
-      const output = createMockOutput(["Hello world"]);
-
-      await hook(input, output);
-
-      const newActivity = ctx.stateManager.getState().workflow.lastActivity;
-      expect(new Date(newActivity).getTime()).toBeGreaterThanOrEqual(
-        new Date(initialActivity).getTime()
-      );
-    });
-
-    it("appends to history", async () => {
-      const hook = createChatMessageHook(ctx);
-      
-      // Track history appends
-      let historyEntry: any;
-      const originalAppend = ctx.stateManager.appendHistory;
-      ctx.stateManager.appendHistory = (entry) => {
-        historyEntry = entry;
-        originalAppend.call(ctx.stateManager, entry);
-      };
-
-      const input = {
-        sessionID: "test-session",
-        agent: "test-agent",
-        messageID: "msg-456",
-      };
-
-      const output = createMockOutput(["Test message"]);
-
-      await hook(input, output);
-
-      expect(historyEntry).toBeDefined();
-      expect(historyEntry.type).toBe("tool_call");
-      expect(historyEntry.sessionId).toBe("test-session");
-      expect(historyEntry.data.type).toBe("chat_message");
-      expect(historyEntry.data.agent).toBe("test-agent");
-      expect(historyEntry.data.messageID).toBe("msg-456");
-    });
+    const results = await ctx.memory.search({ query: "ok" });
+    expect(results.length).toBe(0);
   });
 
-  describe("message capture", () => {
-    it("captures significant messages when memory manager exists", async () => {
-      const mockMemory = createMockMemoryManager();
-      ctx.memoryManager = mockMemory;
+  it("does not capture empty messages", async () => {
+    const hooks = createChatMessageHook(ctx);
+    await hooks["chat.message"]?.(
+      { sessionID: "s1" },
+      {
+        message: { role: "user", content: "" } as never,
+        parts: [],
+      },
+    );
 
-      const hook = createChatMessageHook(ctx);
-
-      const input = {
-        sessionID: "test-session",
-        agent: "test-agent",
-        messageID: "msg-789",
-      };
-
-      const output = createMockOutput(["Can you implement a new feature for user authentication?"]);
-
-      await hook(input, output);
-
-      // Check if memory was saved
-      const recent = await mockMemory.getRecent(1);
-      expect(recent.length).toBeGreaterThan(0);
-      expect(recent[0].type).toBe("user_prompt");
-    });
-
-    it("captures questions (messages with ?)", async () => {
-      const mockMemory = createMockMemoryManager();
-      ctx.memoryManager = mockMemory;
-
-      const hook = createChatMessageHook(ctx);
-
-      const input = { sessionID: "test-session" };
-      const output = createMockOutput(["How does this work?"]);
-
-      await hook(input, output);
-
-      const recent = await mockMemory.getRecent(1);
-      expect(recent.length).toBe(1);
-      expect(recent[0].importance).toBe(6); // Questions get higher importance
-    });
-
-    it("captures commands (messages starting with /)", async () => {
-      const mockMemory = createMockMemoryManager();
-      ctx.memoryManager = mockMemory;
-
-      const hook = createChatMessageHook(ctx);
-
-      const input = { sessionID: "test-session" };
-      const output = createMockOutput(["/goop-plan new feature"]);
-
-      await hook(input, output);
-
-      const recent = await mockMemory.getRecent(1);
-      expect(recent.length).toBe(1);
-    });
-
-    it("captures long messages (> 100 chars)", async () => {
-      const mockMemory = createMockMemoryManager();
-      ctx.memoryManager = mockMemory;
-
-      const hook = createChatMessageHook(ctx);
-
-      const input = { sessionID: "test-session" };
-      const longMessage = "a".repeat(150);
-      const output = createMockOutput([longMessage]);
-
-      await hook(input, output);
-
-      const recent = await mockMemory.getRecent(1);
-      expect(recent.length).toBe(1);
-    });
-
-    it("captures messages with requirement keywords", async () => {
-      const mockMemory = createMockMemoryManager();
-      ctx.memoryManager = mockMemory;
-
-      const hook = createChatMessageHook(ctx);
-
-      const keywords = ["must", "should", "need", "require", "want", "implement", "create", "build", "fix", "debug"];
-
-      for (const keyword of keywords) {
-        const input = { sessionID: `session-${keyword}` };
-        const output = createMockOutput([`Please ${keyword} this`]);
-
-        await hook(input, output);
-      }
-
-      const recent = await mockMemory.getRecent(20);
-      expect(recent.length).toBeGreaterThan(0);
-    });
-
-    it("does not capture when capture is disabled", async () => {
-      const ctxDisabled = createMockPluginContext({
-        testDir,
-        config: {
-          memory: {
-            enabled: true,
-            capture: {
-              enabled: true,
-              captureMessages: false, // Disabled
-            },
-          },
-        },
-        includeMemory: true,
-      });
-
-      const hook = createChatMessageHook(ctxDisabled);
-
-      const input = { sessionID: "test-session" };
-      const output = createMockOutput(["Can you implement this feature?"]);
-
-      await hook(input, output);
-
-      const recent = await ctxDisabled.memoryManager!.getRecent(1);
-      expect(recent.length).toBe(0);
-    });
-
-    it("does not capture empty messages", async () => {
-      const mockMemory = createMockMemoryManager();
-      ctx.memoryManager = mockMemory;
-
-      const hook = createChatMessageHook(ctx);
-
-      const input = { sessionID: "test-session" };
-      const output = createMockOutput(["   "]); // Whitespace only
-
-      await hook(input, output);
-
-      const recent = await mockMemory.getRecent(1);
-      expect(recent.length).toBe(0);
-    });
-
-    it("does not capture non-significant messages", async () => {
-      const mockMemory = createMockMemoryManager();
-      ctx.memoryManager = mockMemory;
-
-      const hook = createChatMessageHook(ctx);
-
-      const input = { sessionID: "test-session" };
-      const output = createMockOutput(["ok"]); // Too short, no keywords
-
-      await hook(input, output);
-
-      const recent = await mockMemory.getRecent(1);
-      expect(recent.length).toBe(0);
-    });
-
-    it("handles memory save errors gracefully", async () => {
-      const errorMemory = createMockMemoryManager();
-      errorMemory.save = async () => {
-        throw new Error("Save failed");
-      };
-      ctx.memoryManager = errorMemory;
-
-      const hook = createChatMessageHook(ctx);
-
-      const input = { sessionID: "test-session" };
-      const output = createMockOutput(["Can you implement this feature?"]);
-
-      // Should not throw
-      await expect(hook(input, output)).resolves.toBeUndefined();
-    });
-
-    it("includes current phase in saved memory", async () => {
-      ctx.stateManager.updateWorkflow({ phase: "execute" });
-      const mockMemory = createMockMemoryManager();
-      ctx.memoryManager = mockMemory;
-
-      const hook = createChatMessageHook(ctx);
-
-      const input = { sessionID: "test-session" };
-      const output = createMockOutput(["Can you implement this?"]);
-
-      await hook(input, output);
-
-      const recent = await mockMemory.getRecent(1);
-      expect(recent[0].phase).toBe("execute");
-    });
-
-    it("truncates long message titles", async () => {
-      const mockMemory = createMockMemoryManager();
-      ctx.memoryManager = mockMemory;
-
-      const hook = createChatMessageHook(ctx);
-
-      const input = { sessionID: "test-session" };
-      const longMessage = "a".repeat(200);
-      const output = createMockOutput([longMessage]);
-
-      await hook(input, output);
-
-      const recent = await mockMemory.getRecent(1);
-      expect(recent[0].title.length).toBeLessThanOrEqual(83); // 80 + "..."
-    });
-
-    it("truncates long message content", async () => {
-      const mockMemory = createMockMemoryManager();
-      ctx.memoryManager = mockMemory;
-
-      const hook = createChatMessageHook(ctx);
-
-      const input = { sessionID: "test-session" };
-      const longMessage = "a".repeat(3000);
-      const output = createMockOutput([longMessage]);
-
-      await hook(input, output);
-
-      const recent = await mockMemory.getRecent(1);
-      expect(recent[0].content.length).toBeLessThanOrEqual(2000);
-    });
+    const results = await ctx.memory.search({ query: "" });
+    expect(results.length).toBe(0);
   });
 
-  describe("extractTextFromParts", () => {
-    it("extracts text from multiple text parts", async () => {
-      const mockMemory = createMockMemoryManager();
-      ctx.memoryManager = mockMemory;
+  it("truncates long titles to 80 chars with ellipsis", async () => {
+    const hooks = createChatMessageHook(ctx);
+    const longText = `implement ${"a".repeat(200)}`;
+    await hooks["chat.message"]?.(
+      { sessionID: "s1" },
+      {
+        message: { role: "user", content: "" } as never,
+        parts: [{ type: "text", text: longText }] as SdkPart[],
+      },
+    );
 
-      const hook = createChatMessageHook(ctx);
-
-      const input = { sessionID: "test-session" };
-      const output = createMockOutput([
-        "First part. Can you implement",
-        "this feature?",
-      ]);
-
-      await hook(input, output);
-
-      const recent = await mockMemory.getRecent(1);
-      expect(recent.length).toBe(1);
-    });
-
-    it("ignores non-text parts", async () => {
-      const mockMemory = createMockMemoryManager();
-      ctx.memoryManager = mockMemory;
-
-      const hook = createChatMessageHook(ctx);
-
-      const input = { sessionID: "test-session" };
-      const output = {
-        message: createMockMessage(),
-        parts: [
-          { type: "text", text: "Can you implement this?" },
-          { type: "tool-invocation", toolInvocationId: "123", toolName: "test", state: "result", result: "ok" },
-        ],
-      } as any;
-
-      await hook(input, output);
-
-      const recent = await mockMemory.getRecent(1);
-      expect(recent.length).toBe(1);
-    });
+    const results = await ctx.memory.search({ query: "implement" });
+    expect(results.length).toBeGreaterThan(0);
+    expect(results[0].memory.title.length).toBeLessThanOrEqual(83);
+    expect(results[0].memory.title.endsWith("...")).toBe(true);
   });
 
-  describe("without memory manager", () => {
-    it("works without memory manager", async () => {
-      const ctxNoMemory = createMockPluginContext({ testDir });
-      delete ctxNoMemory.memoryManager;
+  it("sets importance 5 for non-question significant messages", async () => {
+    const hooks = createChatMessageHook(ctx);
+    await hooks["chat.message"]?.(
+      { sessionID: "s1" },
+      {
+        message: { role: "user", content: "" } as never,
+        parts: [{ type: "text", text: "please implement the user dashboard" }] as SdkPart[],
+      },
+    );
 
-      const hook = createChatMessageHook(ctxNoMemory);
+    const results = await ctx.memory.search({ query: "dashboard" });
+    expect(results.length).toBeGreaterThan(0);
+    expect(results[0].memory.importance).toBe(5);
+  });
 
-      const input = { sessionID: "test-session" };
-      const output = createMockOutput(["Test message"]);
+  it("does not throw on errors (safeHandler)", async () => {
+    const brokenCtx = createMockPluginContext({ testDir: cleanup as unknown as string });
+    brokenCtx.memory.save = async () => {
+      throw new Error("memory exploded");
+    };
 
-      // Should not throw
-      await expect(hook(input, output)).resolves.toBeUndefined();
-    });
+    const hooks = createChatMessageHook(brokenCtx);
+
+    await hooks["chat.message"]?.(
+      { sessionID: "s1" },
+      {
+        message: { role: "user", content: "" } as never,
+        parts: [{ type: "text", text: "How do I fix this bug?" }] as SdkPart[],
+      },
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// chatMessageFactory
+// ---------------------------------------------------------------------------
+
+describe("chatMessageFactory", () => {
+  it("is a valid HookFactory", () => {
+    const { testDir, cleanup } = setupTestEnvironment("chat-msg-factory");
+    try {
+      const ctx = createMockPluginContext({ testDir });
+      const hooks = chatMessageFactory(ctx);
+      expect(hooks["chat.message"]).toBeDefined();
+    } finally {
+      cleanup();
+    }
   });
 });

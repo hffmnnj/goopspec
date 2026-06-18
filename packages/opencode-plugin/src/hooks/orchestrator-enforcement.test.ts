@@ -1,1158 +1,280 @@
-/**
- * Tests for Orchestrator Enforcement Hooks
- * @module hooks/orchestrator-enforcement.test
- */
+import { afterEach, beforeEach, describe, expect, it, spyOn } from "bun:test";
+import type { SdkPermission } from "../core/sdk-compat.js";
+import type { PluginContext } from "../core/types.js";
+import { createMockPluginContext, setupTestEnvironment } from "../test-utils.js";
+import { createOrchestratorEnforcementHook } from "./orchestrator-enforcement.js";
 
-import { describe, it, expect, beforeEach, afterEach } from "bun:test";
-import type { Part } from "@opencode-ai/sdk";
-import {
-  createOrchestratorEnforcementHooks,
-  isOrchestrator,
-  wouldBlockPath,
-  isBlockedTool,
-  getToolCategory,
-  detectIntent,
-  detectFreeFormQuestion,
-  clearExplorationTracking,
-} from "./orchestrator-enforcement.js";
-import {
-  createMockPluginContext,
-  setupTestEnvironment,
-  type PluginContext,
-} from "../test-utils.js";
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
 
-describe("orchestrator-enforcement hooks", () => {
+function makePermission(overrides: Partial<SdkPermission> = {}): SdkPermission {
+  return {
+    id: "perm-001",
+    type: "edit",
+    pattern: "src/hooks/index.ts",
+    sessionID: "session-001",
+    messageID: "msg-001",
+    title: "Edit src/hooks/index.ts",
+    metadata: {},
+    time: { created: Date.now() },
+    ...overrides,
+  };
+}
+
+function makeOutput(): { status: "ask" | "deny" | "allow" } {
+  return { status: "ask" };
+}
+
+// ---------------------------------------------------------------------------
+// Tests
+// ---------------------------------------------------------------------------
+
+describe("orchestrator-enforcement hook", () => {
   let ctx: PluginContext;
   let cleanup: () => void;
 
   beforeEach(() => {
-    const env = setupTestEnvironment("enforcement-test");
+    const env = setupTestEnvironment("orch-enforce");
     cleanup = env.cleanup;
-    ctx = createMockPluginContext({ testDir: env.testDir });
-  });
-
-  afterEach(() => {
-    clearExplorationTracking("test-explore");
-    clearExplorationTracking("test-explore-nudge");
-    clearExplorationTracking("explore-task-test");
-    clearExplorationTracking("agent-select-explore");
-    cleanup();
-  });
-
-  describe("isOrchestrator", () => {
-    it("returns true for goopspec agent", () => {
-      expect(isOrchestrator("goopspec")).toBe(true);
-      expect(isOrchestrator("GOOPSPEC")).toBe(true);
-    });
-
-    it("returns true for orchestrator variants", () => {
-      expect(isOrchestrator("goop-orchestrator")).toBe(true);
-      expect(isOrchestrator("my-orchestrator")).toBe(true);
-    });
-
-    it("returns false for other agents", () => {
-      expect(isOrchestrator("goop-executor")).toBe(false);
-      expect(isOrchestrator("general")).toBe(false);
-      expect(isOrchestrator(undefined)).toBe(false);
+    ctx = createMockPluginContext({
+      testDir: env.testDir,
+      agent: "goop-orchestrator",
     });
   });
 
-  describe("wouldBlockPath", () => {
-    it("blocks TypeScript files in src/", () => {
-      expect(wouldBlockPath("src/index.ts")).toBe(true);
-      expect(wouldBlockPath("src/hooks/test.ts")).toBe(true);
-      expect(wouldBlockPath("src/deep/nested/file.tsx")).toBe(true);
-    });
+  afterEach(() => cleanup());
 
-    it("blocks JavaScript files in lib/", () => {
-      expect(wouldBlockPath("lib/utils.js")).toBe(true);
-      expect(wouldBlockPath("lib/helpers.mjs")).toBe(true);
-    });
+  // -----------------------------------------------------------------------
+  // Core blocking behavior
+  // -----------------------------------------------------------------------
 
-    it("allows markdown files everywhere", () => {
-      expect(wouldBlockPath("src/README.md")).toBe(false);
-      expect(wouldBlockPath("lib/CHANGELOG.md")).toBe(false);
-    });
+  it("blocks orchestrator from writing to src/ files", async () => {
+    const hooks = createOrchestratorEnforcementHook(ctx);
+    const output = makeOutput();
 
-    it("allows .goopspec/ files", () => {
-      expect(wouldBlockPath(".goopspec/SPEC.md")).toBe(false);
-      expect(wouldBlockPath(".goopspec/config.json")).toBe(false);
-    });
+    await hooks["permission.ask"]?.(
+      makePermission({ type: "edit", pattern: "src/features/memory/index.ts" }),
+      output,
+    );
 
-    it("allows files outside protected dirs", () => {
-      expect(wouldBlockPath("scripts/build.ts")).toBe(false);
-      expect(wouldBlockPath("test.ts")).toBe(false);
-    });
+    expect(output.status).toBe("deny");
   });
 
-  describe("isBlockedTool", () => {
-    it("returns true for research tools", () => {
-      expect(isBlockedTool("exa_web_search_exa")).toBe(true);
-      expect(isBlockedTool("mcp_google_search")).toBe(true);
-      expect(isBlockedTool("mcp_webfetch")).toBe(true);
-    });
+  it("blocks orchestrator from writing to lib/ files", async () => {
+    const hooks = createOrchestratorEnforcementHook(ctx);
+    const output = makeOutput();
 
-    it("returns false for non-research tools", () => {
-      expect(isBlockedTool("mcp_read")).toBe(false);
-      expect(isBlockedTool("mcp_edit")).toBe(false);
-      expect(isBlockedTool("task")).toBe(false);
-    });
+    await hooks["permission.ask"]?.(
+      makePermission({ type: "write", pattern: "lib/utils.ts" }),
+      output,
+    );
+
+    expect(output.status).toBe("deny");
   });
 
-  describe("getToolCategory", () => {
-    it("returns research for research tools", () => {
-      expect(getToolCategory("exa_web_search_exa")).toBe("research");
-      expect(getToolCategory("mcp_google_search")).toBe("research");
-    });
+  it("blocks orchestrator from writing to packages/ files", async () => {
+    const hooks = createOrchestratorEnforcementHook(ctx);
+    const output = makeOutput();
 
-    it("returns exploration for exploration tools", () => {
-      expect(getToolCategory("mcp_grep")).toBe("exploration");
-      expect(getToolCategory("mcp_glob")).toBe("exploration");
-    });
+    await hooks["permission.ask"]?.(
+      makePermission({ type: "edit", pattern: "packages/core/src/index.ts" }),
+      output,
+    );
 
-    it("returns null for other tools", () => {
-      expect(getToolCategory("mcp_read")).toBe(null);
-      expect(getToolCategory("task")).toBe(null);
-    });
+    expect(output.status).toBe("deny");
   });
 
-  describe("createOrchestratorEnforcementHooks", () => {
-    it("creates permission.ask hook", () => {
-      const hooks = createOrchestratorEnforcementHooks(ctx);
-      expect(hooks["permission.ask"]).toBeDefined();
-      expect(typeof hooks["permission.ask"]).toBe("function");
-    });
+  it("blocks orchestrator from apply_patch on implementation files", async () => {
+    const hooks = createOrchestratorEnforcementHook(ctx);
+    const output = makeOutput();
 
-    it("creates tool.execute.after hook", () => {
-      const hooks = createOrchestratorEnforcementHooks(ctx);
-      expect(hooks["tool.execute.after"]).toBeDefined();
-      expect(typeof hooks["tool.execute.after"]).toBe("function");
-    });
+    await hooks["permission.ask"]?.(
+      makePermission({ type: "apply_patch", pattern: "src/hooks/utils.ts" }),
+      output,
+    );
 
-    it("creates chat.message hook", () => {
-      const hooks = createOrchestratorEnforcementHooks(ctx);
-      expect(hooks["chat.message"]).toBeDefined();
-      expect(typeof hooks["chat.message"]).toBe("function");
-    });
+    expect(output.status).toBe("deny");
   });
 
-  describe("chat.message hook", () => {
-    it("does not inject parts for orchestrator intent-like messages", async () => {
-      const hooks = createOrchestratorEnforcementHooks(ctx);
-      const initialParts = [
-        { type: "text", text: "research compare find trace" },
-      ] as unknown as Part[];
-      const output = {
-        parts: initialParts,
-      };
+  it("blocks when pattern is an array containing implementation files", async () => {
+    const hooks = createOrchestratorEnforcementHook(ctx);
+    const output = makeOutput();
 
-      await hooks["chat.message"](
-        {
-          sessionID: "chat-session",
-          agent: "goopspec",
-          messageID: "m1",
-        },
-        output
-      );
+    await hooks["permission.ask"]?.(
+      makePermission({
+        type: "edit",
+        pattern: ["src/a.ts", "src/b.ts"],
+      }),
+      output,
+    );
 
-      expect(output.parts).toBe(initialParts);
-      expect(output.parts).toHaveLength(1);
-    });
-
-    it("does not modify parts for non-orchestrator messages", async () => {
-      const hooks = createOrchestratorEnforcementHooks(ctx);
-      const initialParts = [
-        { type: "text", text: "where is the router defined" },
-      ] as unknown as Part[];
-      const output = {
-        parts: initialParts,
-      };
-
-      await hooks["chat.message"](
-        {
-          sessionID: "chat-session-non-orch",
-          agent: "goop-executor",
-          messageID: "m2",
-        },
-        output
-      );
-
-      expect(output.parts).toBe(initialParts);
-      expect(output.parts).toHaveLength(1);
-    });
+    expect(output.status).toBe("deny");
   });
 
-  describe("permission.ask hook", () => {
-    it("denies edit on code file for orchestrator", async () => {
-      const hooks = createOrchestratorEnforcementHooks(ctx);
-      const output = { status: "ask" as const };
-      
-      await hooks["permission.ask"](
-        {
-          tool: "edit",
-          sessionID: "test-session",
-          path: "src/index.ts",
-          agent: "goopspec",
-        },
-        output
-      );
-      
-      expect(output.status).toBe("deny");
-    });
+  // -----------------------------------------------------------------------
+  // GoopSpec doc writes — allowed
+  // -----------------------------------------------------------------------
 
-    it("uses warn enforcement level from config", async () => {
-      const warnCtx = createMockPluginContext({
-        testDir: ctx.input.directory,
-        config: { enforcement: "warn" },
-      });
-      const hooks = createOrchestratorEnforcementHooks(warnCtx);
-      const output = { status: "ask" as const };
+  it("allows orchestrator to write .goopspec/ files", async () => {
+    const hooks = createOrchestratorEnforcementHook(ctx);
+    const output = makeOutput();
 
-      await hooks["permission.ask"](
-        {
-          tool: "edit",
-          sessionID: "warn-session",
-          path: "src/index.ts",
-          agent: "goopspec",
-        },
-        output
-      );
+    await hooks["permission.ask"]?.(
+      makePermission({
+        type: "edit",
+        pattern: ".goopspec/plugin-rebuild/SPEC.md",
+      }),
+      output,
+    );
 
-      expect(output.status).toBe("ask");
-    });
-
-    it("uses strict enforcement level from config", async () => {
-      const strictCtx = createMockPluginContext({
-        testDir: ctx.input.directory,
-        config: { enforcement: "strict" },
-      });
-      const hooks = createOrchestratorEnforcementHooks(strictCtx);
-      const output = { status: "ask" as const };
-
-      await hooks["permission.ask"](
-        {
-          tool: "edit",
-          sessionID: "strict-session",
-          path: "src/index.ts",
-          agent: "goopspec",
-        },
-        output
-      );
-
-      expect(output.status).toBe("deny");
-    });
-
-    it("allows edit on code file for non-orchestrator", async () => {
-      const hooks = createOrchestratorEnforcementHooks(ctx);
-      const output = { status: "ask" as const };
-      
-      await hooks["permission.ask"](
-        {
-          tool: "edit",
-          sessionID: "test-session",
-          path: "src/index.ts",
-          agent: "goop-executor",
-        },
-        output
-      );
-      
-      expect(output.status).toBe("ask");  // Unchanged
-    });
-
-    it("allows edit on markdown for orchestrator", async () => {
-      const hooks = createOrchestratorEnforcementHooks(ctx);
-      const output = { status: "ask" as const };
-      
-      await hooks["permission.ask"](
-        {
-          tool: "edit",
-          sessionID: "test-session",
-          path: ".goopspec/SPEC.md",
-          agent: "goopspec",
-        },
-        output
-      );
-      
-      expect(output.status).toBe("ask");  // Unchanged
-    });
-
-    it("logs to ADL when blocking", async () => {
-      const hooks = createOrchestratorEnforcementHooks(ctx);
-      const output = { status: "ask" as const };
-      
-      await hooks["permission.ask"](
-        {
-          tool: "write",
-          sessionID: "test-session",
-          path: "src/new-file.ts",
-          agent: "goopspec",
-        },
-        output
-      );
-      
-      const adl = ctx.stateManager.getADL();
-      expect(adl).toContain("Orchestrator code modification blocked");
-    });
+    expect(output.status).toBe("ask");
   });
 
-  describe("permission.ask hook (research tool blocking)", () => {
-    it("denies research tool for orchestrator", async () => {
-      const hooks = createOrchestratorEnforcementHooks(ctx);
-      const output = { status: "ask" as const };
+  it("allows orchestrator to write .goopspec/state.json", async () => {
+    const hooks = createOrchestratorEnforcementHook(ctx);
+    const output = makeOutput();
 
-      await hooks["permission.ask"](
-        {
-          tool: "mcp_google_search",
-          sessionID: "test-session",
-          agent: "goopspec",
-        },
-        output
-      );
+    await hooks["permission.ask"]?.(
+      makePermission({ type: "write", pattern: ".goopspec/state.json" }),
+      output,
+    );
 
-      expect(output.status).toBe("deny");
-    });
-
-    it("allows research tool for non-orchestrator", async () => {
-      const hooks = createOrchestratorEnforcementHooks(ctx);
-      const output = { status: "ask" as const };
-
-      await hooks["permission.ask"](
-        {
-          tool: "mcp_google_search",
-          sessionID: "test-session",
-          agent: "goop-researcher",
-        },
-        output
-      );
-
-      expect(output.status).toBe("ask");
-    });
+    expect(output.status).toBe("ask");
   });
 
-  describe("tool.execute.after hook (direct task guidance)", () => {
-    it("does not inject delegation wrapper instructions for task tool", async () => {
-      const hooks = createOrchestratorEnforcementHooks(ctx);
-      const output = {
-        title: "Task",
-        output: "Delegated task completed successfully",
-        metadata: {},
-      };
-      
-      await hooks["tool.execute.after"](
-        { tool: "task", sessionID: "test-session", callID: "call-1" },
-        output
-      );
+  // -----------------------------------------------------------------------
+  // Non-orchestrator agents — unaffected
+  // -----------------------------------------------------------------------
 
-      // Direct task usage should not trigger any wrapper-style guidance
-      expect(output.output).not.toContain("MANDATORY NEXT STEP");
-      expect(output.output).not.toContain("Two-Step Delegation Flow");
-      expect(output.output).not.toContain("goop_delegate");
+  it("allows executor agents to write implementation files", async () => {
+    const env = setupTestEnvironment("orch-enforce-exec");
+    const execCtx = createMockPluginContext({
+      testDir: env.testDir,
+      agent: "goop-executor-medium",
     });
 
-    it("clears exploration tracking when task is called", async () => {
-      const hooks = createOrchestratorEnforcementHooks(ctx);
+    const hooks = createOrchestratorEnforcementHook(execCtx);
+    const output = makeOutput();
 
-      clearExplorationTracking("test-session");
-      await hooks["tool.execute.after"](
-        { tool: "mcp_grep", sessionID: "test-session", callID: "call-1" },
-        { title: "Grep", output: "results", metadata: {} }
-      );
-      await hooks["tool.execute.after"](
-        { tool: "mcp_grep", sessionID: "test-session", callID: "call-2" },
-        { title: "Grep", output: "results", metadata: {} }
-      );
+    await hooks["permission.ask"]?.(
+      makePermission({ type: "edit", pattern: "src/hooks/index.ts" }),
+      output,
+    );
 
-      const taskOutput = { title: "Task", output: "done", metadata: {} };
-      await hooks["tool.execute.after"](
-        { tool: "task", sessionID: "test-session", callID: "call-2" },
-        taskOutput
-      );
-
-      const output = { title: "Grep", output: "results", metadata: {} };
-      await hooks["tool.execute.after"](
-        { tool: "mcp_grep", sessionID: "test-session", callID: "call-3" },
-        output
-      );
-
-      expect(output.output).not.toContain("Consider Delegating Exploration");
-    });
+    expect(output.status).toBe("ask");
+    env.cleanup();
   });
 
-  describe("direct task delegation flow", () => {
-    it("generates delegation guidance referencing task() not goop_delegate()", async () => {
-      const hooks = createOrchestratorEnforcementHooks(ctx);
-      const permOutput = { status: "ask" as const };
-      await hooks["permission.ask"](
-        {
-          tool: "mcp_edit",
-          sessionID: "direct-task-test",
-          path: "src/feature.ts",
-          agent: "goopspec",
-        },
-        permOutput
-      );
-      expect(permOutput.status).toBe("deny");
-
-      const execOutput = { title: "Edit", output: "", metadata: {} };
-      await hooks["tool.execute.after"](
-        { tool: "mcp_edit", sessionID: "direct-task-test", callID: "call-1" },
-        execOutput
-      );
-
-      // Guidance must reference direct task() usage
-      expect(execOutput.output).toContain("task(");
-      expect(execOutput.output).toContain("subagent_type");
-      // Must NOT reference the removed wrapper
-      expect(execOutput.output).not.toContain("goop_delegate(");
-      expect(execOutput.output).not.toContain("goop_delegate");
+  it("allows agents with no identity to write files", async () => {
+    const env = setupTestEnvironment("orch-enforce-none");
+    const noAgentCtx = createMockPluginContext({
+      testDir: env.testDir,
+      agent: undefined,
     });
 
-    it("research delegation guidance references task() directly", async () => {
-      const hooks = createOrchestratorEnforcementHooks(ctx);
-      const permOutput = { status: "ask" as const };
-      await hooks["permission.ask"](
-        {
-          tool: "mcp_google_search",
-          sessionID: "research-task-test",
-          agent: "goopspec",
-        },
-        permOutput
-      );
-      expect(permOutput.status).toBe("deny");
+    const hooks = createOrchestratorEnforcementHook(noAgentCtx);
+    const output = makeOutput();
 
-      const execOutput = { title: "Search", output: "", metadata: {} };
-      await hooks["tool.execute.after"](
-        { tool: "mcp_google_search", sessionID: "research-task-test", callID: "call-1" },
-        execOutput
-      );
+    await hooks["permission.ask"]?.(
+      makePermission({ type: "edit", pattern: "src/hooks/index.ts" }),
+      output,
+    );
 
-      expect(execOutput.output).toContain("task(");
-      expect(execOutput.output).toContain("goop-researcher");
-      expect(execOutput.output).not.toContain("goop_delegate");
-    });
-
-    it("exploration nudge guidance references task() directly", async () => {
-      const hooks = createOrchestratorEnforcementHooks(ctx);
-      clearExplorationTracking("explore-task-test");
-
-      for (let i = 0; i < 3; i++) {
-        const output = { title: "Grep", output: "results", metadata: {} };
-        await hooks["tool.execute.after"](
-          { tool: "mcp_grep", sessionID: "explore-task-test", callID: String(i) },
-          output
-        );
-
-        if (i === 2) {
-          expect(output.output).toContain("task(");
-          expect(output.output).toContain("goop-explorer");
-          expect(output.output).not.toContain("goop_delegate");
-        }
-      }
-
-      clearExplorationTracking("explore-task-test");
-    });
+    expect(output.status).toBe("ask");
+    env.cleanup();
   });
 
-  describe("agent selection in delegation guidance", () => {
-    it("selects executor tier for code file blocks", async () => {
-      const hooks = createOrchestratorEnforcementHooks(ctx);
-      const permOutput = { status: "ask" as const };
-      await hooks["permission.ask"](
-        {
-          tool: "mcp_edit",
-          sessionID: "agent-select-code",
-          path: "src/index.ts",
-          agent: "goopspec",
-        },
-        permOutput
-      );
+  // -----------------------------------------------------------------------
+  // Non-write permissions — pass through
+  // -----------------------------------------------------------------------
 
-      const execOutput = { title: "Edit", output: "", metadata: {} };
-      await hooks["tool.execute.after"](
-        { tool: "mcp_edit", sessionID: "agent-select-code", callID: "call-1" },
-        execOutput
-      );
+  it("allows orchestrator to read implementation files", async () => {
+    const hooks = createOrchestratorEnforcementHook(ctx);
+    const output = makeOutput();
 
-      expect(execOutput.output).toContain("goop-executor");
-    });
+    await hooks["permission.ask"]?.(
+      makePermission({ type: "read", pattern: "src/hooks/index.ts" }),
+      output,
+    );
 
-    it("selects goop-researcher for research tool blocks", async () => {
-      const hooks = createOrchestratorEnforcementHooks(ctx);
-      const permOutput = { status: "ask" as const };
-      await hooks["permission.ask"](
-        {
-          tool: "exa_web_search_exa",
-          sessionID: "agent-select-research",
-          agent: "goopspec",
-        },
-        permOutput
-      );
-
-      const execOutput = { title: "Search", output: "", metadata: {} };
-      await hooks["tool.execute.after"](
-        { tool: "exa_web_search_exa", sessionID: "agent-select-research", callID: "call-1" },
-        execOutput
-      );
-
-      expect(execOutput.output).toContain("goop-researcher");
-    });
-
-    it("selects goop-explorer for exploration nudges", async () => {
-      const hooks = createOrchestratorEnforcementHooks(ctx);
-      clearExplorationTracking("agent-select-explore");
-
-      for (let i = 0; i < 3; i++) {
-        const output = { title: "Glob", output: "results", metadata: {} };
-        await hooks["tool.execute.after"](
-          { tool: "mcp_glob", sessionID: "agent-select-explore", callID: String(i) },
-          output
-        );
-
-        if (i === 2) {
-          expect(output.output).toContain("goop-explorer");
-        }
-      }
-
-      clearExplorationTracking("agent-select-explore");
-    });
+    expect(output.status).toBe("ask");
   });
 
-  describe("orchestrator-enforcement integration", () => {
-    let hooks: ReturnType<typeof createOrchestratorEnforcementHooks>;
+  it("allows orchestrator to list directories", async () => {
+    const hooks = createOrchestratorEnforcementHook(ctx);
+    const output = makeOutput();
 
-    beforeEach(() => {
-      hooks = createOrchestratorEnforcementHooks(ctx);
-    });
+    await hooks["permission.ask"]?.(makePermission({ type: "list", pattern: "src/" }), output);
 
-    describe("research tool blocking flow", () => {
-      it("blocks research tool and provides guidance", async () => {
-        const permOutput = { status: "ask" as const };
-        await hooks["permission.ask"](
-          {
-            tool: "mcp_google_search",
-            sessionID: "integration-test",
-            agent: "goopspec",
-          },
-          permOutput
-        );
-        expect(permOutput.status).toBe("deny");
-
-        const execOutput = { title: "Search", output: "", metadata: {} };
-        await hooks["tool.execute.after"](
-          { tool: "mcp_google_search", sessionID: "integration-test", callID: "1" },
-          execOutput
-        );
-        expect(execOutput.output).toContain("goop-researcher");
-        expect(execOutput.output).toContain("task(");
-      });
-
-      it("allows research tool for subagents", async () => {
-        const output = { status: "ask" as const };
-
-        await hooks["permission.ask"](
-          {
-            tool: "mcp_google_search",
-            sessionID: "subagent-test",
-            agent: "goop-researcher",
-          },
-          output
-        );
-
-        expect(output.status).toBe("ask");
-      });
-    });
-
-    describe("code file blocking flow", () => {
-      it("blocks code file and provides delegation guidance", async () => {
-        const permOutput = { status: "ask" as const };
-        await hooks["permission.ask"](
-          {
-            tool: "mcp_edit",
-            sessionID: "code-block-test",
-            path: "src/index.ts",
-            agent: "goopspec",
-          },
-          permOutput
-        );
-        expect(permOutput.status).toBe("deny");
-
-        const execOutput = { title: "Edit", output: "", metadata: {} };
-        await hooks["tool.execute.after"](
-          { tool: "mcp_edit", sessionID: "code-block-test", callID: "1" },
-          execOutput
-        );
-        expect(execOutput.output).toContain("goop-executor");
-      });
-    });
-
-    describe("exploration pattern nudge flow", () => {
-      it("nudges after multiple exploration tool uses", async () => {
-        clearExplorationTracking("exploration-flow-test");
-
-        for (let i = 0; i < 3; i += 1) {
-          const output = { title: "Grep", output: "found matches", metadata: {} };
-          await hooks["tool.execute.after"](
-            { tool: "mcp_grep", sessionID: "exploration-flow-test", callID: String(i) },
-            output
-          );
-
-          if (i === 2) {
-            expect(output.output).toContain("Consider Delegating Exploration");
-            expect(output.output).toContain("goop-explorer");
-          }
-        }
-      });
-
-      it("clears exploration tracking after delegation", async () => {
-        clearExplorationTracking("clear-test");
-
-        for (let i = 0; i < 2; i += 1) {
-          const output = { title: "Grep", output: "results", metadata: {} };
-          await hooks["tool.execute.after"](
-            { tool: "mcp_grep", sessionID: "clear-test", callID: String(i) },
-            output
-          );
-        }
-
-        const taskOutput = { title: "Task", output: "done", metadata: {} };
-        await hooks["tool.execute.after"](
-          { tool: "task", sessionID: "clear-test", callID: "task-1" },
-          taskOutput
-        );
-
-        const output = { title: "Grep", output: "results", metadata: {} };
-        await hooks["tool.execute.after"](
-          { tool: "mcp_grep", sessionID: "clear-test", callID: "3" },
-          output
-        );
-        expect(output.output).not.toContain("Consider Delegating Exploration");
-      });
-    });
-
-    describe("delegation guidance quality", () => {
-      it("provides direct task prompt requirements after code block", async () => {
-        const permOutput = { status: "ask" as const };
-        await hooks["permission.ask"](
-          {
-            tool: "mcp_edit",
-            sessionID: "guidance-quality",
-            path: "src/hooks/orchestrator-enforcement.ts",
-            agent: "goopspec",
-          },
-          permOutput
-        );
-        expect(permOutput.status).toBe("deny");
-
-        const execOutput = { title: "Edit", output: "", metadata: {} };
-        await hooks["tool.execute.after"](
-          { tool: "mcp_edit", sessionID: "guidance-quality", callID: "call-1" },
-          execOutput
-        );
-
-        expect(execOutput.output).toContain("task(");
-        expect(execOutput.output).toContain("Task Intent");
-        expect(execOutput.output).toContain("Expected Output");
-        expect(execOutput.output).toContain("Required Context");
-        expect(execOutput.output).toContain("SPEC must-have");
-        expect(execOutput.output).toContain("BLUEPRINT task");
-        expect(execOutput.output).toContain("Constraints");
-        expect(execOutput.output).toContain("Verification");
-      });
-    });
+    expect(output.status).toBe("ask");
   });
 
-  describe("detectIntent", () => {
-    it("detects research intent", () => {
-      expect(detectIntent("research the best React libraries").type).toBe("research");
-      expect(detectIntent("compare Redux and Zustand").type).toBe("research");
-      expect(detectIntent("evaluate this approach").type).toBe("research");
-    });
+  // -----------------------------------------------------------------------
+  // Graceful degradation
+  // -----------------------------------------------------------------------
 
-    it("detects exploration intent", () => {
-      expect(detectIntent("where is the config defined").type).toBe("exploration");
-      expect(detectIntent("how does the router work").type).toBe("exploration");
-      expect(detectIntent("find where this function is called").type).toBe("exploration");
-    });
+  it("handles permission with no pattern gracefully", async () => {
+    const hooks = createOrchestratorEnforcementHook(ctx);
+    const output = makeOutput();
 
-    it("returns null for unrecognized intents", () => {
-      expect(detectIntent("hello world").type).toBe(null);
-      expect(detectIntent("implement feature X").type).toBe(null);
-    });
+    await hooks["permission.ask"]?.(
+      makePermission({ type: "edit", pattern: undefined, title: "" }),
+      output,
+    );
+
+    // No pattern and empty title — nothing to classify as implementation
+    expect(output.status).toBe("ask");
   });
 
-  describe("detectFreeFormQuestion", () => {
-    it("detects short yes/no free-form question", () => {
-      const result = detectFreeFormQuestion("Should we proceed with this plan?");
+  it("handles permission with empty string pattern", async () => {
+    const hooks = createOrchestratorEnforcementHook(ctx);
+    const output = makeOutput();
 
-      expect(result.shouldEnforce).toBe(true);
-      expect(result.reason).toBe("yes-no");
-      expect(result.question).toContain("Should we proceed");
-    });
+    await hooks["permission.ask"]?.(
+      makePermission({ type: "edit", pattern: "", title: "Edit file" }),
+      output,
+    );
 
-    it("detects short multi-choice free-form question", () => {
-      const result = detectFreeFormQuestion("Do you prefer option A or option B?");
-
-      expect(result.shouldEnforce).toBe(true);
-      expect(result.reason).toBe("yes-no");
-    });
-
-    it("does not flag already structured question tool usage", () => {
-      const result = detectFreeFormQuestion(
-        "Use mcp_question with options: ['Yes', 'No', 'Type your own answer']"
-      );
-
-      expect(result.shouldEnforce).toBe(false);
-      expect(result.reason).toBe("already-structured");
-    });
-
-    it("does not flag rhetorical prompts", () => {
-      const result = detectFreeFormQuestion("Why this matters?");
-
-      expect(result.shouldEnforce).toBe(false);
-      expect(result.reason).toBe("rhetorical");
-    });
-
-    it("does not flag contextual informational prompts", () => {
-      const result = detectFreeFormQuestion(
-        "For example, should this section include references?"
-      );
-
-      expect(result.shouldEnforce).toBe(false);
-      expect(result.reason).toBe("contextual");
-    });
-
-    it("ignores non-question text", () => {
-      const result = detectFreeFormQuestion("Implementation complete. Proceeding to verification.");
-
-      expect(result.shouldEnforce).toBe(false);
-      expect(result.reason).toBe("none");
-    });
-
-    it("does not flag self-answered questions", () => {
-      const result = detectFreeFormQuestion("Should we proceed? Yes.");
-
-      expect(result.shouldEnforce).toBe(false);
-      expect(result.reason).toBe("self-answered");
-    });
-
-    it("does not flag self-answered with 'The answer is'", () => {
-      const result = detectFreeFormQuestion(
-        "Is this the right approach? The answer is to use the existing pattern."
-      );
-
-      expect(result.shouldEnforce).toBe(false);
-      expect(result.reason).toBe("self-answered");
-    });
-
-    it("does not flag heading-style questions in markdown", () => {
-      const result = detectFreeFormQuestion("## What should we build next?");
-
-      expect(result.shouldEnforce).toBe(false);
-      expect(result.reason).toBe("heading");
-    });
-
-    it("does not flag bold heading questions", () => {
-      const result = detectFreeFormQuestion("**What are the key risks?**");
-
-      expect(result.shouldEnforce).toBe(false);
-      expect(result.reason).toBe("heading");
-    });
-
-    it("does not flag embedded prose questions", () => {
-      const result = detectFreeFormQuestion(
-        "Here is what we need to decide about the architecture?"
-      );
-
-      expect(result.shouldEnforce).toBe(false);
-      expect(result.reason).toBe("embedded-prose");
-    });
-
-    it("does not flag 'let me explain' prose with question mark", () => {
-      const result = detectFreeFormQuestion(
-        "Let me explain why this approach works better?"
-      );
-
-      expect(result.shouldEnforce).toBe(false);
-      expect(result.reason).toBe("embedded-prose");
-    });
-
-    it("does not flag 'consider whether' contextual text", () => {
-      const result = detectFreeFormQuestion(
-        "We should consider whether this pattern fits the codebase?"
-      );
-
-      expect(result.shouldEnforce).toBe(false);
-      expect(result.reason).toBe("contextual");
-    });
-
-    it("does not flag 'depending on' contextual text", () => {
-      const result = detectFreeFormQuestion(
-        "Should we use Redis depending on the deployment target?"
-      );
-
-      expect(result.shouldEnforce).toBe(false);
-      expect(result.reason).toBe("contextual");
-    });
-
-    it("does not flag 'the question is' contextual text", () => {
-      const result = detectFreeFormQuestion(
-        "The question is whether we need a cache layer?"
-      );
-
-      expect(result.shouldEnforce).toBe(false);
-      expect(result.reason).toBe("contextual");
-    });
-
-    it("does not flag 'this means' contextual text", () => {
-      const result = detectFreeFormQuestion(
-        "This means we should restructure the module?"
-      );
-
-      expect(result.shouldEnforce).toBe(false);
-      expect(result.reason).toBe("contextual");
-    });
-
-    it("does not flag new rhetorical patterns", () => {
-      expect(detectFreeFormQuestion("Sound good?").shouldEnforce).toBe(false);
-      expect(detectFreeFormQuestion("Sound good?").reason).toBe("rhetorical");
-
-      expect(detectFreeFormQuestion("Makes sense?").shouldEnforce).toBe(false);
-      expect(detectFreeFormQuestion("Makes sense?").reason).toBe("rhetorical");
-
-      expect(detectFreeFormQuestion("Ready?").shouldEnforce).toBe(false);
-      expect(detectFreeFormQuestion("Ready?").reason).toBe("rhetorical");
-
-      expect(detectFreeFormQuestion("Agreed?").shouldEnforce).toBe(false);
-      expect(detectFreeFormQuestion("Agreed?").reason).toBe("rhetorical");
-    });
-
-    it("does not flag questions inside code blocks", () => {
-      const text = "Here is the implementation:\n```\n// Should we cache this?\nconst result = fetch(url);\n```";
-      const result = detectFreeFormQuestion(text);
-
-      expect(result.shouldEnforce).toBe(false);
-    });
-
-    it("still enforces genuine short questions", () => {
-      expect(detectFreeFormQuestion("Should we proceed with deployment?").shouldEnforce).toBe(true);
-      expect(detectFreeFormQuestion("Which database should we use?").shouldEnforce).toBe(true);
-      expect(detectFreeFormQuestion("Do you want to continue?").shouldEnforce).toBe(true);
-    });
-
-    it("does not flag empty or whitespace-only input", () => {
-      expect(detectFreeFormQuestion("").shouldEnforce).toBe(false);
-      expect(detectFreeFormQuestion("   ").shouldEnforce).toBe(false);
-    });
-
-    it("does not flag very short question fragments", () => {
-      const result = detectFreeFormQuestion("Why?");
-      // "Why?" is only 1 word, below the 3-word minimum
-      expect(result.shouldEnforce).toBe(false);
-    });
-
-    it("does not flag very long questions beyond word limit", () => {
-      const longQuestion = "Should we " + "really ".repeat(25) + "proceed with this plan?";
-      const result = detectFreeFormQuestion(longQuestion);
-      // Over 24 words, should be skipped
-      expect(result.shouldEnforce).toBe(false);
-    });
+    expect(output.status).toBe("ask");
   });
 
-  describe("tool.execute.after hook (question guidance injection)", () => {
-    it("injects mcp_question guidance for short free-form question output", async () => {
-      const hooks = createOrchestratorEnforcementHooks(ctx);
-      const output = {
-        title: "Result",
-        output: "Should I continue to Wave 3?",
-        metadata: {},
-      };
+  it("does not throw on malformed input", async () => {
+    const consoleSpy = spyOn(console, "error").mockImplementation(() => {});
+    const hooks = createOrchestratorEnforcementHook(ctx);
+    const output = makeOutput();
 
-      await hooks["tool.execute.after"](
-        { tool: "task", sessionID: "question-inject-test", callID: "call-1" },
-        output
-      );
+    // Pass a completely empty object — safeHandler should catch any errors
+    await hooks["permission.ask"]?.({} as unknown as SdkPermission, output);
 
-      expect(output.output).toContain("Structured Question Guidance");
-      expect(output.output).toContain("mcp_question");
-      expect(output.output).toContain("Type your own answer");
-    });
-
-    it("does not inject guidance for rhetorical/contextual question output", async () => {
-      const hooks = createOrchestratorEnforcementHooks(ctx);
-      const output = {
-        title: "Result",
-        output: "Why this matters?",
-        metadata: {},
-      };
-
-      await hooks["tool.execute.after"](
-        { tool: "task", sessionID: "question-no-inject-test", callID: "call-1" },
-        output
-      );
-
-      expect(output.output).not.toContain("Structured Question Guidance");
-      expect(output.output).not.toContain("mcp_question");
-    });
+    // Should not have changed status (no crash, graceful pass-through)
+    expect(output.status).toBe("ask");
+    consoleSpy.mockRestore();
   });
 
-  describe("exploration tracking", () => {
-    it("does not nudge before threshold", async () => {
-      const hooks = createOrchestratorEnforcementHooks(ctx);
-      const output = { title: "Grep", output: "results", metadata: {} };
+  // -----------------------------------------------------------------------
+  // Edge cases: code extensions without prefix
+  // -----------------------------------------------------------------------
 
-      await hooks["tool.execute.after"](
-        { tool: "mcp_grep", sessionID: "test-explore", callID: "1" },
-        output
-      );
-      await hooks["tool.execute.after"](
-        { tool: "mcp_glob", sessionID: "test-explore", callID: "2" },
-        output
-      );
+  it("blocks orchestrator from writing root-level .ts files", async () => {
+    const hooks = createOrchestratorEnforcementHook(ctx);
+    const output = makeOutput();
 
-      expect(output.output).not.toContain("Consider Delegating Exploration");
-    });
+    await hooks["permission.ask"]?.(makePermission({ type: "edit", pattern: "index.ts" }), output);
 
-    it("nudges after threshold reached", async () => {
-      const hooks = createOrchestratorEnforcementHooks(ctx);
-
-      for (let i = 0; i < 3; i++) {
-        const output = { title: "Grep", output: "results", metadata: {} };
-        await hooks["tool.execute.after"](
-          { tool: "mcp_grep", sessionID: "test-explore-nudge", callID: String(i) },
-          output
-        );
-
-        if (i === 2) {
-          expect(output.output).toContain("Consider Delegating Exploration");
-        }
-      }
-    });
+    // isImplementationFile returns true for .ts extension even without prefix
+    expect(output.status).toBe("deny");
   });
 
-  describe("question enforcement policy regression", () => {
-    it("injects guidance containing mcp_question for genuine short questions", async () => {
-      const hooks = createOrchestratorEnforcementHooks(ctx);
-      const output = {
-        title: "Result",
-        output: "Which approach should we take?",
-        metadata: {},
-      };
+  it("allows orchestrator to write non-code config files", async () => {
+    const hooks = createOrchestratorEnforcementHook(ctx);
+    const output = makeOutput();
 
-      await hooks["tool.execute.after"](
-        { tool: "task", sessionID: "regression-genuine-q", callID: "call-1" },
-        output
-      );
+    await hooks["permission.ask"]?.(
+      makePermission({ type: "edit", pattern: "biome.json" }),
+      output,
+    );
 
-      expect(output.output).toContain("mcp_question");
-    });
-
-    it("injected guidance always includes custom-answer option text", async () => {
-      const hooks = createOrchestratorEnforcementHooks(ctx);
-      const output = {
-        title: "Result",
-        output: "Do you want to proceed with this plan?",
-        metadata: {},
-      };
-
-      await hooks["tool.execute.after"](
-        { tool: "task", sessionID: "regression-custom-answer", callID: "call-1" },
-        output
-      );
-
-      expect(output.output).toContain("Type your own answer");
-    });
-
-    it("does not inject guidance for non-question output", async () => {
-      const hooks = createOrchestratorEnforcementHooks(ctx);
-      const output = {
-        title: "Result",
-        output: "Implementation complete. All tests pass.",
-        metadata: {},
-      };
-
-      await hooks["tool.execute.after"](
-        { tool: "task", sessionID: "regression-no-question", callID: "call-1" },
-        output
-      );
-
-      expect(output.output).not.toContain("Structured Question Guidance");
-      expect(output.output).not.toContain("mcp_question");
-    });
-
-    it("does not inject guidance for self-answered questions", async () => {
-      const hooks = createOrchestratorEnforcementHooks(ctx);
-      const output = {
-        title: "Result",
-        output: "Should we proceed? Yes.",
-        metadata: {},
-      };
-
-      await hooks["tool.execute.after"](
-        { tool: "task", sessionID: "regression-self-answered", callID: "call-1" },
-        output
-      );
-
-      expect(output.output).not.toContain("Structured Question Guidance");
-    });
-
-    it("does not inject guidance for heading-style questions", async () => {
-      const hooks = createOrchestratorEnforcementHooks(ctx);
-      const output = {
-        title: "Result",
-        output: "## What are the next steps?",
-        metadata: {},
-      };
-
-      await hooks["tool.execute.after"](
-        { tool: "task", sessionID: "regression-heading", callID: "call-1" },
-        output
-      );
-
-      expect(output.output).not.toContain("Structured Question Guidance");
-    });
-
-    it("does not inject guidance for code-block questions", async () => {
-      const hooks = createOrchestratorEnforcementHooks(ctx);
-      const output = {
-        title: "Result",
-        output: "Here is the code:\n```\n// Should we cache this?\nconst x = 1;\n```",
-        metadata: {},
-      };
-
-      await hooks["tool.execute.after"](
-        { tool: "task", sessionID: "regression-codeblock", callID: "call-1" },
-        output
-      );
-
-      expect(output.output).not.toContain("Structured Question Guidance");
-    });
-
-    it("does not inject guidance for embedded prose questions", async () => {
-      const hooks = createOrchestratorEnforcementHooks(ctx);
-      const output = {
-        title: "Result",
-        output: "Here is what we need to decide about the architecture?",
-        metadata: {},
-      };
-
-      await hooks["tool.execute.after"](
-        { tool: "task", sessionID: "regression-prose", callID: "call-1" },
-        output
-      );
-
-      expect(output.output).not.toContain("Structured Question Guidance");
-    });
-
-    it("does not inject guidance for rhetorical questions", async () => {
-      const hooks = createOrchestratorEnforcementHooks(ctx);
-      const rhetoricalQuestions = [
-        "Sound good?",
-        "Makes sense?",
-        "Ready?",
-        "Agreed?",
-        "Why this matters?",
-      ];
-
-      for (const question of rhetoricalQuestions) {
-        const output = {
-          title: "Result",
-          output: question,
-          metadata: {},
-        };
-
-        await hooks["tool.execute.after"](
-          { tool: "task", sessionID: `regression-rhetorical-${question}`, callID: "call-1" },
-          output
-        );
-
-        expect(output.output).not.toContain("Structured Question Guidance");
-      }
-    });
-
-    it("enforces guidance for multiple genuine question patterns", async () => {
-      const hooks = createOrchestratorEnforcementHooks(ctx);
-      const genuineQuestions = [
-        "Should we proceed with deployment?",
-        "Which database should we use?",
-        "Do you want to continue?",
-        "Would you like to review the changes?",
-      ];
-
-      let enforcedCount = 0;
-      for (const question of genuineQuestions) {
-        const output = {
-          title: "Result",
-          output: question,
-          metadata: {},
-        };
-
-        await hooks["tool.execute.after"](
-          { tool: "task", sessionID: `regression-enforce-${question}`, callID: "call-1" },
-          output
-        );
-
-        if (output.output.includes("Structured Question Guidance")) {
-          enforcedCount++;
-        }
-      }
-
-      // 95%+ of genuine short questions should trigger enforcement
-      const coveragePercent = (enforcedCount / genuineQuestions.length) * 100;
-      expect(coveragePercent).toBeGreaterThanOrEqual(95);
-    });
+    expect(output.status).toBe("ask");
   });
-
-  describe("detectFreeFormQuestion regression", () => {
-    it("returns consistent reason codes for all false-positive guard categories", () => {
-      const guardedCategories = [
-        { input: "Use mcp_question with options", expectedReason: "already-structured" },
-        { input: "Why this matters?", expectedReason: "rhetorical" },
-        { input: "Sound good?", expectedReason: "rhetorical" },
-        { input: "For example, should this include references?", expectedReason: "contextual" },
-        { input: "Should we proceed? Yes.", expectedReason: "self-answered" },
-        { input: "## What should we build?", expectedReason: "heading" },
-        { input: "Here is what we need to decide?", expectedReason: "embedded-prose" },
-        { input: "Implementation complete.", expectedReason: "none" },
-      ];
-
-      for (const { input, expectedReason } of guardedCategories) {
-        const result = detectFreeFormQuestion(input);
-        expect(result.reason).toBe(expectedReason);
-        if (expectedReason !== "none") {
-          expect(result.shouldEnforce).toBe(false);
-        }
-      }
-    });
-
-    it("enforces for yes/no questions with 3+ words", () => {
-      const yesNoQuestions = [
-        "Should we proceed now?",
-        "Do you want this?",
-        "Can we deploy today?",
-        "Is this approach correct?",
-      ];
-
-      for (const question of yesNoQuestions) {
-        const result = detectFreeFormQuestion(question);
-        expect(result.shouldEnforce).toBe(true);
-        expect(result.reason).toBe("yes-no");
-      }
-    });
-
-    it("rejects questions below minimum word count", () => {
-      const shortQuestions = ["Why?", "How?", "What?"];
-
-      for (const question of shortQuestions) {
-        const result = detectFreeFormQuestion(question);
-        expect(result.shouldEnforce).toBe(false);
-      }
-    });
-
-    it("rejects questions above maximum word count", () => {
-      const longQuestion = "Should we " + "really ".repeat(25) + "proceed?";
-      const result = detectFreeFormQuestion(longQuestion);
-      expect(result.shouldEnforce).toBe(false);
-    });
-  });
-
 });

@@ -1,68 +1,157 @@
 /**
  * GoopSpec State Tool
- * Safe, atomic state operations for agents to update workflow state
- * 
- * This tool provides a safe interface for agents to update state.json
- * without directly editing the file, preventing race conditions and
- * edit conflicts.
- * 
+ *
+ * Safe, atomic state operations for agents to update workflow state.
+ * All mutations flow through the StateManager — never edits state.json directly.
+ *
+ * This is the ONLY sanctioned mutation boundary for workflow state.
+ *
  * @module tools/goop-state
  */
 
-import { tool, type ToolDefinition } from "@opencode-ai/plugin/tool";
-import type { PluginContext, ToolContext, WorkflowPhase, TaskMode, WorkflowDepth } from "../../core/types.js";
-import { log } from "../../shared/logger.js";
+import { TASK_MODES, WORKFLOW_DEPTHS, WORKFLOW_PHASES } from "../../core/constants.js";
+import type { TaskMode, WorkflowDepth, WorkflowPhase } from "../../core/constants.js";
+import { tool } from "../../core/sdk-compat.js";
+import type { ToolContext, ToolDefinition } from "../../core/sdk-compat.js";
+import type { PluginContext, WorkflowState } from "../../core/types.js";
 
-const VALID_PHASES: WorkflowPhase[] = ["idle", "plan", "research", "specify", "execute", "accept"];
-const VALID_MODES: TaskMode[] = ["quick", "standard", "comprehensive", "milestone"];
-const VALID_DEPTHS: WorkflowDepth[] = ["shallow", "standard", "deep"];
+// ---------------------------------------------------------------------------
+// Validation helpers
+// ---------------------------------------------------------------------------
 
-/**
- * Create the goop_state tool
- */
+function isValidPhase(value: string): value is WorkflowPhase {
+  return (WORKFLOW_PHASES as readonly string[]).includes(value);
+}
+
+function isValidMode(value: string): value is TaskMode {
+  return (TASK_MODES as readonly string[]).includes(value);
+}
+
+function isValidDepth(value: string): value is WorkflowDepth {
+  return (WORKFLOW_DEPTHS as readonly string[]).includes(value);
+}
+
+// ---------------------------------------------------------------------------
+// Action enum
+// ---------------------------------------------------------------------------
+
+const STATE_ACTIONS = [
+  "get",
+  "transition",
+  "complete-interview",
+  "reset-interview",
+  "lock-spec",
+  "unlock-spec",
+  "confirm-acceptance",
+  "reset-acceptance",
+  "set-mode",
+  "set-depth",
+  "set-autopilot",
+  "update-wave",
+  "reset",
+  "list-workflows",
+  "set-active-workflow",
+  "create-workflow",
+] as const;
+
+type StateAction = (typeof STATE_ACTIONS)[number];
+
+// ---------------------------------------------------------------------------
+// Formatters
+// ---------------------------------------------------------------------------
+
+const PHASE_ICONS: Record<string, string> = {
+  idle: "\u{1F52E}",
+  discuss: "\u{1F4AC}",
+  plan: "\u{1F4CB}",
+  execute: "\u26A1",
+  accept: "\u2705",
+};
+
+function formatGetResponse(
+  activeId: string,
+  wf: WorkflowState,
+  projectName: string,
+  allIds: string[],
+): string {
+  const icon = PHASE_ICONS[wf.phase] ?? "\u{1F52E}";
+  const interviewDate = wf.interviewComplete ? "\u2713 Complete" : "\u2717 Pending";
+  const specStatus = wf.specLocked ? "\u{1F512} Locked" : "\u{1F513} Unlocked";
+  const acceptStatus = wf.acceptanceConfirmed ? "\u2713 Confirmed" : "\u23F3 Pending";
+
+  const lines: string[] = [];
+  lines.push("## \u{1F52E} GoopSpec \u00B7 State");
+  lines.push(
+    `- **Project:** ${projectName} | **Workflow ID:** ${activeId} | **Docs:** \`.goopspec/${activeId === "default" ? "" : `${activeId}/`}\``,
+  );
+  lines.push(`- **Phase:** ${icon} ${wf.phase} | **Mode:** ${wf.mode} | **Depth:** ${wf.depth}`);
+  lines.push(`- **Interview:** ${interviewDate} | **Spec:** ${specStatus}`);
+  lines.push(`- **Acceptance:** ${acceptStatus} | **Wave:** ${wf.currentWave}/${wf.totalWaves}`);
+
+  if (wf.checkpoint) {
+    lines.push(`- **Checkpoint:** ${wf.checkpoint}`);
+  }
+  if (wf.autopilot) {
+    lines.push(`- **Autopilot:** ON${wf.lazyAutopilot ? " (lazy)" : ""}`);
+  }
+
+  if (allIds.length > 1) {
+    lines.push("");
+    lines.push("### Workflows");
+    for (const id of allIds) {
+      const marker = id === activeId ? "\u25B6" : " ";
+      lines.push(`- ${marker} ${id}`);
+    }
+  }
+
+  return lines.join("\n");
+}
+
+function formatWorkflowList(activeId: string, workflows: Record<string, WorkflowState>): string {
+  const ids = Object.keys(workflows);
+  if (ids.length === 0) return "No workflows found.";
+
+  const lines: string[] = [];
+  lines.push("## \u{1F52E} GoopSpec \u00B7 Workflows");
+  lines.push("");
+  lines.push("| Active | ID | Phase | Mode | Spec | Wave |");
+  lines.push("|--------|----|-------|------|------|------|");
+
+  for (const id of ids) {
+    const wf = workflows[id];
+    const marker = id === activeId ? "\u25B6" : " ";
+    const spec = wf.specLocked ? "\u{1F512}" : "\u{1F513}";
+    const wave = wf.totalWaves > 0 ? `${wf.currentWave}/${wf.totalWaves}` : "-";
+    lines.push(`| ${marker} | ${id} | ${wf.phase} | ${wf.mode} | ${spec} | ${wave} |`);
+  }
+
+  return lines.join("\n");
+}
+
+// ---------------------------------------------------------------------------
+// Tool factory
+// ---------------------------------------------------------------------------
+
 export function createGoopStateTool(ctx: PluginContext): ToolDefinition {
   return tool({
-    description: `Safe atomic state operations for GoopSpec workflow. Use this instead of directly editing state.json.
-
-Actions:
-- 'get': Read current state (returns full state object)
-- 'transition': Change workflow phase (validates transitions)
-- 'complete-interview': Mark discovery interview as complete
-- 'reset-interview': Reset interview status (for starting fresh)
-- 'lock-spec': Lock the specification contract
-- 'unlock-spec': Unlock the specification (use with caution)
-- 'confirm-acceptance': Confirm work acceptance
-- 'reset-acceptance': Reset acceptance status
-- 'set-mode': Set task mode (quick/standard/comprehensive/milestone)
-- 'set-depth': Set workflow depth (shallow/standard/deep)
-- 'set-autopilot': Enable or disable autopilot mode (supports optional lazy mode)
-- 'update-wave': Update wave progress (call ONLY after wave completes — setting currentWave=totalWaves triggers auto-progression to accept)
-- 'reset': Reset entire workflow to idle state
-- 'list-workflows': List all workflows with status table
-- 'set-active-workflow': Switch the active workflow (requires workflowId)
-- 'create-workflow': Create a new workflow entry (requires workflowId in kebab-case)
-
-IMPORTANT: Always use this tool instead of Read/Edit on state.json to avoid conflicts.`,
+    description:
+      "Safe atomic state operations for GoopSpec workflow. Use this instead of directly editing state.json.\n\n" +
+      "Actions:\n" +
+      "- 'get': Read current state\n" +
+      "- 'transition': Change workflow phase (requires `phase`)\n" +
+      "- 'complete-interview' / 'reset-interview': Toggle interview status\n" +
+      "- 'lock-spec' / 'unlock-spec': Toggle spec lock\n" +
+      "- 'confirm-acceptance' / 'reset-acceptance': Toggle acceptance\n" +
+      "- 'set-mode': Set task mode (requires `mode`)\n" +
+      "- 'set-depth': Set workflow depth (requires `depth`)\n" +
+      "- 'set-autopilot': Toggle autopilot (requires `autopilot`, optional `lazy`)\n" +
+      "- 'update-wave': Update wave progress (requires `currentWave`, `totalWaves`)\n" +
+      "- 'reset': Reset active workflow to idle\n" +
+      "- 'list-workflows': List all workflows\n" +
+      "- 'set-active-workflow': Switch active workflow (requires `workflowId`)\n" +
+      "- 'create-workflow': Create new workflow (requires `workflowId`)",
     args: {
-      action: tool.schema.enum([
-        "get",
-        "transition",
-        "complete-interview",
-        "reset-interview",
-        "lock-spec",
-        "unlock-spec",
-        "confirm-acceptance",
-        "reset-acceptance",
-        "set-mode",
-        "set-depth",
-        "set-autopilot",
-        "update-wave",
-        "reset",
-        "list-workflows",
-        "set-active-workflow",
-        "create-workflow",
-      ]),
-      workflowId: tool.schema.string().optional(),
+      action: tool.schema.enum(STATE_ACTIONS),
       phase: tool.schema.string().optional(),
       mode: tool.schema.string().optional(),
       depth: tool.schema.string().optional(),
@@ -70,257 +159,180 @@ IMPORTANT: Always use this tool instead of Read/Edit on state.json to avoid conf
       lazy: tool.schema.boolean().optional(),
       currentWave: tool.schema.number().optional(),
       totalWaves: tool.schema.number().optional(),
+      workflowId: tool.schema.string().optional(),
       force: tool.schema.boolean().optional(),
     },
-    async execute(args, _context: ToolContext): Promise<string> {
-      const { action } = args;
-      
-      log("goop_state action", { action, args });
-
-      switch (action) {
-        case "get": {
-          const state = ctx.stateManager.getState();
-          const workflow = state.workflow;
-          
-          const phaseIcons: Record<string, string> = {
-            idle: "🔮",
-            plan: "📋",
-            research: "🔬",
-            specify: "📜",
-            execute: "⚡",
-            accept: "✅",
-          };
-          const phaseIcon = phaseIcons[workflow.phase] || "🔮";
-          const initializedDate = state.project.initialized.includes("T")
-            ? state.project.initialized.split("T")[0]
-            : state.project.initialized;
-          const interviewDate = workflow.interviewCompletedAt
-            ? (workflow.interviewCompletedAt.includes("T")
-              ? workflow.interviewCompletedAt.split("T")[0]
-              : workflow.interviewCompletedAt)
-            : null;
-          const phases = state.execution.completedPhases;
-          const phaseCount = phases.length;
-          let phaseSummary = "None";
-          if (phaseCount > 0) {
-            const lastThree = phases.slice(-3).join(" → ");
-            phaseSummary = phaseCount <= 3
-              ? `${phaseCount} ${phaseCount === 1 ? "phase" : "phases"} (${lastThree})`
-              : `${phaseCount} phases (... → ${lastThree})`;
-          }
-          
-          const activeWorkflowId = ctx.stateManager.getActiveWorkflowId?.() ?? "default";
-          const resolvedWorkflowId = workflow.workflowId ?? activeWorkflowId;
-          const workflowDocPrefix = activeWorkflowId === "default"
-            ? ".goopspec/"
-            : `.goopspec/${activeWorkflowId}/`;
-
-          return `## 🔮 GoopSpec · State
-- **Project:** ${state.project.name} | **Initialized:** ${initializedDate}
-- **Workflow ID:** ${resolvedWorkflowId} | **Active Workflow:** ${activeWorkflowId} | **Docs:** \`${workflowDocPrefix}\`
-- **Phase:** ${phaseIcon} ${workflow.phase} | **Mode:** ${workflow.mode} | **Depth:** ${workflow.depth}
-- **Interview:** ${workflow.interviewComplete ? "✓ Complete" : "⏳ Pending"}${interviewDate ? ` (${interviewDate})` : ""} | **Spec:** ${workflow.specLocked ? "🔒 Locked" : "🔓 Unlocked"}
-- **Acceptance:** ${workflow.acceptanceConfirmed ? "✓ Confirmed" : "⏳ Pending"} | **Wave:** ${workflow.currentWave}/${workflow.totalWaves}
-- **Checkpoint:** ${state.execution.activeCheckpointId || "None"}
-- **Phases:** ${phaseSummary}
-- **Pending Tasks:** ${state.execution.pendingTasks.length}
-
----`;
-        }
-
-        case "transition": {
-          if (!args.phase) {
-            return "Error: 'phase' is required for transition action.\n\nValid phases: " + VALID_PHASES.join(", ");
-          }
-          
-          const phase = args.phase as WorkflowPhase;
-          if (!VALID_PHASES.includes(phase)) {
-            return `Error: Invalid phase '${args.phase}'.\n\nValid phases: ${VALID_PHASES.join(", ")}`;
-          }
-          
-          const success = ctx.stateManager.transitionPhase(phase, args.force ?? false);
-          if (success) {
-            const state = ctx.stateManager.getState();
-            return `Phase transitioned to: ${phase}\n\nCurrent state:\n- Phase: ${state.workflow.phase}\n- Interview Complete: ${state.workflow.interviewComplete}\n- Spec Locked: ${state.workflow.specLocked}`;
-          } else {
-            const currentState = ctx.stateManager.getState();
-            return `Error: Invalid phase transition from '${currentState.workflow.phase}' to '${phase}'.\n\nUse force=true to override (not recommended).\n\nValid transitions from '${currentState.workflow.phase}': Check workflow documentation.`;
-          }
-        }
-
-        case "complete-interview": {
-          ctx.stateManager.completeInterview();
-          return `✓ Interview marked as complete.
-
-→ Proceed to planning with \`/goop-plan\``;
-        }
-
-        case "reset-interview": {
-          ctx.stateManager.resetInterview();
-          return `✓ Interview status reset.
-
-→ Run \`/goop-discuss\` to start a new discovery interview.`;
-        }
-
-        case "lock-spec": {
-          ctx.stateManager.lockSpec();
-          const confirmedState = ctx.stateManager.getState();
-          if (!confirmedState.workflow.specLocked) {
-            return "✗ Error: Spec lock failed — state did not confirm. Retry this action.";
-          }
-          return `🔒 Specification locked. Confirmed: specLocked = true.
-
-The specification is now frozen. Changes require \`/goop-amend\`.
-
-→ Run \`/goop-execute\` to begin implementation.`;
-        }
-
-        case "unlock-spec": {
-          ctx.stateManager.unlockSpec();
-          return `🔓 Specification unlocked.
-
-⚠️ Warning: Unlocking the spec should only be done when amendments are needed.`;
-        }
-
-        case "confirm-acceptance": {
-          ctx.stateManager.confirmAcceptance();
-          return `✓ Acceptance confirmed.
-
-Work has been verified and accepted.
-
-→ Run \`/goop-accept\` to execute finalization and archival in the same flow.`;
-        }
-
-        case "reset-acceptance": {
-          ctx.stateManager.resetAcceptance();
-          return `✓ Acceptance status reset.
-
-Work needs to be re-verified.`;
-        }
-
-        case "set-mode": {
-          if (!args.mode) {
-            return "✗ Error: 'mode' is required for set-mode action.\n\nValid modes: " + VALID_MODES.join(", ");
-          }
-          
-          const mode = args.mode as TaskMode;
-          if (!VALID_MODES.includes(mode)) {
-            return `✗ Error: Invalid mode '${args.mode}'.\n\nValid modes: ${VALID_MODES.join(", ")}`;
-          }
-          
-          ctx.stateManager.setMode(mode);
-          return `✓ Task mode set to: ${mode}`;
-        }
-
-        case "set-depth": {
-          if (!args.depth) {
-            return "✗ Error: 'depth' is required for set-depth action.\n\nValid depths: " + VALID_DEPTHS.join(", ");
-          }
-          
-          const depth = args.depth as WorkflowDepth;
-          if (!VALID_DEPTHS.includes(depth)) {
-            return `✗ Error: Invalid depth '${args.depth}'.\n\nValid depths: ${VALID_DEPTHS.join(", ")}`;
-          }
-          
-          ctx.stateManager.updateWorkflow({ depth });
-          return `✓ Workflow depth set to: ${depth}`;
-        }
-
-        case "set-autopilot": {
-          if (args.autopilot === undefined) {
-            return "✗ Error: 'autopilot' (boolean) is required for set-autopilot action.";
-          }
-
-          if (!args.autopilot) {
-            ctx.stateManager.updateWorkflow({ autopilot: false, lazyAutopilot: false });
-            return `✓ Autopilot disabled. Manual confirmation will be required between phases.`;
-          }
-
-          if (args.lazy) {
-            ctx.stateManager.updateWorkflow({ autopilot: true, lazyAutopilot: true });
-            return `✓ Lazy Autopilot enabled. The full pipeline will run with zero questions — all decisions inferred from your initial prompt. Pauses only at final acceptance.`;
-          }
-
-          ctx.stateManager.updateWorkflow({ autopilot: true, lazyAutopilot: false });
-          return `✓ Autopilot enabled. The full pipeline (discuss → plan → execute) will run unattended, pausing only at final acceptance.`;
-        }
-
-        case "update-wave": {
-          if (args.currentWave === undefined || args.totalWaves === undefined) {
-            return "✗ Error: Both 'currentWave' and 'totalWaves' are required for update-wave action.";
-          }
-          
-          if (args.currentWave < 0 || args.totalWaves < 0) {
-            return "✗ Error: Wave numbers must be non-negative.";
-          }
-          
-          if (args.currentWave > args.totalWaves) {
-            return "✗ Error: currentWave cannot be greater than totalWaves.";
-          }
-          
-          ctx.stateManager.updateWaveProgress(args.currentWave, args.totalWaves);
-          const progressMsg = `✓ Wave progress: ${args.currentWave}/${args.totalWaves}`;
-          if (args.currentWave === args.totalWaves) {
-            return progressMsg + `\n\n⚠️ currentWave = totalWaves: auto-progression to accept will fire after this tool call. Only call update-wave(${args.currentWave}, ${args.totalWaves}) after Wave ${args.currentWave} tasks have fully completed.`;
-          }
-          return progressMsg;
-        }
-
-        case "reset": {
-          ctx.stateManager.resetWorkflow();
-          return `✓ Workflow reset to idle state.
-
-All workflow flags cleared. Ready for a new task.
-
-→ Run \`/goop-discuss\` to start.`;
-        }
-
-        case "list-workflows": {
-          const workflows = ctx.stateManager.listWorkflows?.() ?? [];
-          if (workflows.length === 0) {
-            return "No workflows found. Run `/goop-discuss` to create one.";
-          }
-          const activeId = ctx.stateManager.getActiveWorkflowId?.() ?? "default";
-          const rows = workflows.map(wf => {
-            const prefix = wf.workflowId === activeId ? "►" : " ";
-            const waveStr = `${wf.currentWave}/${wf.totalWaves}`;
-            const spec = wf.specLocked ? "🔒" : "🔓";
-            const date = wf.lastActivity?.split("T")[0] ?? "—";
-            return `${prefix} ${wf.workflowId.padEnd(20)} ${wf.phase.padEnd(8)} Wave ${waveStr.padEnd(6)} ${spec} ${date}`;
-          });
-          return `## Workflows\n\n  ${"ID".padEnd(20)} ${"Phase".padEnd(8)} ${"Wave".padEnd(10)} Spec Date\n${rows.join("\n")}\n\nActive: ${activeId}`;
-        }
-
-        case "set-active-workflow": {
-          if (!args.workflowId) {
-            return "✗ Error: 'workflowId' is required for set-active-workflow action.";
-          }
-          const success = ctx.stateManager.setActiveWorkflow(args.workflowId);
-          if (!success) {
-            return `✗ Error: Workflow '${args.workflowId}' not found. Use list-workflows to see available workflows.`;
-          }
-          ctx.workflowId = args.workflowId;
-          return `✓ Active workflow set to: ${args.workflowId}`;
-        }
-
-        case "create-workflow": {
-          if (!args.workflowId) {
-            return "✗ Error: 'workflowId' is required for create-workflow action.";
-          }
-          if (!/^[a-z0-9][a-z0-9-]*[a-z0-9]$/.test(args.workflowId) || args.workflowId.length < 2) {
-            return `✗ Error: Invalid workflow ID '${args.workflowId}'. Must be kebab-case (lowercase letters, numbers, hyphens), min 2 chars.`;
-          }
-          const existing = ctx.stateManager.getWorkflow(args.workflowId);
-          if (existing) {
-            return `✓ Workflow '${args.workflowId}' already exists (no-op).\n\nWorkflow ID: ${existing.workflowId}\nPhase: ${existing.phase}\n\n→ Use set-active-workflow to bind this session to it.`;
-          }
-          const workflow = ctx.stateManager.createWorkflow(args.workflowId);
-          return `✓ Workflow '${args.workflowId}' created.\n\nWorkflow ID: ${workflow.workflowId}\nPhase: ${workflow.phase}\n\n→ Call set-active-workflow to bind this session to the new workflow.`;
-        }
-
-        default:
-          return "Unknown action. Valid actions: get, transition, complete-interview, reset-interview, lock-spec, unlock-spec, confirm-acceptance, reset-acceptance, set-mode, set-depth, set-autopilot (supports optional lazy), update-wave, reset, list-workflows, set-active-workflow, create-workflow";
+    async execute(
+      args: {
+        action: StateAction;
+        phase?: string;
+        mode?: string;
+        depth?: string;
+        autopilot?: boolean;
+        lazy?: boolean;
+        currentWave?: number;
+        totalWaves?: number;
+        workflowId?: string;
+        force?: boolean;
+      },
+      _context: ToolContext,
+    ): Promise<string> {
+      try {
+        return executeAction(ctx, args);
+      } catch (error: unknown) {
+        const msg = error instanceof Error ? error.message : String(error);
+        return `**Error (goop_state):** ${msg}`;
       }
     },
   });
+}
+
+// ---------------------------------------------------------------------------
+// Action dispatcher
+// ---------------------------------------------------------------------------
+
+function executeAction(
+  ctx: PluginContext,
+  args: {
+    action: StateAction;
+    phase?: string;
+    mode?: string;
+    depth?: string;
+    autopilot?: boolean;
+    lazy?: boolean;
+    currentWave?: number;
+    totalWaves?: number;
+    workflowId?: string;
+    force?: boolean;
+  },
+): string {
+  const { action } = args;
+  const sm = ctx.stateManager;
+
+  switch (action) {
+    // -- Read ---------------------------------------------------------------
+    case "get": {
+      const state = sm.getState();
+      const activeId = state.activeWorkflowId;
+      const wf = state.workflows[activeId];
+      if (!wf) return "No active workflow found.";
+      const projectName = ctx.sdk.directory.split("/").pop() ?? ctx.sdk.directory;
+      return formatGetResponse(activeId, wf, projectName, Object.keys(state.workflows));
+    }
+
+    // -- Phase transition ---------------------------------------------------
+    case "transition": {
+      if (!args.phase) return "**Error:** `phase` is required for transition.";
+      if (!isValidPhase(args.phase)) {
+        return `**Error:** Invalid phase "${args.phase}". Valid: ${WORKFLOW_PHASES.join(", ")}`;
+      }
+      sm.transitionPhase(args.phase, args.force ?? false);
+      return `Phase transitioned to **${args.phase}**.`;
+    }
+
+    // -- Interview ----------------------------------------------------------
+    case "complete-interview": {
+      sm.completeInterview();
+      return "Interview marked as **complete**.";
+    }
+    case "reset-interview": {
+      sm.resetInterview();
+      return "Interview status **reset**.";
+    }
+
+    // -- Spec lock ----------------------------------------------------------
+    case "lock-spec": {
+      sm.lockSpec();
+      return "Specification **locked**. \u{1F512}";
+    }
+    case "unlock-spec": {
+      sm.unlockSpec();
+      return "Specification **unlocked**. \u{1F513}";
+    }
+
+    // -- Acceptance ---------------------------------------------------------
+    case "confirm-acceptance": {
+      sm.confirmAcceptance();
+      return "Acceptance **confirmed**. \u2705";
+    }
+    case "reset-acceptance": {
+      sm.resetAcceptance();
+      return "Acceptance status **reset**.";
+    }
+
+    // -- Mode ---------------------------------------------------------------
+    case "set-mode": {
+      if (!args.mode) return "**Error:** `mode` is required for set-mode.";
+      if (!isValidMode(args.mode)) {
+        return `**Error:** Invalid mode "${args.mode}". Valid: ${TASK_MODES.join(", ")}`;
+      }
+      sm.setMode(args.mode);
+      return `Mode set to **${args.mode}**.`;
+    }
+
+    // -- Depth --------------------------------------------------------------
+    case "set-depth": {
+      if (!args.depth) return "**Error:** `depth` is required for set-depth.";
+      if (!isValidDepth(args.depth)) {
+        return `**Error:** Invalid depth "${args.depth}". Valid: ${WORKFLOW_DEPTHS.join(", ")}`;
+      }
+      sm.setDepth(args.depth);
+      return `Depth set to **${args.depth}**.`;
+    }
+
+    // -- Autopilot ----------------------------------------------------------
+    case "set-autopilot": {
+      if (args.autopilot == null) {
+        return "**Error:** `autopilot` (boolean) is required for set-autopilot.";
+      }
+      sm.updateWorkflow({
+        autopilot: args.autopilot,
+        lazyAutopilot: args.autopilot ? (args.lazy ?? false) : false,
+      });
+      const label = args.autopilot ? `ON${args.lazy ? " (lazy)" : ""}` : "OFF";
+      return `Autopilot set to **${label}**.`;
+    }
+
+    // -- Wave progress ------------------------------------------------------
+    case "update-wave": {
+      if (args.currentWave == null || args.totalWaves == null) {
+        return "**Error:** `currentWave` and `totalWaves` are required for update-wave.";
+      }
+      sm.updateWaveProgress(args.currentWave, args.totalWaves);
+      return `Wave progress updated to **${args.currentWave}/${args.totalWaves}**.`;
+    }
+
+    // -- Reset --------------------------------------------------------------
+    case "reset": {
+      sm.resetWorkflow();
+      return "Active workflow **reset** to idle.";
+    }
+
+    // -- Workflow CRUD ------------------------------------------------------
+    case "list-workflows": {
+      const state = sm.getState();
+      return formatWorkflowList(state.activeWorkflowId, state.workflows);
+    }
+
+    case "set-active-workflow": {
+      if (!args.workflowId) {
+        return "**Error:** `workflowId` is required for set-active-workflow.";
+      }
+      sm.setActiveWorkflow(args.workflowId);
+      return `Active workflow switched to **${args.workflowId}**.`;
+    }
+
+    case "create-workflow": {
+      if (!args.workflowId) {
+        return "**Error:** `workflowId` is required for create-workflow.";
+      }
+      sm.createWorkflow(args.workflowId);
+      return `Workflow **${args.workflowId}** created.`;
+    }
+
+    default: {
+      const exhaustive: never = action;
+      return `**Error:** Unknown action "${exhaustive as string}".`;
+    }
+  }
 }

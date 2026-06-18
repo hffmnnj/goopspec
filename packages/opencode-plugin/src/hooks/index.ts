@@ -1,128 +1,126 @@
 /**
- * Hooks barrel export and factory
- * @module hooks
+ * Hook registry — merges individual HookFactory outputs into a single
+ * SDK-compatible Hooks object with same-event handler chaining.
+ *
+ * Tasks 5.2–5.9 each export a HookFactory. This module collects them,
+ * merges their Partial<Hooks> results, and chains handlers that target
+ * the same event so all fire sequentially.
  */
 
-import type { Hooks } from "@opencode-ai/plugin";
 import type { PluginContext } from "../core/types.js";
-import { createChatMessageHook } from "./chat-message.js";
-import { createCompactionHook } from "./compaction-hook.js";
-import { createToolLifecycleHooks } from "./tool-lifecycle.js";
-import { createEventHandler } from "./event-handler.js";
-import { createSystemTransformHook } from "./system-transform.js";
-import { createCommandProcessor } from "./command-processor.js";
-import { createOrchestratorEnforcementHooks } from "./orchestrator-enforcement.js";
-import { createAutoProgressionHook } from "./auto-progression.js";
-import { createCommentCheckerHooks } from "./comment-checker.js";
+import type { HookEventName, HookFactory, Hooks } from "./types.js";
+import { chainHandlers } from "./utils.js";
+
+// ---------------------------------------------------------------------------
+// Handler event names — used to distinguish chainable handlers from
+// registration properties (tool, auth) during merge
+// ---------------------------------------------------------------------------
+
+const HANDLER_EVENT_NAMES: readonly HookEventName[] = [
+  "event",
+  "chat.message",
+  "chat.params",
+  "chat.headers",
+  "permission.ask",
+  "command.execute.before",
+  "tool.execute.before",
+  "tool.execute.after",
+  "experimental.chat.messages.transform",
+  "experimental.chat.system.transform",
+  "experimental.session.compacting",
+  "experimental.text.complete",
+] as const;
+
+// ---------------------------------------------------------------------------
+// Factory registry — tasks 5.2–5.9 append their factories here
+// ---------------------------------------------------------------------------
+
+const hookFactories: HookFactory[] = [];
 
 /**
- * Create all GoopSpec hooks
- * 
- * @param ctx - Plugin context with state manager, resolver, etc.
+ * Register a hook factory. Called by individual hook modules (5.2–5.9)
+ * to add themselves to the registry.
  */
-export function createHooks(ctx: PluginContext): Partial<Hooks> {
-  const toolLifecycleHooks = createToolLifecycleHooks(ctx);
-  const commandProcessorHooks = createCommandProcessor(ctx);
-  const enforcementHooks = createOrchestratorEnforcementHooks(ctx);
-  const autoProgressionHooks = createAutoProgressionHook(ctx);
-  const commentCheckerHooks = createCommentCheckerHooks();
-  const chatMessageHooks = [
-    createChatMessageHook(ctx),
-    enforcementHooks["chat.message"],
-  ].filter(
-    (hook): hook is NonNullable<Hooks["chat.message"]> => Boolean(hook)
-  );
-  
-  // Combine all tool.execute.before hooks
-  const toolExecuteBeforeHooks = [
-    commentCheckerHooks["tool.execute.before"],
-  ].filter(
-    (hook): hook is NonNullable<Hooks["tool.execute.before"]> => Boolean(hook)
-  );
-  
-  // Combine all tool.execute.after hooks
-  const toolExecuteAfterHooks = [
-    toolLifecycleHooks["tool.execute.after"],
-    commandProcessorHooks["tool.execute.after"],
-    enforcementHooks["tool.execute.after"],
-    autoProgressionHooks["tool.execute.after"],
-    commentCheckerHooks["tool.execute.after"],
-  ].filter(
-    (hook): hook is NonNullable<Hooks["tool.execute.after"]> => Boolean(hook)
-  );
-  
-  // Combine event handlers
-  const baseEventHandler = createEventHandler(ctx);
-
-  const hooks: Partial<Hooks> = {
-    event: async (eventInput) => {
-      // Run base event handler
-      await baseEventHandler(eventInput);
-    },
-    "chat.message": async (input, output) => {
-      for (const hook of chatMessageHooks) {
-        await hook(input, output);
-      }
-    },
-    ...toolLifecycleHooks,
-    ...commandProcessorHooks,
-  };
-  
-  // Add permission.ask hook for orchestrator code blocking
-  if (enforcementHooks["permission.ask"]) {
-    // @ts-expect-error - permission.ask hook type may not be in Hooks interface
-    hooks["permission.ask"] = enforcementHooks["permission.ask"];
-  }
-
-  if (toolExecuteBeforeHooks.length > 0) {
-    hooks["tool.execute.before"] = async (input, output) => {
-      for (const hook of toolExecuteBeforeHooks) {
-        await hook(input, output);
-      }
-    };
-  }
-
-  if (toolExecuteAfterHooks.length > 0) {
-    hooks["tool.execute.after"] = async (input, output) => {
-      for (const hook of toolExecuteAfterHooks) {
-        await hook(input, output);
-      }
-    };
-  }
-
-  // Add system transform hook for memory injection if enabled
-  if (ctx.memoryManager && ctx.config.memory?.injection?.enabled !== false) {
-    // @ts-expect-error - experimental hook not in type definitions
-    hooks["experimental.chat.system.transform"] = createSystemTransformHook(ctx);
-  }
-
-  // Add compaction hook for workflow state injection on context window reset
-  hooks["experimental.session.compacting"] = createCompactionHook(ctx);
-
-  return hooks;
+export function registerHookFactory(factory: HookFactory): void {
+  hookFactories.push(factory);
 }
 
-export { createChatMessageHook } from "./chat-message.js";
-export { createToolLifecycleHooks } from "./tool-lifecycle.js";
-export { createCommandProcessor } from "./command-processor.js";
-export { createEventHandler } from "./event-handler.js";
-export { createSystemTransformHook } from "./system-transform.js";
-export { 
-  createCommentCheckerHooks,
-  analyzeComments,
-  formatAnalysis
-} from "./comment-checker.js";
-export type { CommentCheckerConfig, CommentAnalysis } from "./comment-checker.js";
-export {
-  createOrchestratorEnforcementHooks,
-  isOrchestrator,
-  hasPendingDelegation,
-  getPendingDelegation,
-  clearPendingDelegation,
-  wouldBlockPath,
-} from "./orchestrator-enforcement.js";
-export {
-  createAutoProgressionHook,
-  checkProgressionConditions,
-} from "./auto-progression.js";
-export { createCompactionHook } from "./compaction-hook.js";
+// ---------------------------------------------------------------------------
+// Merge logic
+// ---------------------------------------------------------------------------
+
+/** Any async handler matching the SDK hook signature pattern. */
+type AnyHandler = (...args: never[]) => Promise<void>;
+
+/**
+ * Merge multiple Partial<Hooks> objects into a single Hooks object.
+ *
+ * Handler events: if multiple partials define the same event, their handlers
+ * are chained via `chainHandlers` — each runs sequentially, mutations accumulate.
+ *
+ * Registration properties:
+ * - `tool` maps are shallow-merged (later entries override earlier for same key)
+ * - `auth` uses the last defined value
+ */
+export function mergeHooks(partials: Partial<Hooks>[]): Hooks {
+  const merged: Hooks = {};
+
+  // Collect handlers per event name
+  const handlerMap = new Map<string, AnyHandler[]>();
+
+  // Collect tool registrations
+  let toolMap: Record<string, unknown> = {};
+
+  for (const partial of partials) {
+    for (const eventName of HANDLER_EVENT_NAMES) {
+      const handler = partial[eventName] as AnyHandler | undefined;
+      if (handler) {
+        let handlers = handlerMap.get(eventName);
+        if (!handlers) {
+          handlers = [];
+          handlerMap.set(eventName, handlers);
+        }
+        handlers.push(handler);
+      }
+    }
+
+    if (partial.tool) {
+      toolMap = { ...toolMap, ...partial.tool };
+    }
+
+    if (partial.auth) {
+      merged.auth = partial.auth;
+    }
+  }
+
+  // Chain handlers for each event
+  for (const [eventName, handlers] of handlerMap) {
+    if (handlers.length > 0) {
+      (merged as Record<string, unknown>)[eventName] = chainHandlers(eventName, handlers);
+    }
+  }
+
+  if (Object.keys(toolMap).length > 0) {
+    merged.tool = toolMap as Hooks["tool"];
+  }
+
+  return merged;
+}
+
+// ---------------------------------------------------------------------------
+// Public API
+// ---------------------------------------------------------------------------
+
+/**
+ * Create the merged Hooks object from all registered factories.
+ *
+ * Called once during plugin initialisation. Collects all HookFactory
+ * outputs and merges them into a single SDK-compatible Hooks object.
+ */
+export function createHooks(ctx: PluginContext, extraFactories: HookFactory[] = []): Hooks {
+  const allFactories = [...hookFactories, ...extraFactories];
+  const partials = allFactories.map((factory) => factory(ctx));
+  return mergeHooks(partials);
+}
+
+export type { HookFactory, HookEventName, Hooks };

@@ -1,32 +1,51 @@
 /**
- * Enforcement Module
- * Phase-aware workflow enforcement for GoopSpec
- * 
+ * Enforcement subsystem — phase validators, document scaffolder, and
+ * context injection rules.
+ *
+ * This module re-exports the three enforcement concerns as a single
+ * public surface. Hooks (Wave 5) consume these pure functions.
+ *
  * @module features/enforcement
  */
 
+// Validators — phase-action allow/deny logic
 export {
-  buildPhaseEnforcement,
-  buildStateContext,
-  buildEnforcementContext,
-  getPhaseEnforcement,
+  canStartExecution,
+  canStartPlanning,
+  isImplementationFile,
   isOperationAllowed,
-  type PhaseEnforcement,
-} from "./phase-context.js";
+  isOrchestratorCodeWrite,
+  validateWriteOperation,
+  type EnforcedOperation,
+  type ValidationResult,
+} from "./validators.js";
 
+// Scaffolder — document auto-creation per phase
 export {
-  scaffoldPhaseDocuments,
   checkPhaseDocuments,
-  getPhaseDir,
+  getRequiredDocuments,
+  getWorkflowDocDir,
+  getWorkflowDocPath,
+  scaffoldPhaseDocuments,
+  type DocumentCheckResult,
+  type DocumentName,
   type ScaffoldResult,
-  type DocumentType,
 } from "./scaffolder.js";
 
+// Phase context — per-phase rules for system prompt injection
 export {
-  validateWriteOperation,
-  validatePhaseTransition,
-  isImplementationFile,
-  getValidationWarning,
-  type ValidationResult,
-  type TransitionValidation,
-} from "./validators.js";
+  buildEnforcementContext,
+  buildPhaseEnforcement,
+  buildStateContext,
+  getPhaseRules,
+  type PhaseRules,
+} from "./phase-context.js";
+
+// Validation contract — spec completeness gate before wave decomposition
+export {
+  checkContractGate,
+  shouldEnforceContractGate,
+  validateSpecContract,
+  type ContractValidation,
+  type SpecContract,
+} from "./validation-contract.js";

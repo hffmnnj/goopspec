@@ -1,177 +1,146 @@
 /**
- * Phase Enforcement Context Builder
- * Generates phase-specific MUST DO / MUST NOT DO enforcement rules
- * 
+ * Per-phase context rules for the enforcement subsystem.
+ *
+ * Builds phase-specific instruction blocks that the system-transform hook
+ * (Wave 5) injects into the LLM system prompt. Each phase has MUST DO /
+ * MUST NOT DO rules, required documents, and optional delegation guidance.
+ *
+ * All functions are pure — they take state and return strings.
+ *
  * @module features/enforcement/phase-context
  */
 
-import type { GoopState, WorkflowPhase } from "../../core/types.js";
+import type { WorkflowPhase, WorkflowState } from "../../core/types.js";
 
-/**
- * Phase enforcement rules
- */
-export interface PhaseEnforcement {
+// ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
+
+export interface PhaseRules {
   phase: WorkflowPhase;
-  phaseName: string;
-  mustDo: string[];
-  mustNotDo: string[];
-  requiredDocuments: string[];
-  delegationReminder?: string;
+  label: string;
+  mustDo: readonly string[];
+  mustNotDo: readonly string[];
+  requiredDocuments: readonly string[];
+  delegationNote?: string;
 }
 
-/**
- * Delegation example using correct tool syntax
- */
-const DELEGATION_EXAMPLE = `
-Use the task tool for delegation:
-\`\`\`
-task({
-  subagent_type: "goop-executor-high",  // or appropriate goop-executor-{tier}
-  description: "Brief task description",
-  prompt: \`
-    ## TASK
-    [Specific, atomic goal]
-    
-    ## FILES
-    - path/to/file.ts (modify/create)
-    
-    ## REQUIREMENTS
-    [From SPEC.md]
-    
-    ## ACCEPTANCE
-    [How to verify completion]
-  \`
-})
-\`\`\`
-NOTE: Use "task" tool, NOT "delegate" tool for subagent work.
-`.trim();
+// ---------------------------------------------------------------------------
+// Phase rule definitions
+// ---------------------------------------------------------------------------
 
-/**
- * Phase-specific enforcement rules
- */
-const PHASE_ENFORCEMENT: Record<WorkflowPhase, Omit<PhaseEnforcement, "phase">> = {
+const DELEGATION_NOTE = [
+  "DELEGATE all code work to executor subagents using the task() tool.",
+  'Use subagent_type: "goop-executor-{tier}" (low/medium/high/frontend-low/frontend-high).',
+  "Never write implementation code directly as the orchestrator.",
+].join("\n");
+
+const PHASE_RULES: Record<WorkflowPhase, Omit<PhaseRules, "phase">> = {
   idle: {
-    phaseName: "IDLE",
+    label: "IDLE",
     mustDo: [
-      "Use /goop-plan to start a new feature",
+      "Use /goop-discuss or /goop-plan to start a new feature",
       "Use /goop-status to check current state",
     ],
+    mustNotDo: ["Write implementation code without a plan", "Skip the planning phase"],
+    requiredDocuments: [],
+  },
+
+  discuss: {
+    label: "DISCUSS",
+    mustDo: [
+      "Ask clarifying questions to understand requirements",
+      "Identify must-haves, nice-to-haves, and out-of-scope items",
+      "Challenge assumptions respectfully",
+      "Summarise understanding before moving to plan",
+    ],
     mustNotDo: [
-      "Write implementation code without a plan",
-      "Skip the planning phase",
+      "Write ANY implementation code",
+      "Create source files outside .goopspec/",
+      "Skip requirement gathering",
+      "Proceed to execution without a plan",
     ],
     requiredDocuments: [],
   },
-  
+
   plan: {
-    phaseName: "PLAN",
+    label: "PLAN",
     mustDo: [
-      "Ask clarifying questions to understand requirements",
       "Create SPEC.md with must-haves, nice-to-haves, out-of-scope",
-      "Define clear success criteria",
-      "Get user confirmation before proceeding to research/execute",
-      "Call goop_status() to verify current state",
+      "Create BLUEPRINT.md with wave-based execution plan",
+      "Map all must-haves to specific tasks",
+      "Define verification steps for each task",
+      "Get user confirmation before locking the spec",
     ],
     mustNotDo: [
       "Write ANY implementation code",
       "Create source files (only .goopspec/ documents)",
-      "Skip requirement gathering",
       "Proceed without user confirmation",
       "Use write/edit tools on src/ files",
     ],
     requiredDocuments: ["SPEC.md"],
   },
-  
-  research: {
-    phaseName: "RESEARCH",
-    mustDo: [
-      "Read SPEC.md to understand requirements",
-      "Research implementation approaches",
-      "Create RESEARCH.md with findings",
-      "Document trade-offs and recommendations",
-      "Search memory for similar past work",
-    ],
-    mustNotDo: [
-      "Write implementation code",
-      "Modify source files",
-      "Skip documenting findings",
-      "Make architectural decisions without documenting",
-    ],
-    requiredDocuments: ["SPEC.md", "RESEARCH.md"],
-  },
-  
-  specify: {
-    phaseName: "SPECIFY",
-    mustDo: [
-      "Create BLUEPRINT.md with wave-based execution plan",
-      "Map all must-haves to specific tasks",
-      "Define verification steps for each task",
-      "Get user confirmation to lock specification",
-      "Call goop_checkpoint() to save state",
-    ],
-    mustNotDo: [
-      "Write implementation code",
-      "Proceed without locked specification",
-      "Skip task decomposition",
-      "Create vague or incomplete tasks",
-    ],
-    requiredDocuments: ["SPEC.md", "BLUEPRINT.md"],
-  },
-  
+
   execute: {
-    phaseName: "EXECUTE",
+    label: "EXECUTE",
     mustDo: [
-      "DELEGATE all code work to executor agents using task() tool",
+      "DELEGATE all code work to executor subagents",
       "Track progress in CHRONICLE.md",
       "Follow wave order (complete wave N before wave N+1)",
       "Verify each task completion before moving on",
       "Save checkpoints at wave boundaries",
-      "Update ADL.md with any deviations",
+      "Log deviations in ADL.md",
     ],
     mustNotDo: [
-      "Write code directly - ALWAYS delegate to subagents",
-      "Use 'delegate' tool - use 'task' tool instead",
+      "Write code directly — ALWAYS delegate to subagents",
       "Skip verification steps",
       "Ignore test failures",
       "Modify files outside BLUEPRINT.md scope",
     ],
     requiredDocuments: ["SPEC.md", "BLUEPRINT.md", "CHRONICLE.md"],
-    delegationReminder: DELEGATION_EXAMPLE,
+    delegationNote: DELEGATION_NOTE,
   },
-  
+
   accept: {
-    phaseName: "ACCEPT",
+    label: "ACCEPT",
     mustDo: [
       "Verify ALL must-haves from SPEC.md are complete",
       "Run all tests and ensure they pass",
       "Check for any deviations in ADL.md",
       "Get explicit user acceptance",
-      "Save final checkpoint",
     ],
     mustNotDo: [
       "Mark complete without verification",
       "Skip user confirmation",
       "Ignore failing tests",
-      "Proceed if must-haves are missing",
+      "Write new features — only fixes for acceptance gaps",
     ],
     requiredDocuments: ["SPEC.md", "BLUEPRINT.md", "CHRONICLE.md"],
   },
 };
 
-/**
- * Build phase enforcement context for injection into system prompt
- */
-export function buildPhaseEnforcement(phase: WorkflowPhase, _state: GoopState): string {
-  const rules = PHASE_ENFORCEMENT[phase];
-  if (!rules) {
-    return "";
-  }
+// ---------------------------------------------------------------------------
+// Public API
+// ---------------------------------------------------------------------------
 
-  const lines: string[] = [
-    `## PHASE ENFORCEMENT: ${rules.phaseName}`,
-    "",
-    "### MUST DO:",
-  ];
+/**
+ * Get the enforcement rules for a specific phase.
+ */
+export function getPhaseRules(phase: WorkflowPhase): PhaseRules {
+  const rules = PHASE_RULES[phase];
+  return { phase, ...rules };
+}
+
+/**
+ * Build the phase enforcement block for system prompt injection.
+ *
+ * Returns a markdown-formatted string with MUST DO / MUST NOT DO rules.
+ */
+export function buildPhaseEnforcement(phase: WorkflowPhase): string {
+  const rules = PHASE_RULES[phase];
+  if (!rules) return "";
+
+  const lines: string[] = [`## PHASE ENFORCEMENT: ${rules.label}`, "", "### MUST DO:"];
 
   for (const item of rules.mustDo) {
     lines.push(`- ${item}`);
@@ -182,118 +151,57 @@ export function buildPhaseEnforcement(phase: WorkflowPhase, _state: GoopState): 
     lines.push(`- ${item}`);
   }
 
-  // Add required documents status
   if (rules.requiredDocuments.length > 0) {
     lines.push("", "### REQUIRED DOCUMENTS:");
     for (const doc of rules.requiredDocuments) {
-      // TODO: Check if document actually exists
-      lines.push(`- [ ] ${doc}`);
+      lines.push(`- ${doc}`);
     }
   }
 
-  // Add delegation reminder for execute phase
-  if (rules.delegationReminder) {
-    lines.push("", "### DELEGATION (CRITICAL):", "", rules.delegationReminder);
+  if (rules.delegationNote) {
+    lines.push("", "### DELEGATION (CRITICAL):", "", rules.delegationNote);
   }
 
   return lines.join("\n");
 }
 
 /**
- * Build current state context for injection
+ * Build a compact state summary for system prompt injection.
  */
-export function buildStateContext(state: GoopState): string {
-  const workflow = state.workflow;
-  const execution = state.execution;
-
+export function buildStateContext(workflow: WorkflowState, workflowId: string): string {
   const lines: string[] = [
     "## CURRENT STATE",
     "",
+    `**Workflow:** ${workflowId}`,
     `**Phase:** ${workflow.phase}`,
     `**Mode:** ${workflow.mode}`,
     `**Spec Locked:** ${workflow.specLocked ? "Yes" : "No"}`,
-    `**Acceptance Confirmed:** ${workflow.acceptanceConfirmed ? "Yes" : "No"}`,
   ];
 
   if (workflow.totalWaves > 0) {
     lines.push(`**Wave Progress:** ${workflow.currentWave}/${workflow.totalWaves}`);
   }
 
-  if (execution.activeCheckpointId) {
-    lines.push(`**Active Checkpoint:** ${execution.activeCheckpointId}`);
+  if (workflow.acceptanceConfirmed) {
+    lines.push("**Acceptance:** Confirmed");
   }
 
-  if (execution.pendingTasks.length > 0) {
-    lines.push(`**Pending Tasks:** ${execution.pendingTasks.length}`);
+  if (workflow.checkpoint) {
+    lines.push(`**Checkpoint:** ${workflow.checkpoint}`);
   }
 
   return lines.join("\n");
 }
 
 /**
- * Build complete enforcement context (state + phase rules)
+ * Build the complete enforcement context (state + phase rules).
+ *
+ * This is the primary entry point for the system-transform hook.
  */
-export function buildEnforcementContext(state: GoopState): string {
-  const stateContext = buildStateContext(state);
-  const phaseEnforcement = buildPhaseEnforcement(state.workflow.phase, state);
+export function buildEnforcementContext(workflow: WorkflowState, workflowId: string): string {
+  const stateBlock = buildStateContext(workflow, workflowId);
+  const phaseBlock = buildPhaseEnforcement(workflow.phase);
 
-  if (!phaseEnforcement) {
-    return stateContext;
-  }
-
-  return `${stateContext}\n\n${phaseEnforcement}`;
-}
-
-/**
- * Get enforcement rules for a specific phase
- */
-export function getPhaseEnforcement(phase: WorkflowPhase): PhaseEnforcement {
-  const rules = PHASE_ENFORCEMENT[phase];
-  return {
-    phase,
-    ...rules,
-  };
-}
-
-/**
- * Check if an operation is allowed in the current phase
- */
-export function isOperationAllowed(
-  phase: WorkflowPhase,
-  operation: "write_code" | "create_doc" | "delegate" | "transition"
-): { allowed: boolean; reason?: string } {
-  switch (operation) {
-    case "write_code":
-      if (phase === "plan" || phase === "research" || phase === "specify") {
-        return {
-          allowed: false,
-          reason: `Cannot write implementation code in ${phase} phase. Complete planning first.`,
-        };
-      }
-      if (phase === "execute") {
-        return {
-          allowed: false,
-          reason: "Orchestrator should delegate code work to executor agent, not write directly.",
-        };
-      }
-      return { allowed: true };
-
-    case "create_doc":
-      return { allowed: true };
-
-    case "delegate":
-      if (phase === "idle" || phase === "plan") {
-        return {
-          allowed: false,
-          reason: `Cannot delegate implementation work in ${phase} phase. Complete requirements first.`,
-        };
-      }
-      return { allowed: true };
-
-    case "transition":
-      return { allowed: true }; // Transitions have their own validation
-
-    default:
-      return { allowed: true };
-  }
+  if (!phaseBlock) return stateBlock;
+  return `${stateBlock}\n\n${phaseBlock}`;
 }

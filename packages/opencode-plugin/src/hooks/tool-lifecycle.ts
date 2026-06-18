@@ -1,179 +1,206 @@
 /**
- * Tool Lifecycle Hooks
- * Tracks tool calls in history and captures to memory
- * 
- * @module hooks/tool-lifecycle
+ * Tool-lifecycle hook — before/after handlers with non-blocking memory distillation.
+ *
+ * `before`: lightweight bookkeeping (track active tool, start timing).
+ * `after`: lightweight bookkeeping (timing) + fire-and-forget memory distillation
+ *          for significant tool executions (phase transitions, spec locks, wave
+ *          completions, ADL decisions, archive operations).
+ *
+ * Memory distillation replaces the cut `memory-distiller` agent from 0.2.x.
+ * Distillation is NON-BLOCKING: it is kicked off without awaiting in the
+ * handler's critical path. Errors are caught internally — no unhandled rejections.
  */
 
-import type { PluginContext, RawEvent } from "../core/types.js";
-import { log, logError } from "../shared/logger.js";
-import {
-  shouldCapture,
-  estimateImportance,
-  sanitizeContent,
-  getMemoryTypeForEvent,
-  DEFAULT_CAPTURE_CONFIG,
-} from "../features/memory/capture.js";
+import type { PluginContext } from "../core/types.js";
+import type { HookFactory, Hooks } from "./types.js";
+import { safeHandler } from "./utils.js";
 
-type ToolExecuteBeforeInput = {
-  tool: string;
-  sessionID: string;
-  callID: string;
-};
+// ---------------------------------------------------------------------------
+// Timing bookkeeping — per-call start timestamps
+// ---------------------------------------------------------------------------
 
-type ToolExecuteBeforeOutput = {
-  args: unknown;
-};
+const callTimings = new Map<string, number>();
 
-type ToolExecuteAfterInput = {
-  tool: string;
-  sessionID: string;
-  callID: string;
-};
-
-type ToolExecuteAfterOutput = {
-  title: string;
-  output: string;
-  metadata: unknown;
-};
-
-// Store tool args temporarily between before/after calls
-const pendingToolCalls = new Map<string, { tool: string; args: unknown; startTime: number }>();
+// ---------------------------------------------------------------------------
+// Significance predicate
+// ---------------------------------------------------------------------------
 
 /**
- * Create tool lifecycle hooks
- * 
- * Returns both before and after hooks for tool execution
- * Includes auto-capture to memory system for important tool calls
+ * Tool names whose executions are considered significant enough to distill
+ * into memory. These represent meaningful workflow state changes.
  */
-export function createToolLifecycleHooks(ctx: PluginContext) {
-  // Get capture config from plugin config or use defaults
-  const captureConfig = {
-    ...DEFAULT_CAPTURE_CONFIG,
-    ...ctx.config.memory?.capture,
-  };
+const SIGNIFICANT_TOOLS = new Set(["goop_state", "goop_adl", "goop_checkpoint", "goop_setup"]);
 
-  return {
-    "tool.execute.before": async (
-      input: ToolExecuteBeforeInput,
-      output: ToolExecuteBeforeOutput
+/**
+ * For `goop_state`, only certain actions are significant (not reads).
+ */
+const SIGNIFICANT_STATE_ACTIONS = new Set([
+  "transition",
+  "lock-spec",
+  "unlock-spec",
+  "complete-interview",
+  "confirm-acceptance",
+  "update-wave",
+  "set-mode",
+  "set-depth",
+  "create-workflow",
+  "set-active-workflow",
+  "reset",
+]);
+
+/**
+ * Determine whether a tool execution is significant enough to warrant
+ * memory distillation.
+ *
+ * Significant events: phase transitions, spec lock/unlock, wave updates,
+ * interview/acceptance completions, ADL decisions, checkpoint saves,
+ * setup operations. NOT: trivial reads, status checks, memory searches.
+ */
+export function isSignificant(toolName: string, input: Record<string, unknown>): boolean {
+  if (!SIGNIFICANT_TOOLS.has(toolName)) {
+    return false;
+  }
+
+  // goop_state: only significant for mutating actions
+  if (toolName === "goop_state") {
+    const action = input.action;
+    if (typeof action !== "string") return false;
+    return SIGNIFICANT_STATE_ACTIONS.has(action);
+  }
+
+  // goop_adl: only significant for append (not read)
+  if (toolName === "goop_adl") {
+    return input.action === "append";
+  }
+
+  // goop_checkpoint: only significant for save (not list/load)
+  if (toolName === "goop_checkpoint") {
+    return input.action === "save";
+  }
+
+  // goop_setup: all actions are significant
+  return true;
+}
+
+// ---------------------------------------------------------------------------
+// Distillation — non-blocking memory write
+// ---------------------------------------------------------------------------
+
+/**
+ * Build a concise observation string from a significant tool execution.
+ */
+function buildObservation(
+  toolName: string,
+  input: Record<string, unknown>,
+  _output: string,
+): string {
+  const action = typeof input.action === "string" ? input.action : "unknown";
+
+  switch (toolName) {
+    case "goop_state": {
+      const details: string[] = [`State ${action}`];
+      if (input.phase) details.push(`phase → ${String(input.phase)}`);
+      if (input.currentWave != null)
+        details.push(`wave ${String(input.currentWave)}/${String(input.totalWaves ?? "?")}`);
+      if (input.mode) details.push(`mode: ${String(input.mode)}`);
+      return details.join("; ");
+    }
+    case "goop_adl": {
+      const desc =
+        typeof input.description === "string" ? input.description.slice(0, 120) : "decision logged";
+      return `ADL: ${desc}`;
+    }
+    case "goop_checkpoint":
+      return `Checkpoint saved: ${typeof input.id === "string" ? input.id : "unnamed"}`;
+    case "goop_setup":
+      return `Setup: ${action}`;
+    default:
+      return `${toolName}: ${action}`;
+  }
+}
+
+/**
+ * Fire-and-forget memory distillation. Catches all errors internally.
+ */
+function distill(
+  memory: PluginContext["memory"],
+  toolName: string,
+  input: Record<string, unknown>,
+  output: string,
+): void {
+  const observation = buildObservation(toolName, input, output);
+
+  // Fire-and-forget: do NOT await. Catch errors internally.
+  memory
+    .save({
+      type: "observation",
+      title: `Hook distill: ${observation.slice(0, 80)}`,
+      content: observation,
+      concepts: ["auto-distill", toolName],
+      importance: 4,
+    })
+    .catch((err: unknown) => {
+      // biome-ignore lint/suspicious/noConsole: Intentional error logging for graceful degradation
+      console.error("[goopspec] memory-distill error:", err);
+    });
+}
+
+// ---------------------------------------------------------------------------
+// Hook factory
+// ---------------------------------------------------------------------------
+
+/**
+ * Create the tool-lifecycle hook (before/after) with non-blocking memory distillation.
+ */
+export function createToolLifecycleHook(ctx: PluginContext): Partial<Hooks> {
+  // Cache for input args — keyed by callID so `after` can access what `before` saw
+  const callArgs = new Map<string, Record<string, unknown>>();
+
+  const before: NonNullable<Hooks["tool.execute.before"]> = safeHandler(
+    "tool-lifecycle:before",
+    async (
+      input: { tool: string; sessionID: string; callID: string },
+      _output: { args: Record<string, unknown> },
     ): Promise<void> => {
-      log("Tool execute before", {
-        tool: input.tool,
-        sessionID: input.sessionID,
-        callID: input.callID,
-      });
+      // Track timing
+      callTimings.set(input.callID, Date.now());
 
-      // Store args for the after hook to use when capturing
-      pendingToolCalls.set(input.callID, {
-        tool: input.tool,
-        args: output.args,
-        startTime: Date.now(),
-      });
-
-      // Track tool call start in history
-      ctx.stateManager.appendHistory({
-        timestamp: new Date().toISOString(),
-        type: "tool_call",
-        sessionId: input.sessionID,
-        data: {
-          phase: "before",
-          tool: input.tool,
-          callID: input.callID,
-        },
-      });
+      // Cache the args for the after handler's significance check
+      callArgs.set(input.callID, { ..._output.args });
     },
+  );
 
-    "tool.execute.after": async (
-      input: ToolExecuteAfterInput,
-      output: ToolExecuteAfterOutput
+  const after: NonNullable<Hooks["tool.execute.after"]> = safeHandler(
+    "tool-lifecycle:after",
+    async (
+      input: { tool: string; sessionID: string; callID: string },
+      output: { title: string; output: string; metadata: Record<string, unknown> },
     ): Promise<void> => {
-      log("Tool execute after", {
-        tool: input.tool,
-        sessionID: input.sessionID,
-        callID: input.callID,
-        title: output.title,
-      });
+      // Clean up timing
+      const startTime = callTimings.get(input.callID);
+      callTimings.delete(input.callID);
 
-      // Track tool call completion in history
-      ctx.stateManager.appendHistory({
-        timestamp: new Date().toISOString(),
-        type: "tool_call",
-        sessionId: input.sessionID,
-        data: {
-          phase: "after",
-          tool: input.tool,
-          callID: input.callID,
-          title: output.title,
-        },
-      });
+      // Retrieve cached args
+      const args = callArgs.get(input.callID) ?? {};
+      callArgs.delete(input.callID);
 
-      // Update last activity
-      ctx.stateManager.updateWorkflow({
-        lastActivity: new Date().toISOString(),
-      });
+      // Inject timing metadata if available
+      if (startTime != null) {
+        output.metadata.durationMs = Date.now() - startTime;
+      }
 
-      // Get stored args from before hook
-      const pending = pendingToolCalls.get(input.callID);
-      pendingToolCalls.delete(input.callID);
-
-      // Note: Continuation enforcer and comment checker are now handled by dedicated hooks
-      // in hooks/index.ts that properly integrate with the tool.execute.after chain
-
-      // Auto-capture to memory if enabled and tool is worth capturing
-      if (ctx.memoryManager && captureConfig.enabled) {
-        const rawEvent: RawEvent = {
-          type: "tool_use",
-          timestamp: Date.now(),
-          sessionId: input.sessionID,
-          data: {
-            tool: input.tool,
-            args: pending?.args ?? {},
-            result: output.output?.slice(0, 2000) ?? "",
-            title: output.title,
-            duration: pending ? Date.now() - pending.startTime : 0,
-          },
-        };
-
-        // Check if this tool call should be captured
-        if (shouldCapture(rawEvent, captureConfig)) {
-          const importance = estimateImportance(rawEvent);
-          
-          // Only capture if importance meets threshold
-          if (importance >= captureConfig.minImportanceThreshold) {
-            try {
-              // Use distill if available (LLM-based), otherwise direct save
-              if (ctx.memoryManager.distill) {
-                await ctx.memoryManager.distill(rawEvent);
-              } else {
-                // Direct save with extracted info
-                const memoryType = getMemoryTypeForEvent(rawEvent);
-                const content = sanitizeContent(
-                  `Tool: ${input.tool}\n` +
-                  `Result: ${output.output?.slice(0, 1000) ?? "No output"}`
-                );
-
-                await ctx.memoryManager.save({
-                  type: memoryType,
-                  title: output.title || `${input.tool} execution`,
-                  content,
-                  importance,
-                  sessionId: input.sessionID,
-                  phase: ctx.stateManager.getState().workflow.phase,
-                });
-              }
-              
-              log("Tool call captured to memory", {
-                tool: input.tool,
-                importance,
-              });
-            } catch (error) {
-              logError("Failed to capture tool call to memory", error);
-              // Don't fail the tool execution
-            }
-          }
-        }
+      // Non-blocking memory distillation for significant events
+      if (isSignificant(input.tool, args)) {
+        distill(ctx.memory, input.tool, args, output.output);
       }
     },
+  );
+
+  return {
+    "tool.execute.before": before,
+    "tool.execute.after": after,
   };
 }
+
+/** HookFactory-compatible wrapper. */
+export const toolLifecycleHookFactory: HookFactory = (ctx) => createToolLifecycleHook(ctx);

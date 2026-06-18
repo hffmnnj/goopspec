@@ -1,388 +1,243 @@
-/**
- * Tests for GoopSpec Spec Tool
- * @module tools/goop-spec/index.test
- */
+import { afterEach, beforeEach, describe, expect, it } from "bun:test";
+import { mkdirSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 
-import { describe, it, expect, beforeEach, afterEach } from "bun:test";
-import { mkdirSync, writeFileSync, rmSync } from "fs";
-import { tmpdir } from "os";
-import { join } from "path";
-import { createGoopSpecTool } from "./index.js";
+import { GOOPSPEC_DIR } from "../../core/constants.js";
+import type { PluginContext } from "../../test-utils.js";
 import {
   createMockPluginContext,
   createMockToolContext,
+  setupTestEnvironment,
 } from "../../test-utils.js";
-import type { PluginContext } from "../../core/types.js";
+import { createGoopSpecTool } from "./index.js";
 
-describe("createGoopSpecTool", () => {
+describe("goop_spec tool", () => {
   let ctx: PluginContext;
+  let cleanup: () => void;
   let testDir: string;
-  let goopspecDir: string;
 
   beforeEach(() => {
-    testDir = join(tmpdir(), `goop-spec-test-${Date.now()}`);
-    goopspecDir = join(testDir, ".goopspec");
-    mkdirSync(goopspecDir, { recursive: true });
-    mkdirSync(join(goopspecDir, "phases"), { recursive: true });
-
+    const env = setupTestEnvironment("goop-spec");
+    cleanup = env.cleanup;
+    testDir = env.testDir;
     ctx = createMockPluginContext({ testDir });
   });
 
-  afterEach(() => {
-    rmSync(testDir, { recursive: true, force: true });
-  });
+  afterEach(() => cleanup());
 
-  describe("tool creation", () => {
-    it("creates a tool definition", () => {
-      const tool = createGoopSpecTool(ctx);
-      expect(tool).toBeDefined();
-      expect(tool.description).toContain("SPEC.md");
-      expect(tool.description).toContain("PLAN.md");
-    });
-  });
+  const toolCtx = createMockToolContext();
 
-  describe("list action", () => {
-    it("returns message when no phases exist", async () => {
+  // -----------------------------------------------------------------------
+  // list action
+  // -----------------------------------------------------------------------
+
+  describe("action: list", () => {
+    it("lists workflows with doc presence", async () => {
+      // The default workflow has no docs yet
       const tool = createGoopSpecTool(ctx);
-      const toolCtx = createMockToolContext({ directory: testDir });
-      
       const result = await tool.execute({ action: "list" }, toolCtx);
-      expect(result).toContain("No phases found");
-      expect(result).toContain("/goop-plan");
+
+      expect(result).toContain("Workflow Documents");
+      expect(result).toContain("default");
+      expect(result).toContain("active");
     });
 
-    it("lists available phases with their files", async () => {
-      // Create some phases
-      const phase1Dir = join(goopspecDir, "phases", "phase-1");
-      mkdirSync(phase1Dir, { recursive: true });
-      writeFileSync(join(phase1Dir, "SPEC.md"), "# Spec");
-      writeFileSync(join(phase1Dir, "PLAN.md"), "# Plan");
-
-      const phase2Dir = join(goopspecDir, "phases", "phase-2");
-      mkdirSync(phase2Dir, { recursive: true });
-      writeFileSync(join(phase2Dir, "SPEC.md"), "# Spec only");
+    it("shows SPEC.md and BLUEPRINT.md when present", async () => {
+      // Default workflow docs live in .goopspec/ root (not .goopspec/default/)
+      const docDir = join(testDir, GOOPSPEC_DIR);
+      writeFileSync(join(docDir, "SPEC.md"), "# Spec\n## Must-Haves\n", "utf-8");
+      writeFileSync(join(docDir, "BLUEPRINT.md"), "# Blueprint\n", "utf-8");
 
       const tool = createGoopSpecTool(ctx);
-      const toolCtx = createMockToolContext({ directory: testDir });
-      
       const result = await tool.execute({ action: "list" }, toolCtx);
-      expect(result).toContain("phase-1");
-      expect(result).toContain("phase-2");
-      expect(result).toContain("SPEC");
-      expect(result).toContain("PLAN");
+
+      expect(result).toContain("SPEC.md");
+      expect(result).toContain("BLUEPRINT.md");
     });
 
-    it("handles empty phases directory", async () => {
+    it("lists multiple workflows", async () => {
+      ctx.stateManager.createWorkflow("feat-auth");
+      const wfDir = join(testDir, GOOPSPEC_DIR, "feat-auth");
+      mkdirSync(wfDir, { recursive: true });
+      writeFileSync(join(wfDir, "SPEC.md"), "# Auth Spec", "utf-8");
+
       const tool = createGoopSpecTool(ctx);
-      const toolCtx = createMockToolContext({ directory: testDir });
-      
       const result = await tool.execute({ action: "list" }, toolCtx);
-      expect(result).toContain("No phases found");
+
+      expect(result).toContain("default");
+      expect(result).toContain("feat-auth");
     });
   });
 
-  describe("read action", () => {
-    beforeEach(() => {
-      // Create a test phase with files
-      const phaseDir = join(goopspecDir, "phases", "test-phase");
-      mkdirSync(phaseDir, { recursive: true });
-      
-      writeFileSync(join(phaseDir, "SPEC.md"), `---
-phase: 1
-title: Test Phase
-status: active
----
+  // -----------------------------------------------------------------------
+  // read action
+  // -----------------------------------------------------------------------
 
-# Test Phase Specification
+  describe("action: read", () => {
+    it("reads SPEC.md when file=spec", async () => {
+      const docDir = join(testDir, GOOPSPEC_DIR);
+      writeFileSync(join(docDir, "SPEC.md"), "# My Spec\nContent here.", "utf-8");
 
-## Requirements
-- Req 1
-- Req 2
-`);
+      const tool = createGoopSpecTool(ctx);
+      const result = await tool.execute({ action: "read", file: "spec" }, toolCtx);
 
-      writeFileSync(join(phaseDir, "PLAN.md"), `---
-phase: 1
-plan: 1.1
-type: auto
----
-
-# Test Phase Plan
-
-## Wave 1
-
-<task type="auto">
-  <name>Task 1</name>
-</task>
-`);
+      expect(result).toContain("# SPEC.md");
+      expect(result).toContain("Content here.");
+      expect(result).not.toContain("BLUEPRINT.md");
     });
 
-    it("requires phase parameter", async () => {
+    it("reads BLUEPRINT.md when file=plan", async () => {
+      const docDir = join(testDir, GOOPSPEC_DIR);
+      writeFileSync(join(docDir, "BLUEPRINT.md"), "# My Plan\nWave 1.", "utf-8");
+
       const tool = createGoopSpecTool(ctx);
-      const toolCtx = createMockToolContext({ directory: testDir });
-      
+      const result = await tool.execute({ action: "read", file: "plan" }, toolCtx);
+
+      expect(result).toContain("# BLUEPRINT.md");
+      expect(result).toContain("Wave 1.");
+      expect(result).not.toContain("# SPEC.md");
+    });
+
+    it("reads both by default", async () => {
+      const docDir = join(testDir, GOOPSPEC_DIR);
+      writeFileSync(join(docDir, "SPEC.md"), "Spec content", "utf-8");
+      writeFileSync(join(docDir, "BLUEPRINT.md"), "Plan content", "utf-8");
+
+      const tool = createGoopSpecTool(ctx);
       const result = await tool.execute({ action: "read" }, toolCtx);
-      expect(result).toContain("Error");
-      expect(result).toContain("phase");
-      expect(result).toContain("required");
+
+      expect(result).toContain("# SPEC.md");
+      expect(result).toContain("Spec content");
+      expect(result).toContain("# BLUEPRINT.md");
+      expect(result).toContain("Plan content");
     });
 
-    it("reads spec file", async () => {
+    it("reports missing files gracefully", async () => {
       const tool = createGoopSpecTool(ctx);
-      const toolCtx = createMockToolContext({ directory: testDir });
-      
-      const result = await tool.execute({ action: "read", phase: "test-phase", file: "spec" }, toolCtx);
-      expect(result).toContain("SPEC.md");
-      expect(result).toContain("Test Phase Specification");
-      expect(result).toContain("Requirements");
-    });
+      const result = await tool.execute({ action: "read", file: "spec" }, toolCtx);
 
-    it("reads plan file", async () => {
-      const tool = createGoopSpecTool(ctx);
-      const toolCtx = createMockToolContext({ directory: testDir });
-      
-      const result = await tool.execute({ action: "read", phase: "test-phase", file: "plan" }, toolCtx);
-      expect(result).toContain("PLAN.md");
-      expect(result).toContain("Test Phase Plan");
-      expect(result).toContain("Wave 1");
-    });
-
-    it("reads both files by default", async () => {
-      const tool = createGoopSpecTool(ctx);
-      const toolCtx = createMockToolContext({ directory: testDir });
-      
-      const result = await tool.execute({ action: "read", phase: "test-phase" }, toolCtx);
-      expect(result).toContain("SPEC.md");
-      expect(result).toContain("PLAN.md");
-    });
-
-    it("handles non-existent phase", async () => {
-      const tool = createGoopSpecTool(ctx);
-      const toolCtx = createMockToolContext({ directory: testDir });
-      
-      const result = await tool.execute({ action: "read", phase: "non-existent" }, toolCtx);
       expect(result).toContain("not found");
-      expect(result).toContain("list");
     });
 
-    it("handles missing spec file", async () => {
-      const phaseDir = join(goopspecDir, "phases", "plan-only");
-      mkdirSync(phaseDir, { recursive: true });
-      writeFileSync(join(phaseDir, "PLAN.md"), "# Plan");
+    it("reads from non-default workflow doc dir", async () => {
+      ctx.stateManager.createWorkflow("feat-auth");
+      ctx.stateManager.setActiveWorkflow("feat-auth");
+
+      const wfDir = join(testDir, GOOPSPEC_DIR, "feat-auth");
+      mkdirSync(wfDir, { recursive: true });
+      writeFileSync(join(wfDir, "SPEC.md"), "Auth spec content", "utf-8");
 
       const tool = createGoopSpecTool(ctx);
-      const toolCtx = createMockToolContext({ directory: testDir });
-      
-      const result = await tool.execute({ action: "read", phase: "plan-only", file: "spec" }, toolCtx);
-      expect(result).toContain("SPEC.md not found");
-    });
+      const result = await tool.execute({ action: "read", file: "spec" }, toolCtx);
 
-    it("handles missing plan file", async () => {
-      const phaseDir = join(goopspecDir, "phases", "spec-only");
-      mkdirSync(phaseDir, { recursive: true });
-      writeFileSync(join(phaseDir, "SPEC.md"), "# Spec");
-
-      const tool = createGoopSpecTool(ctx);
-      const toolCtx = createMockToolContext({ directory: testDir });
-      
-      const result = await tool.execute({ action: "read", phase: "spec-only", file: "plan" }, toolCtx);
-      expect(result).toContain("PLAN.md not found");
+      expect(result).toContain("Auth spec content");
     });
   });
 
-  describe("validate action", () => {
-    it("requires phase parameter", async () => {
+  // -----------------------------------------------------------------------
+  // validate action
+  // -----------------------------------------------------------------------
+
+  describe("action: validate", () => {
+    it("reports VALID when all sections present", async () => {
+      const docDir = join(testDir, GOOPSPEC_DIR);
+      const specContent = [
+        "# SPEC",
+        "## Must-Haves",
+        "### MH1: Something",
+        "## Out of Scope",
+        "## Acceptance Criteria",
+      ].join("\n");
+      const planContent = ["# BLUEPRINT", "## Spec Mapping", "| MH1 | W1.T1 |", "## Wave 1"].join(
+        "\n",
+      );
+
+      writeFileSync(join(docDir, "SPEC.md"), specContent, "utf-8");
+      writeFileSync(join(docDir, "BLUEPRINT.md"), planContent, "utf-8");
+
       const tool = createGoopSpecTool(ctx);
-      const toolCtx = createMockToolContext({ directory: testDir });
-      
       const result = await tool.execute({ action: "validate" }, toolCtx);
-      expect(result).toContain("Error");
-      expect(result).toContain("phase");
-      expect(result).toContain("required");
-    });
 
-    it("validates complete phase files", async () => {
-      const phaseDir = join(goopspecDir, "phases", "valid-phase");
-      mkdirSync(phaseDir, { recursive: true });
-      
-      writeFileSync(join(phaseDir, "SPEC.md"), `---
-phase: 1
-title: Valid Phase
-status: active
----
-# Content`);
-
-      writeFileSync(join(phaseDir, "PLAN.md"), `---
-phase: 1
-plan: 1.1
-type: auto
----
-# Content
-<task type="auto">Task</task>`);
-
-      const tool = createGoopSpecTool(ctx);
-      const toolCtx = createMockToolContext({ directory: testDir });
-      
-      const result = await tool.execute({ action: "validate", phase: "valid-phase" }, toolCtx);
       expect(result).toContain("VALID");
-      expect(result).toContain("No issues found");
+      expect(result).not.toContain("ISSUES FOUND");
     });
 
-    it("reports missing frontmatter fields in SPEC", async () => {
-      const phaseDir = join(goopspecDir, "phases", "incomplete-spec");
-      mkdirSync(phaseDir, { recursive: true });
-      
-      writeFileSync(join(phaseDir, "SPEC.md"), `---
-phase: 1
----
-# No title or status`);
-
-      writeFileSync(join(phaseDir, "PLAN.md"), `---
-phase: 1
-plan: 1.1
-type: auto
----
-<task>Task</task>`);
+    it("reports missing SPEC.md sections", async () => {
+      const docDir = join(testDir, GOOPSPEC_DIR);
+      writeFileSync(join(docDir, "SPEC.md"), "# Spec\nSome content.", "utf-8");
+      writeFileSync(
+        join(docDir, "BLUEPRINT.md"),
+        "# Plan\n## Wave 1\n## Spec Mapping\nMH1",
+        "utf-8",
+      );
 
       const tool = createGoopSpecTool(ctx);
-      const toolCtx = createMockToolContext({ directory: testDir });
-      
-      const result = await tool.execute({ action: "validate", phase: "incomplete-spec" }, toolCtx);
+      const result = await tool.execute({ action: "validate" }, toolCtx);
+
       expect(result).toContain("ISSUES FOUND");
-      expect(result).toContain("title");
-      expect(result).toContain("status");
+      expect(result).toContain("Must-Haves");
     });
 
-    it("reports missing frontmatter fields in PLAN", async () => {
-      const phaseDir = join(goopspecDir, "phases", "incomplete-plan");
-      mkdirSync(phaseDir, { recursive: true });
-      
-      writeFileSync(join(phaseDir, "SPEC.md"), `---
-phase: 1
-title: Test
-status: active
----
-# Spec`);
-
-      writeFileSync(join(phaseDir, "PLAN.md"), `---
-phase: 1
----
-# No plan or type
-<task>Task</task>`);
+    it("reports missing BLUEPRINT.md", async () => {
+      const docDir = join(testDir, GOOPSPEC_DIR);
+      writeFileSync(
+        join(docDir, "SPEC.md"),
+        "# Spec\n## Must-Haves\n### MH1: X\n## Out of Scope\n## Acceptance Criteria",
+        "utf-8",
+      );
 
       const tool = createGoopSpecTool(ctx);
-      const toolCtx = createMockToolContext({ directory: testDir });
-      
-      const result = await tool.execute({ action: "validate", phase: "incomplete-plan" }, toolCtx);
+      const result = await tool.execute({ action: "validate" }, toolCtx);
+
       expect(result).toContain("ISSUES FOUND");
-      expect(result).toContain("plan");
-      expect(result).toContain("type");
+      expect(result).toContain("BLUEPRINT.md not found");
     });
 
-    it("reports missing tasks in PLAN", async () => {
-      const phaseDir = join(goopspecDir, "phases", "no-tasks");
-      mkdirSync(phaseDir, { recursive: true });
-      
-      writeFileSync(join(phaseDir, "SPEC.md"), `---
-phase: 1
-title: Test
-status: active
----
-# Spec`);
-
-      writeFileSync(join(phaseDir, "PLAN.md"), `---
-phase: 1
-plan: 1.1
-type: auto
----
-# Plan with no tasks`);
+    it("reports missing traceability in BLUEPRINT.md", async () => {
+      const docDir = join(testDir, GOOPSPEC_DIR);
+      writeFileSync(
+        join(docDir, "SPEC.md"),
+        "# Spec\n## Must-Haves\n### MH1: X\n## Out of Scope\n## Acceptance Criteria",
+        "utf-8",
+      );
+      writeFileSync(
+        join(docDir, "BLUEPRINT.md"),
+        "# Plan\n## Spec Mapping\nNothing here\n## Wave 1",
+        "utf-8",
+      );
 
       const tool = createGoopSpecTool(ctx);
-      const toolCtx = createMockToolContext({ directory: testDir });
-      
-      const result = await tool.execute({ action: "validate", phase: "no-tasks" }, toolCtx);
+      const result = await tool.execute({ action: "validate" }, toolCtx);
+
       expect(result).toContain("ISSUES FOUND");
-      expect(result).toContain("No <task>");
+      expect(result).toContain("traceability");
     });
 
-    it("reports missing files", async () => {
-      const phaseDir = join(goopspecDir, "phases", "empty-phase");
-      mkdirSync(phaseDir, { recursive: true });
-
+    it("reports both files missing", async () => {
       const tool = createGoopSpecTool(ctx);
-      const toolCtx = createMockToolContext({ directory: testDir });
-      
-      const result = await tool.execute({ action: "validate", phase: "empty-phase" }, toolCtx);
+      const result = await tool.execute({ action: "validate" }, toolCtx);
+
       expect(result).toContain("ISSUES FOUND");
       expect(result).toContain("SPEC.md not found");
-      expect(result).toContain("PLAN.md not found");
-    });
-
-    it("handles non-existent phase", async () => {
-      const tool = createGoopSpecTool(ctx);
-      const toolCtx = createMockToolContext({ directory: testDir });
-      
-      const result = await tool.execute({ action: "validate", phase: "non-existent" }, toolCtx);
-      expect(result).toContain("not found");
+      expect(result).toContain("BLUEPRINT.md not found");
     });
   });
 
-  describe("security - path traversal prevention", () => {
-    it("blocks path traversal with ..", async () => {
-      const tool = createGoopSpecTool(ctx);
-      const toolCtx = createMockToolContext({ directory: testDir });
-      
-      const result = await tool.execute({ action: "read", phase: "../../../etc" }, toolCtx);
-      expect(result).toContain("Error");
-      expect(result).toContain("path traversal");
-    });
+  // -----------------------------------------------------------------------
+  // error handling
+  // -----------------------------------------------------------------------
 
-    it("blocks path traversal with /", async () => {
-      const tool = createGoopSpecTool(ctx);
-      const toolCtx = createMockToolContext({ directory: testDir });
-      
-      const result = await tool.execute({ action: "read", phase: "foo/bar" }, toolCtx);
-      expect(result).toContain("Error");
-      expect(result).toContain("path traversal");
-    });
+  it("handles errors gracefully", async () => {
+    // Force an error by making stateManager throw
+    const broken = createMockPluginContext({ testDir });
+    broken.stateManager.getActiveWorkflowId = () => {
+      throw new Error("state corrupted");
+    };
 
-    it("blocks path traversal with backslash", async () => {
-      const tool = createGoopSpecTool(ctx);
-      const toolCtx = createMockToolContext({ directory: testDir });
-      
-      const result = await tool.execute({ action: "read", phase: "foo\\bar" }, toolCtx);
-      expect(result).toContain("Error");
-      expect(result).toContain("path traversal");
-    });
+    const tool = createGoopSpecTool(broken);
+    const result = await tool.execute({ action: "read" }, toolCtx);
 
-    it("blocks special characters in phase name", async () => {
-      const tool = createGoopSpecTool(ctx);
-      const toolCtx = createMockToolContext({ directory: testDir });
-      
-      const result = await tool.execute({ action: "read", phase: "phase$name" }, toolCtx);
-      expect(result).toContain("Error");
-      expect(result.toLowerCase()).toContain("invalid");
-    });
-
-    it("allows valid phase names with hyphens and underscores", async () => {
-      const phaseDir = join(goopspecDir, "phases", "valid-phase_name");
-      mkdirSync(phaseDir, { recursive: true });
-      writeFileSync(join(phaseDir, "SPEC.md"), "# Content");
-
-      const tool = createGoopSpecTool(ctx);
-      const toolCtx = createMockToolContext({ directory: testDir });
-      
-      const result = await tool.execute({ action: "read", phase: "valid-phase_name", file: "spec" }, toolCtx);
-      expect(result).toContain("SPEC.md");
-    });
-  });
-
-  describe("unknown action", () => {
-    it("handles unknown action", async () => {
-      const tool = createGoopSpecTool(ctx);
-      const toolCtx = createMockToolContext({ directory: testDir });
-      
-      const result = await tool.execute({ action: "unknown" as any }, toolCtx);
-      expect(result).toContain("Unknown action");
-    });
+    expect(result).toContain("Error in goop_spec");
+    expect(result).toContain("state corrupted");
   });
 });

@@ -1,293 +1,180 @@
-/**
- * Unit Tests for Memory Search Tool
- * @module tools/memory-search/index.test
- */
+import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 
-import { describe, it, expect, beforeEach, afterEach } from "bun:test";
-import { createMemorySearchTool } from "./index.js";
+import type { MemoryEntry, PluginContext, ToolContext } from "../../test-utils.js";
 import {
   createMockPluginContext,
   createMockToolContext,
-  createMockMemory,
   setupTestEnvironment,
-  type PluginContext,
-  type Memory,
 } from "../../test-utils.js";
+import { createMemorySearchTool } from "./index.js";
+
+// ---------------------------------------------------------------------------
+// Seed data
+// ---------------------------------------------------------------------------
+
+function seedMemories(): MemoryEntry[] {
+  return [
+    {
+      id: 1,
+      type: "observation",
+      title: "Repository pattern in data layer",
+      content: "The codebase uses the repository pattern for all data access.",
+      facts: ["Uses repository pattern"],
+      concepts: ["patterns", "architecture"],
+      importance: 7,
+      createdAt: Date.now() - 86_400_000,
+    },
+    {
+      id: 2,
+      type: "decision",
+      title: "Use PostgreSQL for storage",
+      content: "Chose PostgreSQL for JSON support and complex queries.",
+      facts: ["PostgreSQL selected"],
+      concepts: ["database", "architecture"],
+      importance: 9,
+      createdAt: Date.now() - 43_200_000,
+    },
+    {
+      id: 3,
+      type: "note",
+      title: "Auth tests flaky on CI",
+      content: "The auth integration tests fail intermittently on CI runners.",
+      concepts: ["testing", "ci"],
+      importance: 3,
+      createdAt: Date.now(),
+    },
+    {
+      id: 4,
+      type: "todo",
+      title: "Refactor auth middleware",
+      content: "Extract shared auth logic into a reusable helper function.",
+      concepts: ["auth", "refactor"],
+      importance: 5,
+      createdAt: Date.now(),
+    },
+  ];
+}
 
 describe("memory_search tool", () => {
   let ctx: PluginContext;
-  let toolContext: ReturnType<typeof createMockToolContext>;
+  let toolCtx: ToolContext;
   let cleanup: () => void;
 
   beforeEach(() => {
-    const env = setupTestEnvironment("memory-search-test");
+    const env = setupTestEnvironment("memory-search");
     cleanup = env.cleanup;
-    
-    // Create some test memories
-    const memories: Memory[] = [
-      createMockMemory({
-        id: 1,
-        type: "decision",
-        title: "Chose React framework",
-        content: "Decided to use React for the frontend due to team expertise.",
-        concepts: ["react", "frontend", "decision"],
-        importance: 8,
-      }),
-      createMockMemory({
-        id: 2,
-        type: "observation",
-        title: "Performance bottleneck found",
-        content: "Discovered N+1 query problem in the user listing.",
-        concepts: ["performance", "database", "sql"],
-        importance: 7,
-      }),
-      createMockMemory({
-        id: 3,
-        type: "note",
-        title: "Testing patterns",
-        content: "The codebase uses describe/it blocks with bun:test.",
-        concepts: ["testing", "bun", "patterns"],
-        importance: 5,
-      }),
-    ];
-
-    ctx = createMockPluginContext({
-      testDir: env.testDir,
-      includeMemory: true,
-      memories,
-    });
-    toolContext = createMockToolContext({ directory: env.testDir });
+    ctx = createMockPluginContext({ testDir: env.testDir, memories: seedMemories() });
+    toolCtx = createMockToolContext();
   });
 
-  afterEach(() => {
-    cleanup();
+  afterEach(() => cleanup());
+
+  // -------------------------------------------------------------------------
+  // Basic search
+  // -------------------------------------------------------------------------
+
+  it("finds memories matching a query", async () => {
+    const tool = createMemorySearchTool(ctx);
+    const result = await tool.execute({ query: "repository" }, toolCtx);
+
+    expect(result).toContain("# Memory Search Results");
+    expect(result).toContain("Repository pattern in data layer");
+    expect(result).toContain("**Type:** observation");
   });
 
-  describe("tool creation", () => {
-    it("creates tool with correct description", () => {
-      const tool = createMemorySearchTool(ctx);
-      
-      expect(tool.description).toContain("Search");
-      expect(tool.description).toContain("memory");
-    });
+  it("returns no-results message when nothing matches", async () => {
+    const tool = createMemorySearchTool(ctx);
+    const result = await tool.execute({ query: "xyznonexistent" }, toolCtx);
 
-    it("has required args", () => {
-      const tool = createMemorySearchTool(ctx);
-      
-      expect(tool.args).toHaveProperty("query");
-      expect(tool.args).toHaveProperty("limit");
-      expect(tool.args).toHaveProperty("types");
-      expect(tool.args).toHaveProperty("concepts");
-      expect(tool.args).toHaveProperty("minImportance");
-    });
+    expect(result).toContain('No memories found matching: "xyznonexistent"');
+    expect(result).toContain("Tip:");
   });
 
-  describe("when memory system is not initialized", () => {
-    it("returns error message", async () => {
-      ctx = createMockPluginContext({
-        testDir: ctx.input.directory,
-        includeMemory: false,
-      });
+  // -------------------------------------------------------------------------
+  // Filters
+  // -------------------------------------------------------------------------
 
-      const tool = createMemorySearchTool(ctx);
-      const result = await tool.execute({
-        query: "test",
-      }, toolContext);
+  it("filters by type", async () => {
+    const tool = createMemorySearchTool(ctx);
+    const result = await tool.execute({ query: "auth", types: ["todo"] }, toolCtx);
 
-      expect(result).toContain("Memory system is not configured");
-      expect(result).toContain("No memories found");
-    });
+    expect(result).toContain("Refactor auth middleware");
+    expect(result).not.toContain("Auth tests flaky");
   });
 
-  describe("basic search", () => {
-    it("searches memories by query", async () => {
-      const tool = createMemorySearchTool(ctx);
-      const result = await tool.execute({
-        query: "React",
-      }, toolContext);
+  it("filters by concepts", async () => {
+    const tool = createMemorySearchTool(ctx);
+    // Both entries match "storage"/"data" text, but only PostgreSQL has "database" concept
+    const result = await tool.execute({ query: "PostgreSQL", concepts: ["database"] }, toolCtx);
 
-      expect(result).toContain("# Memory Search Results");
-      expect(result).toContain("React");
-    });
-
-    it("returns no results message when nothing matches", async () => {
-      const tool = createMemorySearchTool(ctx);
-      const result = await tool.execute({
-        query: "nonexistent-xyz-query",
-      }, toolContext);
-
-      expect(result).toContain("No memories found");
-      expect(result).toContain("Tip:");
-    });
-
-    it("shows number of results found", async () => {
-      const tool = createMemorySearchTool(ctx);
-      const result = await tool.execute({
-        query: "React",
-      }, toolContext);
-
-      expect(result).toMatch(/Found \d+ matching memor/);
-    });
+    expect(result).toContain("PostgreSQL");
+    // The observation has "architecture" concept but not "database"
+    expect(result).not.toContain("Repository pattern");
   });
 
-  describe("result formatting", () => {
-    it("shows memory title in results", async () => {
-      const tool = createMemorySearchTool(ctx);
-      const result = await tool.execute({
-        query: "React",
-      }, toolContext);
+  it("filters by minImportance", async () => {
+    const tool = createMemorySearchTool(ctx);
+    const result = await tool.execute({ query: "auth", minImportance: 5 }, toolCtx);
 
-      expect(result).toContain("Chose React framework");
-    });
-
-    it("shows memory type in results", async () => {
-      const tool = createMemorySearchTool(ctx);
-      const result = await tool.execute({
-        query: "React",
-      }, toolContext);
-
-      expect(result).toContain("**Type:** decision");
-    });
-
-    it("shows memory content in results", async () => {
-      const tool = createMemorySearchTool(ctx);
-      const result = await tool.execute({
-        query: "React",
-      }, toolContext);
-
-      expect(result).toContain("team expertise");
-    });
-
-    it("shows concepts when present", async () => {
-      const tool = createMemorySearchTool(ctx);
-      const result = await tool.execute({
-        query: "React",
-      }, toolContext);
-
-      expect(result).toContain("**Concepts:**");
-      expect(result).toContain("frontend");
-    });
+    // Only the todo (importance=5) should match, not the note (importance=3)
+    expect(result).toContain("Refactor auth middleware");
+    expect(result).not.toContain("flaky");
   });
 
-  describe("limit parameter", () => {
-    it("uses default limit of 5", async () => {
-      // Add more memories
-      for (let i = 4; i <= 10; i++) {
-        await ctx.memoryManager!.save({
-          type: "note",
-          title: `Test memory ${i}`,
-          content: `Content for memory ${i} about React`,
-        });
-      }
+  // -------------------------------------------------------------------------
+  // Limit
+  // -------------------------------------------------------------------------
 
-      const tool = createMemorySearchTool(ctx);
-      const result = await tool.execute({
-        query: "React",
-      }, toolContext);
+  it("respects the limit parameter", async () => {
+    const tool = createMemorySearchTool(ctx);
+    const result = await tool.execute({ query: "auth", limit: 1 }, toolCtx);
 
-      // Count the number of ### headers (each result has one)
-      const matches = result.match(/### \[\d+\]/g);
-      expect(matches?.length).toBeLessThanOrEqual(5);
-    });
-
-    it("respects custom limit", async () => {
-      const tool = createMemorySearchTool(ctx);
-      const result = await tool.execute({
-        query: "React",
-        limit: 1,
-      }, toolContext);
-
-      const matches = result.match(/### \[\d+\]/g);
-      expect(matches?.length).toBeLessThanOrEqual(1);
-    });
-
-    it("caps limit at 20", async () => {
-      const tool = createMemorySearchTool(ctx);
-      
-      // This should not throw, just cap at 20
-      const result = await tool.execute({
-        query: "test",
-        limit: 100,
-      }, toolContext);
-
-      expect(result).toBeDefined();
-    });
-
-    it("enforces minimum limit of 1", async () => {
-      const tool = createMemorySearchTool(ctx);
-      const result = await tool.execute({
-        query: "React",
-        limit: 0,
-      }, toolContext);
-
-      // Should still return at least one result if available
-      expect(result).toContain("Memory Search Results");
-    });
+    expect(result).toContain("Found 1 matching memory");
   });
 
-  describe("type filtering", () => {
-    it("filters by single type", async () => {
-      const tool = createMemorySearchTool(ctx);
-      const result = await tool.execute({
-        query: "test",
-        types: ["decision"],
-      }, toolContext);
+  it("caps limit at 20", async () => {
+    const tool = createMemorySearchTool(ctx);
+    // Even with limit=100, the mock only has 4 entries
+    const result = await tool.execute({ query: "auth", limit: 100 }, toolCtx);
 
-      // Should only return decision type if matches
-      if (result.includes("Memory Search Results")) {
-        expect(result).toContain("decision");
-      }
-    });
-
-    it("filters by multiple types", async () => {
-      const tool = createMemorySearchTool(ctx);
-      const result = await tool.execute({
-        query: "test",
-        types: ["decision", "observation"],
-      }, toolContext);
-
-      expect(result).toBeDefined();
-    });
+    // Should not crash; returns whatever matches
+    expect(result).toContain("Memory Search Results");
   });
 
-  describe("concept filtering", () => {
-    it("filters by concepts", async () => {
-      const tool = createMemorySearchTool(ctx);
-      const result = await tool.execute({
-        query: "frontend",
-        concepts: ["react"],
-      }, toolContext);
+  // -------------------------------------------------------------------------
+  // Output formatting
+  // -------------------------------------------------------------------------
 
-      expect(result).toBeDefined();
-    });
+  it("includes facts and concepts in output", async () => {
+    const tool = createMemorySearchTool(ctx);
+    const result = await tool.execute({ query: "repository" }, toolCtx);
+
+    expect(result).toContain("**Facts:**");
+    expect(result).toContain("- Uses repository pattern");
+    expect(result).toContain("**Concepts:** patterns, architecture");
   });
 
-  describe("importance filtering", () => {
-    it("filters by minimum importance", async () => {
-      const tool = createMemorySearchTool(ctx);
-      const result = await tool.execute({
-        query: "test",
-        minImportance: 8,
-      }, toolContext);
+  it("shows score and match type", async () => {
+    const tool = createMemorySearchTool(ctx);
+    const result = await tool.execute({ query: "PostgreSQL" }, toolCtx);
 
-      // Only high importance memories should match
-      expect(result).toBeDefined();
-    });
+    // Mock returns "fts" match type
+    expect(result).toContain("(fts)");
   });
 
-  describe("error handling", () => {
-    it("handles search errors gracefully", async () => {
-      ctx.memoryManager!.search = async () => {
-        throw new Error("Search index corrupted");
-      };
+  // -------------------------------------------------------------------------
+  // Error handling
+  // -------------------------------------------------------------------------
 
-      const tool = createMemorySearchTool(ctx);
-      const result = await tool.execute({
-        query: "test",
-      }, toolContext);
+  it("returns error message on search failure (never throws)", async () => {
+    const brokenCtx = createMockPluginContext({ testDir: "/tmp/broken" });
+    brokenCtx.memory.search = async () => {
+      throw new Error("Index corrupted");
+    };
 
-      expect(result).toContain("Error searching memory");
-      expect(result).toContain("Search index corrupted");
-    });
+    const tool = createMemorySearchTool(brokenCtx);
+    const result = await tool.execute({ query: "test" }, toolCtx);
+
+    expect(result).toContain("Error searching memory: Index corrupted");
   });
 });

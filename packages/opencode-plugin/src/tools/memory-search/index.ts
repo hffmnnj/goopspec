@@ -1,115 +1,118 @@
 /**
  * Memory Search Tool
- * Search persistent memory for relevant information
+ *
+ * Searches persistent memory using keyword/semantic matching with optional
+ * filters for type, concepts, and minimum importance.
+ *
  * @module tools/memory-search
  */
 
-import { tool, type ToolDefinition } from "@opencode-ai/plugin/tool";
-import type { PluginContext, ToolContext } from "../../core/types.js";
-import type { MemoryType, SearchResult } from "../../features/memory/types.js";
-import { log } from "../../shared/logger.js";
+import { MEMORY_TYPES } from "../../core/constants.js";
+import { tool } from "../../core/sdk-compat.js";
+import type { ToolContext, ToolDefinition } from "../../core/sdk-compat.js";
+import type { MemorySearchResult, PluginContext } from "../../core/types.js";
 
-/**
- * Format a search result for display
- */
-function formatResult(result: SearchResult, index: number): string {
+// ---------------------------------------------------------------------------
+// Formatting
+// ---------------------------------------------------------------------------
+
+function formatResult(result: MemorySearchResult, index: number): string {
   const { memory, score, matchType } = result;
-  const date = new Date(memory.createdAt * 1000).toLocaleDateString();
-  
-  const lines = [
+  const date = new Date(memory.createdAt).toLocaleDateString();
+
+  const lines: string[] = [
     `### [${index + 1}] ${memory.title}`,
     `**Type:** ${memory.type} | **Score:** ${score.toFixed(2)} (${matchType}) | **Date:** ${date}`,
-    ``,
-    memory.content,
+    "",
+    memory.content.length > 500 ? `${memory.content.slice(0, 500)}...` : memory.content,
   ];
 
-  if (memory.facts.length > 0) {
-    lines.push(``, `**Facts:**`);
-    memory.facts.forEach((fact) => lines.push(`- ${fact}`));
+  if (memory.facts?.length) {
+    lines.push("", "**Facts:**");
+    for (const fact of memory.facts) {
+      lines.push(`- ${fact}`);
+    }
   }
 
-  if (memory.concepts.length > 0) {
-    lines.push(``, `**Concepts:** ${memory.concepts.join(", ")}`);
+  if (memory.concepts?.length) {
+    lines.push("", `**Concepts:** ${memory.concepts.join(", ")}`);
   }
 
-  if (memory.sourceFiles.length > 0) {
-    lines.push(``, `**Files:** ${memory.sourceFiles.join(", ")}`);
+  if (memory.sourceFiles?.length) {
+    lines.push("", `**Files:** ${memory.sourceFiles.join(", ")}`);
   }
 
   return lines.join("\n");
 }
 
-/**
- * Create the memory_search tool
- */
+// ---------------------------------------------------------------------------
+// Tool factory
+// ---------------------------------------------------------------------------
+
 export function createMemorySearchTool(ctx: PluginContext): ToolDefinition {
   return tool({
-    description: "Search persistent memory for relevant context using keyword and semantic matching with optional filters.",
+    description:
+      "Search persistent memory for relevant context using keyword and semantic matching " +
+      "with optional filters. Returns formatted results with title, type, score, and snippet.",
     args: {
-      query: tool.schema
-        .string()
-        .describe("Natural language search query"),
+      query: tool.schema.string().describe("Natural language search query"),
       limit: tool.schema
         .number()
         .optional()
         .describe("Max results to return (default: 5, max: 20)"),
       types: tool.schema
-        .array(
-          tool.schema.enum([
-            "observation",
-            "decision",
-            "note",
-            "todo",
-            "session_summary",
-          ])
-        )
+        .array(tool.schema.enum(MEMORY_TYPES))
         .optional()
         .describe("Filter by memory types"),
       concepts: tool.schema
         .array(tool.schema.string())
         .optional()
         .describe("Filter by concept tags"),
-      minImportance: tool.schema
-        .number()
-        .optional()
-        .describe("Minimum importance level (1-10)"),
+      minImportance: tool.schema.number().optional().describe("Minimum importance level (1-10)"),
     },
-    async execute(args, _context: ToolContext): Promise<string> {
+    async execute(
+      args: {
+        query: string;
+        limit?: number;
+        types?: (typeof MEMORY_TYPES)[number][];
+        concepts?: string[];
+        minImportance?: number;
+      },
+      _context: ToolContext,
+    ): Promise<string> {
       try {
-        // Check if memory manager is available
-        if (!ctx.memoryManager) {
-          log("Memory system not initialized, skipping memory-search");
-          return "Memory system is not configured. No memories found.";
-        }
-
         // Validate and cap limit
         const limit = Math.min(Math.max(args.limit ?? 5, 1), 20);
 
-        const results = await ctx.memoryManager.search({
+        const results = await ctx.memory.search({
           query: args.query,
           limit,
-          types: args.types as MemoryType[] | undefined,
+          types: args.types,
           concepts: args.concepts,
           minImportance: args.minImportance,
         });
 
-        if (!results || results.length === 0) {
-          return `No memories found matching: "${args.query}"\n\nTip: Try broader search terms or different keywords.`;
+        if (!results.length) {
+          return [
+            `No memories found matching: "${args.query}"`,
+            "",
+            "Tip: Try broader search terms or different keywords.",
+          ].join("\n");
         }
 
-        const lines = [
-          `# Memory Search Results`,
-          `Found ${results.length} matching memor${results.length === 1 ? "y" : "ies"} for: "${args.query}"`,
-          ``,
+        const lines: string[] = [
+          "# Memory Search Results",
+          `Found ${results.length} matching ${results.length === 1 ? "memory" : "memories"} for: "${args.query}"`,
+          "",
         ];
 
-        results.forEach((result, index) => {
-          lines.push(formatResult(result, index));
-          lines.push(``, `---`, ``);
-        });
+        for (let i = 0; i < results.length; i++) {
+          lines.push(formatResult(results[i], i));
+          lines.push("", "---", "");
+        }
 
         return lines.join("\n");
-      } catch (error) {
+      } catch (error: unknown) {
         const message = error instanceof Error ? error.message : String(error);
         return `Error searching memory: ${message}`;
       }

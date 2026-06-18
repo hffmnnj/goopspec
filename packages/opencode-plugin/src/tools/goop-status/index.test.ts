@@ -1,425 +1,144 @@
-/**
- * Unit Tests for GoopSpec Status Tool
- * @module tools/goop-status/index.test
- */
+import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 
-import { describe, it, expect, beforeEach, afterEach } from "bun:test";
-import { createGoopStatusTool } from "./index.js";
-import { setSession } from "../../features/session/binding.js";
-import { createSession } from "../../features/session/manager.js";
-import { registerAgent } from "../../features/team/registry.js";
 import {
   createMockPluginContext,
   createMockToolContext,
   setupTestEnvironment,
-  type PluginContext,
-  type GoopState,
 } from "../../test-utils.js";
+import type { PluginContext } from "../../test-utils.js";
+import { createGoopStatusTool } from "./index.js";
 
 describe("goop_status tool", () => {
   let ctx: PluginContext;
-  let toolContext: ReturnType<typeof createMockToolContext>;
   let cleanup: () => void;
-  let originalCwd: string;
 
   beforeEach(() => {
-    const env = setupTestEnvironment("goop-status-test");
+    const env = setupTestEnvironment("goop-status");
     cleanup = env.cleanup;
     ctx = createMockPluginContext({ testDir: env.testDir });
-    toolContext = createMockToolContext({ directory: env.testDir });
-    originalCwd = process.cwd();
-    process.chdir(env.testDir);
   });
 
-  afterEach(() => {
-    process.chdir(originalCwd);
-    cleanup();
+  afterEach(() => cleanup());
+
+  it("returns a formatted status string", async () => {
+    const tool = createGoopStatusTool(ctx);
+    const result = await tool.execute({}, createMockToolContext());
+    expect(result).toContain("GoopSpec");
+    expect(result).toContain("Status");
+    expect(result).toContain("idle");
   });
 
-  describe("tool creation", () => {
-    it("creates tool with correct description", () => {
-      const tool = createGoopStatusTool(ctx);
-      
-      expect(tool.description).toContain("workflow");
-      expect(tool.description).toContain("state");
-    });
-
-    it("creates tool with verbose arg", () => {
-      const tool = createGoopStatusTool(ctx);
-      
-      expect(tool.args).toHaveProperty("verbose");
-    });
+  it("shows the active workflow id", async () => {
+    const tool = createGoopStatusTool(ctx);
+    const result = await tool.execute({}, createMockToolContext());
+    expect(result).toContain("default");
   });
 
-  describe("idle state", () => {
-    it("shows idle phase status", async () => {
-      const tool = createGoopStatusTool(ctx);
-      const result = await tool.execute({}, toolContext);
+  it("shows mode and depth", async () => {
+    ctx.stateManager.setMode("comprehensive");
+    ctx.stateManager.setDepth("deep");
 
-      expect(result).toContain("GoopSpec · Status");
-      expect(result).toContain("idle");
-    });
-
-    it("shows project name", async () => {
-      const tool = createGoopStatusTool(ctx);
-      const result = await tool.execute({}, toolContext);
-
-      expect(result).toContain("**Project:**");
-      expect(result).toContain("test-project");
-    });
-
-    it("shows spec locked status", async () => {
-      const tool = createGoopStatusTool(ctx);
-      const result = await tool.execute({}, toolContext);
-
-      expect(result).toContain("**Spec:**");
-      expect(result).toContain("🔓");
-    });
-
-    it("shows idle phase next steps", async () => {
-      const tool = createGoopStatusTool(ctx);
-      const result = await tool.execute({}, toolContext);
-
-      expect(result).toContain("→ Next:");
-      expect(result).toContain("goop-plan");
-    });
-
-    it("does not show active agents when registry empty", async () => {
-      const tool = createGoopStatusTool(ctx);
-      const result = await tool.execute({}, toolContext);
-
-      expect(result).not.toContain("## Active Agents");
-    });
+    const tool = createGoopStatusTool(ctx);
+    const result = await tool.execute({}, createMockToolContext());
+    expect(result).toContain("comprehensive");
+    expect(result).toContain("deep");
   });
 
-  describe("active agents", () => {
-    it("shows active agents when registry has entries", async () => {
-      await registerAgent({
-        id: "agent-123",
-        type: "goop-executor",
-        task: "Handle status display",
-        claimedFiles: ["src/tools/goop-status/index.ts"],
-        startedAt: Date.now(),
-      });
+  it("shows interview, spec lock, and acceptance flags", async () => {
+    ctx.stateManager.completeInterview();
+    ctx.stateManager.lockSpec();
 
-      const tool = createGoopStatusTool(ctx);
-      const result = await tool.execute({}, toolContext);
-
-      expect(result).toContain("## Active Agents");
-      expect(result).toContain("goop-executor");
-      expect(result).toContain("Handle status display");
-      expect(result).toContain("[1 file]");
-    });
+    const tool = createGoopStatusTool(ctx);
+    const result = await tool.execute({}, createMockToolContext());
+    expect(result).toContain("\u2713 Interview");
+    expect(result).toContain("\u2713 Spec Locked");
+    expect(result).toContain("\u2717 Accepted");
   });
 
-  describe("planning phase", () => {
-    beforeEach(() => {
-      ctx.stateManager.updateWorkflow({ phase: "plan" });
-    });
+  it("shows wave progress when waves are set", async () => {
+    ctx.stateManager.updateWaveProgress(2, 5);
 
-    it("shows plan phase status", async () => {
-      const tool = createGoopStatusTool(ctx);
-      const result = await tool.execute({}, toolContext);
-
-      expect(result).toContain("plan");
-    });
-
-    it("shows plan phase next steps", async () => {
-      const tool = createGoopStatusTool(ctx);
-      const result = await tool.execute({}, toolContext);
-
-      expect(result).toContain("goop-execute");
-    });
+    const tool = createGoopStatusTool(ctx);
+    const result = await tool.execute({}, createMockToolContext());
+    expect(result).toContain("Wave Progress");
+    expect(result).toContain("2/5");
   });
 
-  describe("execute phase", () => {
-    beforeEach(() => {
-      ctx.stateManager.updateWorkflow({
-        phase: "execute",
-        currentWave: 2,
-        totalWaves: 5,
-      });
-    });
-
-    it("shows wave progress", async () => {
-      const tool = createGoopStatusTool(ctx);
-      const result = await tool.execute({}, toolContext);
-
-      expect(result).toContain("**Wave:**");
-      expect(result).toContain("2/5");
-    });
-
-    it("shows progress bar", async () => {
-      const tool = createGoopStatusTool(ctx);
-      const result = await tool.execute({}, toolContext);
-
-      // Should show some form of progress indicator
-      expect(result).toMatch(/[█░]/);
-    });
+  it("does not show wave progress when totalWaves is 0", async () => {
+    const tool = createGoopStatusTool(ctx);
+    const result = await tool.execute({}, createMockToolContext());
+    expect(result).not.toContain("Wave Progress");
   });
 
-  describe("spec locked state", () => {
-    beforeEach(() => {
-      ctx.stateManager.lockSpec();
-      ctx.stateManager.updateWorkflow({ phase: "specify" });
-    });
-
-    it("shows spec locked status", async () => {
-      const tool = createGoopStatusTool(ctx);
-      const result = await tool.execute({}, toolContext);
-
-      expect(result).toContain("🔒");
-    });
+  it("shows phase guidance for idle", async () => {
+    const tool = createGoopStatusTool(ctx);
+    const result = await tool.execute({}, createMockToolContext());
+    expect(result).toContain("/goop-discuss");
   });
 
-  describe("acceptance confirmed state", () => {
-    beforeEach(() => {
-      ctx.stateManager.confirmAcceptance();
-    });
+  it("shows phase guidance for execute", async () => {
+    ctx.stateManager.transitionPhase("plan", true);
+    ctx.stateManager.transitionPhase("execute", true);
 
-    it("shows acceptance confirmed status", async () => {
-      const tool = createGoopStatusTool(ctx);
-      const result = await tool.execute({}, toolContext);
-
-      expect(result).toContain("**Accepted:** ✅");
-    });
+    const tool = createGoopStatusTool(ctx);
+    const result = await tool.execute({}, createMockToolContext());
+    expect(result).toContain("execute");
+    expect(result).toContain("/goop-accept");
   });
 
-  describe("verbose output", () => {
-    it("shows pending tasks when verbose", async () => {
-      ctx.stateManager.setState({
-        execution: {
-          activeCheckpointId: null,
-          completedPhases: [],
-          pendingTasks: [
-            { id: "1", name: "Task A", phase: "1", plan: "1.1", status: "pending" },
-            { id: "2", name: "Task B", phase: "1", plan: "1.2", status: "in_progress" },
-          ],
+  it("shows autopilot status when enabled", async () => {
+    ctx.stateManager.updateWorkflow({ autopilot: true, lazyAutopilot: true });
+
+    const tool = createGoopStatusTool(ctx);
+    const result = await tool.execute({}, createMockToolContext());
+    expect(result).toContain("Autopilot");
+    expect(result).toContain("lazy");
+  });
+
+  it("shows checkpoint when set", async () => {
+    ctx.stateManager.updateWorkflow({ checkpoint: "wave-2-done" });
+
+    const tool = createGoopStatusTool(ctx);
+    const result = await tool.execute({}, createMockToolContext());
+    expect(result).toContain("wave-2-done");
+  });
+
+  it("lists multiple workflows", async () => {
+    ctx.stateManager.createWorkflow("feat-auth");
+
+    const tool = createGoopStatusTool(ctx);
+    const result = await tool.execute({}, createMockToolContext());
+    expect(result).toContain("Workflows");
+    expect(result).toContain("feat-auth");
+    expect(result).toContain("default");
+  });
+
+  it("handles missing active workflow gracefully", async () => {
+    // Force a broken state where active workflow doesn't exist
+    const state = ctx.stateManager.getState();
+    state.activeWorkflowId = "nonexistent";
+    ctx.stateManager.setState(state);
+
+    const tool = createGoopStatusTool(ctx);
+    const result = await tool.execute({}, createMockToolContext());
+    expect(result).toContain("No active workflow found");
+  });
+
+  it("handles errors gracefully without throwing", async () => {
+    // Create a context with a broken state manager
+    const brokenCtx: PluginContext = {
+      ...ctx,
+      stateManager: {
+        ...ctx.stateManager,
+        getState: () => {
+          throw new Error("disk read failed");
         },
-      });
+      },
+    };
 
-      const tool = createGoopStatusTool(ctx);
-      const result = await tool.execute({ verbose: true }, toolContext);
-
-      expect(result).toContain("Pending Tasks");
-      expect(result).toContain("Task A");
-      expect(result).toContain("Task B");
-    });
-
-    it("does not show pending tasks when not verbose", async () => {
-      ctx.stateManager.setState({
-        execution: {
-          activeCheckpointId: null,
-          completedPhases: [],
-          pendingTasks: [
-            { id: "1", name: "Task A", phase: "1", plan: "1.1", status: "pending" },
-          ],
-        },
-      });
-
-      const tool = createGoopStatusTool(ctx);
-      const result = await tool.execute({ verbose: false }, toolContext);
-
-      expect(result).not.toContain("### Pending Tasks");
-    });
-  });
-
-  describe("completed phases", () => {
-    it("shows completed phases", async () => {
-      ctx.stateManager.transitionPhase("plan");
-      ctx.stateManager.transitionPhase("research");
-
-      const tool = createGoopStatusTool(ctx);
-      const result = await tool.execute({ verbose: true }, toolContext);
-
-      expect(result).toContain("Phases");
-      expect(result).toContain("plan");
-    });
-
-    it("shows None when no completed phases", async () => {
-      const tool = createGoopStatusTool(ctx);
-      const result = await tool.execute({ verbose: true }, toolContext);
-
-      expect(result).toContain("**Phases:** None");
-    });
-  });
-
-  describe("active checkpoint", () => {
-    it("shows active checkpoint when set", async () => {
-      ctx.stateManager.setState({
-        execution: {
-          activeCheckpointId: "checkpoint-123",
-          completedPhases: [],
-          pendingTasks: [],
-        },
-      });
-
-      const tool = createGoopStatusTool(ctx);
-      const result = await tool.execute({ verbose: true }, toolContext);
-
-      expect(result).toContain("checkpoint-123");
-    });
-
-    it("shows None when no active checkpoint", async () => {
-      const tool = createGoopStatusTool(ctx);
-      const result = await tool.execute({ verbose: true }, toolContext);
-
-      expect(result).toContain("**Checkpoint:** None");
-    });
-  });
-
-  describe("output size limits", () => {
-    it("non-verbose output is ≤15 lines", async () => {
-      const tool = createGoopStatusTool(ctx);
-      const result = await tool.execute({ verbose: false }, toolContext);
-      const lines = result.split("\n").filter((l: string) => l.trim().length > 0);
-      expect(lines.length).toBeLessThanOrEqual(15);
-    });
-
-    it("verbose output is ≤30 lines", async () => {
-      ctx.stateManager.setState({
-        execution: {
-          activeCheckpointId: "test-checkpoint",
-          completedPhases: ["plan", "execute", "accept"],
-          pendingTasks: [
-            { id: "1", name: "Task A", phase: "1", plan: "1.1", status: "pending" },
-          ],
-        },
-      });
-      ctx.stateManager.updateWorkflow({
-        phase: "execute",
-        currentWave: 2,
-        totalWaves: 5,
-      });
-
-      const tool = createGoopStatusTool(ctx);
-      const result = await tool.execute({ verbose: true }, toolContext);
-      const lines = result.split("\n").filter((l: string) => l.trim().length > 0);
-      expect(lines.length).toBeLessThanOrEqual(30);
-    });
-  });
-
-  describe("mode display", () => {
-    it("shows standard mode by default", async () => {
-      const tool = createGoopStatusTool(ctx);
-      const result = await tool.execute({}, toolContext);
-
-      expect(result).toContain("standard");
-    });
-
-    it("shows quick mode when set", async () => {
-      ctx.stateManager.setMode("quick");
-
-      const tool = createGoopStatusTool(ctx);
-      const result = await tool.execute({}, toolContext);
-
-      expect(result).toContain("quick");
-    });
-
-    it("shows comprehensive mode when set", async () => {
-      ctx.stateManager.setMode("comprehensive");
-
-      const tool = createGoopStatusTool(ctx);
-      const result = await tool.execute({}, toolContext);
-
-      expect(result).toContain("comprehensive");
-    });
-
-    it("shows milestone mode when set", async () => {
-      ctx.stateManager.setMode("milestone");
-
-      const tool = createGoopStatusTool(ctx);
-      const result = await tool.execute({}, toolContext);
-
-      expect(result).toContain("milestone");
-    });
-  });
-
-  describe("last activity", () => {
-    it("shows last activity timestamp", async () => {
-      const tool = createGoopStatusTool(ctx);
-      const result = await tool.execute({ verbose: true }, toolContext);
-
-      expect(result).toContain("Last Activity");
-      // Should contain an ISO timestamp
-      expect(result).toMatch(/\d{4}-\d{2}-\d{2}/);
-    });
-  });
-
-  describe("session display", () => {
-    it("shows status output when session is bound", async () => {
-      createSession(ctx.input.directory, "feat-auth");
-      createSession(ctx.input.directory, "feat-billing");
-      setSession(ctx, "feat-auth");
-
-      const tool = createGoopStatusTool(ctx);
-      const result = await tool.execute({}, toolContext);
-
-      expect(result).toContain("GoopSpec");
-      expect(result).toContain("Phase:");
-    });
-
-    it("keeps standard output when no session is bound", async () => {
-      createSession(ctx.input.directory, "feat-unbound");
-
-      const tool = createGoopStatusTool(ctx);
-      const result = await tool.execute({}, toolContext);
-
-      expect(result).not.toContain("Current Session");
-      expect(result).not.toContain("Active Sessions");
-    });
-  });
-
-  describe("multi-workflow display", () => {
-    it("shows workflow ID for single workflow", async () => {
-      const tool = createGoopStatusTool(ctx);
-      const result = await tool.execute({}, toolContext);
-
-      expect(result).toContain("**Workflow:** default");
-    });
-
-    it("shows count and list for multiple workflows", async () => {
-      ctx.stateManager.createWorkflow("feat-auth");
-      ctx.stateManager.createWorkflow("feat-billing");
-
-      const tool = createGoopStatusTool(ctx);
-      const result = await tool.execute({}, toolContext);
-
-      expect(result).toContain("**Workflows:** 3 active");
-      expect(result).toContain("► default");
-      expect(result).toContain("feat-auth");
-      expect(result).toContain("feat-billing");
-    });
-
-    it("shows detailed workflow table in verbose mode with multiple workflows", async () => {
-      ctx.stateManager.createWorkflow("feat-auth");
-
-      const tool = createGoopStatusTool(ctx);
-      const result = await tool.execute({ verbose: true }, toolContext);
-
-      expect(result).toContain("### Workflows");
-      expect(result).toContain("| ► | default |");
-      expect(result).toContain("feat-auth");
-    });
-
-    it("gracefully handles missing listWorkflows method", async () => {
-      // Simulate a state manager without listWorkflows (older version)
-      const origList = ctx.stateManager.listWorkflows;
-      const origGetActive = ctx.stateManager.getActiveWorkflowId;
-      // @ts-expect-error — testing graceful degradation with undefined method
-      ctx.stateManager.listWorkflows = undefined;
-      // @ts-expect-error — testing graceful degradation with undefined method
-      ctx.stateManager.getActiveWorkflowId = undefined;
-
-      const tool = createGoopStatusTool(ctx);
-      const result = await tool.execute({}, toolContext);
-
-      // Should still render without crashing
-      expect(result).toContain("GoopSpec · Status");
-      expect(result).toContain("Phase:");
-
-      ctx.stateManager.listWorkflows = origList;
-      ctx.stateManager.getActiveWorkflowId = origGetActive;
-    });
+    const tool = createGoopStatusTool(brokenCtx);
+    const result = await tool.execute({}, createMockToolContext());
+    expect(result).toContain("Error");
+    expect(result).toContain("disk read failed");
   });
 });
