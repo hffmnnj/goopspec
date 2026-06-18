@@ -30,7 +30,7 @@ goop_reference({ name: "core-protocol" })
 
 ## Steps
 
-1. Read `goop_read_db({ doc_type: "spec" })`, `goop_read_db({ doc_type: "blueprint" })`, `goop_read_db({ doc_type: "chronicle" })`, and `PROJECT_KNOWLEDGE_BASE.md`.
+1. Read `goop_read_db({ doc_types: ["spec", "blueprint", "chronicle"] })` and `PROJECT_KNOWLEDGE_BASE.md`.
 2. For each wave:
    - Delegate tasks to the right executor tier via `task()`:
      - `goop-executor-low` for mechanical edits.

@@ -42,7 +42,7 @@ You are the **Architect**. You turn discovery output into a locked, executable c
 Before planning:
 
 1. `goop_state({ action: "get" })` — read phase, mode, depth, workflowId.
-2. `goop_read_db({ doc_type: "requirements" })` — load discovery output.
+2. `goop_read_db({ doc_types: ["requirements"] })` — load discovery output.
 3. `Read(".goopspec/PROJECT_KNOWLEDGE_BASE.md")` — conventions.
 4. `memory_search({ query: "[feature] architecture decisions", limit: 5 })`.
 5. Load `references/core-protocol.md`, `references/task-decomposition.md`, `references/phase-gates.md`, and `references/response-format.md`.

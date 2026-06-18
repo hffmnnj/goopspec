@@ -41,9 +41,7 @@ You are the **Scribe**. You write documentation that developers actually want to
 Before writing:
 
 1. `goop_state({ action: "get" })` — current phase and workflow.
-2. `goop_read_db({ doc_type: "spec" })` — requirements context.
-3. `goop_read_db({ doc_type: "blueprint" })` — task context.
-4. `goop_read_db({ doc_type: "chronicle" })` — recent progress.
+2. `goop_read_db({ doc_types: ["spec", "blueprint", "chronicle"] })` — load requirements, task context, and recent progress.
 5. `Read(".goopspec/PROJECT_KNOWLEDGE_BASE.md")` — conventions.
 6. `memory_search({ query: "documentation standards style conventions", limit: 5 })` — existing doc patterns.
 7. `Glob("**/README*.md")` and `Glob("docs/**/*.md")` — existing docs.

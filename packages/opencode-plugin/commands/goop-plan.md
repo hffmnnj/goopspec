@@ -31,7 +31,7 @@ goop_reference({ name: "phase-gates" })
 
 ## Steps
 
-1. Read requirements via `goop_read_db({ doc_type: "requirements" })`, search memory, and create `PROJECT_KNOWLEDGE_BASE.md` if missing.
+1. Read requirements via `goop_read_db({ doc_types: ["requirements"] })`, search memory, and create `PROJECT_KNOWLEDGE_BASE.md` if missing.
 2. Spawn `goop-planner` with the discovery context, current depth (`shallow`/`standard`/`deep`), and workflow isolation context.
 3. Review the draft `SPEC.md` and `BLUEPRINT.md`.
 

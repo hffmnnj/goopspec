@@ -37,8 +37,7 @@ Before exploring:
 
 1. `goop_state({ action: "get" })` — read phase, workflowId.
 2. `goop_search_notes({ query: "[codebase/project name] patterns conventions" })` — check prior exploration notes.
-3. `goop_read_db({ doc_type: "spec" })` — requirements.
-4. `goop_read_db({ doc_type: "blueprint" })` — task context.
+3. `goop_read_db({ doc_types: ["spec", "blueprint"] })` — load requirements and task context.
 5. `Read(".goopspec/PROJECT_KNOWLEDGE_BASE.md")` — known conventions.
 6. `memory_search({ query: "[project] entrypoints integration points patterns", limit: 5 })`.
 6. Load `references/architecture-design.md` and `references/response-format.md`.

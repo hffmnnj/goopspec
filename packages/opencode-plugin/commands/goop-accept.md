@@ -30,7 +30,7 @@ goop_reference({ name: "security-checklist" })
 
 ## Steps
 
-1. Read `goop_read_db({ doc_type: "spec" })` and `goop_read_db({ doc_type: "blueprint" })`.
+1. Read `goop_read_db({ doc_types: ["spec", "blueprint"] })`.
 2. Spawn `goop-verifier` to check must-have coverage, artifacts, key links, and quality.
 3. Spawn `goop-tester` for test and build verification.
 4. Present a verification matrix. Require explicit user acceptance.

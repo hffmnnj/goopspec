@@ -41,8 +41,7 @@ Before researching:
 
 1. `goop_state({ action: "get" })` — read phase, depth, workflowId.
 2. `goop_search_notes({ query: "[research topic]" })` — check prior research notes.
-3. `goop_read_db({ doc_type: "spec" })` — requirements context.
-4. `goop_read_db({ doc_type: "blueprint" })` — execution plan context.
+3. `goop_read_db({ doc_types: ["spec", "blueprint"] })` — load requirements and execution plan context.
 5. `Read(".goopspec/PROJECT_KNOWLEDGE_BASE.md")` — conventions and constraints.
 6. `memory_search({ query: "[topic] research findings", limit: 5 })`.
 6. Load `references/dispatch-patterns.md` and `references/response-format.md`.
