@@ -39,17 +39,27 @@ bun run typecheck
 bun test
 ```
 
+Linting is handled by Biome inside the plugin package:
+
+```bash
+bun run --cwd packages/opencode-plugin lint
+```
+
 ## Project structure
 Common locations:
 
 ```
-agents/        # Agent definitions
-commands/      # Command definitions
-references/    # Reference docs
-skills/        # Skill modules
-templates/     # Templates
-src/           # Core implementation
-tests/         # Test suite
+agents/                        # Agent definitions
+commands/                      # Command definitions
+references/                    # Reference docs
+templates/                     # Templates
+packages/opencode-plugin/      # Primary plugin package
+  src/
+    core/                      # Types, config, resolver
+    features/                  # Feature modules
+    hooks/                     # OpenCode plugin hooks
+    shared/                    # Utilities
+    tools/                     # MCP tool implementations
 ```
 
 ## Contribution workflow
