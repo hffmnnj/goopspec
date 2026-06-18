@@ -16,10 +16,8 @@ dist/
 *.db-shm
 *.db-wal
 
-# Logs
+# Logs / runtime
 *.log
-
-# Runtime
 *.pid
 *.pid.lock
 
@@ -33,13 +31,8 @@ test-results.txt
 coverage/
 *.lcov
 
-# OS files
+# OS / IDE / tooling
 .DS_Store
-Thumbs.db
-
-# IDE
 .vscode/
 .idea/
-
-# Package manager
 .npm
