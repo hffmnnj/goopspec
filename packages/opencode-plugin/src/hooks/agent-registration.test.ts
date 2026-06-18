@@ -172,4 +172,78 @@ describe("createAgentRegistrationHook", () => {
       cleanup();
     }
   });
+
+  it("applies thinkingBudget from config to agent", async () => {
+    const { testDir, cleanup } = setupTestEnvironment("agent-reg-thinking-budget");
+    const origGlobalPath = process.env.GOOPSPEC_GLOBAL_CONFIG_PATH;
+    try {
+      process.env.GOOPSPEC_GLOBAL_CONFIG_PATH = join(testDir, "no-global-config.json");
+
+      writeFileSync(
+        join(testDir, "goopspec.json"),
+        JSON.stringify({
+          orchestrator: { model: "anthropic/claude-opus-4-6", thinkingBudget: 32000 },
+        }),
+        "utf-8",
+      );
+
+      const ctx = createMockPluginContext({ testDir });
+      const hooks = createAgentRegistrationHook(ctx);
+
+      const config: SdkConfig = {};
+      await hooks.config?.(config);
+
+      const orchConfig = config.agent?.["goop-orchestrator"] as Record<string, unknown> | undefined;
+      expect(orchConfig?.thinkingBudget).toBe(32000);
+    } finally {
+      if (origGlobalPath === undefined) {
+        process.env.GOOPSPEC_GLOBAL_CONFIG_PATH = undefined;
+      } else {
+        process.env.GOOPSPEC_GLOBAL_CONFIG_PATH = origGlobalPath;
+      }
+      cleanup();
+    }
+  });
+
+  it("logs warning when model override is missing provider prefix", async () => {
+    const { testDir, cleanup } = setupTestEnvironment("agent-reg-no-provider");
+    const origGlobalPath = process.env.GOOPSPEC_GLOBAL_CONFIG_PATH;
+    const errors: string[] = [];
+    const origError = console.error;
+    try {
+      process.env.GOOPSPEC_GLOBAL_CONFIG_PATH = join(testDir, "no-global-config.json");
+
+      // Write a config with a model string missing the provider/ prefix
+      writeFileSync(
+        join(testDir, "goopspec.json"),
+        JSON.stringify({
+          agentModels: { orchestrator: "claude-opus-4-6" },
+        }),
+        "utf-8",
+      );
+
+      console.error = (...args: unknown[]) => {
+        errors.push(args.map(String).join(" "));
+      };
+
+      const ctx = createMockPluginContext({ testDir });
+      const hooks = createAgentRegistrationHook(ctx);
+
+      const config: SdkConfig = {};
+      await hooks.config?.(config);
+
+      // Model should still be applied (we warn, not block)
+      expect(config.agent?.["goop-orchestrator"]?.model).toBe("claude-opus-4-6");
+      // But a warning should have been logged
+      expect(errors.some((e) => e.includes("missing provider prefix"))).toBe(true);
+    } finally {
+      console.error = origError;
+      if (origGlobalPath === undefined) {
+        process.env.GOOPSPEC_GLOBAL_CONFIG_PATH = undefined;
+      } else {
+        process.env.GOOPSPEC_GLOBAL_CONFIG_PATH = origGlobalPath;
+      }
+      cleanup();
+    }
+  });
 });
