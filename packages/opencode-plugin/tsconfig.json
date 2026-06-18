@@ -23,7 +23,6 @@
     "dist",
     "agents",
     "commands",
-    "references",
-    "skills"
+    "references"
   ]
 }
