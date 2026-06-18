@@ -121,16 +121,16 @@ describe("scanForViolations", () => {
     expect(match!.severity).toBe("error");
   });
 
-  it('detects "ADL" uppercase only (error) — "adl" should NOT match', () => {
+  it('detects "ADL" uppercase (error)', () => {
     const upper = scanForViolations("Logged in ADL");
     const adlMatch = upper.find((v) => v.term === "ADL");
     expect(adlMatch).toBeDefined();
     expect(adlMatch!.severity).toBe("error");
+  });
 
-    // Lowercase "adl" should NOT match (pattern is case-sensitive)
-    const lower = scanForViolations("the adl was updated");
-    const lowerMatch = lower.find((v) => v.term === "ADL");
-    expect(lowerMatch).toBeUndefined();
+  it("detects 'adl' lowercase (case-insensitive)", () => {
+    const violations = scanForViolations("Updated the adl with decisions");
+    expect(violations.some((v) => v.term === "ADL")).toBe(true);
   });
 
   it('detects "wiring task" (error)', () => {
@@ -184,6 +184,13 @@ describe("scanForViolations", () => {
     const match = result.find((v) => v.term === "goopspec");
     expect(match).toBeDefined();
     expect(match!.severity).toBe("warn");
+  });
+
+  it("detects standalone 'executor' as warn severity", () => {
+    const violations = scanForViolations("The executor processes tasks");
+    const v = violations.find((v) => v.term === "executor");
+    expect(v).toBeDefined();
+    expect(v?.severity).toBe("warn");
   });
 
   // -----------------------------------------------------------------------

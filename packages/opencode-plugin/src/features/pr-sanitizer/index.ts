@@ -94,6 +94,12 @@ export const FORBIDDEN_TERMS: TermRule[] = [
     severity: "error",
   },
   {
+    name: "executor",
+    pattern: /\bexecutor\b/gi,
+    replacement: "component",
+    severity: "warn" as ViolationSeverity,
+  },
+  {
     name: "chronicle",
     pattern: new RegExp("\\bchronicle\\b", "gi"),
     replacement: "change log",
@@ -101,7 +107,7 @@ export const FORBIDDEN_TERMS: TermRule[] = [
   },
   {
     name: "ADL",
-    pattern: new RegExp("\\bADL\\b", "g"),
+    pattern: new RegExp("\\bADL\\b", "gi"),
     replacement: "decision log",
     severity: "error",
   },
