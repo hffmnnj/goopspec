@@ -614,30 +614,23 @@ bun run build
 
 ```
 goopspec/
-├── agents/           # Agent markdown definitions
-├── commands/         # Command markdown definitions
-├── references/       # Reference documentation
-├── skills/           # Loadable skill modules
-├── templates/        # File templates
-└── src/
-    ├── agents/       # Agent factory
-    ├── cli/          # Standalone CLI (goopspec command)
-    │   └── commands/ # CLI subcommands (init, models, memory, etc.)
-    ├── core/         # Core types and config
-    ├── features/     # Feature modules
-    │   ├── archive/
-    │   ├── enforcement/
-    │   ├── memory/
-    │   ├── mode-detection/
-    │   ├── parallel-research/
-    │   ├── routing/
-    │   ├── setup/
-    │   ├── state-manager/
-    │   └── workflow-memory/
-    ├── hooks/        # OpenCode hooks
-    ├── plugin-handlers/
-    ├── shared/       # Utilities
-    └── tools/        # MCP tools
+├── agents/                        # Agent markdown definitions
+├── commands/                      # Command markdown definitions
+├── references/                    # Reference documentation
+├── templates/                     # File templates
+└── packages/
+    └── opencode-plugin/           # Primary plugin package
+        └── src/
+            ├── core/              # Types, config, resolver
+            ├── features/          # Feature modules
+            │   ├── enforcement/
+            │   ├── memory/
+            │   ├── routing/
+            │   ├── state-manager/
+            │   └── worktree/
+            ├── hooks/             # OpenCode plugin hooks
+            ├── shared/            # Utilities
+            └── tools/             # MCP tool implementations
 ```
 
 ---
@@ -652,7 +645,6 @@ MIT License. See [LICENSE](./LICENSE) for details.
 
 GoopSpec builds on ideas from:
 - [OpenCode](https://opencode.ai) - The AI coding assistant platform
-- GSD (Get Stuff Done) - Structured task execution patterns
 - oh-my-opencode - Plugin architecture patterns
 
 ---
