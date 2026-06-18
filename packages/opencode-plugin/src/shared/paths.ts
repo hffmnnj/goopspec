@@ -2,6 +2,7 @@
  * Path helpers for GoopSpec 1.0.0 plugin.
  */
 
+import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -43,4 +44,21 @@ export function getWorkflowDocPath(
   filename: string,
 ): string {
   return join(projectDir, GOOPSPEC_DIR, workflowId, filename);
+}
+
+/** Path to project-root goopspec.json (user-facing config). */
+export function getProjectGoopspecJsonPath(projectDir: string): string {
+  return join(projectDir, "goopspec.json");
+}
+
+/**
+ * Path to the global GoopSpec config (~/.config/opencode/goopspec.json).
+ *
+ * Override with GOOPSPEC_GLOBAL_CONFIG_PATH env var (useful for testing).
+ */
+export function getGlobalConfigPath(): string {
+  if (process.env.GOOPSPEC_GLOBAL_CONFIG_PATH) {
+    return process.env.GOOPSPEC_GLOBAL_CONFIG_PATH;
+  }
+  return join(homedir(), ".config", "opencode", "goopspec.json");
 }
