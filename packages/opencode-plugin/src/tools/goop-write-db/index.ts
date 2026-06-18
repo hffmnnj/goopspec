@@ -46,39 +46,56 @@ export function createGoopWriteDbTool(ctx: PluginContext): ToolDefinition {
       "Args:\n" +
       "- doc_type: Document type (spec, blueprint, chronicle, adl, handoff, requirements, research)\n" +
       "- content: Markdown body to write\n" +
-      "- workflow_id: Optional workflow ID (defaults to active workflow)",
+      "- workflow_id: Optional workflow ID (defaults to active workflow)\n" +
+      "- mode: 'replace' (default) overwrites; 'append' concatenates to existing content",
     args: {
       doc_type: tool.schema.enum(DOC_TYPES),
       content: tool.schema.string(),
       workflow_id: tool.schema.string().optional(),
+      mode: tool.schema.enum(["replace", "append"] as const).optional(),
     },
     async execute(
       args: {
         doc_type: DocType;
         content: string;
         workflow_id?: string;
+        mode?: "replace" | "append";
       },
       _context: ToolContext,
     ): Promise<string> {
       try {
         const workflowId = args.workflow_id ?? ctx.stateManager.getState().activeWorkflowId;
+        const mode = args.mode ?? "replace";
 
         // Persist to DB
-        ctx.db.upsertDocument(workflowId, args.doc_type, args.content);
+        if (mode === "append") {
+          ctx.db.appendDocument(workflowId, args.doc_type, args.content);
+          // Also insert chronicle event row when appending chronicle
+          if (args.doc_type === "chronicle") {
+            ctx.db.appendChronicleEvent(workflowId, args.content);
+          }
+        } else {
+          ctx.db.upsertDocument(workflowId, args.doc_type, args.content);
+        }
 
         // Log doc_write event
         ctx.db.appendEvent(workflowId, "doc_write", {
           doc_type: args.doc_type,
+          mode,
           timestamp: Date.now(),
         });
+
+        // Read back the full document for sidecar (important for append mode)
+        const updatedDoc = ctx.db.getDocument(workflowId, args.doc_type);
+        const sidecarContent = updatedDoc?.content ?? args.content;
 
         // Render sidecar markdown file
         const filename = docTypeToFilename(args.doc_type);
         const sidecarPath = getWorkflowDocPath(ctx.sdk.directory, workflowId, filename);
         mkdirSync(dirname(sidecarPath), { recursive: true });
-        writeFileSync(sidecarPath, args.content, "utf-8");
+        writeFileSync(sidecarPath, sidecarContent, "utf-8");
 
-        return `Written ${args.doc_type} for workflow '${workflowId}' (${args.content.length} chars). Sidecar: .goopspec/${workflowId}/${filename}`;
+        return `Written ${args.doc_type} for workflow '${workflowId}' (${sidecarContent.length} chars, mode: ${mode}). Sidecar: .goopspec/${workflowId}/${filename}`;
       } catch (error: unknown) {
         const msg = error instanceof Error ? error.message : String(error);
         return `Error in goop_write_db: ${msg}`;
