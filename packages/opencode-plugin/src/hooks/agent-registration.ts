@@ -14,17 +14,32 @@ import { join } from "node:path";
 import type { Config } from "../core/sdk-compat.js";
 import type { PluginContext } from "../core/types.js";
 import { loadAgentConfigs, loadCommandConfigs } from "../features/agents/index.js";
+import { loadMergedConfig } from "../features/setup/index.js";
 import { log } from "../shared/logger.js";
 import { getPackageRoot } from "../shared/paths.js";
 import type { HookFactory, Hooks } from "./types.js";
 
-export function createAgentRegistrationHook(_ctx: PluginContext): Partial<Hooks> {
+export function createAgentRegistrationHook(ctx: PluginContext): Partial<Hooks> {
   return {
     config: async (config: Config): Promise<void> => {
       const packageRoot = getPackageRoot();
 
       // -- Agents -------------------------------------------------------------
       const agents = loadAgentConfigs(join(packageRoot, "agents"));
+
+      // Apply model overrides from goopspec.json config (priority: per-role > defaultModel > frontmatter)
+      const mergedConfig = loadMergedConfig(ctx.sdk.directory);
+      for (const [name, agentConfig] of Object.entries(agents)) {
+        const role = name.replace(/^goop-/, "");
+        const roleOverride = mergedConfig.agentModels?.[role];
+        if (roleOverride) {
+          agentConfig.model = roleOverride;
+        } else if (mergedConfig.defaultModel) {
+          agentConfig.model = mergedConfig.defaultModel;
+        }
+        // else: keep the markdown frontmatter default
+      }
+
       const agentNames = Object.keys(agents);
       if (agentNames.length > 0) {
         if (!config.agent) config.agent = {};
