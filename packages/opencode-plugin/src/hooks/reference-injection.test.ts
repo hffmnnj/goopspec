@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, spyOn } from "bun:test";
-import type { SdkModel } from "../core/sdk-compat.js";
+import type { SdkModel, SdkPart } from "../core/sdk-compat.js";
 import type { ResolvedResource } from "../core/types.js";
 import {
   clearSignals,
@@ -8,7 +8,6 @@ import {
 } from "../features/reference-signals/index.js";
 import {
   createMockPluginContext,
-  createDefaultWorkflowState,
   setupTestEnvironment,
 } from "../test-utils.js";
 import {
@@ -35,8 +34,8 @@ function chatInput(sessionID = SESSION_ID) {
 /** Build a mock ChatMessageOutput with text parts. */
 function chatOutput(text: string) {
   return {
-    message: { role: "user" as const, parts: [textPart(text)] },
-    parts: [textPart(text)],
+    message: { role: "user" as const, parts: [textPart(text)] } as never,
+    parts: [textPart(text)] as SdkPart[],
   };
 }
 
@@ -51,7 +50,6 @@ function mockResources(...names: string[]): ResolvedResource[] {
     type: "reference" as const,
     name,
     content: `# ${name}\n\nThis is the ${name} reference content for testing purposes.`,
-    path: `references/${name}.md`,
   }));
 }
 
@@ -154,7 +152,7 @@ describe("chat.message handler", () => {
     const consoleSpy = spyOn(console, "error").mockImplementation(() => {});
 
     // Pass malformed output with no parts array
-    const badOutput = { message: {}, parts: null } as unknown;
+    const badOutput = { message: {}, parts: null } as never;
     await handler(chatInput(), badOutput);
 
     // Should not throw — safeHandler catches it
@@ -264,7 +262,6 @@ describe("experimental.chat.system.transform handler", () => {
           type: "reference" as const,
           name: "debugging",
           content: longContent,
-          path: "references/debugging.md",
         },
       ],
     });
