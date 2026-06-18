@@ -3,6 +3,8 @@
  * and identity/path classification helpers used across all hooks.
  */
 
+import { log } from "../shared/logger.js";
+
 // ---------------------------------------------------------------------------
 // Generic handler type — the SDK's (input, output) => Promise<void> shape
 // ---------------------------------------------------------------------------
@@ -21,7 +23,12 @@ type AsyncHandler = (...args: never[]) => Promise<void>;
 export function safeHandler<H extends AsyncHandler>(label: string, handler: H): H {
   const wrapped = async (...args: Parameters<H>): Promise<void> => {
     try {
+      const start = Date.now();
       await (handler as unknown as (...a: unknown[]) => Promise<void>)(...args);
+      const duration = Date.now() - start;
+      if (duration > 25) {
+        log(`${label}: slow hook detected`, { durationMs: duration });
+      }
     } catch (err) {
       // biome-ignore lint/suspicious/noConsole: Intentional error logging for graceful degradation
       console.error(`[goopspec] hook "${label}" error:`, err);

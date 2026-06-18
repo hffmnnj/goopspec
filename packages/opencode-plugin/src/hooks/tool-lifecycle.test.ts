@@ -313,7 +313,7 @@ describe("createToolLifecycleHook after handler", () => {
 
     expect(consoleSpy).toHaveBeenCalled();
     const errorMsg = consoleSpy.mock.calls[0][0] as string;
-    expect(errorMsg).toContain("memory-distill");
+    expect(errorMsg).toContain("memory.save failed");
     consoleSpy.mockRestore();
   });
 

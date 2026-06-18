@@ -17,6 +17,40 @@ import type { HookFactory, Hooks } from "./types.js";
 import { safeHandler } from "./utils.js";
 
 // ---------------------------------------------------------------------------
+// Memory cache — session-level, keyed by sessionID:phase:currentWave
+// ---------------------------------------------------------------------------
+
+interface MemoryCacheEntry {
+  results: MemorySearchResult[];
+  timestamp: number;
+}
+
+const CACHE_TTL_MS = 30_000;
+const _memoryCache = new Map<string, MemoryCacheEntry>();
+
+/** Exported for testing — clears the module-level memory cache. */
+export function clearMemoryCache(): void {
+  _memoryCache.clear();
+}
+
+// ---------------------------------------------------------------------------
+// DocType cache — per-workflowId, shorter TTL (doc types change more often)
+// ---------------------------------------------------------------------------
+
+interface DocTypeCacheEntry {
+  docTypes: string[];
+  timestamp: number;
+}
+
+const _docTypeCache = new Map<string, DocTypeCacheEntry>();
+const DOC_TYPE_CACHE_TTL_MS = 10_000;
+
+/** Exported for testing — clears the module-level doc-type cache. */
+export function clearDocTypeCache(): void {
+  _docTypeCache.clear();
+}
+
+// ---------------------------------------------------------------------------
 // Token estimation
 // ---------------------------------------------------------------------------
 
@@ -124,7 +158,15 @@ export function buildMemoryBlock(memories: MemorySearchResult[], tokenBudget: nu
 export function buildDbContextBlock(ctx: PluginContext, workflowId: string): string {
   let docInventory = "(DB not available)";
   try {
-    const existingTypes = ctx.db.listDocTypes(workflowId);
+    const now = Date.now();
+    const cached = _docTypeCache.get(workflowId);
+    let existingTypes: string[];
+    if (cached && now - cached.timestamp < DOC_TYPE_CACHE_TTL_MS) {
+      existingTypes = cached.docTypes;
+    } else {
+      existingTypes = ctx.db.listDocTypes(workflowId);
+      _docTypeCache.set(workflowId, { docTypes: existingTypes, timestamp: now });
+    }
     if (existingTypes.length > 0) {
       docInventory = existingTypes.map((t) => `- ${t}`).join("\n");
     } else {
@@ -190,14 +232,33 @@ export function createSystemTransformHook(ctx: PluginContext): Partial<Hooks> {
         log("system-transform: DB context block failed, skipping", { error });
       }
 
-      // 4. Memory block — token-budgeted
+      // 4. Memory block — token-budgeted, with session-level caching
       let memoryBlock = "";
       const tokenBudget = DEFAULT_MEMORY_TOKEN_BUDGET;
+      const sessionID = _input.sessionID ?? "unknown";
+      const cacheKey = `${sessionID}:${workflow.phase}:${workflow.currentWave}`;
+      const now = Date.now();
+      const cached = _memoryCache.get(cacheKey);
 
-      const searchResults = await ctx.memory.search({
-        query: `${workflow.phase} workflow`,
-        limit: 10,
-      });
+      let searchResults: MemorySearchResult[];
+      if (cached && now - cached.timestamp < CACHE_TTL_MS) {
+        searchResults = cached.results;
+        log("system-transform: memory cache hit", { cacheKey });
+      } else {
+        searchResults = await ctx.memory.search({
+          query: `${workflow.phase} workflow`,
+          limit: 10,
+        });
+        _memoryCache.set(cacheKey, { results: searchResults, timestamp: now });
+        // Prune to prevent unbounded growth
+        if (_memoryCache.size > 50) {
+          const oldest = [..._memoryCache.entries()].sort(
+            (a, b) => a[1].timestamp - b[1].timestamp,
+          )[0];
+          if (oldest) _memoryCache.delete(oldest[0]);
+        }
+        log("system-transform: memory cache miss", { cacheKey });
+      }
 
       if (searchResults.length > 0) {
         memoryBlock = buildMemoryBlock(searchResults, tokenBudget);

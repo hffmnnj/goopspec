@@ -1,4 +1,4 @@
-import { describe, expect, it, spyOn } from "bun:test";
+import { afterEach, describe, expect, it, spyOn } from "bun:test";
 import type { SdkModel } from "../core/sdk-compat.js";
 import type { MemoryEntry } from "../core/types.js";
 import {
@@ -9,6 +9,8 @@ import {
 import {
   buildMemoryBlock,
   buildStateBlock,
+  clearDocTypeCache,
+  clearMemoryCache,
   createSystemTransformHook,
   estimateTokens,
   systemTransformFactory,
@@ -153,6 +155,11 @@ describe("buildMemoryBlock", () => {
 // ---------------------------------------------------------------------------
 
 describe("createSystemTransformHook", () => {
+  afterEach(() => {
+    clearMemoryCache();
+    clearDocTypeCache();
+  });
+
   it("injects state block into output.system", async () => {
     const { testDir, cleanup } = setupTestEnvironment("sys-transform-state");
     try {
