@@ -1,6 +1,7 @@
 import { describe, expect, it } from "bun:test";
 
 import { GoopSpecDB } from "./index.js";
+import { CURRENT_SCHEMA_VERSION } from "./migrations.js";
 
 // ---------------------------------------------------------------------------
 // All tests use in-memory SQLite — no temp files needed.
@@ -48,9 +49,9 @@ describe("GoopSpecDB", () => {
       db.close();
     });
 
-    it("getSchemaVersion() returns 1", () => {
+    it("getSchemaVersion() returns current version", () => {
       const db = new GoopSpecDB(":memory:");
-      expect(db.getSchemaVersion()).toBe(1);
+      expect(db.getSchemaVersion()).toBe(CURRENT_SCHEMA_VERSION);
       db.close();
     });
   });
@@ -421,22 +422,21 @@ describe("GoopSpecDB", () => {
   describe("migration", () => {
     it("getSchemaVersion() returns current version after init", () => {
       const db = new GoopSpecDB(":memory:");
-      expect(db.getSchemaVersion()).toBe(1);
+      expect(db.getSchemaVersion()).toBe(CURRENT_SCHEMA_VERSION);
       db.close();
     });
 
     it("runMigrations is idempotent", async () => {
       const db = new GoopSpecDB(":memory:");
-      // Constructor already ran migrations. Creating a second instance
-      // on the same DB would re-run them. Instead, verify version is still 1.
-      expect(db.getSchemaVersion()).toBe(1);
+      // Constructor already ran migrations. Re-running should not change the version.
+      expect(db.getSchemaVersion()).toBe(CURRENT_SCHEMA_VERSION);
 
       // Manually re-run migrations via the internal DB handle
       const { runMigrations } = await import("./migrations.js");
       // biome-ignore lint/complexity/useLiteralKeys: accessing private property for test
       runMigrations(db["db"]);
 
-      expect(db.getSchemaVersion()).toBe(1);
+      expect(db.getSchemaVersion()).toBe(CURRENT_SCHEMA_VERSION);
       db.close();
     });
   });
