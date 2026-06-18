@@ -119,10 +119,10 @@ Optional at natural pauses or complex task boundaries.
 ### Command to Run
 `/goop-[command]`
 
-### Files to Read First
-1. `.goopspec/<workflowId>/SPEC.md`
-2. `.goopspec/<workflowId>/BLUEPRINT.md`
-3. `.goopspec/<workflowId>/CHRONICLE.md`
+### Documents to Read First
+1. `goop_read_db({ doc_type: "spec" })`
+2. `goop_read_db({ doc_type: "blueprint" })`
+3. `goop_read_db({ doc_type: "chronicle" })`
 
 ### Context Summary
 [2-4 sentences: decisions, patterns, gotchas]
@@ -146,14 +146,15 @@ Optional at natural pauses or complex task boundaries.
 - Include tasks completed, key decisions with rationale, exact workflow position, files modified, and explicit next steps.
 - Do not include full file contents or detailed implementation code.
 - Keep the context summary to 2-4 sentences max.
-- Update `CHRONICLE.md` before generating `HANDOFF.md`.
+- Update chronicle via `goop_write_db({ doc_type: "chronicle", content: "..." })` before generating `HANDOFF.md`.
+- Write `HANDOFF.md` via `goop_write_db({ doc_type: "handoff", content: "..." })`.
 - Persist a memory entry for the handoff context.
 
 ### Orchestrator Responsibilities
 
 - Detect handoff points.
-- Generate `HANDOFF.md`.
-- Update `CHRONICLE.md`.
+- Generate handoff via `goop_write_db({ doc_type: "handoff", content: "..." })`.
+- Update chronicle via `goop_write_db({ doc_type: "chronicle", content: "..." })`.
 - Suggest starting a new session when appropriate.
 
 ### Subagent Responsibilities

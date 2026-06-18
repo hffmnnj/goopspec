@@ -8,7 +8,7 @@
  * @module test-utils
  */
 
-import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -33,6 +33,7 @@ import type {
   StateManager,
   WorkflowState,
 } from "./core/types.js";
+import { GoopSpecDB } from "./features/db/index.js";
 import { createSessionManager } from "./features/session/index.js";
 
 // Re-export types that tests commonly need alongside the factories.
@@ -49,6 +50,7 @@ export type { GoopState, MemoryEntry, PluginContext, StateManager, ToolContext, 
  */
 export function setupTestEnvironment(prefix = "goopspec-test"): {
   testDir: string;
+  db: GoopSpecDB;
   cleanup: () => void;
 } {
   const testDir = join(tmpdir(), `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2)}`);
@@ -57,19 +59,14 @@ export function setupTestEnvironment(prefix = "goopspec-test"): {
   mkdirSync(goopspecDir, { recursive: true });
   mkdirSync(join(goopspecDir, "default"), { recursive: true });
 
-  // Scaffold a minimal v2 state.json
-  const state: GoopState = {
-    version: STATE_SCHEMA_VERSION,
-    activeWorkflowId: "default",
-    workflows: {
-      default: createDefaultWorkflowState(),
-    },
-  };
-  writeFileSync(join(goopspecDir, "state.json"), JSON.stringify(state, null, 2), "utf-8");
+  // Create an in-memory DB for tests
+  const db = new GoopSpecDB(":memory:");
 
   return {
     testDir,
+    db,
     cleanup: () => {
+      db.close();
       if (existsSync(testDir)) {
         rmSync(testDir, { recursive: true, force: true });
       }
@@ -413,6 +410,7 @@ export function createMockResolver(resources: ResolvedResource[] = []): Resource
 
 export interface MockPluginContextOptions {
   testDir?: string;
+  db?: GoopSpecDB;
   state?: Partial<GoopState>;
   memories?: MemoryEntry[];
   resources?: ResolvedResource[];
@@ -428,6 +426,7 @@ export interface MockPluginContextOptions {
  */
 export function createMockPluginContext(opts: MockPluginContextOptions = {}): PluginContext {
   const dir = opts.testDir ?? join(tmpdir(), `mock-ctx-${Date.now()}`);
+  const db = opts.db ?? new GoopSpecDB(":memory:");
 
   const sdk: SdkEssentials = {
     client: {} as SdkEssentials["client"],
@@ -449,6 +448,7 @@ export function createMockPluginContext(opts: MockPluginContextOptions = {}): Pl
 
   return {
     sdk,
+    db,
     stateManager: createMockStateManager(opts.state),
     memory: createMockMemory(opts.memories ?? []),
     resolver: createMockResolver(opts.resources ?? []),

@@ -29,15 +29,21 @@ packages/
 packages/opencode-plugin/src/
 ├── core/                  # Types, config, resolver
 ├── tools/                 # MCP tool implementations
+│   ├── goop-read-db/      # Read workflow docs from GoopSpecDB
+│   ├── goop-write-db/     # Write/update workflow docs; auto-renders markdown sidecar
+│   ├── goop-save-note/    # Save a Field Note to the global knowledge base
+│   ├── goop-search-notes/ # Search Field Notes with FTS + tag filtering
+│   └── ...                # Other tool directories
 ├── hooks/                 # OpenCode plugin hooks
-├── features/              # Feature modules (memory, state, routing, model-routing)
+├── features/              # Feature modules (memory, state, db, routing, model-routing)
+│   └── db/                # GoopSpecDB — unified SQLite database (schema, migrations, types)
 ├── shared/                # Utilities (logger, paths)
 ├── test-utils.ts          # Shared test utilities
 └── index.ts               # Plugin entry point
 
 agents/                    # 13 agent markdown definitions
 commands/                  # 9 slash command definitions
-references/                # 12 consolidated reference documents
+references/                # 13 consolidated reference documents (incl. field-notes-protocol)
 templates/                 # File templates
 ```
 
@@ -192,11 +198,13 @@ export function createMyHook(ctx: PluginContext) {
 
 ## Gotchas (Auto)
 
-<!-- Last verified: 2026-06-17 — GoopSpec 1.0.0 plugin-only structure -->
+<!-- Last verified: 2026-06-18 — GoopSpec 1.0.0 plugin-only structure -->
 
 - **Bun `mock.module()` replaces the entire module globally.** When mocking `../../features/worktree/git.js` in a tool test, spread the real module into the mock (`const real = await import(...); mock.module(..., () => ({ ...real, fn: mockFn }))`) — otherwise named exports disappear and other tests in the same run fail with "Export named 'X' not found".
 
-- **State schema v2 required for multi-workflow.** `state.json` must be `"version": 2` with a `workflows` map. v1 files are auto-migrated on first write with a `.backup` copy. The `"default"` workflow key maps to `.goopspec/` root (backward compat); all other workflow IDs get their own subdirectory.
+- **`goopspec.db` is the source of truth for workflow state.** The unified SQLite database at `.goopspec/goopspec.db` stores workflows, events, documents, and field notes. `state.json` is auto-migrated to DB on first use; `.backup` kept for safety. Markdown files under `.goopspec/<workflowId>/` are rendered sidecars, not primary storage.
+
+- **`goop_read_db({ doc_types: [...] })` batch form preferred.** In agent boot sequences, use the batch form to load multiple docs in one call instead of multiple singular `goop_read_db({ doc_type: "..." })` calls. Example: `goop_read_db({ doc_types: ["spec", "blueprint", "chronicle"] })`.
 
 - **Workflow-scoped docs live under `.goopspec/<workflowId>/`.** When writing SPEC.md, BLUEPRINT.md, CHRONICLE.md, ADL.md, HANDOFF.md, REQUIREMENTS.md, RESEARCH.md — always use `getWorkflowDocPath(projectDir, workflowId, filename)` from `src/shared/paths.ts`. Never write these to `.goopspec/` root for non-default workflows.
 
@@ -204,4 +212,4 @@ export function createMyHook(ctx: PluginContext) {
 
 - **Memory is in-process via `bun:sqlite`.** The memory feature runs inside the plugin process using SQLite with FTS5 + LIKE fallback. There is no separate worker process and no `port-37777` service.
 
-- **Knowledge lives in `references/`, not `skills/`.** GoopSpec 1.0.0 removed the skills feature. Use `goop_reference` to load the 12 consolidated reference documents.
+- **Knowledge lives in `references/`, not `skills/`.** GoopSpec 1.0.0 removed the skills feature. Use `goop_reference` to load the 13 consolidated reference documents (including `field-notes-protocol`).

@@ -11,6 +11,7 @@ import { join } from "node:path";
 
 import type { MemoryManager } from "../../core/types.js";
 import { createMockMemory, setupTestEnvironment } from "../../test-utils.js";
+import { GoopSpecDB } from "../db/index.js";
 import { archiveWorkflow, extractLearnings, generateRetrospective, listArchived } from "./index.js";
 
 // ---------------------------------------------------------------------------
@@ -102,6 +103,12 @@ describe("archiveWorkflow", () => {
   it("copies docs for default workflow without destroying root .goopspec/", async () => {
     scaffoldWorkflow(testDir, "default");
 
+    // Create goopspec.db so we can verify archiving doesn't destroy root files
+    const dbPath = join(testDir, ".goopspec", "goopspec.db");
+    const db = new GoopSpecDB(dbPath);
+    db.upsertWorkflow("_meta", { activeWorkflowId: "default" });
+    db.close();
+
     const entry = await archiveWorkflow({
       projectDir: testDir,
       workflowId: "default",
@@ -110,8 +117,8 @@ describe("archiveWorkflow", () => {
     // Archive should exist
     expect(existsSync(join(entry.path, "SPEC.md"))).toBe(true);
 
-    // Original .goopspec/ root should still have state.json (not destroyed)
-    expect(existsSync(join(testDir, ".goopspec", "state.json"))).toBe(true);
+    // Original .goopspec/ root should still have goopspec.db (not destroyed)
+    expect(existsSync(join(testDir, ".goopspec", "goopspec.db"))).toBe(true);
   });
 
   it("uses provided retrospective content instead of generating template", async () => {

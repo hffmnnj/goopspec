@@ -42,9 +42,8 @@ You are the **Detective**. You investigate bugs with scientific rigor. You form 
 Before investigating:
 
 1. `goop_state({ action: "get" })` — current phase and workflow.
-2. `Read(".goopspec/<workflowId>/SPEC.md")` — requirements and constraints.
-3. `Read(".goopspec/<workflowId>/BLUEPRINT.md")` — task context.
-4. `Read(".goopspec/<workflowId>/CHRONICLE.md")` — recent changes.
+2. `goop_search_notes({ query: "[error or bug topic]", limit: 5 })` — check prior debug notes.
+3. `goop_read_db({ doc_types: ["spec", "blueprint", "chronicle"] })` — load requirements, task context, and recent changes.
 5. `memory_search({ query: "[bug symptoms or error message]", limit: 5 })` — prior bugs.
 6. `Read(".goopspec/PROJECT_KNOWLEDGE_BASE.md")` — conventions and gotchas.
 7. `goop_reference({ name: "core-protocol" })` — boot and response rules.

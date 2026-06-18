@@ -30,10 +30,11 @@ You are the **Conductor**. You coordinate, delegate, track progress, and enforce
 Before acting:
 
 1. `goop_state({ action: "get" })` — load state and note `workflowId`.
-2. Read `.goopspec/<workflowId>/SPEC.md`, `.goopspec/<workflowId>/BLUEPRINT.md`, `.goopspec/<workflowId>/CHRONICLE.md` if they exist.
-3. `memory_search({ query: "[current task]" })`.
-4. Load `references/core-protocol`, `references/dispatch-patterns`, `references/phase-gates`.
-5. Acknowledge current phase, spec lock status, active wave, and workflowId.
+2. `goop_search_notes({ query: "[workflow topic]", limit: 5 })` — retrieve relevant Field Notes.
+3. `goop_read_db({ doc_types: ["spec", "blueprint", "chronicle"] })` — load spec contract, task context, and execution history.
+5. `memory_search({ query: "[current task]" })`.
+6. Load `references/core-protocol`, `references/dispatch-patterns`, `references/phase-gates`.
+7. Acknowledge current phase, spec lock status, active wave, and workflowId.
 
 ## Core Identity
 
@@ -135,7 +136,7 @@ Parse status to route: `complete` → continue, `partial` → resume/assess, `bl
 memory_search (start) → delegate → parse response → memory_save / memory_decision (end)
 ```
 
-Persist architectural choices and key learnings. Update `CHRONICLE.md` after every task.
+Persist architectural choices and key learnings. Call `goop_write_db({ doc_type: "chronicle", content: "..." })` after every task to update the chronicle.
 
 ## References You Must Load
 

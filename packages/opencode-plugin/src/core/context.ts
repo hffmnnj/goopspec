@@ -9,12 +9,13 @@
 import type { PluginInput } from "./sdk-compat.js";
 import type { PluginContext, SessionInfo } from "./types.js";
 
+import { GoopSpecDB } from "../features/db/index.js";
 import { SqliteMemoryManager } from "../features/memory/index.js";
 import { createResourceResolver, defaultReferencePaths } from "../features/resolver/index.js";
 import { createSessionManager } from "../features/session/index.js";
 import { createStateManager } from "../features/state-manager/index.js";
 import { log, logError } from "../shared/logger.js";
-import { getMemoryDbPath, getPackageRoot } from "../shared/paths.js";
+import { getDbPath, getMemoryDbPath, getPackageRoot } from "../shared/paths.js";
 
 /**
  * Build a complete PluginContext from the SDK's PluginInput.
@@ -40,8 +41,12 @@ export async function createPluginContext(input: PluginInput): Promise<PluginCon
     $: input.$,
   };
 
+  // -- GoopSpec database ----------------------------------------------------
+  const db = new GoopSpecDB(getDbPath(directory));
+  log("GoopSpec database initialised");
+
   // -- State manager -------------------------------------------------------
-  const stateManager = createStateManager({ projectDir: directory });
+  const stateManager = createStateManager({ projectDir: directory, db });
   log("State manager initialised");
 
   // -- Memory manager ------------------------------------------------------
@@ -76,6 +81,7 @@ export async function createPluginContext(input: PluginInput): Promise<PluginCon
 
   return {
     sdk,
+    db,
     stateManager,
     memory,
     resolver,

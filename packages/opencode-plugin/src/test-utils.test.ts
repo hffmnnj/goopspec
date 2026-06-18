@@ -1,8 +1,7 @@
 import { afterEach, describe, expect, it } from "bun:test";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { join } from "node:path";
 
-import { STATE_SCHEMA_VERSION } from "./core/constants.js";
 import type { ToolContext } from "./core/sdk-compat.js";
 import type {
   GoopState,
@@ -40,20 +39,15 @@ describe("setupTestEnvironment", () => {
     expect(existsSync(env.testDir)).toBe(true);
     expect(existsSync(join(env.testDir, ".goopspec"))).toBe(true);
     expect(existsSync(join(env.testDir, ".goopspec", "default"))).toBe(true);
-    expect(existsSync(join(env.testDir, ".goopspec", "state.json"))).toBe(true);
   });
 
-  it("scaffolds a valid v2 state.json", () => {
+  it("provides an in-memory GoopSpecDB instance", () => {
     const env = setupTestEnvironment("state-check");
     cleanup = env.cleanup;
 
-    const raw = readFileSync(join(env.testDir, ".goopspec", "state.json"), "utf-8");
-    const state: GoopState = JSON.parse(raw);
-
-    expect(state.version).toBe(STATE_SCHEMA_VERSION);
-    expect(state.activeWorkflowId).toBe("default");
-    expect(state.workflows.default).toBeDefined();
-    expect(state.workflows.default.phase).toBe("idle");
+    expect(env.db).toBeDefined();
+    expect(typeof env.db.getAllWorkflows).toBe("function");
+    expect(typeof env.db.upsertWorkflow).toBe("function");
   });
 
   it("cleanup removes the directory", () => {

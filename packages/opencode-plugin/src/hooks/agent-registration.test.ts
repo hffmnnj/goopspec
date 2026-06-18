@@ -72,9 +72,7 @@ describe("createAgentRegistrationHook", () => {
       // The orchestrator should use the override model
       expect(config.agent?.["goop-orchestrator"]?.model).toBe("anthropic/claude-test-override");
       // Other agents should keep their frontmatter defaults (not the override)
-      expect(config.agent?.["goop-executor-low"]?.model).not.toBe(
-        "anthropic/claude-test-override",
-      );
+      expect(config.agent?.["goop-executor-low"]?.model).not.toBe("anthropic/claude-test-override");
     } finally {
       cleanup();
     }
@@ -112,7 +110,7 @@ describe("createAgentRegistrationHook", () => {
       expect(config.agent?.["goop-executor-medium"]?.model).toBe("anthropic/claude-default-test");
     } finally {
       if (origGlobalPath === undefined) {
-        delete process.env.GOOPSPEC_GLOBAL_CONFIG_PATH;
+        Reflect.deleteProperty(process.env, "GOOPSPEC_GLOBAL_CONFIG_PATH");
       } else {
         process.env.GOOPSPEC_GLOBAL_CONFIG_PATH = origGlobalPath;
       }
@@ -165,7 +163,7 @@ describe("createAgentRegistrationHook", () => {
       expect(config.agent?.["goop-orchestrator"]?.model).toBe("anthropic/claude-opus-4-6");
     } finally {
       if (origGlobalPath === undefined) {
-        delete process.env.GOOPSPEC_GLOBAL_CONFIG_PATH;
+        Reflect.deleteProperty(process.env, "GOOPSPEC_GLOBAL_CONFIG_PATH");
       } else {
         process.env.GOOPSPEC_GLOBAL_CONFIG_PATH = origGlobalPath;
       }

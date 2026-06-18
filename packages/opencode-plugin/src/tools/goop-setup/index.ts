@@ -34,7 +34,7 @@ function formatDetect(result: ReturnType<typeof detect>): string {
     "## Directory Structure",
     "",
     `- **.goopspec/**: ${result.hasGoopspecDir ? "Found" : "Not found"}`,
-    `- **state.json**: ${result.hasStateFile ? "Found" : "Not found"}`,
+    `- **goopspec.db**: ${result.hasStateFile ? "Found" : "Not found"}`,
     `- **config.json**: ${result.hasConfigFile ? "Found" : "Not found"}`,
     `- **package.json**: ${result.hasPackageJson ? "Found" : "Not found"}`,
     "",
