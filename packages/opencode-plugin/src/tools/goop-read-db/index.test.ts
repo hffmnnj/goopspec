@@ -59,10 +59,7 @@ describe("goop_read_db tool", () => {
     ctx.db.upsertDocument("custom-wf", "blueprint", "# Custom Blueprint");
 
     const tool = createGoopReadDbTool(ctx);
-    const result = await tool.execute(
-      { doc_type: "blueprint", workflow_id: "custom-wf" },
-      toolCtx,
-    );
+    const result = await tool.execute({ doc_type: "blueprint", workflow_id: "custom-wf" }, toolCtx);
 
     expect(result).toBe("# Custom Blueprint");
   });
@@ -84,10 +81,7 @@ describe("goop_read_db tool", () => {
     ctx.db.upsertDocument("default", "blueprint", "# Blueprint Content");
 
     const tool = createGoopReadDbTool(ctx);
-    const result = await tool.execute(
-      { doc_types: ["spec", "blueprint"] },
-      toolCtx,
-    );
+    const result = await tool.execute({ doc_types: ["spec", "blueprint"] }, toolCtx);
 
     expect(result).toContain("## spec");
     expect(result).toContain("# Spec Content");
@@ -101,10 +95,7 @@ describe("goop_read_db tool", () => {
     // chronicle is NOT created
 
     const tool = createGoopReadDbTool(ctx);
-    const result = await tool.execute(
-      { doc_types: ["spec", "chronicle"] },
-      toolCtx,
-    );
+    const result = await tool.execute({ doc_types: ["spec", "chronicle"] }, toolCtx);
 
     expect(result).toContain("## spec");
     expect(result).toContain("# Spec Content");
@@ -114,10 +105,7 @@ describe("goop_read_db tool", () => {
 
   it("batch mode: validates doc_type values", async () => {
     const tool = createGoopReadDbTool(ctx);
-    const result = await tool.execute(
-      { doc_types: ["spec", "bogus_type"] },
-      toolCtx,
-    );
+    const result = await tool.execute({ doc_types: ["spec", "bogus_type"] }, toolCtx);
 
     expect(result).toContain("Unknown doc_type(s)");
     expect(result).toContain("bogus_type");

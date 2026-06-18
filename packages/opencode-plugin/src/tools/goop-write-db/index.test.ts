@@ -1,6 +1,6 @@
+import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 
 import type { PluginContext, ToolContext } from "../../test-utils.js";
 import {
@@ -32,27 +32,21 @@ describe("goop_write_db tool", () => {
 
   it("writes a new document to DB", async () => {
     const tool = createGoopWriteDbTool(ctx);
-    await tool.execute(
-      { doc_type: "spec", content: "# New Spec" },
-      toolCtx,
-    );
+    await tool.execute({ doc_type: "spec", content: "# New Spec" }, toolCtx);
 
     const doc = ctx.db.getDocument("default", "spec");
     expect(doc).not.toBeNull();
-    expect(doc!.content).toBe("# New Spec");
+    expect(doc?.content).toBe("# New Spec");
   });
 
   it("updates an existing document", async () => {
     ctx.db.upsertDocument("default", "spec", "# Version 1");
 
     const tool = createGoopWriteDbTool(ctx);
-    await tool.execute(
-      { doc_type: "spec", content: "# Version 2" },
-      toolCtx,
-    );
+    await tool.execute({ doc_type: "spec", content: "# Version 2" }, toolCtx);
 
     const doc = ctx.db.getDocument("default", "spec");
-    expect(doc!.content).toBe("# Version 2");
+    expect(doc?.content).toBe("# Version 2");
   });
 
   // -----------------------------------------------------------------------
@@ -61,10 +55,7 @@ describe("goop_write_db tool", () => {
 
   it("renders a markdown sidecar file in the correct directory", async () => {
     const tool = createGoopWriteDbTool(ctx);
-    await tool.execute(
-      { doc_type: "blueprint", content: "# Blueprint Body" },
-      toolCtx,
-    );
+    await tool.execute({ doc_type: "blueprint", content: "# Blueprint Body" }, toolCtx);
 
     const sidecarPath = join(testDir, ".goopspec", "default", "BLUEPRINT.md");
     expect(existsSync(sidecarPath)).toBe(true);
@@ -79,10 +70,7 @@ describe("goop_write_db tool", () => {
 
   it("appends a doc_write event to the events table", async () => {
     const tool = createGoopWriteDbTool(ctx);
-    await tool.execute(
-      { doc_type: "chronicle", content: "# Chronicle" },
-      toolCtx,
-    );
+    await tool.execute({ doc_type: "chronicle", content: "# Chronicle" }, toolCtx);
 
     const events = ctx.db.getEvents("default", "doc_write");
     expect(events.length).toBe(1);
@@ -99,10 +87,7 @@ describe("goop_write_db tool", () => {
 
   it("returns confirmation string with doc_type and workflow_id", async () => {
     const tool = createGoopWriteDbTool(ctx);
-    const result = await tool.execute(
-      { doc_type: "spec", content: "# Spec" },
-      toolCtx,
-    );
+    const result = await tool.execute({ doc_type: "spec", content: "# Spec" }, toolCtx);
 
     expect(result).toContain("Written spec");
     expect(result).toContain("default");
@@ -115,15 +100,12 @@ describe("goop_write_db tool", () => {
 
   it("uses active workflow_id when none provided", async () => {
     const tool = createGoopWriteDbTool(ctx);
-    await tool.execute(
-      { doc_type: "adl", content: "# ADL" },
-      toolCtx,
-    );
+    await tool.execute({ doc_type: "adl", content: "# ADL" }, toolCtx);
 
     // Active workflow is "default"
     const doc = ctx.db.getDocument("default", "adl");
     expect(doc).not.toBeNull();
-    expect(doc!.content).toBe("# ADL");
+    expect(doc?.content).toBe("# ADL");
   });
 
   it("uses provided workflow_id override", async () => {
@@ -137,6 +119,6 @@ describe("goop_write_db tool", () => {
 
     const doc = ctx.db.getDocument("custom-wf", "spec");
     expect(doc).not.toBeNull();
-    expect(doc!.content).toBe("# Custom Spec");
+    expect(doc?.content).toBe("# Custom Spec");
   });
 });

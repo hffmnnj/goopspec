@@ -91,10 +91,7 @@ describe("goop_search_notes tool", () => {
 
   it("filters by project_id", async () => {
     const tool = createGoopSearchNotesTool(ctx);
-    const result = await tool.execute(
-      { query: "patterns", project_id: "other-project" },
-      toolCtx,
-    );
+    const result = await tool.execute({ query: "patterns", project_id: "other-project" }, toolCtx);
 
     expect(result).toContain("Bun test runner patterns");
     expect(result).not.toContain("React hooks");
@@ -102,10 +99,7 @@ describe("goop_search_notes tool", () => {
 
   it("filters by workflow_id", async () => {
     const tool = createGoopSearchNotesTool(ctx);
-    const result = await tool.execute(
-      { query: "performance", workflow_id: "wf-alpha" },
-      toolCtx,
-    );
+    const result = await tool.execute({ query: "performance", workflow_id: "wf-alpha" }, toolCtx);
 
     expect(result).toContain("SQLite WAL mode");
     expect(result).not.toContain("React hooks");
@@ -117,10 +111,7 @@ describe("goop_search_notes tool", () => {
 
   it("respects limit parameter", async () => {
     const tool = createGoopSearchNotesTool(ctx);
-    const result = await tool.execute(
-      { query: "performance", limit: 1 },
-      toolCtx,
-    );
+    const result = await tool.execute({ query: "performance", limit: 1 }, toolCtx);
 
     expect(result).toContain("1 result");
   });
@@ -128,10 +119,7 @@ describe("goop_search_notes tool", () => {
   it("caps limit at 50", async () => {
     const tool = createGoopSearchNotesTool(ctx);
     // Even with limit=100, should not crash
-    const result = await tool.execute(
-      { query: "performance", limit: 100 },
-      toolCtx,
-    );
+    const result = await tool.execute({ query: "performance", limit: 100 }, toolCtx);
 
     // Should return results without error
     expect(result).toContain("Field Notes");
@@ -143,10 +131,7 @@ describe("goop_search_notes tool", () => {
 
   it("empty query with tags returns results", async () => {
     const tool = createGoopSearchNotesTool(ctx);
-    const result = await tool.execute(
-      { query: "", tags: ["sqlite"] },
-      toolCtx,
-    );
+    const result = await tool.execute({ query: "", tags: ["sqlite"] }, toolCtx);
 
     expect(result).toContain("Field Notes");
     expect(result).toContain("SQLite WAL mode");

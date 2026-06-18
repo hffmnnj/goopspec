@@ -49,14 +49,8 @@ export function createGoopSaveNoteTool(ctx: PluginContext): ToolDefinition {
       source_agent: tool.schema
         .string()
         .describe('Which agent is saving (e.g. "goop-researcher", "goop-explorer")'),
-      importance: tool.schema
-        .number()
-        .optional()
-        .describe("Importance level 1-10 (default 5)"),
-      workflow_id: tool.schema
-        .string()
-        .optional()
-        .describe("Originating workflow (optional)"),
+      importance: tool.schema.number().optional().describe("Importance level 1-10 (default 5)"),
+      workflow_id: tool.schema.string().optional().describe("Originating workflow (optional)"),
       project_id: tool.schema
         .string()
         .optional()

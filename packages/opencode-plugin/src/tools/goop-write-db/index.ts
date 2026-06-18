@@ -10,11 +10,11 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 
-import { DOC_TYPES } from "../../features/db/types.js";
-import type { DocType } from "../../features/db/types.js";
 import { tool } from "../../core/sdk-compat.js";
 import type { ToolContext, ToolDefinition } from "../../core/sdk-compat.js";
 import type { PluginContext } from "../../core/types.js";
+import { DOC_TYPES } from "../../features/db/types.js";
+import type { DocType } from "../../features/db/types.js";
 import { getWorkflowDocPath } from "../../shared/paths.js";
 
 // ---------------------------------------------------------------------------
@@ -61,8 +61,7 @@ export function createGoopWriteDbTool(ctx: PluginContext): ToolDefinition {
       _context: ToolContext,
     ): Promise<string> {
       try {
-        const workflowId =
-          args.workflow_id ?? ctx.stateManager.getState().activeWorkflowId;
+        const workflowId = args.workflow_id ?? ctx.stateManager.getState().activeWorkflowId;
 
         // Persist to DB
         ctx.db.upsertDocument(workflowId, args.doc_type, args.content);
@@ -75,11 +74,7 @@ export function createGoopWriteDbTool(ctx: PluginContext): ToolDefinition {
 
         // Render sidecar markdown file
         const filename = docTypeToFilename(args.doc_type);
-        const sidecarPath = getWorkflowDocPath(
-          ctx.sdk.directory,
-          workflowId,
-          filename,
-        );
+        const sidecarPath = getWorkflowDocPath(ctx.sdk.directory, workflowId, filename);
         mkdirSync(dirname(sidecarPath), { recursive: true });
         writeFileSync(sidecarPath, args.content, "utf-8");
 

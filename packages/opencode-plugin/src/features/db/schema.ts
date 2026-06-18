@@ -62,7 +62,9 @@ function createEventsTable(db: Database): void {
     )
   `);
 
-  db.run("CREATE INDEX IF NOT EXISTS idx_events_workflow_created ON events(workflow_id, created_at)");
+  db.run(
+    "CREATE INDEX IF NOT EXISTS idx_events_workflow_created ON events(workflow_id, created_at)",
+  );
   db.run("CREATE INDEX IF NOT EXISTS idx_events_type_created ON events(event_type, created_at)");
 }
 
@@ -79,7 +81,9 @@ function createDocumentsTable(db: Database): void {
     )
   `);
 
-  db.run("CREATE INDEX IF NOT EXISTS idx_documents_workflow_type ON documents(workflow_id, doc_type)");
+  db.run(
+    "CREATE INDEX IF NOT EXISTS idx_documents_workflow_type ON documents(workflow_id, doc_type)",
+  );
 }
 
 function createFieldNotesTable(db: Database): void {
@@ -97,8 +101,12 @@ function createFieldNotesTable(db: Database): void {
     )
   `);
 
-  db.run("CREATE INDEX IF NOT EXISTS idx_field_notes_project_created ON field_notes(project_id, created_at)");
-  db.run("CREATE INDEX IF NOT EXISTS idx_field_notes_workflow_created ON field_notes(workflow_id, created_at)");
+  db.run(
+    "CREATE INDEX IF NOT EXISTS idx_field_notes_project_created ON field_notes(project_id, created_at)",
+  );
+  db.run(
+    "CREATE INDEX IF NOT EXISTS idx_field_notes_workflow_created ON field_notes(workflow_id, created_at)",
+  );
 }
 
 function createSchemaVersionTable(db: Database): void {

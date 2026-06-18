@@ -45,9 +45,7 @@ export function createGoopSearchNotesTool(ctx: PluginContext): ToolDefinition {
       "Search Field Notes with hybrid FTS5 + tag matching. " +
       "Supports scoping by project, workflow, and tags.",
     args: {
-      query: tool.schema
-        .string()
-        .describe("Search query (can be empty string if tags provided)"),
+      query: tool.schema.string().describe("Search query (can be empty string if tags provided)"),
       tags: tool.schema
         .array(tool.schema.string())
         .optional()
@@ -56,14 +54,8 @@ export function createGoopSearchNotesTool(ctx: PluginContext): ToolDefinition {
         .string()
         .optional()
         .describe("Scope to project (optional; omit for global search)"),
-      workflow_id: tool.schema
-        .string()
-        .optional()
-        .describe("Scope to workflow (optional)"),
-      limit: tool.schema
-        .number()
-        .optional()
-        .describe("Max results (default 10, max 50)"),
+      workflow_id: tool.schema.string().optional().describe("Scope to workflow (optional)"),
+      limit: tool.schema.number().optional().describe("Max results (default 10, max 50)"),
     },
     async execute(
       args: {
@@ -93,7 +85,7 @@ export function createGoopSearchNotesTool(ctx: PluginContext): ToolDefinition {
         const header = `## Field Notes (${results.length} result${results.length === 1 ? "" : "s"})\n`;
         const formatted = results.map(formatNote).join("\n");
 
-        return header + "\n" + formatted;
+        return `${header}\n${formatted}`;
       } catch (error: unknown) {
         const message = error instanceof Error ? error.message : String(error);
         return `Error searching Field Notes: ${message}`;

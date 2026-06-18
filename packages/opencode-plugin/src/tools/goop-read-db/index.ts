@@ -8,11 +8,11 @@
  * @module tools/goop-read-db
  */
 
-import { DOC_TYPES } from "../../features/db/types.js";
-import type { DocType } from "../../features/db/types.js";
 import { tool } from "../../core/sdk-compat.js";
 import type { ToolContext, ToolDefinition } from "../../core/sdk-compat.js";
 import type { PluginContext } from "../../core/types.js";
+import { DOC_TYPES } from "../../features/db/types.js";
+import type { DocType } from "../../features/db/types.js";
 
 // ---------------------------------------------------------------------------
 // Tool factory
@@ -24,7 +24,7 @@ export function createGoopReadDbTool(ctx: PluginContext): ToolDefinition {
       "Read workflow documents from the GoopSpecDB.\n\n" +
       "Args:\n" +
       "- doc_type: Single document type (spec, blueprint, chronicle, adl, handoff, requirements, research)\n" +
-      "- doc_types: Array of document types for batch loading (e.g. [\"spec\", \"blueprint\"])\n" +
+      '- doc_types: Array of document types for batch loading (e.g. ["spec", "blueprint"])\n' +
       "- workflow_id: Optional workflow ID (defaults to active workflow)\n\n" +
       "Provide either doc_type (single) or doc_types (batch). " +
       "Batch mode returns each document under a ## heading separated by ---.",
@@ -42,8 +42,7 @@ export function createGoopReadDbTool(ctx: PluginContext): ToolDefinition {
       _context: ToolContext,
     ): Promise<string> {
       try {
-        const workflowId =
-          args.workflow_id ?? ctx.stateManager.getState().activeWorkflowId;
+        const workflowId = args.workflow_id ?? ctx.stateManager.getState().activeWorkflowId;
 
         // Determine which types to load
         const hasBatch = args.doc_types && args.doc_types.length > 0;
@@ -51,10 +50,8 @@ export function createGoopReadDbTool(ctx: PluginContext): ToolDefinition {
 
         if (hasBatch) {
           // Batch mode — validate all entries
-          const requestedTypes = args.doc_types!;
-          const invalid = requestedTypes.filter(
-            (t) => !DOC_TYPES.includes(t as DocType),
-          );
+          const requestedTypes = args.doc_types ?? [];
+          const invalid = requestedTypes.filter((t) => !DOC_TYPES.includes(t as DocType));
           if (invalid.length > 0) {
             return `Unknown doc_type(s): ${invalid.join(", ")}. Valid types: ${DOC_TYPES.join(", ")}`;
           }
@@ -63,8 +60,7 @@ export function createGoopReadDbTool(ctx: PluginContext): ToolDefinition {
           const sections = requestedTypes.map((docType) => {
             const doc = ctx.db.getDocument(workflowId, docType as DocType);
             const content =
-              doc?.content ??
-              `_(No ${docType} document found. Use goop_write_db to create it.)_`;
+              doc?.content ?? `_(No ${docType} document found. Use goop_write_db to create it.)_`;
             return `## ${docType}\n\n${content}`;
           });
 
@@ -77,10 +73,7 @@ export function createGoopReadDbTool(ctx: PluginContext): ToolDefinition {
             return `Unknown doc_type: ${args.doc_type}. Valid types: ${DOC_TYPES.join(", ")}`;
           }
 
-          const doc = ctx.db.getDocument(
-            workflowId,
-            args.doc_type as DocType,
-          );
+          const doc = ctx.db.getDocument(workflowId, args.doc_type as DocType);
 
           if (doc) {
             return doc.content;
