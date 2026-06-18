@@ -9,6 +9,7 @@
  */
 
 import type { PluginInput } from "@opencode-ai/plugin";
+import type { GoopSpecDB } from "../features/db/index.js";
 import type { SessionManager } from "../features/session/index.js";
 import type {
   AgentRole,
@@ -58,6 +59,7 @@ export interface SdkEssentials {
  */
 export interface PluginContext {
   readonly sdk: SdkEssentials;
+  readonly db: GoopSpecDB;
   readonly stateManager: StateManager;
   readonly memory: MemoryManager;
   readonly resolver: ResourceResolver;

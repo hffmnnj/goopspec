@@ -1,10 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
-import { existsSync, readFileSync, readdirSync, unlinkSync, writeFileSync } from "node:fs";
+import { existsSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { STATE_SCHEMA_VERSION } from "../../core/constants.js";
 import type { GoopState } from "../../core/types.js";
 import { setupTestEnvironment } from "../../test-utils.js";
+import type { GoopSpecDB } from "../db/index.js";
 import { createStateManager } from "./index.js";
 import { createDefaultWorkflowState } from "./schema.js";
 
@@ -13,10 +14,15 @@ import { createDefaultWorkflowState } from "./schema.js";
 // ---------------------------------------------------------------------------
 
 let testDir: string;
+let db: GoopSpecDB;
 let cleanup: () => void;
 
 function statePath(): string {
   return join(testDir, ".goopspec", "state.json");
+}
+
+function mgr(workflowId?: string) {
+  return createStateManager({ projectDir: testDir, db, workflowId });
 }
 
 // ---------------------------------------------------------------------------
@@ -26,6 +32,7 @@ function statePath(): string {
 beforeEach(() => {
   const env = setupTestEnvironment("state-mgr");
   testDir = env.testDir;
+  db = env.db;
   cleanup = env.cleanup;
 });
 
@@ -36,22 +43,22 @@ afterEach(() => cleanup());
 // ===========================================================================
 
 describe("init and create", () => {
-  it("creates state.json on first access when none exists", () => {
-    // Remove the scaffolded state.json so the manager creates a fresh one
-    unlinkSync(statePath());
-
-    const mgr = createStateManager({ projectDir: testDir });
-    const state = mgr.getState();
+  it("creates default state in DB on first access when DB is empty", () => {
+    const m = mgr();
+    const state = m.getState();
 
     expect(state.version).toBe(STATE_SCHEMA_VERSION);
     expect(state.activeWorkflowId).toBe("default");
     expect(state.workflows.default).toBeDefined();
-    expect(existsSync(statePath())).toBe(true);
   });
 
-  it("loads existing v2 state.json without modification", () => {
-    const mgr = createStateManager({ projectDir: testDir });
-    const state = mgr.getState();
+  it("loads existing state from DB without modification", () => {
+    // Seed the DB with a workflow
+    db.upsertWorkflow("default", createDefaultWorkflowState());
+    db.upsertWorkflow("_meta", { activeWorkflowId: "default" });
+
+    const m = mgr();
+    const state = m.getState();
 
     expect(state.version).toBe(STATE_SCHEMA_VERSION);
     expect(state.activeWorkflowId).toBe("default");
@@ -59,10 +66,8 @@ describe("init and create", () => {
   });
 
   it("uses provided workflowId as default when creating fresh state", () => {
-    unlinkSync(statePath());
-
-    const mgr = createStateManager({ projectDir: testDir, workflowId: "my-feature" });
-    const state = mgr.getState();
+    const m = mgr("my-feature");
+    const state = m.getState();
 
     expect(state.activeWorkflowId).toBe("my-feature");
     expect(state.workflows["my-feature"]).toBeDefined();
@@ -75,8 +80,8 @@ describe("init and create", () => {
 
 describe("get and set state", () => {
   it("setState persists and getState returns the new value", () => {
-    const mgr = createStateManager({ projectDir: testDir });
-    const original = mgr.getState();
+    const m = mgr();
+    const original = m.getState();
 
     const updated: GoopState = {
       ...original,
@@ -87,18 +92,18 @@ describe("get and set state", () => {
       },
     };
 
-    mgr.setState(updated);
-    const reloaded = mgr.getState();
+    m.setState(updated);
+    const reloaded = m.getState();
     expect(reloaded.workflows.default.phase).toBe("plan");
   });
 
-  it("persists to disk so a new manager instance reads the same state", () => {
-    const mgr1 = createStateManager({ projectDir: testDir });
-    mgr1.getActiveWorkflow(); // ensure loaded
-    mgr1.lockSpec();
+  it("persists to DB so a new manager instance reads the same state", () => {
+    const m1 = mgr();
+    m1.getActiveWorkflow(); // ensure loaded
+    m1.lockSpec();
 
-    const mgr2 = createStateManager({ projectDir: testDir });
-    expect(mgr2.getActiveWorkflow().specLocked).toBe(true);
+    const m2 = createStateManager({ projectDir: testDir, db });
+    expect(m2.getActiveWorkflow().specLocked).toBe(true);
   });
 });
 
@@ -108,71 +113,71 @@ describe("get and set state", () => {
 
 describe("workflow CRUD", () => {
   it("createWorkflow adds a new workflow", () => {
-    const mgr = createStateManager({ projectDir: testDir });
-    const wf = mgr.createWorkflow("feat-auth");
+    const m = mgr();
+    const wf = m.createWorkflow("feat-auth");
 
     expect(wf.phase).toBe("idle");
-    expect(mgr.listWorkflowIds()).toContain("feat-auth");
+    expect(m.listWorkflowIds()).toContain("feat-auth");
   });
 
   it("createWorkflow returns existing workflow if id already exists", () => {
-    const mgr = createStateManager({ projectDir: testDir });
-    mgr.createWorkflow("feat-auth");
-    mgr.setActiveWorkflow("feat-auth");
-    mgr.lockSpec();
+    const m = mgr();
+    m.createWorkflow("feat-auth");
+    m.setActiveWorkflow("feat-auth");
+    m.lockSpec();
 
-    const existing = mgr.createWorkflow("feat-auth");
+    const existing = m.createWorkflow("feat-auth");
     expect(existing.specLocked).toBe(true);
   });
 
   it("createWorkflow creates doc directory for non-default workflows", () => {
-    const mgr = createStateManager({ projectDir: testDir });
-    mgr.createWorkflow("feat-auth");
+    const m = mgr();
+    m.createWorkflow("feat-auth");
 
     expect(existsSync(join(testDir, ".goopspec", "feat-auth"))).toBe(true);
   });
 
   it("removeWorkflow deletes a workflow", () => {
-    const mgr = createStateManager({ projectDir: testDir });
-    mgr.createWorkflow("feat-auth");
-    mgr.removeWorkflow("feat-auth");
+    const m = mgr();
+    m.createWorkflow("feat-auth");
+    m.removeWorkflow("feat-auth");
 
-    expect(mgr.listWorkflowIds()).not.toContain("feat-auth");
+    expect(m.listWorkflowIds()).not.toContain("feat-auth");
   });
 
   it("removeWorkflow switches active if removed was active", () => {
-    const mgr = createStateManager({ projectDir: testDir });
-    mgr.createWorkflow("feat-auth");
-    mgr.setActiveWorkflow("feat-auth");
-    mgr.removeWorkflow("feat-auth");
+    const m = mgr();
+    m.createWorkflow("feat-auth");
+    m.setActiveWorkflow("feat-auth");
+    m.removeWorkflow("feat-auth");
 
-    expect(mgr.getActiveWorkflowId()).toBe("default");
+    expect(m.getActiveWorkflowId()).toBe("default");
   });
 
   it("setActiveWorkflow throws for non-existent workflow", () => {
-    const mgr = createStateManager({ projectDir: testDir });
-    expect(() => mgr.setActiveWorkflow("nope")).toThrow("does not exist");
+    const m = mgr();
+    expect(() => m.setActiveWorkflow("nope")).toThrow("does not exist");
   });
 
   it("setActiveWorkflow switches the active workflow", () => {
-    const mgr = createStateManager({ projectDir: testDir });
-    mgr.createWorkflow("feat-auth");
-    mgr.setActiveWorkflow("feat-auth");
+    const m = mgr();
+    m.createWorkflow("feat-auth");
+    m.setActiveWorkflow("feat-auth");
 
-    expect(mgr.getActiveWorkflowId()).toBe("feat-auth");
+    expect(m.getActiveWorkflowId()).toBe("feat-auth");
   });
 
   it("getWorkflow returns undefined for non-existent id", () => {
-    const mgr = createStateManager({ projectDir: testDir });
-    expect(mgr.getWorkflow("nope")).toBeUndefined();
+    const m = mgr();
+    expect(m.getWorkflow("nope")).toBeUndefined();
   });
 
   it("listWorkflowIds returns all workflow keys", () => {
-    const mgr = createStateManager({ projectDir: testDir });
-    mgr.createWorkflow("a");
-    mgr.createWorkflow("b");
+    const m = mgr();
+    m.createWorkflow("a");
+    m.createWorkflow("b");
 
-    const ids = mgr.listWorkflowIds();
+    const ids = m.listWorkflowIds();
     expect(ids).toContain("default");
     expect(ids).toContain("a");
     expect(ids).toContain("b");
@@ -185,55 +190,55 @@ describe("workflow CRUD", () => {
 
 describe("phase transitions", () => {
   it("allows valid transition idle -> discuss", () => {
-    const mgr = createStateManager({ projectDir: testDir });
-    mgr.transitionPhase("discuss");
-    expect(mgr.getActiveWorkflow().phase).toBe("discuss");
+    const m = mgr();
+    m.transitionPhase("discuss");
+    expect(m.getActiveWorkflow().phase).toBe("discuss");
   });
 
   it("allows valid transition idle -> plan", () => {
-    const mgr = createStateManager({ projectDir: testDir });
-    mgr.transitionPhase("plan");
-    expect(mgr.getActiveWorkflow().phase).toBe("plan");
+    const m = mgr();
+    m.transitionPhase("plan");
+    expect(m.getActiveWorkflow().phase).toBe("plan");
   });
 
   it("allows valid chain: idle -> plan -> execute -> accept -> idle", () => {
-    const mgr = createStateManager({ projectDir: testDir });
-    mgr.transitionPhase("plan");
-    mgr.transitionPhase("execute");
-    mgr.transitionPhase("accept");
-    mgr.transitionPhase("idle");
-    expect(mgr.getActiveWorkflow().phase).toBe("idle");
+    const m = mgr();
+    m.transitionPhase("plan");
+    m.transitionPhase("execute");
+    m.transitionPhase("accept");
+    m.transitionPhase("idle");
+    expect(m.getActiveWorkflow().phase).toBe("idle");
   });
 
   it("throws on invalid transition idle -> execute", () => {
-    const mgr = createStateManager({ projectDir: testDir });
-    expect(() => mgr.transitionPhase("execute")).toThrow("Invalid phase transition");
+    const m = mgr();
+    expect(() => m.transitionPhase("execute")).toThrow("Invalid phase transition");
   });
 
   it("throws on invalid transition idle -> accept", () => {
-    const mgr = createStateManager({ projectDir: testDir });
-    expect(() => mgr.transitionPhase("accept")).toThrow("Invalid phase transition");
+    const m = mgr();
+    expect(() => m.transitionPhase("accept")).toThrow("Invalid phase transition");
   });
 
   it("force=true bypasses validation", () => {
-    const mgr = createStateManager({ projectDir: testDir });
-    mgr.transitionPhase("accept", true);
-    expect(mgr.getActiveWorkflow().phase).toBe("accept");
+    const m = mgr();
+    m.transitionPhase("accept", true);
+    expect(m.getActiveWorkflow().phase).toBe("accept");
   });
 
   it("transitions are scoped to the active workflow", () => {
-    const mgr = createStateManager({ projectDir: testDir });
-    mgr.createWorkflow("feat-auth");
-    mgr.setActiveWorkflow("feat-auth");
-    mgr.transitionPhase("discuss");
+    const m = mgr();
+    m.createWorkflow("feat-auth");
+    m.setActiveWorkflow("feat-auth");
+    m.transitionPhase("discuss");
 
     // Switch back — default should still be idle
-    mgr.setActiveWorkflow("default");
-    expect(mgr.getActiveWorkflow().phase).toBe("idle");
+    m.setActiveWorkflow("default");
+    expect(m.getActiveWorkflow().phase).toBe("idle");
 
     // feat-auth should be discuss
-    mgr.setActiveWorkflow("feat-auth");
-    expect(mgr.getActiveWorkflow().phase).toBe("discuss");
+    m.setActiveWorkflow("feat-auth");
+    expect(m.getActiveWorkflow().phase).toBe("discuss");
   });
 });
 
@@ -243,32 +248,32 @@ describe("phase transitions", () => {
 
 describe("spec lock and flags", () => {
   it("lockSpec / unlockSpec toggles specLocked", () => {
-    const mgr = createStateManager({ projectDir: testDir });
-    expect(mgr.getActiveWorkflow().specLocked).toBe(false);
+    const m = mgr();
+    expect(m.getActiveWorkflow().specLocked).toBe(false);
 
-    mgr.lockSpec();
-    expect(mgr.getActiveWorkflow().specLocked).toBe(true);
+    m.lockSpec();
+    expect(m.getActiveWorkflow().specLocked).toBe(true);
 
-    mgr.unlockSpec();
-    expect(mgr.getActiveWorkflow().specLocked).toBe(false);
+    m.unlockSpec();
+    expect(m.getActiveWorkflow().specLocked).toBe(false);
   });
 
   it("completeInterview / resetInterview toggles interviewComplete", () => {
-    const mgr = createStateManager({ projectDir: testDir });
-    mgr.completeInterview();
-    expect(mgr.getActiveWorkflow().interviewComplete).toBe(true);
+    const m = mgr();
+    m.completeInterview();
+    expect(m.getActiveWorkflow().interviewComplete).toBe(true);
 
-    mgr.resetInterview();
-    expect(mgr.getActiveWorkflow().interviewComplete).toBe(false);
+    m.resetInterview();
+    expect(m.getActiveWorkflow().interviewComplete).toBe(false);
   });
 
   it("confirmAcceptance / resetAcceptance toggles acceptanceConfirmed", () => {
-    const mgr = createStateManager({ projectDir: testDir });
-    mgr.confirmAcceptance();
-    expect(mgr.getActiveWorkflow().acceptanceConfirmed).toBe(true);
+    const m = mgr();
+    m.confirmAcceptance();
+    expect(m.getActiveWorkflow().acceptanceConfirmed).toBe(true);
 
-    mgr.resetAcceptance();
-    expect(mgr.getActiveWorkflow().acceptanceConfirmed).toBe(false);
+    m.resetAcceptance();
+    expect(m.getActiveWorkflow().acceptanceConfirmed).toBe(false);
   });
 });
 
@@ -278,20 +283,21 @@ describe("spec lock and flags", () => {
 
 describe("wave tracking", () => {
   it("updateWaveProgress sets current and total", () => {
-    const mgr = createStateManager({ projectDir: testDir });
-    mgr.updateWaveProgress(3, 8);
+    const m = mgr();
+    m.updateWaveProgress(3, 8);
 
-    const wf = mgr.getActiveWorkflow();
+    const wf = m.getActiveWorkflow();
     expect(wf.currentWave).toBe(3);
     expect(wf.totalWaves).toBe(8);
   });
 
   it("wave progress persists across manager instances", () => {
-    const mgr1 = createStateManager({ projectDir: testDir });
-    mgr1.updateWaveProgress(5, 10);
+    const m1 = mgr();
+    m1.updateWaveProgress(5, 10);
 
-    const mgr2 = createStateManager({ projectDir: testDir });
-    const wf = mgr2.getActiveWorkflow();
+    // New manager instance sharing the same DB
+    const m2 = createStateManager({ projectDir: testDir, db });
+    const wf = m2.getActiveWorkflow();
     expect(wf.currentWave).toBe(5);
     expect(wf.totalWaves).toBe(10);
   });
@@ -303,34 +309,34 @@ describe("wave tracking", () => {
 
 describe("mode, depth, and workflow updates", () => {
   it("setMode changes the task mode", () => {
-    const mgr = createStateManager({ projectDir: testDir });
-    mgr.setMode("comprehensive");
-    expect(mgr.getActiveWorkflow().mode).toBe("comprehensive");
+    const m = mgr();
+    m.setMode("comprehensive");
+    expect(m.getActiveWorkflow().mode).toBe("comprehensive");
   });
 
   it("setDepth changes the workflow depth", () => {
-    const mgr = createStateManager({ projectDir: testDir });
-    mgr.setDepth("deep");
-    expect(mgr.getActiveWorkflow().depth).toBe("deep");
+    const m = mgr();
+    m.setDepth("deep");
+    expect(m.getActiveWorkflow().depth).toBe("deep");
   });
 
   it("updateWorkflow applies partial updates", () => {
-    const mgr = createStateManager({ projectDir: testDir });
-    mgr.updateWorkflow({ autopilot: true, lazyAutopilot: true });
+    const m = mgr();
+    m.updateWorkflow({ autopilot: true, lazyAutopilot: true });
 
-    const wf = mgr.getActiveWorkflow();
+    const wf = m.getActiveWorkflow();
     expect(wf.autopilot).toBe(true);
     expect(wf.lazyAutopilot).toBe(true);
   });
 
   it("resetWorkflow returns active workflow to defaults", () => {
-    const mgr = createStateManager({ projectDir: testDir });
-    mgr.transitionPhase("plan");
-    mgr.lockSpec();
-    mgr.updateWaveProgress(3, 5);
+    const m = mgr();
+    m.transitionPhase("plan");
+    m.lockSpec();
+    m.updateWaveProgress(3, 5);
 
-    mgr.resetWorkflow();
-    const wf = mgr.getActiveWorkflow();
+    m.resetWorkflow();
+    const wf = m.getActiveWorkflow();
     expect(wf.phase).toBe("idle");
     expect(wf.specLocked).toBe(false);
     expect(wf.currentWave).toBe(0);
@@ -343,14 +349,14 @@ describe("mode, depth, and workflow updates", () => {
 
 describe("ADL (Automated Decision Log)", () => {
   it("getADL creates the file if missing and returns header", () => {
-    const mgr = createStateManager({ projectDir: testDir });
-    const adl = mgr.getADL();
+    const m = mgr();
+    const adl = m.getADL();
     expect(adl).toContain("Automated Decision Log");
   });
 
   it("appendADL adds an entry to the log", () => {
-    const mgr = createStateManager({ projectDir: testDir });
-    mgr.appendADL({
+    const m = mgr();
+    m.appendADL({
       timestamp: "2026-06-16T12:00:00Z",
       type: "decision",
       description: "Chose approach A",
@@ -359,7 +365,7 @@ describe("ADL (Automated Decision Log)", () => {
       files: ["src/foo.ts"],
     });
 
-    const adl = mgr.getADL();
+    const adl = m.getADL();
     expect(adl).toContain("[DECISION]");
     expect(adl).toContain("Rule 1");
     expect(adl).toContain("Chose approach A");
@@ -373,16 +379,16 @@ describe("ADL (Automated Decision Log)", () => {
 
 describe("checkpoints", () => {
   it("saveCheckpoint + loadCheckpoint round-trips data", () => {
-    const mgr = createStateManager({ projectDir: testDir });
+    const m = mgr();
     const data = {
       id: "cp-1",
       timestamp: "2026-06-16T12:00:00Z",
-      state: mgr.getState(),
+      state: m.getState(),
       context: { note: "test" },
     };
 
-    mgr.saveCheckpoint("cp-1", data);
-    const loaded = mgr.loadCheckpoint("cp-1");
+    m.saveCheckpoint("cp-1", data);
+    const loaded = m.loadCheckpoint("cp-1");
 
     expect(loaded).not.toBeNull();
     expect(loaded?.id).toBe("cp-1");
@@ -390,44 +396,79 @@ describe("checkpoints", () => {
   });
 
   it("loadCheckpoint returns null for non-existent checkpoint", () => {
-    const mgr = createStateManager({ projectDir: testDir });
-    expect(mgr.loadCheckpoint("nope")).toBeNull();
+    const m = mgr();
+    expect(m.loadCheckpoint("nope")).toBeNull();
   });
 
   it("listCheckpoints returns saved checkpoint ids", () => {
-    const mgr = createStateManager({ projectDir: testDir });
+    const m = mgr();
     const base = {
       timestamp: "2026-06-16T12:00:00Z",
-      state: mgr.getState(),
+      state: m.getState(),
     };
 
-    mgr.saveCheckpoint("cp-a", { id: "cp-a", ...base });
-    mgr.saveCheckpoint("cp-b", { id: "cp-b", ...base });
+    m.saveCheckpoint("cp-a", { id: "cp-a", ...base });
+    m.saveCheckpoint("cp-b", { id: "cp-b", ...base });
 
-    const ids = mgr.listCheckpoints();
+    const ids = m.listCheckpoints();
     expect(ids).toContain("cp-a");
     expect(ids).toContain("cp-b");
   });
 
   it("saveCheckpoint updates the workflow checkpoint field", () => {
-    const mgr = createStateManager({ projectDir: testDir });
-    mgr.saveCheckpoint("wave-2-done", {
+    const m = mgr();
+    m.saveCheckpoint("wave-2-done", {
       id: "wave-2-done",
       timestamp: "2026-06-16T12:00:00Z",
-      state: mgr.getState(),
+      state: m.getState(),
     });
 
-    expect(mgr.getActiveWorkflow().checkpoint).toBe("wave-2-done");
+    expect(m.getActiveWorkflow().checkpoint).toBe("wave-2-done");
   });
 });
 
 // ===========================================================================
-// v1 -> v2 migration
+// Auto-import from state.json
 // ===========================================================================
 
-describe("v1 to v2 migration", () => {
-  it("migrates a v1 state file to v2 format", () => {
-    // Write a v1-style state.json (no version, no workflows map)
+describe("auto-import from state.json", () => {
+  it("imports a v2 state.json into DB on first access", () => {
+    const v2State: GoopState = {
+      version: STATE_SCHEMA_VERSION,
+      activeWorkflowId: "default",
+      workflows: {
+        default: createDefaultWorkflowState({ phase: "execute", specLocked: true }),
+        "feat-auth": createDefaultWorkflowState({ phase: "plan" }),
+      },
+    };
+    writeFileSync(statePath(), JSON.stringify(v2State), "utf-8");
+
+    const m = mgr();
+    const state = m.getState();
+
+    expect(state.workflows.default.phase).toBe("execute");
+    expect(state.workflows.default.specLocked).toBe(true);
+    expect(state.workflows["feat-auth"]).toBeDefined();
+    expect(state.workflows["feat-auth"].phase).toBe("plan");
+  });
+
+  it("renames state.json to state.json.backup after import", () => {
+    const v2State: GoopState = {
+      version: STATE_SCHEMA_VERSION,
+      activeWorkflowId: "default",
+      workflows: {
+        default: createDefaultWorkflowState(),
+      },
+    };
+    writeFileSync(statePath(), JSON.stringify(v2State), "utf-8");
+
+    mgr().getState();
+
+    expect(existsSync(`${statePath()}.backup`)).toBe(true);
+    expect(existsSync(statePath())).toBe(false);
+  });
+
+  it("migrates a v1 state.json through v2 migration then into DB", () => {
     const v1State = {
       workflow: {
         phase: "execute",
@@ -442,80 +483,36 @@ describe("v1 to v2 migration", () => {
     };
     writeFileSync(statePath(), JSON.stringify(v1State), "utf-8");
 
-    const mgr = createStateManager({ projectDir: testDir });
-    const state = mgr.getState();
+    const m = mgr();
+    const state = m.getState();
 
     expect(state.version).toBe(STATE_SCHEMA_VERSION);
     expect(state.activeWorkflowId).toBe("default");
-    expect(state.workflows.default).toBeDefined();
     expect(state.workflows.default.phase).toBe("execute");
     expect(state.workflows.default.specLocked).toBe(true);
     expect(state.workflows.default.currentWave).toBe(3);
     expect(state.workflows.default.depth).toBe("deep");
   });
 
-  it("creates a .backup file before migration", () => {
-    const v1State = { workflow: { phase: "plan" } };
-    writeFileSync(statePath(), JSON.stringify(v1State), "utf-8");
+  it("handles malformed state.json by creating fresh state", () => {
+    writeFileSync(statePath(), "not json at all", "utf-8");
 
-    createStateManager({ projectDir: testDir }).getState();
+    const m = mgr();
+    const state = m.getState();
 
-    const backupPath = `${statePath()}.backup`;
-    expect(existsSync(backupPath)).toBe(true);
-
-    const backup = JSON.parse(readFileSync(backupPath, "utf-8"));
-    expect(backup.workflow.phase).toBe("plan");
+    expect(state.version).toBe(STATE_SCHEMA_VERSION);
+    expect(state.workflows.default).toBeDefined();
   });
 
-  it("handles completely empty state file gracefully", () => {
+  it("handles empty JSON state.json by migrating to v2", () => {
     writeFileSync(statePath(), "{}", "utf-8");
 
-    const mgr = createStateManager({ projectDir: testDir });
-    const state = mgr.getState();
+    const m = mgr();
+    const state = m.getState();
 
     expect(state.version).toBe(STATE_SCHEMA_VERSION);
     expect(state.workflows.default).toBeDefined();
     expect(state.workflows.default.phase).toBe("idle");
-  });
-
-  it("handles malformed JSON by creating fresh state", () => {
-    writeFileSync(statePath(), "not json at all", "utf-8");
-
-    const mgr = createStateManager({ projectDir: testDir });
-    const state = mgr.getState();
-
-    expect(state.version).toBe(STATE_SCHEMA_VERSION);
-    expect(state.workflows.default).toBeDefined();
-  });
-});
-
-// ===========================================================================
-// Atomic writes
-// ===========================================================================
-
-describe("atomic writes", () => {
-  it("state.json is valid JSON after every mutation", () => {
-    const mgr = createStateManager({ projectDir: testDir });
-
-    mgr.transitionPhase("plan");
-    expect(() => JSON.parse(readFileSync(statePath(), "utf-8"))).not.toThrow();
-
-    mgr.lockSpec();
-    expect(() => JSON.parse(readFileSync(statePath(), "utf-8"))).not.toThrow();
-
-    mgr.updateWaveProgress(1, 3);
-    expect(() => JSON.parse(readFileSync(statePath(), "utf-8"))).not.toThrow();
-  });
-
-  it("no .tmp files remain after writes", () => {
-    const mgr = createStateManager({ projectDir: testDir });
-    mgr.transitionPhase("plan");
-    mgr.lockSpec();
-
-    const goopDir = join(testDir, ".goopspec");
-    const files = readdirSync(goopDir) as string[];
-    const tmpFiles = files.filter((f: string) => f.includes(".tmp."));
-    expect(tmpFiles.length).toBe(0);
   });
 });
 
