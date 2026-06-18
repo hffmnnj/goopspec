@@ -114,7 +114,7 @@ Research resolves unknowns before or during planning/execution. Deliverables:
 - Recommendation with rationale.
 - Known risks and mitigation options.
 
-Persist findings to `RESEARCH.md` and memory.
+Persist findings as Field Notes via `goop_save_note`. Search prior research via `goop_search_notes({ query: "[topic]" })`.
 
 Dispatch rules:
 
@@ -128,7 +128,7 @@ Dispatch rules:
 2. Gather from multiple sources (official docs, search, example repos).
 3. Note contradictions and source reliability.
 4. Synthesize patterns and actionable recommendations.
-5. Document results in `RESEARCH.md`.
+5. Persist results as Field Notes via `goop_save_note`.
 
 Time-box research: 30–60 minutes typical, 2 hours maximum.
 

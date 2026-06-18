@@ -33,12 +33,12 @@ goop_reference({ name: "discovery-interview" })
 4. After the vision answer, infer a kebab-case `workflowId` if one was not supplied, then create and bind it before any file writes.
 5. Probe until each category has specifics. Empty must-haves, out-of-scope, or risks are invalid.
 6. Summarize and confirm with the user.
-7. Write `.goopspec/<workflowId>/REQUIREMENTS.md` and call `goop_state({ action: "complete-interview" })`.
+7. Write REQUIREMENTS.md via `goop_write_db({ doc_type: "requirements", content: "..." })` and call `goop_state({ action: "complete-interview" })`. The tool renders the markdown sidecar automatically.
 8. Suggest `/goop-plan`.
 
 ## Lazy autopilot
 
-If `workflow.lazyAutopilot == true`, infer all six categories from the user's prompt, skip the `question` tool, generate `REQUIREMENTS.md`, then immediately call:
+If `workflow.lazyAutopilot == true`, infer all six categories from the user's prompt, skip the `question` tool, write REQUIREMENTS.md via `goop_write_db({ doc_type: "requirements", content: "..." })`, then immediately call:
 
 ```
 mcp_slashcommand({ command: "/goop-plan" })

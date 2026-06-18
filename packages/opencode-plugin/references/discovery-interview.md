@@ -10,7 +10,7 @@ Mandatory gate before planning. Captures six categories of requirements so the c
 
 - Triggered by `/goop-discuss`.
 - Required before `/goop-plan`.
-- Output: `.goopspec/<workflowId>/REQUIREMENTS.md`.
+- Output: `requirements` document written via `goop_write_db({ doc_type: "requirements", content: "..." })`. The tool renders `.goopspec/<workflowId>/REQUIREMENTS.md` automatically.
 - State update: `interview_complete: true`.
 
 ## The Six Questions
@@ -68,7 +68,7 @@ Every risk needs impact, likelihood, and mitigation.
 4. **Structured questioning**: use the `question` tool for each category, with practical option seeds and a custom-answer path.
 5. **Probe for specifics**: convert vague answers into concrete targets.
 6. **Summarize and confirm**: present the six answers back to the user.
-7. **Lock discovery**: write `REQUIREMENTS.md`, set `interview_complete: true`, save to memory.
+7. **Lock discovery**: write REQUIREMENTS.md via `goop_write_db({ doc_type: "requirements", content: "..." })`, set `interview_complete: true`, save to memory.
 
 ## Structured Question Policy
 
@@ -94,7 +94,7 @@ When `workflow.lazyAutopilot == true`:
 - Infer all six categories directly from the user's initial prompt.
 - Do not use the `question` tool.
 - Infer a `feat/kebab-case` branch name and create it silently.
-- Generate `REQUIREMENTS.md` directly.
+- Write REQUIREMENTS.md via `goop_write_db({ doc_type: "requirements", content: "..." })` directly.
 - Proceed to `/goop-plan` immediately without a confirmation gate.
 
 ## REQUIREMENTS.md Template

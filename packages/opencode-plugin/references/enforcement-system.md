@@ -24,14 +24,13 @@ Key functions:
 - `scaffoldPhaseDocuments(ctx, phaseName, phase)`
 - `checkPhaseDocuments(ctx, phaseName, phase)`
 
-Required documents by phase:
+Required documents by phase (checked via `goop_read_db({ doc_type: "..." })` returning content, not a 'not found' message):
 
 | Type | Required In |
 |------|-------------|
-| `SPEC.md` | plan, research, specify, execute, accept |
-| `BLUEPRINT.md` | specify, execute, accept |
-| `CHRONICLE.md` | plan, research, specify, execute, accept |
-| `RESEARCH.md` | research, specify |
+| `spec` | plan, research, specify, execute, accept |
+| `blueprint` | specify, execute, accept |
+| `chronicle` | plan, research, specify, execute, accept |
 
 ### Validators
 
@@ -82,7 +81,7 @@ Processes `/goop-*` slash commands, triggers state transitions, scaffolds phase 
 MUST DO:
 
 - Ask clarifying questions.
-- Create `SPEC.md` with must-haves, nice-to-haves, out of scope.
+- Create spec document via `goop_write_db({ doc_type: "spec", content: "..." })` with must-haves, nice-to-haves, out of scope.
 - Get user confirmation before proceeding.
 
 MUST NOT DO:
@@ -95,8 +94,8 @@ MUST NOT DO:
 
 MUST DO:
 
-- Read `SPEC.md`.
-- Create `RESEARCH.md` with findings.
+- Read spec via `goop_read_db({ doc_type: "spec" })`.
+- Persist findings as Field Notes via `goop_save_note`. Search prior research via `goop_search_notes`.
 - Document trade-offs and recommendations.
 
 MUST NOT DO:
@@ -108,7 +107,7 @@ MUST NOT DO:
 
 MUST DO:
 
-- Create `BLUEPRINT.md` with wave-based plan.
+- Create blueprint document via `goop_write_db({ doc_type: "blueprint", content: "..." })` with wave-based plan.
 - Map all must-haves to tasks.
 - Get user confirmation to lock specification.
 
@@ -122,7 +121,7 @@ MUST NOT DO:
 MUST DO:
 
 - Delegate all code work via `task()`.
-- Track progress in `CHRONICLE.md`.
+- Track progress via `goop_write_db({ doc_type: "chronicle", content: "..." })`.
 - Follow wave order.
 - Save checkpoints at wave boundaries.
 
@@ -181,14 +180,14 @@ Delegate to `goop-executor-{tier}`. The orchestrator is blocked from writing imp
 
 ### Phase transition rejected
 
-Ensure required documents exist before transitioning:
+Ensure required documents exist in DB before transitioning (check via `goop_read_db({ doc_type: "..." })` returning content):
 
-- `execute` requires `SPEC.md`.
-- `accept` requires `SPEC.md`, `BLUEPRINT.md`, and `CHRONICLE.md`.
+- `execute` requires `spec` document in DB.
+- `accept` requires `spec`, `blueprint`, and `chronicle` documents in DB.
 
 ### Commands not triggering state changes
 
-Verify the command is processed by checking `ADL.md` for logged entries.
+Verify the command is processed by checking ADL entries via `goop_adl({ action: "read" })`.
 
 ---
 

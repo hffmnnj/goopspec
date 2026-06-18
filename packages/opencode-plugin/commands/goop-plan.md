@@ -13,11 +13,11 @@ alternatives:
 
 # /goop-plan
 
-Turn `REQUIREMENTS.md` into a locked contract (`SPEC.md`) and an executable wave plan (`BLUEPRINT.md`).
+Turn the requirements document into a locked contract (`SPEC.md`) and an executable wave plan (`BLUEPRINT.md`).
 
 ## Gate check
 
-Call `goop_state({ action: "get" })`. If `interviewComplete` is not `true` or `REQUIREMENTS.md` is missing, return `BLOCKED` with:
+Call `goop_state({ action: "get" })`. If `interviewComplete` is not `true` or the `requirements` document does not exist — check via `goop_read_db({ doc_type: "requirements" })` returning content (not a 'not found' message) — return `BLOCKED` with:
 
 > Run `/goop-discuss` first.
 
@@ -31,7 +31,7 @@ goop_reference({ name: "phase-gates" })
 
 ## Steps
 
-1. Read `REQUIREMENTS.md`, search memory, and create `PROJECT_KNOWLEDGE_BASE.md` if missing.
+1. Read requirements via `goop_read_db({ doc_type: "requirements" })`, search memory, and create `PROJECT_KNOWLEDGE_BASE.md` if missing.
 2. Spawn `goop-planner` with the discovery context, current depth (`shallow`/`standard`/`deep`), and workflow isolation context.
 3. Review the draft `SPEC.md` and `BLUEPRINT.md`.
 
@@ -64,12 +64,12 @@ mcp_slashcommand({ command: "/goop-execute" })
 
 ## Output
 
-| File | Purpose |
-|------|---------|
-| `.goopspec/<workflowId>/SPEC.md` | Locked contract |
-| `.goopspec/<workflowId>/BLUEPRINT.md` | Wave/task plan |
-| `.goopspec/<workflowId>/CHRONICLE.md` | Progress log |
-| `.goopspec/PROJECT_KNOWLEDGE_BASE.md` | Shared conventions |
+| Document | Tool | Purpose |
+|----------|------|---------|
+| `spec` | `goop_write_db({ doc_type: "spec", content: "..." })` | Locked contract |
+| `blueprint` | `goop_write_db({ doc_type: "blueprint", content: "..." })` | Wave/task plan |
+| `chronicle` | `goop_write_db({ doc_type: "chronicle", content: "..." })` | Progress log |
+| `PROJECT_KNOWLEDGE_BASE.md` | `Write(...)` | Shared conventions (global, not workflow-scoped) |
 
 ## Anti-patterns
 

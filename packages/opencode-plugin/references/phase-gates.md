@@ -6,8 +6,8 @@ Mandatory checkpoints that enforce workflow discipline. No phase proceeds until 
 
 | Gate | Location | Requirement | Enforced By |
 |------|----------|-------------|-------------|
-| Discovery | Before `/goop-plan` | `interview_complete == true`, `REQUIREMENTS.md` exists | Orchestrator |
-| Spec | Before `/goop-execute` | `spec_locked == true`, `SPEC.md` and `BLUEPRINT.md` exist, 100% traceability | Orchestrator |
+| Discovery | Before `/goop-plan` | `interview_complete == true`, `requirements` document exists in DB (`goop_read_db({ doc_type: "requirements" })` returns content) | Orchestrator |
+| Spec | Before `/goop-execute` | `spec_locked == true`, `spec` and `blueprint` documents exist in DB, 100% traceability | Orchestrator |
 | Execution | Before `/goop-accept` | All waves and tasks complete, verification passing, no blockers | Orchestrator |
 | Acceptance | Within `/goop-accept` | Verification passed, user explicitly accepts | Orchestrator |
 
@@ -39,7 +39,7 @@ Specification must be locked before execution.
 | Execution | Partial | Nice-to-haves may be deferred with user confirmation |
 | Acceptance | No | Never — explicit user acceptance is required |
 
-All bypasses must be logged to `ADL.md` via `goop_adl`.
+All bypasses must be logged via `goop_adl`.
 
 ## Autopilot Behavior
 
@@ -60,7 +60,7 @@ Autopilot and lazy-autopilot reduce human checkpoints but do not relax rules.
 
 ### Deviation Logging
 
-All bypasses and rule applications must be appended to `ADL.md` via `goop_adl` with the rule number, issue, action, and affected files.
+All bypasses and rule applications must be appended via `goop_adl` with the rule number, issue, action, and affected files.
 
 ### Hard Stops in Autopilot
 

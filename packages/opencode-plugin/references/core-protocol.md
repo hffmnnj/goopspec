@@ -1,6 +1,6 @@
 # Core Protocol
 
-The GoopSpec workflow: five phases, markdown-as-state, and memory-first execution.
+The GoopSpec workflow: five phases, DB-as-state, and memory-first execution.
 
 ## Five-Phase Workflow
 
@@ -18,35 +18,37 @@ discuss -> plan -> execute -> accept -> confirm
 
 Each phase has a gate. A phase cannot start until the previous gate is satisfied. See `phase-gates.md` for gate semantics.
 
-## Markdown-as-State
+## DB-as-State
 
-Project state is readable in versioned markdown files under `.goopspec/<workflowId>/`. Global state files stay at `.goopspec/` root.
+Project state is stored in GoopSpecDB (`.goopspec/goopspec.db`). Markdown files under `.goopspec/<workflowId>/` are **rendered outputs** from the DB, written automatically on every `goop_write_db` call. They are human-readable sidecars — the DB is the source of truth.
 
-| File | Scope | Purpose |
-|------|-------|---------|
-| `REQUIREMENTS.md` | workflow | Discovery output: vision, must-haves, constraints, out of scope, assumptions, risks |
-| `SPEC.md` | workflow | Locked contract with must-haves, nice-to-haves, out of scope, traceability |
-| `BLUEPRINT.md` | workflow | Wave/task plan with verification steps and spec coverage |
-| `CHRONICLE.md` | workflow | Progress log, decisions, deviations, blockers |
-| `ADL.md` | workflow | Automated Decision Log: deviations, architectural decisions, observations |
-| `HANDOFF.md` | workflow | Session handoff context for fresh sessions |
-| `RESEARCH.md` | workflow | Research findings and recommendations |
-| `PROJECT_KNOWLEDGE_BASE.md` | global | Stack, conventions, decisions, patterns, gotchas |
-| `state.json` | global | Machine state: phase, locks, waves, workflow map |
-| `config.json` | global | User configuration |
+| File | Scope | Purpose | Storage |
+|------|-------|---------|---------|
+| `REQUIREMENTS.md` | workflow | Discovery output: vision, must-haves, constraints, out of scope, assumptions, risks | GoopSpecDB `documents` table; rendered as `.goopspec/<workflowId>/REQUIREMENTS.md` |
+| `SPEC.md` | workflow | Locked contract with must-haves, nice-to-haves, out of scope, traceability | GoopSpecDB `documents` table; rendered as `.goopspec/<workflowId>/SPEC.md` |
+| `BLUEPRINT.md` | workflow | Wave/task plan with verification steps and spec coverage | GoopSpecDB `documents` table; rendered as `.goopspec/<workflowId>/BLUEPRINT.md` |
+| `CHRONICLE.md` | workflow | Progress log, decisions, deviations, blockers | GoopSpecDB `documents` table; rendered as `.goopspec/<workflowId>/CHRONICLE.md` |
+| `ADL.md` | workflow | Automated Decision Log: deviations, architectural decisions, observations | GoopSpecDB `documents` table; rendered as `.goopspec/<workflowId>/ADL.md` |
+| `HANDOFF.md` | workflow | Session handoff context for fresh sessions | GoopSpecDB `documents` table; rendered as `.goopspec/<workflowId>/HANDOFF.md` |
+| `PROJECT_KNOWLEDGE_BASE.md` | global | Stack, conventions, decisions, patterns, gotchas | `.goopspec/PROJECT_KNOWLEDGE_BASE.md` (file, unchanged) |
+| `state.json` | global | **Replaced by GoopSpecDB `workflows` table** | `.goopspec/goopspec.db` |
+| `memory.db` | global | Episodic/semantic memory | `.goopspec/memory.db` (unchanged) |
+| `goopspec.db` | global | Unified state DB (workflows, events, documents, field_notes) | `.goopspec/goopspec.db` |
+| `config.json` | global | User configuration | `.goopspec/config.json` (file, unchanged) |
 
-For workflow path resolution, see `workflow-paths` (folded into this reference):
+For workflow path resolution:
 - Resolve `workflowId` from `goop_state({ action: "get" })` before reading or writing workflow docs.
-- Write workflow docs to `.goopspec/<workflowId>/` unless `workflowId` is `default`, which uses `.goopspec/` root for backward compatibility.
-- `state.json`, `config.json`, and `memory.db` are always global.
+- Read workflow docs via `goop_read_db({ doc_type: "..." })` — no path construction needed.
+- Write workflow docs via `goop_write_db({ doc_type: "...", content: "..." })` — the tool renders the markdown sidecar automatically.
+- `config.json` and `memory.db` are always global files.
 
 ## Memory-First Protocol
 
 Every agent follows the same loop:
 
-1. **Before:** `memory_search`, read state, read `PROJECT_KNOWLEDGE_BASE.md`, read `SPEC.md`/`BLUEPRINT.md`.
-2. **During:** record observations with `memory_note`, decisions with `memory_decision`, progress in `CHRONICLE.md`.
-3. **After:** persist learnings with `memory_save`, update `CHRONICLE.md`, return a structured response.
+1. **Before:** `memory_search`, read state, read `PROJECT_KNOWLEDGE_BASE.md`, read spec via `goop_read_db({ doc_type: "spec" })` and blueprint via `goop_read_db({ doc_type: "blueprint" })`.
+2. **During:** record observations with `memory_note`, decisions with `memory_decision`, progress via `goop_write_db({ doc_type: "chronicle", content: "..." })`.
+3. **After:** persist learnings with `memory_save`, update chronicle via `goop_write_db`, return a structured response.
 
 Useful memory types:
 
@@ -76,20 +78,21 @@ Tag memories with relevant `concepts` so later searches surface them.
 Before doing work, every subagent must:
 
 1. `goop_state({ action: "get" })`
-2. `Read(".goopspec/<workflowId>/SPEC.md")`
-3. `Read(".goopspec/<workflowId>/BLUEPRINT.md")`
-4. `memory_search({ query: "[task context]" })`
-5. `Read(".goopspec/PROJECT_KNOWLEDGE_BASE.md")` if present
-6. Acknowledge current phase, spec lock status, and active task.
+2. `goop_read_db({ doc_type: "spec" })` — load spec contract
+3. `goop_read_db({ doc_type: "blueprint" })` — load task context
+4. `goop_search_notes({ query: "[task context]" })` — check Field Notes for prior research
+5. `memory_search({ query: "[task context]" })`
+6. `Read(".goopspec/PROJECT_KNOWLEDGE_BASE.md")` if present
+7. Acknowledge current phase, spec lock status, and active task.
 
 If any required bootstrap step fails, return `BLOCKED`.
 
 ## Planning File Rules
 
-- `SPEC.md` is read-only for executors. Only the orchestrator/planner may write it.
-- `BLUEPRINT.md` is read-only for executors. Only the orchestrator/planner may write it.
-- `CHRONICLE.md` is read-write for all agents; update it after each task.
-- `RESEARCH.md` is written by research agents and read by others.
+- `spec` document is read-only for executors. Only the orchestrator/planner may write it via `goop_write_db({ doc_type: "spec", content: "..." })`.
+- `blueprint` document is read-only for executors. Only the orchestrator/planner may write it via `goop_write_db({ doc_type: "blueprint", content: "..." })`.
+- `chronicle` document is read-write for all agents; update it after each task via `goop_write_db({ doc_type: "chronicle", content: "..." })`.
+- Research findings are persisted as Field Notes via `goop_save_note` and searched via `goop_search_notes({ query: "[topic]" })`.
 
 ## Atomic Commit Protocol
 
