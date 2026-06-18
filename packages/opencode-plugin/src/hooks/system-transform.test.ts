@@ -363,4 +363,179 @@ describe("createSystemTransformHook", () => {
       cleanup();
     }
   });
+
+  // -----------------------------------------------------------------------
+  // Memory cache behaviour
+  // -----------------------------------------------------------------------
+
+  it("cache miss: first call invokes ctx.memory.search", async () => {
+    const { testDir, cleanup } = setupTestEnvironment("sys-transform-cache-miss");
+    try {
+      const ctx = createMockPluginContext({
+        testDir,
+        state: {
+          activeWorkflowId: "default",
+          workflows: {
+            default: createDefaultWorkflowState({ phase: "execute", currentWave: 1 }),
+          },
+        },
+      });
+
+      const searchSpy = spyOn(ctx.memory, "search");
+
+      const hooks = createSystemTransformHook(ctx);
+      const output = { system: [] as string[] };
+      const input = { sessionID: "sess-cache-miss", model: {} as SdkModel };
+
+      await hooks["experimental.chat.system.transform"]?.(input, output);
+
+      expect(searchSpy).toHaveBeenCalledTimes(1);
+    } finally {
+      cleanup();
+    }
+  });
+
+  it("cache hit: second call with same sessionID+phase+wave skips ctx.memory.search", async () => {
+    const { testDir, cleanup } = setupTestEnvironment("sys-transform-cache-hit");
+    try {
+      const ctx = createMockPluginContext({
+        testDir,
+        state: {
+          activeWorkflowId: "default",
+          workflows: {
+            default: createDefaultWorkflowState({ phase: "execute", currentWave: 2 }),
+          },
+        },
+      });
+
+      const searchSpy = spyOn(ctx.memory, "search");
+
+      const hooks = createSystemTransformHook(ctx);
+      const input = { sessionID: "sess-cache-hit", model: {} as SdkModel };
+
+      // First call — cache miss
+      await hooks["experimental.chat.system.transform"]?.(input, { system: [] as string[] });
+      expect(searchSpy).toHaveBeenCalledTimes(1);
+
+      // Second call — same key, should be a cache hit
+      await hooks["experimental.chat.system.transform"]?.(input, { system: [] as string[] });
+      expect(searchSpy).toHaveBeenCalledTimes(1); // still 1, not 2
+    } finally {
+      cleanup();
+    }
+  });
+
+  it("different phase produces a new cache key → cache miss → search called again", async () => {
+    const { testDir, cleanup } = setupTestEnvironment("sys-transform-cache-phase");
+    try {
+      const ctx = createMockPluginContext({
+        testDir,
+        state: {
+          activeWorkflowId: "default",
+          workflows: {
+            default: createDefaultWorkflowState({ phase: "execute", currentWave: 1 }),
+          },
+        },
+      });
+
+      const searchSpy = spyOn(ctx.memory, "search");
+      const hooks = createSystemTransformHook(ctx);
+
+      // First call — execute phase
+      await hooks["experimental.chat.system.transform"]?.(
+        { sessionID: "sess-phase-test", model: {} as SdkModel },
+        { system: [] as string[] },
+      );
+      expect(searchSpy).toHaveBeenCalledTimes(1);
+
+      // Mutate workflow to a different phase
+      ctx.stateManager.updateWorkflow({ phase: "plan" });
+
+      // Second call — different phase → different cache key → cache miss
+      await hooks["experimental.chat.system.transform"]?.(
+        { sessionID: "sess-phase-test", model: {} as SdkModel },
+        { system: [] as string[] },
+      );
+      expect(searchSpy).toHaveBeenCalledTimes(2);
+    } finally {
+      cleanup();
+    }
+  });
+
+  it("clearMemoryCache() resets the cache so next call is a miss", async () => {
+    const { testDir, cleanup } = setupTestEnvironment("sys-transform-clear-cache");
+    try {
+      const ctx = createMockPluginContext({
+        testDir,
+        state: {
+          activeWorkflowId: "default",
+          workflows: {
+            default: createDefaultWorkflowState({ phase: "plan", currentWave: 0 }),
+          },
+        },
+      });
+
+      const searchSpy = spyOn(ctx.memory, "search");
+      const hooks = createSystemTransformHook(ctx);
+      const input = { sessionID: "sess-clear", model: {} as SdkModel };
+
+      // First call — cache miss
+      await hooks["experimental.chat.system.transform"]?.(input, { system: [] as string[] });
+      expect(searchSpy).toHaveBeenCalledTimes(1);
+
+      // Second call — cache hit, no new search
+      await hooks["experimental.chat.system.transform"]?.(input, { system: [] as string[] });
+      expect(searchSpy).toHaveBeenCalledTimes(1);
+
+      // Clear the cache
+      clearMemoryCache();
+
+      // Third call — cache was cleared → miss → search called again
+      await hooks["experimental.chat.system.transform"]?.(input, { system: [] as string[] });
+      expect(searchSpy).toHaveBeenCalledTimes(2);
+    } finally {
+      cleanup();
+    }
+  });
+
+  it("TTL expiry produces a cache miss on next call", async () => {
+    const { testDir, cleanup } = setupTestEnvironment("sys-transform-ttl");
+    try {
+      const ctx = createMockPluginContext({
+        testDir,
+        state: {
+          activeWorkflowId: "default",
+          workflows: {
+            default: createDefaultWorkflowState({ phase: "execute", currentWave: 3 }),
+          },
+        },
+      });
+
+      const searchSpy = spyOn(ctx.memory, "search");
+      const hooks = createSystemTransformHook(ctx);
+      const input = { sessionID: "sess-ttl", model: {} as SdkModel };
+
+      // First call — cache miss, entry stored
+      await hooks["experimental.chat.system.transform"]?.(input, { system: [] as string[] });
+      expect(searchSpy).toHaveBeenCalledTimes(1);
+
+      // Manually expire the cache entry by backdating its timestamp
+      // Access the module-level cache via clearMemoryCache + re-insert with old timestamp
+      // Strategy: clear cache and re-populate with an expired entry by calling the hook
+      // with a manipulated Date.now. We use clearMemoryCache + Date mock approach.
+      const realDateNow = Date.now;
+      // Simulate 31 seconds have passed (TTL is 30s)
+      Date.now = () => realDateNow() + 31_000;
+
+      try {
+        // Second call — TTL expired → cache miss → search called again
+        await hooks["experimental.chat.system.transform"]?.(input, { system: [] as string[] });
+        expect(searchSpy).toHaveBeenCalledTimes(2);
+      } finally {
+        Date.now = realDateNow;
+      }
+    } finally {
+      cleanup();
+    }
+  });
 });
