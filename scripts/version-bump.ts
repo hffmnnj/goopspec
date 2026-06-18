@@ -1,7 +1,5 @@
 /// <reference types="bun-types" />
 
-import { ensurePosixPath } from "../src/shared/platform.js";
-
 type CliOptions = {
   version?: string;
   dryRun: boolean;
@@ -24,6 +22,10 @@ type PatternRegistryEntry = {
   patterns: UpdatePattern[];
 };
 
+function ensurePosixPath(p: string): string {
+  return p.replace(/\\/g, "/");
+}
+
 class UsageError extends Error {
   override name = "UsageError";
 }
@@ -40,7 +42,7 @@ Examples:
 
 const FILE_PATTERNS = [
   "*.example.json",
-  "src/**/*.ts",
+  "packages/opencode-plugin/src/**/*.ts",
 ];
 
 const EXPLICIT_FILES = ["package.json", "README.md"];
