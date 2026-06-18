@@ -12,6 +12,7 @@
 import type { SdkModel } from "../core/sdk-compat.js";
 import type { MemorySearchResult, PluginContext, WorkflowState } from "../core/types.js";
 import { buildEnforcementContext } from "../features/enforcement/phase-context.js";
+import { log } from "../shared/logger.js";
 import type { HookFactory, Hooks } from "./types.js";
 import { safeHandler } from "./utils.js";
 
@@ -110,6 +111,45 @@ export function buildMemoryBlock(memories: MemorySearchResult[], tokenBudget: nu
 }
 
 // ---------------------------------------------------------------------------
+// DB context block
+// ---------------------------------------------------------------------------
+
+/**
+ * Build a `<goopspec_db>` context block listing available DB tools and
+ * the document inventory for the active workflow.
+ *
+ * Returns an empty string when the DB is unavailable or throws — the
+ * system-transform hook must never crash due to DB issues.
+ */
+export function buildDbContextBlock(ctx: PluginContext, workflowId: string): string {
+  let docInventory = "(DB not available)";
+  try {
+    const existingTypes = ctx.db.listDocTypes(workflowId);
+    if (existingTypes.length > 0) {
+      docInventory = existingTypes.map((t) => `- ${t}`).join("\n");
+    } else {
+      docInventory = "(no documents yet — use goop_write_db to create them)";
+    }
+  } catch (error) {
+    log("buildDbContextBlock: DB unavailable, skipping", { error });
+    return "";
+  }
+
+  return [
+    "<goopspec_db>",
+    "## DB Tools Available",
+    "- goop_read_db(doc_type, workflow_id?) — read a workflow document (spec, blueprint, chronicle, adl, handoff, requirements, research)",
+    "- goop_write_db(doc_type, content, workflow_id?) — write/update a workflow document; renders markdown sidecar automatically",
+    "- goop_save_note(title, body, tags, source_agent, importance, workflow_id?, project_id?) — save a Field Note (persists across projects)",
+    "- goop_search_notes(query, tags?, project_id?, workflow_id?, limit?) — search Field Notes with FTS + tag matching",
+    "",
+    `## Workflow Documents (${workflowId})`,
+    docInventory,
+    "</goopspec_db>",
+  ].join("\n");
+}
+
+// ---------------------------------------------------------------------------
 // Hook factory
 // ---------------------------------------------------------------------------
 
@@ -142,7 +182,15 @@ export function createSystemTransformHook(ctx: PluginContext): Partial<Hooks> {
       // 2. Phase rules — always injected
       const phaseRulesBlock = buildPhaseRulesBlock(workflow, workflowId);
 
-      // 3. Memory block — token-budgeted
+      // 3. DB context block — lists available DB tools and doc inventory
+      let dbBlock = "";
+      try {
+        dbBlock = buildDbContextBlock(ctx, workflowId);
+      } catch (error) {
+        log("system-transform: DB context block failed, skipping", { error });
+      }
+
+      // 4. Memory block — token-budgeted
       let memoryBlock = "";
       const tokenBudget = DEFAULT_MEMORY_TOKEN_BUDGET;
 
@@ -157,6 +205,9 @@ export function createSystemTransformHook(ctx: PluginContext): Partial<Hooks> {
 
       // Assemble the full context block
       const parts = [stateBlock, phaseRulesBlock];
+      if (dbBlock) {
+        parts.push(dbBlock);
+      }
       if (memoryBlock) {
         parts.push(memoryBlock);
       }
