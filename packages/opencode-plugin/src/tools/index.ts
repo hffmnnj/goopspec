@@ -1,5 +1,5 @@
 /**
- * Tool Registry — wires all 15 GoopSpec tools for plugin registration.
+ * Tool Registry — wires all 16 GoopSpec tools for plugin registration.
  *
  * `createTools` returns a map of canonical MCP tool names → ToolDefinition.
  * Individual factory re-exports allow direct import when only one tool is needed.
@@ -11,6 +11,7 @@ import type { ToolDefinition } from "../core/sdk-compat.js";
 import type { PluginContext } from "../core/types.js";
 import { createGoopAdlTool } from "./goop-adl/index.js";
 import { createGoopCheckpointTool } from "./goop-checkpoint/index.js";
+import { createGoopCreatePrTool } from "./goop-create-pr/index.js";
 import { createGoopReadDbTool } from "./goop-read-db/index.js";
 import { createGoopReferenceTool } from "./goop-reference/index.js";
 import { createGoopSaveNoteTool } from "./goop-save-note/index.js";
@@ -28,6 +29,7 @@ import { createSlashcommandTool } from "./slashcommand/index.js";
 export {
   createGoopAdlTool,
   createGoopCheckpointTool,
+  createGoopCreatePrTool,
   createGoopReadDbTool,
   createGoopReferenceTool,
   createGoopSaveNoteTool,
@@ -52,6 +54,7 @@ export function createTools(ctx: PluginContext): Record<string, ToolDefinition> 
     goop_checkpoint: createGoopCheckpointTool(ctx),
     goop_setup: createGoopSetupTool(ctx),
     goop_reference: createGoopReferenceTool(ctx),
+    goop_create_pr: createGoopCreatePrTool(ctx),
     goop_read_db: createGoopReadDbTool(ctx),
     goop_write_db: createGoopWriteDbTool(ctx),
     goop_save_note: createGoopSaveNoteTool(ctx),
