@@ -662,7 +662,9 @@ describe("setup feature", () => {
 
       writeFileSync(
         globalPath,
-        JSON.stringify({ agentModels: { orchestrator: "global-orch", "executor-low": "global-low" } }),
+        JSON.stringify({
+          agentModels: { orchestrator: "global-orch", "executor-low": "global-low" },
+        }),
       );
       writeFileSync(
         join(freshDir, "goopspec.json"),

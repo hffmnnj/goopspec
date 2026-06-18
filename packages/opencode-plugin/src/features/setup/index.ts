@@ -16,7 +16,7 @@ import { basename, join } from "node:path";
 
 import { AGENT_ROLES, GOOPSPEC_DIR } from "../../core/constants.js";
 import type { AgentRole } from "../../core/constants.js";
-import type { GoopState, StateManager } from "../../core/types.js";
+import type { StateManager } from "../../core/types.js";
 import { log, logError } from "../../shared/logger.js";
 import { getDbPath, getGlobalConfigPath, getProjectGoopspecJsonPath } from "../../shared/paths.js";
 import { GoopSpecDB } from "../db/index.js";

@@ -72,9 +72,7 @@ describe("createAgentRegistrationHook", () => {
       // The orchestrator should use the override model
       expect(config.agent?.["goop-orchestrator"]?.model).toBe("anthropic/claude-test-override");
       // Other agents should keep their frontmatter defaults (not the override)
-      expect(config.agent?.["goop-executor-low"]?.model).not.toBe(
-        "anthropic/claude-test-override",
-      );
+      expect(config.agent?.["goop-executor-low"]?.model).not.toBe("anthropic/claude-test-override");
     } finally {
       cleanup();
     }
