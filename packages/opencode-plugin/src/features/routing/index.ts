@@ -9,7 +9,7 @@
  * @module features/routing
  */
 
-import type { AgentRole, ExecutorTier } from "../../core/constants.js";
+import { AGENT_ROLES, type AgentRole, type ExecutorTier } from "../../core/constants.js";
 import { type ClassifierOptions, classify } from "./classifier.js";
 
 // Re-export types and categories for consumers.
@@ -35,6 +35,22 @@ export interface RoutingResult {
   readonly matchedSignals: readonly string[];
 }
 
+/** OpenCode agent registration key (for example, `goop-researcher`). */
+export type AgentId = `goop-${AgentRole}`;
+
+/** Result of resolving a routing role to an OpenCode agent ID. */
+export interface AgentIdResolutionResult {
+  readonly role: AgentRole;
+  readonly agentId: AgentId;
+  readonly fallbackApplied: boolean;
+  readonly reason: string;
+}
+
+/** Options for resolving a routed role to an OpenCode agent ID. */
+export interface AgentIdResolutionOptions {
+  readonly availableAgentIds?: readonly string[] | Record<string, unknown>;
+}
+
 /**
  * Classify a task description and return the best agent to handle it.
  *
@@ -43,6 +59,79 @@ export interface RoutingResult {
  */
 export function route(description: string, options?: ClassifierOptions): RoutingResult {
   return classify(description, options);
+}
+
+/** Convert a bare GoopSpec role to the OpenCode `Config.agent` key. */
+export function toAgentId(role: AgentRole): AgentId {
+  return `goop-${role}` as AgentId;
+}
+
+/** Normalize either `explorer` or `goop-explorer` into a bare role. */
+export function normalizeAgentRole(agent: AgentRole | string): AgentRole | undefined {
+  const role = agent.replace(/^goop-/, "");
+  return (AGENT_ROLES as readonly string[]).includes(role) ? (role as AgentRole) : undefined;
+}
+
+/**
+ * Resolve a routed role to the actual OpenCode agent ID.
+ *
+ * Routing categories use bare roles (`explorer`), while OpenCode validates task
+ * subagents against `Config.agent` keys (`goop-explorer`). This helper is the
+ * bridge between the two namespaces and applies the requested explorer →
+ * researcher fallback when explorer is not registered.
+ */
+export function resolveAgentId(
+  agent: AgentRole | string,
+  options: AgentIdResolutionOptions = {},
+): AgentIdResolutionResult {
+  const role = normalizeAgentRole(agent) ?? "researcher";
+  const agentId = toAgentId(role);
+
+  if (isAgentAvailable(agentId, options.availableAgentIds)) {
+    return {
+      role,
+      agentId,
+      fallbackApplied: false,
+      reason: `Resolved ${role} to registered agent ID ${agentId}.`,
+    };
+  }
+
+  if (role === "explorer" && isAgentAvailable("goop-researcher", options.availableAgentIds)) {
+    return {
+      role: "researcher",
+      agentId: "goop-researcher",
+      fallbackApplied: true,
+      reason: "goop-explorer is unavailable; falling back to goop-researcher.",
+    };
+  }
+
+  return {
+    role,
+    agentId,
+    fallbackApplied: false,
+    reason: options.availableAgentIds
+      ? `${agentId} is not in the available agent list.`
+      : `Resolved ${role} to agent ID ${agentId}.`,
+  };
+}
+
+/** Classify a description and return the OpenCode-valid agent ID. */
+export function routeToAgentId(
+  description: string,
+  options: ClassifierOptions & AgentIdResolutionOptions = {},
+): RoutingResult & AgentIdResolutionResult {
+  const routed = route(description, options);
+  const resolved = resolveAgentId(routed.agent, options);
+  return { ...routed, ...resolved };
+}
+
+function isAgentAvailable(
+  agentId: AgentId,
+  availableAgentIds: readonly string[] | Record<string, unknown> | undefined,
+): boolean {
+  if (!availableAgentIds) return true;
+  if (Array.isArray(availableAgentIds)) return availableAgentIds.includes(agentId);
+  return Object.hasOwn(availableAgentIds as Record<string, unknown>, agentId);
 }
 
 // ---------------------------------------------------------------------------

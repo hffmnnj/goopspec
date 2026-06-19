@@ -1,6 +1,14 @@
 import { describe, expect, it } from "bun:test";
 
-import { DEFAULT_AGENT, ROUTING_CATEGORIES, detectAutoDelegation, route } from "./index.js";
+import {
+  DEFAULT_AGENT,
+  ROUTING_CATEGORIES,
+  detectAutoDelegation,
+  resolveAgentId,
+  route,
+  routeToAgentId,
+  toAgentId,
+} from "./index.js";
 
 // ---------------------------------------------------------------------------
 // route() — Executor tiers
@@ -200,6 +208,47 @@ describe("route — explorer", () => {
   it("routes 'where is' queries", () => {
     const r = route("Where is the user model defined?");
     expect(r.agent).toBe("explorer");
+  });
+});
+
+describe("agent ID resolution", () => {
+  it("converts bare roles to OpenCode agent IDs", () => {
+    expect(toAgentId("explorer")).toBe("goop-explorer");
+    expect(toAgentId("researcher")).toBe("goop-researcher");
+  });
+
+  it("resolves goop-prefixed agent IDs without treating them as invalid", () => {
+    const resolved = resolveAgentId("goop-explorer", {
+      availableAgentIds: ["goop-explorer", "goop-researcher"],
+    });
+    expect(resolved.agentId).toBe("goop-explorer");
+    expect(resolved.fallbackApplied).toBe(false);
+  });
+
+  it("falls back from explorer to researcher when explorer is unavailable", () => {
+    const resolved = resolveAgentId("explorer", {
+      availableAgentIds: ["goop-researcher"],
+    });
+    expect(resolved.agentId).toBe("goop-researcher");
+    expect(resolved.role).toBe("researcher");
+    expect(resolved.fallbackApplied).toBe(true);
+  });
+
+  it("routes codebase questions to a valid OpenCode agent ID", () => {
+    const resolved = routeToAgentId("Where is the user model defined?", {
+      availableAgentIds: ["goop-explorer", "goop-researcher"],
+    });
+    expect(resolved.agent).toBe("explorer");
+    expect(resolved.agentId).toBe("goop-explorer");
+  });
+
+  it("routes codebase questions to researcher when explorer is unavailable", () => {
+    const resolved = routeToAgentId("Where is the user model defined?", {
+      availableAgentIds: ["goop-researcher"],
+    });
+    expect(resolved.agent).toBe("explorer");
+    expect(resolved.agentId).toBe("goop-researcher");
+    expect(resolved.fallbackApplied).toBe(true);
   });
 });
 

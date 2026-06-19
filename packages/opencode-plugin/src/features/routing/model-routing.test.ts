@@ -98,6 +98,29 @@ describe("resolveModelForRole", () => {
     expect(resolveModelForRole("orchestrator", testDir)).toBe(DEFAULT_MODEL_MAP.orchestrator);
   });
 
+  it("accepts goop-prefixed explorer agent IDs from config-driven dispatch", () => {
+    writeConfig(testDir, {
+      agents: {
+        "goop-explorer": { model: "google/gemini-2.5-flash" },
+      },
+    });
+
+    expect(resolveModelForRole("goop-explorer", testDir)).toBe("google/gemini-2.5-flash");
+  });
+
+  it("falls back from explorer model routing to researcher when explorer is unavailable", () => {
+    writeConfig(testDir, {
+      agents: {
+        "goop-explorer": { model: "google/gemini-2.5-flash" },
+        "goop-researcher": { model: "anthropic/claude-sonnet-4-6" },
+      },
+    });
+
+    expect(resolveModelForRole("goop-explorer", testDir, ["goop-researcher"])).toBe(
+      "anthropic/claude-sonnet-4-6",
+    );
+  });
+
   it("covers all 13 agent roles", () => {
     expect(AGENT_ROLES.length).toBe(13);
     for (const role of AGENT_ROLES) {

@@ -17,6 +17,7 @@ import type { AgentRole, ExecutorTier } from "../../core/constants.js";
 import { AGENT_ROLES } from "../../core/constants.js";
 import type { AgentModelPreference } from "../../core/types.js";
 import { DEFAULT_MODEL_MAP, getEffectiveModelMap } from "../setup/index.js";
+import { normalizeAgentRole, resolveAgentId } from "./index.js";
 
 // ---------------------------------------------------------------------------
 // Resolve model for a role
@@ -33,12 +34,21 @@ import { DEFAULT_MODEL_MAP, getEffectiveModelMap } from "../setup/index.js";
  * @param projectDir - Optional project directory for config-based overrides.
  * @returns The resolved model identifier string.
  */
-export function resolveModelForRole(role: AgentRole, projectDir?: string): string {
+export function resolveModelForRole(
+  role: AgentRole | string,
+  projectDir?: string,
+  availableAgentIds?: readonly string[] | Record<string, unknown>,
+): string {
+  const resolved = resolveAgentId(role, { availableAgentIds });
+  const normalizedRole = normalizeAgentRole(resolved.agentId) ?? "orchestrator";
+
   if (projectDir) {
     const effective = getEffectiveModelMap(projectDir);
-    return effective[role] ?? DEFAULT_MODEL_MAP[role] ?? DEFAULT_MODEL_MAP.orchestrator;
+    return (
+      effective[normalizedRole] ?? DEFAULT_MODEL_MAP[normalizedRole] ?? DEFAULT_MODEL_MAP.orchestrator
+    );
   }
-  return DEFAULT_MODEL_MAP[role] ?? DEFAULT_MODEL_MAP.orchestrator;
+  return DEFAULT_MODEL_MAP[normalizedRole] ?? DEFAULT_MODEL_MAP.orchestrator;
 }
 
 // ---------------------------------------------------------------------------
