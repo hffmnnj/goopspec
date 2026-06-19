@@ -29,7 +29,7 @@
   "author": "James",
   "license": "MIT",
   "dependencies": {
-    "@sinclair/typebox": "^0.34.33",
+    "@sinclair/typebox": "^0.34.33"
   },
   "devDependencies": {
     "@biomejs/biome": "^1.9.4",
@@ -59,7 +59,7 @@
   "pi": {
     "name": "GoopSpec",
     "description": "Five-phase workflow orchestration for Pi agent — spec-locked gates, compounding memory, tiered executor delegation",
-    "extensions": ["src/extensions/goopspec.ts"],
+    "extensions": ["src/index.ts"],
     "skills": [],
     "prompts": [],
     "themes": []

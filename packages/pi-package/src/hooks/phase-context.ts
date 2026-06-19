@@ -13,7 +13,10 @@ export type BeforeAgentStartHandler = (ctx: {
 	projectDir: string;
 	systemPromptAddition?: string;
 	[key: string]: unknown;
-}) => Promise<void> | void;
+}) =>
+	| Promise<{ systemPromptAddition?: string } | void>
+	| { systemPromptAddition?: string }
+	| void;
 
 export function createPhaseContextHook(
 	_ctx: GoopPiContext,
@@ -24,7 +27,9 @@ export function createPhaseContextHook(
 			sm = new StateManager(piCtx.projectDir);
 			const workflowId = sm.getActiveWorkflowId();
 			const state = sm.getState(workflowId);
-			piCtx.systemPromptAddition = buildPhaseContext(state);
+			const phaseContext = buildPhaseContext(state);
+			piCtx.systemPromptAddition = phaseContext;
+			return { systemPromptAddition: phaseContext } as unknown as void;
 		} catch (error) {
 			logError("phase-context hook failed", error);
 		} finally {

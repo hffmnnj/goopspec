@@ -1,5 +1,6 @@
 import { type Static, Type } from "@sinclair/typebox";
 import type { GoopPiContext, PiEventContext } from "../../core/types.js";
+import { useBuiltinWebSearch } from "../../features/runtime/index.js";
 import { logError } from "../../shared/logger.js";
 import { searchBrave } from "./brave-client.js";
 
@@ -29,6 +30,18 @@ export function createGoopWebSearchTool(_ctx: GoopPiContext) {
       _onUpdate: (text: string) => void,
       _piCtx: PiEventContext,
     ): Promise<string> {
+      if (useBuiltinWebSearch()) {
+        return [
+          "## omp Delegation",
+          "",
+          "Use the built-in `web_search` tool for this query:",
+          `**Query:** ${args.query}`,
+          "",
+          "omp's built-in web_search supports 14 providers with higher quality than Brave alone.",
+          `Call: web_search({ query: ${JSON.stringify(args.query)}${args.count ? `, count: ${args.count}` : ""} })`,
+        ].join("\n");
+      }
+
       try {
         const { results, query } = await searchBrave(args.query, {
           count: args.count ?? 10,
