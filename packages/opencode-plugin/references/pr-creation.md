@@ -147,6 +147,76 @@ git checkout main && git pull
 gh run list --limit 3
 ```
 
+## Atomic PR Model
+
+One PR per logical change — not one per session, not one per project milestone.
+
+Each PR should be independently reviewable, mergeable, and understandable without context from any other PR in a series.
+
+**When to split into separate PRs:**
+- Distinct feature areas that can ship independently
+- Infrastructure changes separate from feature changes
+- Bug fixes separate from feature additions
+- Documentation changes separate from code changes
+
+**When NOT to split:**
+- Tightly coupled changes that would break if either merged alone
+- Trivial follow-up (typo fix, comment) directly after the PR it targets
+
+**Benefits:**
+- Reviewers can focus on one clear scope
+- Smaller diffs are reviewed more thoroughly
+- Failed or reverted changes have a smaller blast radius
+- Git history is more useful: `git log --oneline` tells a story
+
+**Branching convention:**
+- Name branches for the feature, not the session
+- Use `feat/<name>`, `fix/<description>`, `chore/<description>`
+- Never encode session identifiers or internal tooling phases into branch names
+
+## Terminology Gate
+
+PRs must use plain English. Internal tooling terminology must not appear in PR titles, descriptions, or branch names.
+
+The `goop_create_pr` tool enforces this automatically — it scans PR content before calling `gh pr create` and blocks if forbidden terms are detected.
+
+**Forbidden term categories:**
+- Planning phases: "wave", "wave 2/4", "task 2.1"
+- Requirements labels: "must-have", "MH-3", "nice-to-have", "NH-1"
+- Internal agent names: "goop-executor", "goop-executor-medium"
+- Internal documents: "chronicle", "ADL", "wiring task"
+- Process terms: "spec locked", "acceptance gate", "deviation rule"
+
+**Severity levels:**
+- `error` — blocks PR creation. Fix the content before retrying.
+- `warn` — logged but does not block.
+
+**Before/after example:**
+
+Before (blocked):
+```
+Title: Complete wave 2/4 — MH-3 implemented
+Body: goop-executor-medium ran the wiring task. Deviation rule 3 applied. ADL updated.
+```
+
+After (passes gate):
+```
+Title: Add PR creation tool with terminology gate
+Body: Implements the sanitizer module and MCP tool. Integration step verified. Decision log updated.
+```
+
+**Using `goop_create_pr`:**
+```bash
+goop_create_pr({
+  title: "feat(tools): add PR creation tool with terminology gate",
+  body: "Implements the sanitizer and MCP tool...",
+  branch: "feat/atomic-pr-system",
+  base: "main"
+})
+```
+
+If the gate blocks, the tool returns a list of violations with line numbers and suggested replacements. Fix the offending lines and retry.
+
 ## Anti-Patterns
 
 - **Giant PRs (>500 lines)** — impossible to review thoroughly; split into smaller, focused PRs.
@@ -155,7 +225,8 @@ gh run list --limit 3
 - **Reviewing your own PR and immediately merging** — always get at least one other set of eyes.
 - **Force-pushing to a PR branch after review has started** — rewrites history reviewers already read; use a new commit instead.
 - **Marking comments resolved without addressing them** — let the reviewer decide when their concern is satisfied.
+- **Bundling unrelated changes** — each PR should have one reason to exist; if you can't write a one-line summary, split it.
 
 ---
 
-*PR Creation v1.0 — GoopSpec Reference*
+*PR Creation v1.1 — GoopSpec Reference*
