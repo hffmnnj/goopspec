@@ -1,0 +1,69 @@
+{
+  "name": "@goopspec/pi-package",
+  "version": "0.1.0",
+  "private": false,
+  "description": "GoopSpec — five-phase workflow orchestration for Pi agent",
+  "type": "module",
+  "main": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "files": [
+    "src"
+  ],
+  "scripts": {
+    "build": "tsc --project tsconfig.json",
+    "typecheck": "bunx tsc --noEmit",
+    "test": "bun test",
+    "lint": "biome check src",
+    "lint:fix": "biome check --write src",
+    "format": "biome format --write src"
+  },
+  "keywords": [
+    "pi-agent",
+    "goopspec",
+    "spec-driven",
+    "agent-orchestration",
+    "workflow"
+  ],
+  "author": "James",
+  "license": "MIT",
+  "dependencies": {
+    "@sinclair/typebox": "^0.34.33",
+    "better-sqlite3": "^11.10.0"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^1.9.4",
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/node": "^22.13.9",
+    "bun-types": "latest",
+    "typescript": "^5.8.2"
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-agent-core": "*",
+    "@oh-my-pi/pi-coding-agent": "*"
+  },
+  "peerDependenciesMeta": {
+    "@earendil-works/pi-agent-core": {
+      "optional": false
+    },
+    "@oh-my-pi/pi-coding-agent": {
+      "optional": true
+    }
+  },
+  "engines": {
+    "bun": ">=1.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/hffmnnj/opencode-goopspec.git"
+  },
+  "pi": {
+    "name": "GoopSpec",
+    "description": "Five-phase workflow orchestration for Pi agent — spec-locked gates, compounding memory, tiered executor delegation",
+    "extensions": ["src/extensions/goopspec.ts"],
+    "skills": [],
+    "prompts": [],
+    "themes": []
+  }
+}
