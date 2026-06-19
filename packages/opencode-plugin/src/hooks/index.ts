@@ -13,7 +13,6 @@ import { createAutoProgressionHook } from "./auto-progression.js";
 import { chatMessageFactory } from "./chat-message.js";
 import { createCommandProcessorHook } from "./command-processor.js";
 import { commentCheckerFactory } from "./comment-checker.js";
-import { referenceInjectionFactory } from "./reference-injection.js";
 import { createCompactionHook } from "./compaction-hook.js";
 import { createEventHandlerHook } from "./event-handler.js";
 import { orchestratorEnforcementFactory } from "./orchestrator-enforcement.js";
@@ -67,7 +66,6 @@ export const DEFAULT_HOOK_FACTORIES: readonly HookFactory[] = [
   agentRegistrationFactory,
   systemTransformFactory,
   chatMessageFactory,
-  referenceInjectionFactory,
   commentCheckerFactory,
   createCommandProcessorHook,
   orchestratorEnforcementFactory,

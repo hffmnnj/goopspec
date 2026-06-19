@@ -65,6 +65,14 @@ export interface FieldNoteRow {
   created_at: number;
 }
 
+/** Raw row from the `chronicle_events` table. */
+export interface ChronicleEventRow {
+  id: number;
+  workflow_id: string;
+  entry: string;
+  created_at: number;
+}
+
 // ---------------------------------------------------------------------------
 // Search result shapes
 // ---------------------------------------------------------------------------

@@ -11,6 +11,7 @@ import { Database } from "bun:sqlite";
 import { runMigrations } from "./migrations.js";
 import { initSchema } from "./schema.js";
 import type {
+  ChronicleEventRow,
   DocType,
   DocumentRow,
   EventRow,
@@ -189,6 +190,41 @@ export class GoopSpecDB {
         $content: content,
         $now: now,
       });
+  }
+
+  appendDocument(workflowId: string, docType: DocType, content: string): void {
+    const existing = this.getDocument(workflowId, docType);
+    if (existing) {
+      const updated = existing.content + "\n\n" + content;
+      this.upsertDocument(workflowId, docType, updated);
+    } else {
+      this.upsertDocument(workflowId, docType, content);
+    }
+  }
+
+  // -----------------------------------------------------------------------
+  // Chronicle Events
+  // -----------------------------------------------------------------------
+
+  appendChronicleEvent(workflowId: string, entry: string): number {
+    const result = this.db
+      .query<ChronicleEventRow, NamedBindings>(
+        `INSERT INTO chronicle_events (workflow_id, entry)
+         VALUES ($workflowId, $entry)
+         RETURNING id`,
+      )
+      .get({ $workflowId: workflowId, $entry: entry });
+    return result?.id ?? -1;
+  }
+
+  getChronicleEvents(workflowId: string): ChronicleEventRow[] {
+    return this.db
+      .query<ChronicleEventRow, NamedBindings>(
+        `SELECT id, workflow_id, entry, created_at FROM chronicle_events
+         WHERE workflow_id = $workflowId
+         ORDER BY created_at ASC`,
+      )
+      .all({ $workflowId: workflowId });
   }
 
   listDocTypes(workflowId: string): DocType[] {

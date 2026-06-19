@@ -114,7 +114,6 @@ describe("createPluginContext()", () => {
     expect(toolNames).toContain("goop_write_db");
     expect(toolNames).toContain("goop_save_note");
     expect(toolNames).toContain("goop_search_notes");
-    expect(toolNames).toContain("goop_create_pr");
     expect(toolNames).toContain("memory_save");
     expect(toolNames).toContain("memory_search");
     expect(toolNames).toContain("memory_forget");

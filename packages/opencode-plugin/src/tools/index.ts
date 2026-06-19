@@ -11,7 +11,6 @@ import type { ToolDefinition } from "../core/sdk-compat.js";
 import type { PluginContext } from "../core/types.js";
 import { createGoopAdlTool } from "./goop-adl/index.js";
 import { createGoopCheckpointTool } from "./goop-checkpoint/index.js";
-import { createGoopCreatePrTool } from "./goop-create-pr/index.js";
 import { createGoopReadDbTool } from "./goop-read-db/index.js";
 import { createGoopReferenceTool } from "./goop-reference/index.js";
 import { createGoopSaveNoteTool } from "./goop-save-note/index.js";
@@ -20,6 +19,7 @@ import { createGoopSetupTool } from "./goop-setup/index.js";
 import { createGoopSpecTool } from "./goop-spec/index.js";
 import { createGoopStateTool } from "./goop-state/index.js";
 import { createGoopStatusTool } from "./goop-status/index.js";
+import { createGoopAppendChronicleTool } from "./goop-append-chronicle/index.js";
 import { createGoopWriteDbTool } from "./goop-write-db/index.js";
 import { createMemoryForgetTool } from "./memory-forget/index.js";
 import { createMemorySaveTool } from "./memory-save/index.js";
@@ -28,8 +28,8 @@ import { createSlashcommandTool } from "./slashcommand/index.js";
 
 export {
   createGoopAdlTool,
+  createGoopAppendChronicleTool,
   createGoopCheckpointTool,
-  createGoopCreatePrTool,
   createGoopReadDbTool,
   createGoopReferenceTool,
   createGoopSaveNoteTool,
@@ -54,9 +54,9 @@ export function createTools(ctx: PluginContext): Record<string, ToolDefinition> 
     goop_checkpoint: createGoopCheckpointTool(ctx),
     goop_setup: createGoopSetupTool(ctx),
     goop_reference: createGoopReferenceTool(ctx),
-    goop_create_pr: createGoopCreatePrTool(ctx),
     goop_read_db: createGoopReadDbTool(ctx),
     goop_write_db: createGoopWriteDbTool(ctx),
+    goop_append_chronicle: createGoopAppendChronicleTool(ctx),
     goop_save_note: createGoopSaveNoteTool(ctx),
     goop_search_notes: createGoopSearchNotesTool(ctx),
     memory_save: createMemorySaveTool(ctx),

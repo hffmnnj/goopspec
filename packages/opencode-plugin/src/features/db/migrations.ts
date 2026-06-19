@@ -9,7 +9,7 @@
 
 import type { Database } from "bun:sqlite";
 
-export const CURRENT_SCHEMA_VERSION = 1;
+export const CURRENT_SCHEMA_VERSION = 2;
 
 interface VersionRow {
   v: number | null;
@@ -24,6 +24,18 @@ export function runMigrations(db: Database): void {
     db.run("INSERT OR IGNORE INTO schema_version(version) VALUES(1)");
   }
 
-  // Future migrations:
-  // if (current < 2) { ... db.run("ALTER TABLE ..."); db.run("INSERT OR IGNORE INTO schema_version(version) VALUES(2)"); }
+  if (current < 2) {
+    db.run(`
+      CREATE TABLE IF NOT EXISTS chronicle_events (
+        id          INTEGER PRIMARY KEY AUTOINCREMENT,
+        workflow_id TEXT    NOT NULL,
+        entry       TEXT    NOT NULL,
+        created_at  INTEGER DEFAULT (unixepoch())
+      )
+    `);
+    db.run(
+      "CREATE INDEX IF NOT EXISTS idx_chronicle_events_workflow ON chronicle_events(workflow_id)",
+    );
+    db.run("INSERT OR IGNORE INTO schema_version(version) VALUES(2)");
+  }
 }

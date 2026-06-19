@@ -358,8 +358,8 @@ describe("setup feature", () => {
     it("reads state version and active workflow", () => {
       init(testDir, stateManager);
       const status = getStatus(testDir);
-      // DB schema version is 1 (CURRENT_SCHEMA_VERSION from migrations.ts)
-      expect(status.stateVersion).toBe(1);
+      // DB schema version matches CURRENT_SCHEMA_VERSION from migrations.ts
+      expect(status.stateVersion).toBe(2);
       expect(status.activeWorkflow).toBeDefined();
     });
   });

@@ -121,4 +121,78 @@ describe("goop_write_db tool", () => {
     expect(doc).not.toBeNull();
     expect(doc?.content).toBe("# Custom Spec");
   });
+
+  // -----------------------------------------------------------------------
+  // Append mode
+  // -----------------------------------------------------------------------
+
+  describe("append mode", () => {
+    it("mode: append on a missing document creates it with just the provided content", async () => {
+      const tool = createGoopWriteDbTool(ctx);
+      await tool.execute({ doc_type: "spec", content: "# First Entry", mode: "append" }, toolCtx);
+
+      const doc = ctx.db.getDocument("default", "spec");
+      expect(doc).not.toBeNull();
+      expect(doc?.content).toBe("# First Entry");
+    });
+
+    it("mode: append on an existing document appends with double newline separator", async () => {
+      ctx.db.upsertDocument("default", "spec", "# Existing Content");
+
+      const tool = createGoopWriteDbTool(ctx);
+      await tool.execute({ doc_type: "spec", content: "# Appended Content", mode: "append" }, toolCtx);
+
+      const doc = ctx.db.getDocument("default", "spec");
+      expect(doc?.content).toBe("# Existing Content\n\n# Appended Content");
+    });
+
+    it("mode: replace (explicit) overwrites existing content", async () => {
+      ctx.db.upsertDocument("default", "spec", "# Original");
+
+      const tool = createGoopWriteDbTool(ctx);
+      await tool.execute({ doc_type: "spec", content: "# Replaced", mode: "replace" }, toolCtx);
+
+      const doc = ctx.db.getDocument("default", "spec");
+      expect(doc?.content).toBe("# Replaced");
+    });
+
+    it("omitting mode defaults to replace behavior (overwrites existing content)", async () => {
+      ctx.db.upsertDocument("default", "spec", "# Original");
+
+      const tool = createGoopWriteDbTool(ctx);
+      await tool.execute({ doc_type: "spec", content: "# Overwritten" }, toolCtx);
+
+      const doc = ctx.db.getDocument("default", "spec");
+      expect(doc?.content).toBe("# Overwritten");
+    });
+
+    it("appending to doc_type: chronicle inserts a row into chronicle_events", async () => {
+      const tool = createGoopWriteDbTool(ctx);
+      await tool.execute(
+        { doc_type: "chronicle", content: "Wave 1 complete", mode: "append" },
+        toolCtx,
+      );
+
+      const events = ctx.db.getChronicleEvents("default");
+      expect(events.length).toBe(1);
+      expect(events[0].entry).toBe("Wave 1 complete");
+      expect(events[0].workflow_id).toBe("default");
+    });
+
+    it("sidecar file reflects the full appended content after append", async () => {
+      ctx.db.upsertDocument("default", "blueprint", "# Part One");
+
+      const tool = createGoopWriteDbTool(ctx);
+      await tool.execute(
+        { doc_type: "blueprint", content: "# Part Two", mode: "append" },
+        toolCtx,
+      );
+
+      const sidecarPath = join(testDir, ".goopspec", "default", "BLUEPRINT.md");
+      expect(existsSync(sidecarPath)).toBe(true);
+
+      const sidecarContent = await Bun.file(sidecarPath).text();
+      expect(sidecarContent).toBe("# Part One\n\n# Part Two");
+    });
+  });
 });

@@ -12,6 +12,7 @@
  */
 
 import type { PluginContext } from "../core/types.js";
+import { logError } from "../shared/logger.js";
 import type { HookFactory, Hooks } from "./types.js";
 import { safeHandler } from "./utils.js";
 
@@ -130,19 +131,21 @@ function distill(
 ): void {
   const observation = buildObservation(toolName, input, output);
 
-  // Fire-and-forget: do NOT await. Catch errors internally.
-  memory
-    .save({
-      type: "observation",
-      title: `Hook distill: ${observation.slice(0, 80)}`,
-      content: observation,
-      concepts: ["auto-distill", toolName],
-      importance: 4,
-    })
-    .catch((err: unknown) => {
-      // biome-ignore lint/suspicious/noConsole: Intentional error logging for graceful degradation
-      console.error("[goopspec] memory-distill error:", err);
-    });
+  // Defer to queueMicrotask so synchronous SQLite work does not block the
+  // hook's critical path. Catch errors internally — no unhandled rejections.
+  queueMicrotask(() => {
+    void memory
+      .save({
+        type: "observation",
+        title: `Hook distill: ${observation.slice(0, 80)}`,
+        content: observation,
+        concepts: ["auto-distill", toolName],
+        importance: 4,
+      })
+      .catch((err: unknown) => {
+        logError("tool-lifecycle: fire-and-forget memory.save failed", err);
+      });
+  });
 }
 
 // ---------------------------------------------------------------------------

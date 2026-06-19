@@ -116,7 +116,7 @@ describe("GoopSpec 5-phase integration", () => {
         "goop_write_db",
         "goop_save_note",
         "goop_search_notes",
-        "goop_create_pr",
+        "goop_append_chronicle",
         "memory_save",
         "memory_search",
         "memory_forget",
