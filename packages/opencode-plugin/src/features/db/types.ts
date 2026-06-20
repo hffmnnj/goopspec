@@ -127,6 +127,15 @@ export interface WaveProgressRow {
   completed_tasks: number;
 }
 
+/** Raw row from the `v_workflow_summary` view. */
+export interface WorkflowSummaryRow {
+  workflow_id: string;
+  total_waves: number;
+  completed_waves: number;
+  open_blockers: number;
+  last_activity: number | null;
+}
+
 /** Raw row from the `doc_sections` table. */
 export interface DocSectionRow {
   id: number;

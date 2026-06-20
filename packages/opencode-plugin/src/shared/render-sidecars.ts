@@ -8,6 +8,7 @@ import { dirname } from "node:path";
 import type { PluginContext, WorkflowState } from "../core/types.js";
 import { DOC_TYPES, type BlockerRow, type DocType, type TraceabilityRow } from "../features/db/types.js";
 import { formatStatus } from "../tools/goop-status/index.js";
+import { buildDashboard } from "./dashboard.js";
 import { logError } from "./logger.js";
 import { getGoopspecRootFilePath, getWorkflowDocPath } from "./paths.js";
 import { buildTimeline, formatTimelineMarkdown } from "./timeline.js";
@@ -201,6 +202,15 @@ function renderTimeline(ctx: PluginContext, workflowId: string): void {
   }
 }
 
+function renderDashboard(ctx: PluginContext): void {
+  try {
+    const dashboardPath = getGoopspecRootFilePath(ctx.sdk.directory, "DASHBOARD.md");
+    safeWriteFile(dashboardPath, buildDashboard(ctx));
+  } catch (error: unknown) {
+    logError("Failed to render dashboard", error);
+  }
+}
+
 export function renderSidecars(
   ctx: PluginContext,
   workflowId: string,
@@ -211,6 +221,7 @@ export function renderSidecars(
     renderWorkflowDocuments(ctx, workflowId, documents);
     renderTraceabilityMatrix(ctx, workflowId);
     renderTimeline(ctx, workflowId);
+    renderDashboard(ctx);
 
     const state = ctx.stateManager.getState();
     const activeId = state.activeWorkflowId;

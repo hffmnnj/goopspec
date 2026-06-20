@@ -27,6 +27,7 @@ import type {
   WaveRow,
   WaveTaskRow,
   WorkflowRow,
+  WorkflowSummaryRow,
 } from "./types.js";
 
 /** Named parameter bindings accepted by bun:sqlite. */
@@ -311,6 +312,16 @@ export class GoopSpecDB {
          ORDER BY wave_number ASC`,
       )
       .all({ $workflowId: workflowId });
+  }
+
+  getWorkflowSummaries(): WorkflowSummaryRow[] {
+    return this.db
+      .query<WorkflowSummaryRow, []>(
+        `SELECT workflow_id, total_waves, completed_waves, open_blockers, last_activity
+         FROM v_workflow_summary
+         ORDER BY last_activity DESC`,
+      )
+      .all();
   }
 
   // -----------------------------------------------------------------------
