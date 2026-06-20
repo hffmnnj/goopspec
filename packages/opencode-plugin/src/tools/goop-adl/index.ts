@@ -10,6 +10,7 @@
 import { tool } from "../../core/sdk-compat.js";
 import type { ToolContext, ToolDefinition } from "../../core/sdk-compat.js";
 import type { ADLEntry, PluginContext } from "../../core/types.js";
+import { logError } from "../../shared/logger.js";
 
 // ---------------------------------------------------------------------------
 // Tool factory
@@ -64,6 +65,19 @@ export function createGoopAdlTool(ctx: PluginContext): ToolDefinition {
         };
 
         ctx.stateManager.appendADL(entry);
+
+        try {
+          const workflowId = ctx.stateManager.getState().activeWorkflowId;
+          ctx.db.insertDecision(workflowId, {
+            rule: entry.rule,
+            type: entry.type,
+            description: entry.description,
+            action: entry.action,
+            files: entry.files,
+          });
+        } catch (error) {
+          logError("Failed to dual-write ADL entry to decisions table", error);
+        }
 
         return `ADL entry added: [${entry.type.toUpperCase()}] ${entry.description}`;
       } catch (error) {

@@ -154,6 +154,30 @@ describe("goop_adl tool", () => {
       expect(result).toContain("Error");
       expect(result).toContain("entry_action");
     });
+
+    it("keeps ADL append behavior when decision dual-write fails", async () => {
+      ctx.db.insertDecision = () => {
+        throw new Error("decisions unavailable");
+      };
+
+      const tool = createGoopAdlTool(ctx);
+      const result = await tool.execute(
+        {
+          action: "append",
+          type: "decision",
+          description: "Keep ADL resilient",
+          entry_action: "Swallow decision insert failure",
+          rule: 4,
+        },
+        toolCtx,
+      );
+
+      expect(result).toContain("ADL entry added");
+      expect(result).toContain("[DECISION]");
+
+      const adl = await tool.execute({ action: "read" }, toolCtx);
+      expect(adl).toContain("Keep ADL resilient");
+    });
   });
 
   // -----------------------------------------------------------------------
