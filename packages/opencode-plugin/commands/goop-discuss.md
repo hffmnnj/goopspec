@@ -29,7 +29,7 @@ goop_reference({ name: "discovery-interview" })
 2. If a `workflow-id` is provided, create and bind it via `goop_state`:
    - `goop_state({ action: "create-workflow", workflowId: "<id>" })`
    - `goop_state({ action: "set-active-workflow", workflowId: "<id>" })`
-3. Ask the six discovery categories directly. Use the `question` tool for structured answers; mark exactly one option `(Recommended)`.
+3. Ask all seven discovery categories (vision, must-haves, constraints, out-of-scope, assumptions, risks, and atomic PR preference) directly. Use the `question` tool for structured answers; mark exactly one option `(Recommended)`.
 4. After the vision answer, infer a kebab-case `workflowId` if one was not supplied, then create and bind it before any file writes.
 5. Probe until each category has specifics. Empty must-haves, out-of-scope, or risks are invalid.
 6. Summarize and confirm with the user.
