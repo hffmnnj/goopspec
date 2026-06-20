@@ -13,7 +13,7 @@ Mandatory gate before planning. Captures six categories of requirements so the c
 - Output: `requirements` document written via `goop_write_db({ doc_type: "requirements", content: "..." })`. The tool renders `.goopspec/<workflowId>/REQUIREMENTS.md` automatically.
 - State update: `interview_complete: true`.
 
-## The Six Questions
+## The Seven Questions
 
 ### 1. Vision (The What)
 
@@ -60,6 +60,14 @@ For each assumption, capture the impact if it turns out to be false.
 
 Every risk needs impact, likelihood, and mitigation.
 
+### 7. Atomic PR Strategy
+
+- Would you like atomic PRs for this workflow? One PR per wave, merged before the next begins.
+- Options: `Yes, one PR per wave (Recommended)` / `No, single PR for all work` / `Custom`.
+- Answer is written to REQUIREMENTS.md under `## Atomic PR Strategy`.
+- If `Yes`: the planner will add `**PR:**` and `**Branch:**` fields to every wave in BLUEPRINT.md.
+- If `No`: all work lands in one branch, one PR at the end.
+
 ## Interview Flow
 
 1. **Setup**: check state, detect existing docs, offer branch creation, set research depth and autopilot mode.
@@ -69,6 +77,7 @@ Every risk needs impact, likelihood, and mitigation.
 5. **Probe for specifics**: convert vague answers into concrete targets.
 6. **Summarize and confirm**: present the six answers back to the user.
 7. **Lock discovery**: write REQUIREMENTS.md via `goop_write_db({ doc_type: "requirements", content: "..." })`, set `interview_complete: true`, save to memory.
+- Ensure REQUIREMENTS.md includes a `## Atomic PR Strategy` section with the answer from question 7.
 
 ## Structured Question Policy
 
@@ -95,6 +104,8 @@ When `workflow.lazyAutopilot == true`:
 - Do not use the `question` tool.
 - Infer a `feat/kebab-case` branch name and create it silently.
 - Write REQUIREMENTS.md via `goop_write_db({ doc_type: "requirements", content: "..." })` directly.
+- Default atomic PR preference to `Yes` (one PR per wave) unless the user's prompt explicitly opts out.
+- Include `## Atomic PR Strategy: Yes — one PR per wave` in the inferred REQUIREMENTS.md.
 - Proceed to `/goop-plan` immediately without a confirmation gate.
 
 ## REQUIREMENTS.md Template
@@ -130,6 +141,9 @@ When `workflow.lazyAutopilot == true`:
 |------|--------|------------|------------|
 | [Risk 1] | H/M/L | H/M/L | [Plan] |
 
+## Atomic PR Strategy
+[Yes — one PR per wave / No — single PR / Custom]
+
 *Discovery interview completed. Ready for /goop-plan.*
 ```
 
@@ -141,6 +155,7 @@ The interview is not complete if:
 - Must-haves is empty.
 - Out of scope is empty.
 - No risks are identified.
+- `## Atomic PR Strategy` section is missing from REQUIREMENTS.md.
 
 ## Skip Conditions
 

@@ -98,12 +98,16 @@ If any required bootstrap step fails, return `BLOCKED`.
 
 Every completed task must produce at least one atomic commit.
 
+- Commit after every task. Never wait until the end of a wave.
+- Never batch multiple tasks into a single commit.
+- A wave with N tasks should produce at least N commits.
 - Use conventional commit format: `type(scope): description`.
 - Never reference GoopSpec phases, waves, task IDs, or planning docs in commit messages.
 - Include a short body explaining why.
 - Prefer multiple focused commits when a task contains unrelated changes.
 
 See `git-workflow.md` for full commit conventions.
+See `pr-creation.md` for wave-level PR strategy, branch naming, and the single-branch parallelism rule.
 
 ## Response Envelope
 
