@@ -34,11 +34,14 @@ goop_reference({ name: "discovery-interview" })
 5. Probe until each category has specifics. Empty must-haves, out-of-scope, or risks are invalid.
 6. Summarize and confirm with the user.
 7. Write REQUIREMENTS.md via `goop_write_db({ doc_type: "requirements", content: "..." })` and call `goop_state({ action: "complete-interview" })`. The tool renders the markdown sidecar automatically.
+   > REQUIREMENTS.md must include a `## Atomic PR Strategy` section.
 8. Suggest `/goop-plan`.
 
 ## Lazy autopilot
 
 If `workflow.lazyAutopilot == true`, infer all six categories from the user's prompt, skip the `question` tool, write REQUIREMENTS.md via `goop_write_db({ doc_type: "requirements", content: "..." })`, then immediately call:
+
+- Infer atomic PR preference as `Yes` (one PR per wave) unless the user's prompt explicitly opts out. Include `## Atomic PR Strategy: Yes — one PR per wave` in the inferred REQUIREMENTS.md.
 
 ```
 mcp_slashcommand({ command: "/goop-plan" })
@@ -49,3 +52,4 @@ mcp_slashcommand({ command: "/goop-plan" })
 - Skip the six categories.
 - Start writing files before the workflow is bound.
 - Announce a transition without calling `mcp_slashcommand`.
+- Write REQUIREMENTS.md without a `## Atomic PR Strategy` section.

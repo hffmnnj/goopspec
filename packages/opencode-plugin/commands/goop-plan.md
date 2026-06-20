@@ -27,6 +27,7 @@ Call `goop_state({ action: "get" })`. If `interviewComplete` is not `true` or th
 goop_reference({ name: "core-protocol" })
 goop_reference({ name: "task-decomposition" })
 goop_reference({ name: "phase-gates" })
+goop_reference({ name: "pr-creation" })
 ```
 
 ## Steps
@@ -43,6 +44,7 @@ Before wave decomposition is finalized, validate:
 - Every task maps to a must-have or an explicit enabler.
 - Out-of-scope, assumptions, and risks are captured.
 - The blueprint has 2–4 tasks per wave and clear verification steps.
+- If atomic PRs enabled (REQUIREMENTS.md `## Atomic PR Strategy` is `Yes`): every wave in BLUEPRINT.md must have `**PR:** <title>` and `**Branch:** <name>` fields.
 
 If validation fails, send the planner back to fix gaps.
 
@@ -76,3 +78,4 @@ mcp_slashcommand({ command: "/goop-execute" })
 - Plan without a completed interview.
 - Lock a spec that does not cover every must-have.
 - Announce `/goop-execute` without calling `mcp_slashcommand`.
+- Produce a BLUEPRINT.md without `**PR:**` and `**Branch:**` wave fields when atomic PRs are enabled.

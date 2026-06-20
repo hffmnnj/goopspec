@@ -100,9 +100,25 @@ End every task with the exact five-section envelope from `references/response-fo
 - Record every architectural decision with `memory_decision`.
 - Save learnings with `memory_save` at completion.
 
+## Commit Discipline
+
+Commit after **each task** completes. Never wait until the end of a wave.
+
+- Minimum one commit per task. A wave with 3 tasks produces ≥ 3 commits.
+- Verify after every commit: `git log --oneline -5`.
+- Reference `pr-creation.md` for branch naming and PR conventions.
+
+**Forbidden:**
+
+| Pattern | Why |
+|---------|-----|
+| Committing all wave work in one shot | Hides task progress, breaks rollback |
+| Messages: "WIP", "update", "fix", "changes" | Zero context |
+| Bundling multiple tasks in one commit | Breaks atomicity |
+
 ## Completion Standard
 
-The solution is correct, resilient, testable, and committed atomically with a professional message. Verification includes unit and integration evidence where applicable.
+The solution is correct, resilient, testable, and committed atomically with a professional message. Verify with `git log --oneline -5` that each task produced its own commit. Verification includes unit and integration evidence where applicable.
 
 ---
 
