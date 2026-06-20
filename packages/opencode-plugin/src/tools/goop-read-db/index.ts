@@ -19,6 +19,15 @@ import type { DocType } from "../../features/db/types.js";
 // ---------------------------------------------------------------------------
 
 export function createGoopReadDbTool(ctx: PluginContext): ToolDefinition {
+  function readDocumentContent(workflowId: string, docType: DocType): string | null {
+    const docSections = ctx.db.getSections(workflowId, docType);
+    if (docSections.length > 0) {
+      return ctx.db.assembleDocument(workflowId, docType);
+    }
+
+    return ctx.db.getDocument(workflowId, docType)?.content ?? null;
+  }
+
   return tool({
     description:
       "Read workflow documents from the GoopSpecDB.\n\n" +
@@ -58,10 +67,10 @@ export function createGoopReadDbTool(ctx: PluginContext): ToolDefinition {
 
           // Load all docs
           const sections = requestedTypes.map((docType) => {
-            const doc = ctx.db.getDocument(workflowId, docType as DocType);
-            const content =
-              doc?.content ?? `_(No ${docType} document found. Use goop_write_db to create it.)_`;
-            return `## ${docType}\n\n${content}`;
+            const content = readDocumentContent(workflowId, docType as DocType);
+            const renderedContent =
+              content ?? `_(No ${docType} document found. Use goop_write_db to create it.)_`;
+            return `## ${docType}\n\n${renderedContent}`;
           });
 
           return sections.join("\n\n---\n\n");
@@ -73,10 +82,10 @@ export function createGoopReadDbTool(ctx: PluginContext): ToolDefinition {
             return `Unknown doc_type: ${args.doc_type}. Valid types: ${DOC_TYPES.join(", ")}`;
           }
 
-          const doc = ctx.db.getDocument(workflowId, args.doc_type as DocType);
+          const content = readDocumentContent(workflowId, args.doc_type as DocType);
 
-          if (doc) {
-            return doc.content;
+          if (content !== null) {
+            return content;
           }
 
           return `No ${args.doc_type} document found for workflow '${workflowId}'. Use goop_write_db to create it.`;
