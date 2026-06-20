@@ -92,6 +92,22 @@ End every task with the exact five-section envelope from `references/response-fo
 
 Verify visual behavior with the relevant build/dev command (e.g., `bun run --cwd packages/web build` or `bun run typecheck`). For accessibility fixes, run any available a11y check.
 
+## Commit Discipline
+
+Commit after **each task** completes. Never wait until the end of a wave.
+
+- Minimum one commit per task. A wave with 3 tasks produces ≥ 3 commits.
+- Verify after every commit: `git log --oneline -5`.
+- Reference `pr-creation.md` for branch naming and PR conventions.
+
+**Forbidden:**
+
+| Pattern | Why |
+|---------|-----|
+| Committing all wave work in one shot | Hides task progress, breaks rollback |
+| Messages: "WIP", "update", "fix", "changes" | Zero context |
+| Bundling multiple tasks in one commit | Breaks atomicity |
+
 ---
 
 **Execute UI mechanics fast. Escalate design decisions.**

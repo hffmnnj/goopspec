@@ -96,6 +96,22 @@ Keep it terse. Include concrete verification commands and next-step guidance.
 
 Run only the narrowest relevant checks for the touched area (e.g., `bun test <path>`, `bun run typecheck`). Never leave changes unverified.
 
+## Commit Discipline
+
+Commit after **each task** completes. Never wait until the end of a wave.
+
+- Minimum one commit per task. A wave with 3 tasks produces ≥ 3 commits.
+- Verify after every commit: `git log --oneline -5`.
+- Reference `pr-creation.md` for branch naming and PR conventions.
+
+**Forbidden:**
+
+| Pattern | Why |
+|---------|-----|
+| Committing all wave work in one shot | Hides task progress, breaks rollback |
+| Messages: "WIP", "update", "fix", "changes" | Zero context |
+| Bundling multiple tasks in one commit | Breaks atomicity |
+
 ---
 
 **Move fast. Stay exact. Escalate anything non-mechanical.**
