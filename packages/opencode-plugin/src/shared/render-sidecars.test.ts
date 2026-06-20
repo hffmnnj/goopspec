@@ -82,4 +82,17 @@ describe("renderSidecars()", () => {
     expect(content).toContain("| MH5 | 4 | 2 | pending |");
     expect(content.indexOf("MH15")).toBeLessThan(content.indexOf("MH5"));
   });
+
+  it("renders TIMELINE.md when audit entries exist", () => {
+    ctx.db.appendEvent("default", "doc_write", { doc_type: "spec" });
+
+    renderSidecars(ctx, "default");
+
+    const timelinePath = join(ctx.sdk.directory, ".goopspec", "default", "TIMELINE.md");
+    expect(existsSync(timelinePath)).toBe(true);
+
+    const content = readFileSync(timelinePath, "utf-8");
+    expect(content).toContain("# Timeline");
+    expect(content).toContain("[event] doc_write");
+  });
 });
