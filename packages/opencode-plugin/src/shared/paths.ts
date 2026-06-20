@@ -14,6 +14,11 @@ export function getGoopspecDir(projectDir: string): string {
   return join(projectDir, GOOPSPEC_DIR);
 }
 
+/** Absolute path to a root-level file inside `.goopspec/`. */
+export function getGoopspecRootFilePath(projectDir: string, filename: string): string {
+  return join(projectDir, GOOPSPEC_DIR, filename);
+}
+
 /** Absolute path to the memory SQLite database for a project. */
 export function getMemoryDbPath(projectDir: string): string {
   return join(projectDir, GOOPSPEC_DIR, "memory.db");

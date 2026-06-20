@@ -10,6 +10,7 @@
 import { tool } from "../../core/sdk-compat.js";
 import type { ToolContext, ToolDefinition } from "../../core/sdk-compat.js";
 import type { PluginContext } from "../../core/types.js";
+import { renderSidecars } from "../../shared/render-sidecars.js";
 
 // ---------------------------------------------------------------------------
 // Tool factory
@@ -59,6 +60,7 @@ export function createGoopWriteTraceabilityTool(ctx: PluginContext): ToolDefinit
           status: args.status ?? "pending",
           timestamp: Date.now(),
         });
+        renderSidecars(ctx, workflowId);
 
         return `Wrote traceability for ${args.requirement_key} in workflow '${workflowId}'.`;
       } catch (error: unknown) {

@@ -10,6 +10,7 @@
 import { tool } from "../../core/sdk-compat.js";
 import type { ToolContext, ToolDefinition } from "../../core/sdk-compat.js";
 import type { PluginContext } from "../../core/types.js";
+import { renderSidecars } from "../../shared/render-sidecars.js";
 
 interface InlineWaveTask {
   task_index: number;
@@ -95,6 +96,7 @@ export function createGoopWriteWaveTool(ctx: PluginContext): ToolDefinition {
             mode: "task_update",
             timestamp: Date.now(),
           });
+          renderSidecars(ctx, workflowId);
 
           return `Updated task ${args.task_update.task_index} on wave ${args.wave_number} to '${args.task_update.status}' for workflow '${workflowId}'.`;
         }
@@ -129,6 +131,7 @@ export function createGoopWriteWaveTool(ctx: PluginContext): ToolDefinition {
           mode: "wave_upsert",
           timestamp: Date.now(),
         });
+        renderSidecars(ctx, workflowId);
 
         return `Written wave ${args.wave_number} for workflow '${workflowId}' with ${args.tasks?.length ?? 0} task(s).`;
       } catch (error: unknown) {

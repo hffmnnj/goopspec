@@ -8,13 +8,10 @@
  * @module tools/goop-append-chronicle
  */
 
-import { mkdirSync, writeFileSync } from "node:fs";
-import { dirname } from "node:path";
-
 import { tool } from "../../core/sdk-compat.js";
 import type { ToolContext, ToolDefinition } from "../../core/sdk-compat.js";
 import type { PluginContext } from "../../core/types.js";
-import { getWorkflowDocPath } from "../../shared/paths.js";
+import { renderSidecars } from "../../shared/render-sidecars.js";
 
 // ---------------------------------------------------------------------------
 // Tool factory
@@ -53,11 +50,7 @@ export function createGoopAppendChronicleTool(ctx: PluginContext): ToolDefinitio
           entry_length: args.entry.length,
         });
 
-        // Render sidecar
-        const updatedDoc = ctx.db.getDocument(workflowId, "chronicle");
-        const sidecarPath = getWorkflowDocPath(ctx.sdk.directory, workflowId, "CHRONICLE.md");
-        mkdirSync(dirname(sidecarPath), { recursive: true });
-        writeFileSync(sidecarPath, updatedDoc?.content ?? formatted, "utf-8");
+        renderSidecars(ctx, workflowId);
 
         return `[OK] Chronicle entry appended (${args.entry.length} chars)`;
       } catch (error: unknown) {

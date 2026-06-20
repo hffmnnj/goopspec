@@ -1,7 +1,13 @@
 import { describe, expect, it } from "bun:test";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
-import { getGoopspecDir, getMemoryDbPath, getPackageRoot, getWorkflowDocPath } from "./paths.js";
+import {
+  getGoopspecDir,
+  getGoopspecRootFilePath,
+  getMemoryDbPath,
+  getPackageRoot,
+  getWorkflowDocPath,
+} from "./paths.js";
 
 describe("getGoopspecDir()", () => {
   it("appends .goopspec to the project directory", () => {
@@ -13,6 +19,13 @@ describe("getMemoryDbPath()", () => {
   it("returns the memory.db path inside .goopspec", () => {
     const result = getMemoryDbPath("/tmp/project");
     expect(result).toBe(join("/tmp/project", ".goopspec", "memory.db"));
+  });
+});
+
+describe("getGoopspecRootFilePath()", () => {
+  it("returns a root-level file path inside .goopspec", () => {
+    const result = getGoopspecRootFilePath("/tmp/project", "STATUS.md");
+    expect(result).toBe(join("/tmp/project", ".goopspec", "STATUS.md"));
   });
 });
 

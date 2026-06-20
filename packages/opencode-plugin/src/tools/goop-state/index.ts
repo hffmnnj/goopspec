@@ -14,6 +14,7 @@ import type { TaskMode, WorkflowDepth, WorkflowPhase } from "../../core/constant
 import { tool } from "../../core/sdk-compat.js";
 import type { ToolContext, ToolDefinition } from "../../core/sdk-compat.js";
 import type { PluginContext, WorkflowState } from "../../core/types.js";
+import { renderSidecars } from "../../shared/render-sidecars.js";
 
 // ---------------------------------------------------------------------------
 // Validation helpers
@@ -128,6 +129,15 @@ function formatWorkflowList(activeId: string, workflows: Record<string, Workflow
   return lines.join("\n");
 }
 
+function renderStatusAfterMutation(ctx: PluginContext): void {
+  try {
+    const activeWorkflowId = ctx.stateManager.getState().activeWorkflowId;
+    renderSidecars(ctx, activeWorkflowId, { status: true });
+  } catch {
+    // STATUS.md is best-effort and must never break state mutation responses.
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Tool factory
 // ---------------------------------------------------------------------------
@@ -227,36 +237,43 @@ function executeAction(
         return `**Error:** Invalid phase "${args.phase}". Valid: ${WORKFLOW_PHASES.join(", ")}`;
       }
       sm.transitionPhase(args.phase, args.force ?? false);
+      renderStatusAfterMutation(ctx);
       return `Phase transitioned to **${args.phase}**.`;
     }
 
     // -- Interview ----------------------------------------------------------
     case "complete-interview": {
       sm.completeInterview();
+      renderStatusAfterMutation(ctx);
       return "Interview marked as **complete**.";
     }
     case "reset-interview": {
       sm.resetInterview();
+      renderStatusAfterMutation(ctx);
       return "Interview status **reset**.";
     }
 
     // -- Spec lock ----------------------------------------------------------
     case "lock-spec": {
       sm.lockSpec();
+      renderStatusAfterMutation(ctx);
       return "Specification **locked**. \u{1F512}";
     }
     case "unlock-spec": {
       sm.unlockSpec();
+      renderStatusAfterMutation(ctx);
       return "Specification **unlocked**. \u{1F513}";
     }
 
     // -- Acceptance ---------------------------------------------------------
     case "confirm-acceptance": {
       sm.confirmAcceptance();
+      renderStatusAfterMutation(ctx);
       return "Acceptance **confirmed**. \u2705";
     }
     case "reset-acceptance": {
       sm.resetAcceptance();
+      renderStatusAfterMutation(ctx);
       return "Acceptance status **reset**.";
     }
 
@@ -267,6 +284,7 @@ function executeAction(
         return `**Error:** Invalid mode "${args.mode}". Valid: ${TASK_MODES.join(", ")}`;
       }
       sm.setMode(args.mode);
+      renderStatusAfterMutation(ctx);
       return `Mode set to **${args.mode}**.`;
     }
 
@@ -277,6 +295,7 @@ function executeAction(
         return `**Error:** Invalid depth "${args.depth}". Valid: ${WORKFLOW_DEPTHS.join(", ")}`;
       }
       sm.setDepth(args.depth);
+      renderStatusAfterMutation(ctx);
       return `Depth set to **${args.depth}**.`;
     }
 
@@ -289,6 +308,7 @@ function executeAction(
         autopilot: args.autopilot,
         lazyAutopilot: args.autopilot ? (args.lazy ?? false) : false,
       });
+      renderStatusAfterMutation(ctx);
       const label = args.autopilot ? `ON${args.lazy ? " (lazy)" : ""}` : "OFF";
       return `Autopilot set to **${label}**.`;
     }
@@ -299,12 +319,14 @@ function executeAction(
         return "**Error:** `currentWave` and `totalWaves` are required for update-wave.";
       }
       sm.updateWaveProgress(args.currentWave, args.totalWaves);
+      renderStatusAfterMutation(ctx);
       return `Wave progress updated to **${args.currentWave}/${args.totalWaves}**.`;
     }
 
     // -- Reset --------------------------------------------------------------
     case "reset": {
       sm.resetWorkflow();
+      renderStatusAfterMutation(ctx);
       return "Active workflow **reset** to idle.";
     }
 
@@ -319,6 +341,7 @@ function executeAction(
         return "**Error:** `workflowId` is required for set-active-workflow.";
       }
       sm.setActiveWorkflow(args.workflowId);
+      renderStatusAfterMutation(ctx);
       return `Active workflow switched to **${args.workflowId}**.`;
     }
 
@@ -327,6 +350,7 @@ function executeAction(
         return "**Error:** `workflowId` is required for create-workflow.";
       }
       sm.createWorkflow(args.workflowId);
+      renderStatusAfterMutation(ctx);
       return `Workflow **${args.workflowId}** created.`;
     }
 

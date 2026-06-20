@@ -87,7 +87,7 @@ function getPhaseGuidance(wf: WorkflowState): PhaseGuidance {
 // Status formatter
 // ---------------------------------------------------------------------------
 
-function formatStatus(
+export function formatStatus(
   activeId: string,
   wf: WorkflowState,
   allIds: string[],
