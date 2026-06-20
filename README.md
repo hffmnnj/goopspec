@@ -18,7 +18,7 @@ You've been there. You ask an AI to build a feature. It starts coding immediatel
 
 **GoopSpec fixes this.**
 
-It's a spec-driven workflow for [OpenCode](https://opencode.ai) that forces clarity *before* code. You describe what you want, GoopSpec interviews you to uncover the edge cases, locks a specification you both agree on, then executes against that contract.
+It's a spec-driven workflow plugin for [OpenCode](https://opencode.ai) that forces clarity *before* code. You describe what you want, GoopSpec interviews you to uncover the edge cases, locks a specification you both agree on, then executes against that contract.
 
 No more "that's not what I meant." No more scope creep. No more AI amnesia.
 
@@ -51,15 +51,15 @@ Discuss → Plan (confirm+lock) → Execute → Accept (verify it)
    Interview     Create       Waves of      Check vs.    You sign
    to uncover    locked       atomic        the spec     off on it
    requirements  spec         commits
-                   |                                          |
-                   └──────── CONTRACT GATE ───────────────────┘
-                          (You confirm before and after)
+                    |                                          |
+                    └──────── CONTRACT GATE ───────────────────┘
+                           (You confirm before and after)
 ```
 
 ### Phase 1: Discuss
 GoopSpec interviews you like a product manager. It asks questions, uncovers edge cases, and makes sure it actually understands what you want before touching any code.
 
-### Phase 2: Plan  
+### Phase 2: Plan
 Your requirements become a locked specification (SPEC.md) and execution blueprint (BLUEPRINT.md). This is the contract — both sides agree on what will be delivered.
 
 ### Phase 3: Execute
@@ -79,36 +79,21 @@ You verify the results and accept the work. The AI can't declare itself done —
 
 ### 1. Install
 
-Add to your OpenCode config (`opencode.json`):
+Add GoopSpec to your OpenCode config (`opencode.json`):
 
 ```json
-{ "plugins": ["goopspec"] }
+{
+  "plugins": ["@goopspec/opencode-plugin"]
+}
 ```
 
-Or install globally via npm:
+For local development, point to the built package.
 
-```bash
-npx goopspec init
-# or
-bunx goopspec init
-```
+GoopSpec 1.0.0 requires OpenCode with plugin support (`@opencode-ai/plugin ^1.17.0`).
 
-Or build from source:
+### 2. Configure
 
-```bash
-git clone https://github.com/hffmnnj/opencode-goopspec.git
-cd goopspec && bun install && bun run build
-```
-
-### 2. Setup
-
-Run the interactive setup wizard:
-
-```bash
-goopspec init
-```
-
-Or from within OpenCode:
+Inside OpenCode, run the interactive setup wizard:
 
 ```
 /goop-setup
@@ -124,97 +109,42 @@ GoopSpec interviews you, creates a locked spec, executes in waves, and asks you 
 
 ---
 
-## CLI
-
-GoopSpec includes a standalone CLI for setup and configuration outside of OpenCode. Run it with `npx goopspec`, `bunx goopspec`, or `goopspec` if installed globally.
-
-```
-Usage: goopspec <command> [options]
-
-Options:
-  --help      Show help
-  --version   Show version
-```
-
-### Commands
-
-| Command | Description |
-|---------|-------------|
-| `goopspec init` | Interactive setup wizard — configure project name, agent models, MCP servers, memory, and enforcement level |
-| `goopspec models` | Configure agent models — assign specific LLMs to each specialist agent |
-| `goopspec memory` | Configure the memory system — provider selection, vector search, dependency installation |
-| `goopspec status` | Show current configuration — project info, memory, MCP servers, agent models |
-| `goopspec verify` | Run health checks — validate config files, MCP servers, memory system, and dependencies |
-| `goopspec reset` | Reset configuration — remove global, project, or both config scopes with confirmation |
-
-### Examples
-
-```bash
-# First-time setup with interactive prompts
-goopspec init
-
-# Check what's configured
-goopspec status
-
-# Reconfigure agent models
-goopspec models
-
-# Verify everything is working
-goopspec verify
-
-# Reset project config and start fresh
-goopspec reset
-```
-
----
-
 ## Commands Reference
 
-All 21 commands, organized by what you're doing.
+Nine commands. That's it.
 
 ### Workflow Commands
 
 | Command | Description |
 |---------|-------------|
-| `/goop-discuss` | Start discussion — interview to gather requirements |
+| `/goop-discuss` | Start discovery interview — capture requirements |
 | `/goop-plan` | Create SPEC.md and BLUEPRINT.md from requirements |
 | `/goop-execute` | Begin wave-based implementation |
-| `/goop-accept` | Verify and accept work (ACCEPTANCE GATE) |
+| `/goop-accept` | Verify and accept the work (acceptance gate) |
 
 ### Task Mode Commands
 
 | Command | Description |
 |---------|-------------|
-| `/goop-quick [task]` | Fast-track a small task (skip gates) |
-| `/goop-milestone [name]` | Start a versioned milestone |
-
-### Research & Debug
-
-| Command | Description |
-|---------|-------------|
-| `/goop-research` | Deep research on unknowns or risks |
-| `/goop-debug` | Scientific debugging workflow |
-| `/goop-map-codebase` | Analyze existing codebase structure |
-| `/goop-pr-review` | Review a GitHub pull request with intelligent fixes and safe merge |
-
-### Memory Commands
-
-| Command | Description |
-|---------|-------------|
-| `/goop-recall [query]` | Search past work and memory |
-| `/goop-remember [note]` | Save important context to memory |
-| `/goop-memory` | View memory system status |
+| `/goop-quick [task]` | Fast-track a small, bounded task (skips discovery/spec gates) |
+| `/goop-amend [change]` | Propose a change to a locked spec |
 
 ### Utility Commands
 
 | Command | Description |
 |---------|-------------|
 | `/goop-status` | Show current workflow state |
-| `/goop-setup` | First-time setup wizard |
-| `/goop-amend [change]` | Propose spec changes after lock |
-| `/goop-pause` | Save checkpoint and pause work |
-| `/goop-resume [id]` | Resume from a checkpoint |
-| `/goop-help` | Show help and available commands |
+| `/goop-setup` | Configure models, project name, enforcement |
+| `/goop-help` | Show available commands and phase guide |
+
+### Auto-Delegation
+
+Research and debug don't need slash commands in 1.0.0. The orchestrator detects intent and routes you automatically:
+
+- "I need to investigate the best auth library for this project" → auto-routes to `goop-researcher`
+- "debug why login fails" → auto-routes to `goop-debugger`
+
+Just describe the problem naturally.
 
 ---
 
@@ -226,7 +156,7 @@ Each agent has a default model optimized for its task. **All models are configur
 
 ### The Orchestrator
 
-**goop-orchestrator** — *The Conductor* (`anthropic/claude-opus-4-6`)
+**goop-orchestrator** — *The Conductor*
 
 - Coordinates all work through delegation
 - Maintains clean context across tasks
@@ -238,45 +168,44 @@ The Conductor never writes implementation code. It directs specialists.
 
 ### The Specialists
 
-| Agent | Alias | Default Model | What They Do |
-|-------|-------|---------------|--------------|
-| `goop-executor-low` | The Builder (Low) | `anthropic/claude-sonnet-4-6` | Handles simple, mechanical implementation tasks |
-| `goop-executor-medium` | The Builder (Medium) | `kimi-for-coding/k2p5` | Handles business logic and test-oriented implementation |
-| `goop-executor-high` | The Builder (High) | `openai/gpt-5.3-codex` | Handles complex architecture and security-sensitive work |
-| `goop-executor-frontend` | The Builder (Frontend) | `anthropic/claude-opus-4-6` | Handles UI, styling, responsiveness, and accessibility work |
-| `goop-planner` | The Architect | `openai/gpt-5.3-codex` | Creates specs and blueprints |
-| `goop-researcher` | The Scholar | `openai/gpt-5.2` | Deep domain research |
-| `goop-explorer` | The Scout | `google/gemini-3-flash` | Fast codebase mapping |
-| `goop-verifier` | The Auditor | `openai/gpt-5.3-codex` | Verifies against spec |
-| `goop-debugger` | The Detective | `openai/gpt-5.3-codex` | Scientific debugging |
-| `goop-creative` | The Visionary | `anthropic/claude-opus-4-6` | Creative ideation and architecture brainstorming |
-| `goop-designer` | The Artisan | `anthropic/claude-opus-4-6` | UI/UX design |
-| `goop-tester` | The Guardian | `kimi-for-coding/k2p5` | Test writing |
-| `goop-writer` | The Scribe | `google/gemini-3-pro-high` | Documentation |
-| `goop-librarian` | The Archivist | `openai/gpt-5.2` | Code and doc search |
-| `memory-distiller` | The Curator | `zai-coding-plan/glm-4.7` | Extracts learnings to memory |
+| Agent | Alias | What They Do |
+|-------|-------|--------------|
+| `goop-executor-low` | The Builder (Low) | Mechanical tasks: config, renaming, markdown, scaffolding |
+| `goop-executor-medium` | The Builder (Medium) | Business logic, utilities, tests, refactoring |
+| `goop-executor-high` | The Builder (High) | Architecture, complex algorithms, security-sensitive work |
+| `goop-executor-frontend-low` | The Builder (Frontend Low) | UI markup, simple styling, copy |
+| `goop-executor-frontend-high` | The Builder (Frontend High) | Design-sensitive UI, components, UX, accessibility |
+| `goop-planner` | The Architect | Creates SPEC.md and BLUEPRINT.md |
+| `goop-researcher` | The Scholar | Deep domain research |
+| `goop-explorer` | The Scout | Fast codebase mapping |
+| `goop-verifier` | The Auditor | Verifies against spec |
+| `goop-debugger` | The Detective | Scientific debugging |
+| `goop-tester` | The Guardian | Test writing, coverage |
+| `goop-writer` | The Scribe | Documentation |
 
 ### Executor Tier System
 
-GoopSpec routes implementation work through four executor tiers so each task gets the right model for the job. This improves cost efficiency on simple tasks while preserving quality on complex and frontend-heavy work.
+GoopSpec routes implementation work through five executor tiers so each task gets the right model for the job. This improves cost efficiency on simple tasks while preserving quality on complex and frontend-heavy work.
 
 #### Tier Overview
 
-| Tier | Default Model | Scope | Example Tasks |
-|------|---------------|-------|---------------|
-| `goop-executor-low` | `anthropic/claude-sonnet-4-6` | Config files, simple edits, renaming, dependency updates, markdown, boilerplate | Rename files, update config flags, scaffold command docs |
-| `goop-executor-medium` | `kimi-for-coding/k2p5` | Business logic, utilities, middleware, data transforms, tests, refactoring | Add service logic, write unit tests, refactor utilities |
-| `goop-executor-high` | `openai/gpt-5.3-codex` | Architecture, complex algorithms, DB schemas, API design, security | Design API contracts, implement auth flow, optimize core algorithms |
-| `goop-executor-frontend` | `anthropic/claude-opus-4-6` | UI components, styling, layouts, responsive design, accessibility, UX | Build responsive UI, improve a11y, implement design system components |
+| Tier | Scope | Example Tasks |
+|------|-------|---------------|
+| `goop-executor-low` | Config files, simple edits, renaming, dependency updates, markdown, boilerplate | Rename files, update config flags, scaffold command docs |
+| `goop-executor-medium` | Business logic, utilities, middleware, data transforms, tests, refactoring | Add service logic, write unit tests, refactor utilities |
+| `goop-executor-high` | Architecture, complex algorithms, DB schemas, API design, security | Design API contracts, implement auth flow, optimize core algorithms |
+| `goop-executor-frontend-low` | UI markup, styling tweaks, copy updates, simple layouts | Adjust spacing, update labels, scaffold a form |
+| `goop-executor-frontend-high` | Components, UX, responsive design, accessibility, visual polish | Build a design system component, implement keyboard navigation, refactor a complex interaction |
 
-#### Default and Recommended Models
+#### Default Models
 
-| Tier | Default Model | Recommended Models |
-|------|---------------|--------------------|
-| `goop-executor-low` | `anthropic/claude-sonnet-4-6` | `anthropic/claude-sonnet-4-6`, `kimi-for-coding/k2p5`, `opencode/minimax-m2.1-free`, `zai-coding-plan/glm-4.7` |
-| `goop-executor-medium` | `kimi-for-coding/k2p5` | `kimi-for-coding/k2p5`, `anthropic/claude-sonnet-4-6`, `openai/gpt-5.3-codex`, `opencode/minimax-m2.1-free` |
-| `goop-executor-high` | `openai/gpt-5.3-codex` | `openai/gpt-5.3-codex`, `anthropic/claude-opus-4-6`, `kimi-for-coding/k2p5`, `opencode/minimax-m2.1-free` |
-| `goop-executor-frontend` | `anthropic/claude-opus-4-6` | `anthropic/claude-opus-4-6`, `kimi-for-coding/k2p5`, `google/antigravity-gemini-3-pro-high`, `openai/gpt-5.3-codex` |
+| Tier | Default Model |
+|------|---------------|
+| `goop-executor-low` | `anthropic/claude-sonnet-4-6` |
+| `goop-executor-medium` | `anthropic/claude-sonnet-4-6` |
+| `goop-executor-high` | `anthropic/claude-opus-4-6` |
+| `goop-executor-frontend-low` | `anthropic/claude-sonnet-4-6` |
+| `goop-executor-frontend-high` | `anthropic/claude-opus-4-6` |
 
 #### Tier Classification Quick Reference
 
@@ -285,19 +214,21 @@ GoopSpec routes implementation work through four executor tiers so each task get
 | Mechanical edits, setup, docs, and simple file changes | `goop-executor-low` |
 | Typical application logic, middleware, data processing, and tests | `goop-executor-medium` |
 | Architecture, security, schema/API design, or high-complexity logic | `goop-executor-high` |
-| UI components, styling, responsive behavior, and accessibility | `goop-executor-frontend` |
+| Simple UI markup, styling, or copy | `goop-executor-frontend-low` |
+| Complex components, UX, accessibility, or design-sensitive work | `goop-executor-frontend-high` |
 
 #### Configuration via Setup
 
-Run `/goop-setup` (or `goopspec models`) to select models for each executor tier. The setup wizard shows recommended models and saves your selections to `.goopspec/config.json`.
+Run `/goop-setup` to select models for each executor tier. The setup wizard saves your selections to `.goopspec/config.json`.
 
 ```json
 {
   "agents": {
     "goop-executor-low": { "model": "anthropic/claude-sonnet-4-6" },
-    "goop-executor-medium": { "model": "kimi-for-coding/k2p5" },
-    "goop-executor-high": { "model": "openai/gpt-5.3-codex" },
-    "goop-executor-frontend": { "model": "anthropic/claude-opus-4-6" }
+    "goop-executor-medium": { "model": "anthropic/claude-sonnet-4-6" },
+    "goop-executor-high": { "model": "anthropic/claude-opus-4-6" },
+    "goop-executor-frontend-low": { "model": "anthropic/claude-sonnet-4-6" },
+    "goop-executor-frontend-high": { "model": "anthropic/claude-opus-4-6" }
   }
 }
 ```
@@ -306,14 +237,15 @@ Run `/goop-setup` (or `goopspec models`) to select models for each executor tier
 
 ## Planning Files
 
-GoopSpec uses markdown files to track state:
+GoopSpec stores project state in **GoopSpecDB** (`.goopspec/goopspec.db`). Markdown files under `.goopspec/<workflowId>/` are rendered sidecars from the DB — human-readable, but the DB is the source of truth.
 
 | File | Purpose |
 |------|---------|
 | `SPEC.md` | Locked specification with must-haves |
 | `BLUEPRINT.md` | Execution plan with waves and tasks |
 | `CHRONICLE.md` | Journey log tracking progress |
-| `RESEARCH.md` | Research findings from exploration |
+| `REQUIREMENTS.md` | Captured requirements from discovery |
+| `ADL.md` | Automated Decision Log |
 | `RETROSPECTIVE.md` | Post-completion analysis |
 | `LEARNINGS.md` | Extracted patterns and insights |
 
@@ -321,20 +253,16 @@ GoopSpec uses markdown files to track state:
 
 ```
 .goopspec/
-├── SPEC.md              # Current specification
-├── BLUEPRINT.md         # Current execution plan
-├── CHRONICLE.md         # Current journey log
-├── RESEARCH.md          # Current research findings
-├── config.json          # Project configuration
-├── quick/               # Quick task history
-│   └── 001-fix-typo/
-│       └── SUMMARY.md
-├── milestones/          # Active milestones
-│   └── v1.0-auth/
-└── archive/             # Completed milestones
-    └── v0.9-setup/
-        ├── RETROSPECTIVE.md
-        └── LEARNINGS.md
+├── goopspec.db           # Source of truth (SQLite)
+├── memory.db             # Episodic memory
+├── config.json           # Project configuration
+├── <workflow-id>/        # One dir per workflow
+│   ├── SPEC.md           # Rendered sidecar
+│   ├── BLUEPRINT.md      # Rendered sidecar
+│   ├── CHRONICLE.md      # Rendered sidecar
+│   ├── ADL.md            # Rendered sidecar
+│   └── REQUIREMENTS.md   # Rendered sidecar
+└── PROJECT_KNOWLEDGE_BASE.md
 ```
 
 ---
@@ -383,11 +311,18 @@ GoopSpec remembers everything important:
 - User preferences discovered
 
 ### Recall
+
+Just ask naturally:
+
 ```
-/goop-recall "how did we handle auth before?"
+How did we handle auth before?
 ```
 
-Returns relevant learnings from past projects.
+GoopSpec searches past projects and surfaces relevant learnings.
+
+### Field Notes
+
+GoopSpec includes a global Field Notes system. Agents save important research findings as Field Notes to a persistent, searchable store that persists across projects. This means learnings compound over time — an agent that solved a problem in one project surfaces that knowledge automatically in the next.
 
 ### Archive-to-Memory Pipeline
 When milestones complete:
@@ -400,8 +335,7 @@ When milestones complete:
 
 ## Known Limitations
 
-- Memory system is disabled by default; the worker architecture needs rework for bundled plugins
-- Parallel research is planned for v0.2; current implementation does not spawn agents yet
+- GoopSpec 1.0.0 requires OpenCode with plugin support (`@opencode-ai/plugin ^1.17.0`)
 
 ---
 
@@ -556,7 +490,7 @@ Skips gates, ships fast, still makes atomic commit.
 ### Major Refactor
 
 ```
-/goop-milestone "v2.0 Database Migration"
+/goop-discuss "v2.0 Database Migration"
 ```
 
 Full workflow with deep research, locked spec with rollback plan, multi-wave execution, and archived learnings.
@@ -564,18 +498,18 @@ Full workflow with deep research, locked spec with rollback plan, multi-wave exe
 ### Brownfield Project
 
 ```
-/goop-map-codebase
+Research the codebase structure and the patterns this project uses.
 ```
 
-Maps existing codebase: stack detection, pattern discovery, integration points.
+GoopSpec auto-delegates to the explorer agent to map existing stack, patterns, and integration points.
 
 ### Systematic Debugging
 
 ```
-/goop-debug "Users are getting logged out randomly"
+Users are getting logged out randomly. Debug it.
 ```
 
-Scientific method: hypothesis → experiment → analyze → iterate.
+GoopSpec auto-delegates to the debugger agent: hypothesis → experiment → analyze → iterate.
 
 ---
 
@@ -583,10 +517,11 @@ Scientific method: hypothesis → experiment → analyze → iterate.
 
 Configure via `.goopspec/config.json` after running `/goop-setup`. Key settings:
 
-- **orchestrator.model** — Model for the Conductor (default: claude-opus-4-6)
 - **agents.{name}.model** — Model for specific agents
 - **enforcement** — `assist`, `warn`, or `strict`
 - **memory.enabled** — Persistent memory on/off
+
+Memory runs in-process via `bun:sqlite` — no separate worker or service to configure.
 
 ---
 
@@ -616,17 +551,16 @@ bun run build
 goopspec/
 ├── packages/
 │   └── opencode-plugin/    # @goopspec/opencode-plugin
-│       ├── agents/         # Agent markdown definitions
-│       ├── commands/       # Command markdown definitions
-│       ├── references/     # Reference documentation
+│       ├── agents/         # 13 agent markdown definitions
+│       ├── commands/       # 9 slash command definitions
+│       ├── references/     # 13 consolidated reference documents
 │       ├── templates/      # File templates
 │       └── src/
-│           ├── core/       # Types, config, context
-│           ├── features/   # Feature modules
-│           ├── hooks/      # OpenCode hooks
-│           ├── shared/     # Utilities
-│           └── tools/      # MCP tools
-├── scripts/                # Version bump, test count
+│           ├── core/       # Types, config, resolver
+│           ├── features/   # Feature modules (memory, state, db, routing, model-routing)
+│           ├── hooks/      # OpenCode plugin hooks
+│           ├── shared/     # Utilities (logger, paths)
+│           └── tools/      # MCP tool implementations
 └── .github/                # CI workflows, issue templates
 ```
 
