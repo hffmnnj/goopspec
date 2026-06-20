@@ -23,6 +23,7 @@ import type {
   FtsNoteSearchRow,
   TraceabilityRow,
   VerificationRow,
+  WaveProgressRow,
   WaveRow,
   WaveTaskRow,
   WorkflowRow,
@@ -288,6 +289,26 @@ export class GoopSpecDB {
     return this.db
       .query<WaveRow, NamedBindings>(
         "SELECT * FROM waves WHERE workflow_id = $workflowId ORDER BY wave_number ASC",
+      )
+      .all({ $workflowId: workflowId });
+  }
+
+  getWaveProgress(workflowId: string, waveNumber?: number): WaveProgressRow[] {
+    if (waveNumber !== undefined) {
+      return this.db
+        .query<WaveProgressRow, NamedBindings>(
+          `SELECT * FROM v_wave_progress
+           WHERE workflow_id = $workflowId AND wave_number = $waveNumber
+           ORDER BY wave_number ASC`,
+        )
+        .all({ $workflowId: workflowId, $waveNumber: waveNumber });
+    }
+
+    return this.db
+      .query<WaveProgressRow, NamedBindings>(
+        `SELECT * FROM v_wave_progress
+         WHERE workflow_id = $workflowId
+         ORDER BY wave_number ASC`,
       )
       .all({ $workflowId: workflowId });
   }

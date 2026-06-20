@@ -489,6 +489,39 @@ describe("GoopSpecDB", () => {
       db.close();
     });
 
+    it("getWaveProgress reads task counts from the progress view", () => {
+      const db = new GoopSpecDB(":memory:");
+      db.upsertWave("wf-1", { wave_number: 1, title: "Wave 1" });
+      db.upsertWave("wf-1", { wave_number: 2, title: "Wave 2" });
+      const wave = db.getWave("wf-1", 1);
+      expect(wave).not.toBeNull();
+      const waveId = wave?.id ?? -1;
+
+      db.upsertWaveTask({
+        wave_id: waveId,
+        workflow_id: "wf-1",
+        task_index: 1,
+        status: "done",
+      });
+      db.upsertWaveTask({
+        wave_id: waveId,
+        workflow_id: "wf-1",
+        task_index: 2,
+        status: "pending",
+      });
+
+      const allProgress = db.getWaveProgress("wf-1");
+      expect(allProgress.map((p) => p.wave_number)).toEqual([1, 2]);
+      expect(allProgress[0].completed_tasks).toBe(1);
+      expect(allProgress[0].total_tasks).toBe(2);
+
+      const filteredProgress = db.getWaveProgress("wf-1", 1);
+      expect(filteredProgress.length).toBe(1);
+      expect(filteredProgress[0].wave_id).toBe(waveId);
+
+      db.close();
+    });
+
     it("upsertSection + getSection + getSections + assembleDocument preserve ordering", () => {
       const db = new GoopSpecDB(":memory:");
 
