@@ -416,6 +416,264 @@ describe("GoopSpecDB", () => {
   });
 
   // -----------------------------------------------------------------------
+  // Wave metadata, sections, tracking, and cross-document search
+  // -----------------------------------------------------------------------
+
+  describe("workflow structure tables", () => {
+    it("upsertWave + getWave + getWaves round-trip and preserve omitted fields", () => {
+      const db = new GoopSpecDB(":memory:");
+
+      db.upsertWave("wf-1", {
+        wave_number: 2,
+        title: "Second wave",
+        status: "in_progress",
+        pr_branch: "feat/second-wave",
+        started_at: 100,
+      });
+      db.upsertWave("wf-1", { wave_number: 1, title: "First wave" });
+      db.upsertWave("wf-1", { wave_number: 2, status: "done", completed_at: 200 });
+
+      const wave = db.getWave("wf-1", 2);
+      expect(wave).not.toBeNull();
+      expect(wave?.title).toBe("Second wave");
+      expect(wave?.status).toBe("done");
+      expect(wave?.pr_branch).toBe("feat/second-wave");
+      expect(wave?.completed_at).toBe(200);
+      expect(db.getWaves("wf-1").map((w) => w.wave_number)).toEqual([1, 2]);
+      expect(db.getWave("wf-1", 99)).toBeNull();
+
+      db.close();
+    });
+
+    it("upsertWaveTask + setWaveTaskStatus update task progress view", () => {
+      const db = new GoopSpecDB(":memory:");
+      db.upsertWave("wf-1", { wave_number: 1, title: "Wave 1" });
+      const wave = db.getWave("wf-1", 1);
+      expect(wave).not.toBeNull();
+
+      db.upsertWaveTask({
+        wave_id: wave?.id ?? -1,
+        workflow_id: "wf-1",
+        task_index: 2,
+        description: "Second task",
+        agent: "goop-executor-high",
+      });
+      db.upsertWaveTask({
+        wave_id: wave?.id ?? -1,
+        workflow_id: "wf-1",
+        task_index: 1,
+        description: "First task",
+      });
+      db.upsertWaveTask({
+        wave_id: wave?.id ?? -1,
+        workflow_id: "wf-1",
+        task_index: 2,
+        status: "in_progress",
+      });
+      db.setWaveTaskStatus(wave?.id ?? -1, 2, "completed");
+
+      const tasks = db.getWaveTasks(wave?.id ?? -1);
+      expect(tasks.map((t) => t.task_index)).toEqual([1, 2]);
+      expect(tasks[1].description).toBe("Second task");
+      expect(tasks[1].status).toBe("completed");
+
+      // biome-ignore lint/complexity/useLiteralKeys: accessing private property for test
+      const progress = db["db"]
+        .query<{ completed_tasks: number; total_tasks: number }, []>(
+          "SELECT completed_tasks, total_tasks FROM v_wave_progress WHERE wave_id = 1",
+        )
+        .get();
+      expect(progress?.total_tasks).toBe(2);
+      expect(progress?.completed_tasks).toBe(1);
+
+      db.close();
+    });
+
+    it("upsertSection + getSection + getSections + assembleDocument preserve ordering", () => {
+      const db = new GoopSpecDB(":memory:");
+
+      db.upsertSection("wf-1", "spec", "intro", "# Intro", 1);
+      db.upsertSection("wf-1", "spec", "summary", "# Summary", 0);
+      db.upsertSection("wf-1", "spec", "appendix", "# Appendix");
+      db.upsertSection("wf-1", "spec", "intro", "# Intro Updated", 1);
+
+      expect(db.getSection("wf-1", "spec", "intro")?.content).toBe("# Intro Updated");
+      expect(db.getSections("wf-1", "spec").map((s) => s.section_key)).toEqual([
+        "summary",
+        "intro",
+        "appendix",
+      ]);
+      expect(db.assembleDocument("wf-1", "spec")).toBe(
+        "# Summary\n\n# Intro Updated\n\n# Appendix",
+      );
+      expect(db.assembleDocument("wf-1", "blueprint")).toBe("");
+
+      db.close();
+    });
+
+    it("searchSections uses FTS ranking and supports filters", () => {
+      const db = new GoopSpecDB(":memory:");
+      db.upsertSection("wf-1", "spec", "priority-needle", "ordinary content", 0);
+      db.upsertSection("wf-1", "spec", "ordinary", "needle appears in content", 1);
+      db.upsertSection("wf-2", "spec", "priority-needle", "other workflow", 0);
+
+      const results = db.searchSections("needle", { workflowId: "wf-1" });
+      expect(results.length).toBe(2);
+      expect(results[0].section_key).toBe("priority-needle");
+
+      const filtered = db.searchSections("needle", {
+        workflowId: "wf-1",
+        docType: "spec",
+        sectionKey: "ordinary",
+      });
+      expect(filtered.length).toBe(1);
+      expect(filtered[0].content).toContain("needle");
+
+      db.close();
+    });
+
+    it("searchSections falls back to LIKE when FTS is unavailable", () => {
+      const db = new GoopSpecDB(":memory:");
+      Object.defineProperty(db, "fts5Enabled", { value: false });
+      db.upsertSection("wf-1", "blueprint", "dispatch", "LIKE fallback needle", 0);
+      db.upsertSection("wf-1", "blueprint", "other", "unrelated", 1);
+
+      const results = db.searchSections("fallback needle", { workflowId: "wf-1" });
+      expect(results.length).toBe(1);
+      expect(results[0].section_key).toBe("dispatch");
+
+      db.close();
+    });
+
+    it("decisions round-trip with filtering and JSON files", () => {
+      const db = new GoopSpecDB(":memory:");
+
+      const id = db.insertDecision("wf-1", {
+        rule: 4,
+        type: "decision",
+        description: "Choose typed CRUD methods",
+        action: "Implement methods on GoopSpecDB",
+        files: ["src/features/db/index.ts"],
+      });
+      db.insertDecision("wf-2", {
+        description: "Other workflow",
+        action: "Ignore",
+      });
+
+      expect(id).toBeGreaterThan(0);
+      const decisions = db.getDecisions({ workflowId: "wf-1", rule: 4, type: "decision" });
+      expect(decisions.length).toBe(1);
+      expect(JSON.parse(decisions[0].files)).toEqual(["src/features/db/index.ts"]);
+
+      db.close();
+    });
+
+    it("verifications round-trip and filter by wave", () => {
+      const db = new GoopSpecDB(":memory:");
+      db.upsertWave("wf-1", { wave_number: 1 });
+      const wave = db.getWave("wf-1", 1);
+
+      const id = db.insertVerification("wf-1", {
+        wave_id: wave?.id,
+        check_name: "typecheck",
+        status: "passed",
+        detail: "clean",
+      });
+      db.insertVerification("wf-1", { check_name: "global", status: "skipped" });
+
+      expect(id).toBeGreaterThan(0);
+      const all = db.getVerifications("wf-1");
+      const byWave = db.getVerifications("wf-1", wave?.id ?? -1);
+      expect(all.length).toBe(2);
+      expect(byWave.length).toBe(1);
+      expect(byWave[0].check_name).toBe("typecheck");
+
+      db.close();
+    });
+
+    it("blockers insert, resolve, and filter by status", () => {
+      const db = new GoopSpecDB(":memory:");
+      const id = db.upsertBlocker("wf-1", {
+        description: "Need schema decision",
+        severity: "high",
+      });
+
+      expect(id).toBeGreaterThan(0);
+      expect(db.getBlockers("wf-1", "open").length).toBe(1);
+
+      const resolvedId = db.upsertBlocker("wf-1", {
+        id,
+        description: "Need schema decision",
+        severity: "high",
+        status: "resolved",
+        resolution: "Decision made",
+      });
+      expect(resolvedId).toBe(id);
+      const resolved = db.getBlockers("wf-1", "resolved");
+      expect(resolved.length).toBe(1);
+      expect(resolved[0].resolution).toBe("Decision made");
+      expect(resolved[0].resolved_at).toBeGreaterThan(0);
+
+      db.close();
+    });
+
+    it("traceability upserts and orders requirement mappings", () => {
+      const db = new GoopSpecDB(":memory:");
+
+      db.upsertTraceability("wf-1", {
+        requirement_key: "MH-02",
+        wave_number: 1,
+        task_index: 2,
+        status: "pending",
+      });
+      db.upsertTraceability("wf-1", {
+        requirement_key: "MH-01",
+        wave_number: 1,
+        task_index: 1,
+        status: "done",
+      });
+      db.upsertTraceability("wf-1", {
+        requirement_key: "MH-02",
+        wave_number: 1,
+        task_index: 2,
+        status: "completed",
+      });
+
+      const rows = db.getTraceability("wf-1");
+      expect(rows.map((r) => r.requirement_key)).toEqual(["MH-01", "MH-02"]);
+      expect(rows[1].status).toBe("completed");
+
+      db.close();
+    });
+
+    it("searchDocuments returns document and section hits across workflows", () => {
+      const db = new GoopSpecDB(":memory:");
+      db.upsertDocument("wf-1", "spec", "sharedneedle appears in a document");
+      db.upsertDocument("wf-2", "blueprint", "another sharedneedle document");
+      db.upsertSection("wf-1", "spec", "section-a", "section sharedneedle", 0);
+      db.upsertSection("wf-2", "blueprint", "section-b", "other section sharedneedle", 0);
+
+      const results = db.searchDocuments("sharedneedle", { limit: 10 });
+      const workflows = new Set(results.map((r) => r.workflow_id));
+      const sources = new Set(results.map((r) => r.source));
+
+      expect(results.length).toBe(4);
+      expect(workflows).toEqual(new Set(["wf-1", "wf-2"]));
+      expect(sources).toEqual(new Set(["document", "section"]));
+
+      const sectionOnly = db.searchDocuments("sharedneedle", { sectionKey: "section-a" });
+      expect(sectionOnly.some((r) => r.source === "section" && r.section_key === "section-a")).toBe(
+        true,
+      );
+      expect(sectionOnly.some((r) => r.source === "section" && r.section_key === "section-b")).toBe(
+        false,
+      );
+
+      db.close();
+    });
+  });
+
+  // -----------------------------------------------------------------------
   // Migration
   // -----------------------------------------------------------------------
 
