@@ -7,33 +7,12 @@
  * @module tools/goop-write-section
  */
 
-import { mkdirSync, writeFileSync } from "node:fs";
-import { dirname } from "node:path";
-
 import { tool } from "../../core/sdk-compat.js";
 import type { ToolContext, ToolDefinition } from "../../core/sdk-compat.js";
 import type { PluginContext } from "../../core/types.js";
 import { DOC_TYPES } from "../../features/db/types.js";
 import type { DocType } from "../../features/db/types.js";
-import { getWorkflowDocPath } from "../../shared/paths.js";
-
-// ---------------------------------------------------------------------------
-// DocType → filename mapping
-// ---------------------------------------------------------------------------
-
-const DOC_TYPE_FILENAMES: Record<DocType, string> = {
-  spec: "SPEC.md",
-  blueprint: "BLUEPRINT.md",
-  chronicle: "CHRONICLE.md",
-  adl: "ADL.md",
-  handoff: "HANDOFF.md",
-  requirements: "REQUIREMENTS.md",
-  research: "RESEARCH.md",
-};
-
-function docTypeToFilename(docType: DocType): string {
-  return DOC_TYPE_FILENAMES[docType];
-}
+import { DOC_TYPE_FILENAMES, renderSidecars } from "../../shared/render-sidecars.js";
 
 // ---------------------------------------------------------------------------
 // Tool factory
@@ -85,10 +64,8 @@ export function createGoopWriteSectionTool(ctx: PluginContext): ToolDefinition {
         });
 
         const sidecarContent = ctx.db.assembleDocument(workflowId, args.doc_type);
-        const filename = docTypeToFilename(args.doc_type);
-        const sidecarPath = getWorkflowDocPath(ctx.sdk.directory, workflowId, filename);
-        mkdirSync(dirname(sidecarPath), { recursive: true });
-        writeFileSync(sidecarPath, sidecarContent, "utf-8");
+        renderSidecars(ctx, workflowId);
+        const filename = DOC_TYPE_FILENAMES[args.doc_type];
 
         return `Written section '${args.section_key}' for ${args.doc_type} in workflow '${workflowId}' (${sidecarContent.length} assembled chars). Sidecar: .goopspec/${workflowId}/${filename}`;
       } catch (error: unknown) {

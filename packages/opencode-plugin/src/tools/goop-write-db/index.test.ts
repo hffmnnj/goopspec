@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import type { PluginContext, ToolContext } from "../../test-utils.js";
@@ -62,6 +62,19 @@ describe("goop_write_db tool", () => {
 
     const content = await Bun.file(sidecarPath).text();
     expect(content).toBe("# Blueprint Body");
+  });
+
+  it("renders workflow and active SPEC sidecars through the shared renderer", async () => {
+    const tool = createGoopWriteDbTool(ctx);
+    await tool.execute({ doc_type: "spec", content: "# Active Spec" }, toolCtx);
+
+    const workflowSpecPath = join(testDir, ".goopspec", "default", "SPEC.md");
+    const activeSpecPath = join(testDir, ".goopspec", "ACTIVE_SPEC.md");
+
+    expect(existsSync(workflowSpecPath)).toBe(true);
+    expect(existsSync(activeSpecPath)).toBe(true);
+    expect(readFileSync(workflowSpecPath, "utf-8")).toBe("# Active Spec");
+    expect(readFileSync(activeSpecPath, "utf-8")).toBe("# Active Spec");
   });
 
   // -----------------------------------------------------------------------

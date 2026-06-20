@@ -56,4 +56,30 @@ describe("renderSidecars()", () => {
   it("does not throw when file rendering fails", () => {
     expect(() => renderSidecars(ctx, "bad\0workflow")).not.toThrow();
   });
+
+  it("renders TRACEABILITY.md as a sorted requirement matrix", () => {
+    ctx.db.upsertTraceability("default", {
+      requirement_key: "MH15",
+      wave_number: 4,
+      task_index: 2,
+      status: "done",
+    });
+    ctx.db.upsertTraceability("default", {
+      requirement_key: "MH5",
+      wave_number: 4,
+      task_index: 2,
+      status: "pending",
+    });
+
+    renderSidecars(ctx, "default");
+
+    const traceabilityPath = join(ctx.sdk.directory, ".goopspec", "default", "TRACEABILITY.md");
+    expect(existsSync(traceabilityPath)).toBe(true);
+
+    const content = readFileSync(traceabilityPath, "utf-8");
+    expect(content).toContain("| Requirement | Wave | Task | Status |");
+    expect(content).toContain("| MH15 | 4 | 2 | done |");
+    expect(content).toContain("| MH5 | 4 | 2 | pending |");
+    expect(content.indexOf("MH15")).toBeLessThan(content.indexOf("MH5"));
+  });
 });

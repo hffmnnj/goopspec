@@ -6,7 +6,7 @@ import { existsSync, mkdirSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 
 import type { PluginContext, WorkflowState } from "../core/types.js";
-import { DOC_TYPES, type DocType } from "../features/db/types.js";
+import { DOC_TYPES, type DocType, type TraceabilityRow } from "../features/db/types.js";
 import { formatStatus } from "../tools/goop-status/index.js";
 import { logError } from "./logger.js";
 import { getGoopspecRootFilePath, getWorkflowDocPath } from "./paths.js";
@@ -107,6 +107,57 @@ function renderStatus(ctx: PluginContext, activeId: string, activeWf: WorkflowSt
   safeWriteFile(statusPath, content);
 }
 
+function compareNullableNumber(a: number | null, b: number | null): number {
+  if (a === b) return 0;
+  if (a === null) return 1;
+  if (b === null) return -1;
+  return a - b;
+}
+
+function escapeMarkdownCell(value: string): string {
+  return value.replace(/\|/g, "\\|").replace(/\r?\n/g, " ");
+}
+
+function formatTraceabilityValue(value: number | string | null): string {
+  if (value === null) return "—";
+  return escapeMarkdownCell(String(value));
+}
+
+function renderTraceabilityMatrix(ctx: PluginContext, workflowId: string): void {
+  try {
+    const traceabilityPath = getWorkflowDocPath(ctx.sdk.directory, workflowId, "TRACEABILITY.md");
+    const rows = [...ctx.db.getTraceability(workflowId)].sort(
+      (a: TraceabilityRow, b: TraceabilityRow) => {
+        const requirementOrder = a.requirement_key.localeCompare(b.requirement_key);
+        if (requirementOrder !== 0) return requirementOrder;
+        const waveOrder = compareNullableNumber(a.wave_number, b.wave_number);
+        if (waveOrder !== 0) return waveOrder;
+        return compareNullableNumber(a.task_index, b.task_index);
+      },
+    );
+
+    if (rows.length === 0) {
+      safeUnlink(traceabilityPath);
+      return;
+    }
+
+    const lines = [
+      "# Traceability Matrix",
+      "",
+      "| Requirement | Wave | Task | Status |",
+      "|-------------|------|------|--------|",
+      ...rows.map(
+        (row) =>
+          `| ${formatTraceabilityValue(row.requirement_key)} | ${formatTraceabilityValue(row.wave_number)} | ${formatTraceabilityValue(row.task_index)} | ${formatTraceabilityValue(row.status)} |`,
+      ),
+    ];
+
+    safeWriteFile(traceabilityPath, lines.join("\n"));
+  } catch (error: unknown) {
+    logError(`Failed to render traceability for workflow '${workflowId}'`, error);
+  }
+}
+
 export function renderSidecars(
   ctx: PluginContext,
   workflowId: string,
@@ -115,6 +166,7 @@ export function renderSidecars(
   try {
     const documents = collectRenderableDocuments(ctx, workflowId);
     renderWorkflowDocuments(ctx, workflowId, documents);
+    renderTraceabilityMatrix(ctx, workflowId);
 
     const state = ctx.stateManager.getState();
     const activeId = state.activeWorkflowId;
