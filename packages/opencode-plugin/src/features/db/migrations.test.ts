@@ -160,3 +160,65 @@ describe("migrations v2", () => {
     });
   });
 });
+
+describe("migrations v3-v6", () => {
+  function getObjectName(db: GoopSpecDB, type: string, name: string): string | null {
+    // biome-ignore lint/complexity/useLiteralKeys: accessing private property for test
+    const row = db["db"]
+      .query<{ name: string }, [string, string]>(
+        "SELECT name FROM sqlite_master WHERE type = ? AND name = ?",
+      )
+      .get(type, name);
+    return row?.name ?? null;
+  }
+
+  it("sets CURRENT_SCHEMA_VERSION to 6", () => {
+    expect(CURRENT_SCHEMA_VERSION).toBe(6);
+  });
+
+  it("fresh DB has new relational foundation tables", () => {
+    const db = new GoopSpecDB(":memory:");
+
+    expect(getObjectName(db, "table", "waves")).toBe("waves");
+    expect(getObjectName(db, "table", "wave_tasks")).toBe("wave_tasks");
+    expect(getObjectName(db, "table", "doc_sections")).toBe("doc_sections");
+    expect(getObjectName(db, "table", "doc_sections_fts")).toBe("doc_sections_fts");
+    expect(getObjectName(db, "table", "decisions")).toBe("decisions");
+    expect(getObjectName(db, "table", "verifications")).toBe("verifications");
+    expect(getObjectName(db, "table", "blockers")).toBe("blockers");
+    expect(getObjectName(db, "table", "traceability")).toBe("traceability");
+
+    db.close();
+  });
+
+  it("fresh DB has new SQL views", () => {
+    const db = new GoopSpecDB(":memory:");
+
+    expect(getObjectName(db, "view", "v_workflow_summary")).toBe("v_workflow_summary");
+    expect(getObjectName(db, "view", "v_wave_progress")).toBe("v_wave_progress");
+
+    db.close();
+  });
+
+  it("fresh DB has doc_sections FTS sync triggers", () => {
+    const db = new GoopSpecDB(":memory:");
+
+    expect(getObjectName(db, "trigger", "doc_sections_ai")).toBe("doc_sections_ai");
+    expect(getObjectName(db, "trigger", "doc_sections_ad")).toBe("doc_sections_ad");
+    expect(getObjectName(db, "trigger", "doc_sections_au")).toBe("doc_sections_au");
+
+    db.close();
+  });
+
+  it("re-running migrations on already-migrated DB remains a no-op", () => {
+    const db = new GoopSpecDB(":memory:");
+
+    expect(db.getSchemaVersion()).toBe(6);
+
+    // biome-ignore lint/complexity/useLiteralKeys: accessing private property for test
+    expect(() => runMigrations(db["db"])).not.toThrow();
+    expect(db.getSchemaVersion()).toBe(6);
+
+    db.close();
+  });
+});
