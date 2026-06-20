@@ -1,4 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
+import { existsSync, readFileSync, statSync } from "node:fs";
+import { join } from "node:path";
 
 import {
   createMockPluginContext,
@@ -6,6 +8,7 @@ import {
   setupTestEnvironment,
 } from "../../test-utils.js";
 import type { PluginContext } from "../../test-utils.js";
+import { formatStatus } from "../goop-status/index.js";
 import { createGoopStateTool } from "./index.js";
 
 describe("goop_state tool", () => {
@@ -94,6 +97,68 @@ describe("goop_state tool", () => {
       );
       expect(result).toContain("execute");
       expect(ctx.stateManager.getActiveWorkflow().phase).toBe("execute");
+    });
+
+    it("renders STATUS.md after phase transition and spec lock mutations", async () => {
+      const tool = createGoopStateTool(ctx);
+      const statusPath = join(ctx.sdk.directory, ".goopspec", "STATUS.md");
+
+      await tool.execute({ action: "transition", phase: "discuss" }, createMockToolContext());
+      expect(existsSync(statusPath)).toBe(true);
+      expect(readFileSync(statusPath, "utf-8")).toContain("💬 discuss");
+
+      await tool.execute({ action: "lock-spec" }, createMockToolContext());
+
+      const state = ctx.stateManager.getState();
+      const activeId = state.activeWorkflowId;
+      const activeWorkflow = state.workflows[activeId];
+      expect(readFileSync(statusPath, "utf-8")).toBe(
+        formatStatus(activeId, activeWorkflow, ctx.stateManager.listWorkflowIds(), ctx.sdk.directory),
+      );
+      expect(readFileSync(statusPath, "utf-8")).toContain("✓ Spec Locked");
+    });
+
+    it("does not render STATUS.md for read-only get", async () => {
+      const tool = createGoopStateTool(ctx);
+      const statusPath = join(ctx.sdk.directory, ".goopspec", "STATUS.md");
+
+      await tool.execute({ action: "get" }, createMockToolContext());
+
+      expect(existsSync(statusPath)).toBe(false);
+    });
+
+    it("does not refresh STATUS.md for read-only get after a mutation render", async () => {
+      const tool = createGoopStateTool(ctx);
+      const statusPath = join(ctx.sdk.directory, ".goopspec", "STATUS.md");
+
+      await tool.execute({ action: "transition", phase: "discuss" }, createMockToolContext());
+      const beforeStat = statSync(statusPath);
+      const beforeContent = readFileSync(statusPath, "utf-8");
+
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      await tool.execute({ action: "get" }, createMockToolContext());
+
+      const afterStat = statSync(statusPath);
+      expect(afterStat.mtimeMs).toBe(beforeStat.mtimeMs);
+      expect(readFileSync(statusPath, "utf-8")).toBe(beforeContent);
+    });
+
+    it("includes open blockers in rendered STATUS.md after mutation", async () => {
+      const tool = createGoopStateTool(ctx);
+      const statusPath = join(ctx.sdk.directory, ".goopspec", "STATUS.md");
+      const blockerId = ctx.db.upsertBlocker("default", {
+        description: "Waiting for schema approval",
+        severity: "high",
+        status: "open",
+      });
+
+      await tool.execute({ action: "transition", phase: "discuss" }, createMockToolContext());
+
+      const content = readFileSync(statusPath, "utf-8");
+      expect(content).toContain("### Open Blockers");
+      expect(content).toContain(`#${blockerId}`);
+      expect(content).toContain("[high]");
+      expect(content).toContain("Waiting for schema approval");
     });
   });
 

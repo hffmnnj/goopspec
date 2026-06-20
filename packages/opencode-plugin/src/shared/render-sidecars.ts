@@ -6,7 +6,7 @@ import { existsSync, mkdirSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 
 import type { PluginContext, WorkflowState } from "../core/types.js";
-import { DOC_TYPES, type DocType, type TraceabilityRow } from "../features/db/types.js";
+import { DOC_TYPES, type BlockerRow, type DocType, type TraceabilityRow } from "../features/db/types.js";
 import { formatStatus } from "../tools/goop-status/index.js";
 import { logError } from "./logger.js";
 import { getGoopspecRootFilePath, getWorkflowDocPath } from "./paths.js";
@@ -103,8 +103,34 @@ function renderActiveCopies(ctx: PluginContext, documents: RenderableDocument[])
 function renderStatus(ctx: PluginContext, activeId: string, activeWf: WorkflowState): void {
   const statusPath = getGoopspecRootFilePath(ctx.sdk.directory, "STATUS.md");
   const allWorkflowIds = ctx.stateManager.listWorkflowIds();
-  const content = formatStatus(activeId, activeWf, allWorkflowIds, ctx.sdk.directory);
+  let content = formatStatus(activeId, activeWf, allWorkflowIds, ctx.sdk.directory);
+
+  try {
+    const blockers = ctx.db.getBlockers(activeId, "open");
+    if (blockers.length > 0) {
+      content = `${content}\n\n${formatOpenBlockers(blockers)}`;
+    }
+  } catch (error: unknown) {
+    logError(`Failed to read open blockers for workflow '${activeId}'`, error);
+  }
+
   safeWriteFile(statusPath, content);
+}
+
+function sanitiseStatusLine(value: string): string {
+  return value.replace(/\r?\n/g, " ").trim();
+}
+
+function formatOpenBlockers(blockers: BlockerRow[]): string {
+  const lines = ["### Open Blockers"];
+
+  for (const blocker of blockers) {
+    lines.push(
+      `- #${blocker.id} [${blocker.severity}] ${sanitiseStatusLine(blocker.description)}`,
+    );
+  }
+
+  return lines.join("\n");
 }
 
 function compareNullableNumber(a: number | null, b: number | null): number {
