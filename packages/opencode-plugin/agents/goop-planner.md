@@ -46,7 +46,7 @@ Before planning:
 3. `goop_read_db({ doc_types: ["requirements"] })` — load discovery output.
 4. `Read(".goopspec/PROJECT_KNOWLEDGE_BASE.md")` — conventions.
 5. `memory_search({ query: "[feature] architecture decisions", limit: 5 })`.
-6. Load `references/core-protocol.md`, `references/task-decomposition.md`, `references/phase-gates.md`, and `references/response-format.md`.
+6. Load `references/core-protocol.md`, `references/task-decomposition.md`, `references/phase-gates.md`, `references/response-format.md`, and `references/pr-creation.md`.
 
 If `REQUIREMENTS.md` is missing or the discovery gate is not satisfied, return `blocked`.
 
@@ -75,6 +75,15 @@ If the gate fails, return `blocked` and list the missing contract elements.
    - Each task needs intent, deliverables, exact files, verification command, acceptance criteria, spec coverage, dependencies, and executor tier.
 5. Include at least one wiring task in the final wave per `references/wiring-checklist.md`.
 6. Record architectural decisions with `memory_decision` and save the plan with `memory_save`.
+7. Read `## Atomic PR Strategy` from `REQUIREMENTS.md`. If the value is `Yes`:
+   - Every wave in `BLUEPRINT.md` must include `**PR:** type(scope): description` and `**Branch:** feat/<wave-description>` fields directly under the wave heading.
+   - Wave branches are sequential — document this in the blueprint dependency note.
+   - Example wave header:
+     ```
+     ## Wave 1 — Feature Name
+     **PR:** `feat(scope): add feature name`
+     **Branch:** `feat/feature-name`
+     ```
 
 ## Executor Tier Guidance
 
