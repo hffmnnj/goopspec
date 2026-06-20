@@ -101,19 +101,31 @@ describe("createPluginContext()", () => {
     expect(Number.isNaN(Date.parse(ctx.session.startedAt))).toBe(false);
   });
 
-  it("produces a context that createTools accepts (16 tools)", async () => {
+  it("produces a context that createTools accepts (28 tools)", async () => {
     const input = createMockPluginInput(testDir);
     const ctx = await createPluginContext(input);
     const tools = createTools(ctx);
 
     const toolNames = Object.keys(tools);
-    expect(toolNames).toHaveLength(16);
+    expect(toolNames).toHaveLength(28);
     expect(toolNames).toContain("goop_status");
     expect(toolNames).toContain("goop_state");
     expect(toolNames).toContain("goop_read_db");
     expect(toolNames).toContain("goop_write_db");
     expect(toolNames).toContain("goop_save_note");
     expect(toolNames).toContain("goop_search_notes");
+    expect(toolNames).toContain("goop_write_section");
+    expect(toolNames).toContain("goop_read_section");
+    expect(toolNames).toContain("goop_write_wave");
+    expect(toolNames).toContain("goop_read_waves");
+    expect(toolNames).toContain("goop_query_decisions");
+    expect(toolNames).toContain("goop_record_verification");
+    expect(toolNames).toContain("goop_read_verifications");
+    expect(toolNames).toContain("goop_blocker");
+    expect(toolNames).toContain("goop_write_traceability");
+    expect(toolNames).toContain("goop_search_docs");
+    expect(toolNames).toContain("goop_timeline");
+    expect(toolNames).toContain("goop_dashboard");
     expect(toolNames).toContain("memory_save");
     expect(toolNames).toContain("memory_search");
     expect(toolNames).toContain("memory_forget");
