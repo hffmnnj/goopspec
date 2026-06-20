@@ -15,6 +15,8 @@ alternatives:
 
 Start the discovery interview. Capture vision, must-haves, constraints, out-of-scope items, assumptions, and risks before planning.
 
+> **This command ALWAYS starts a brand-new workflow.** Never reuse or append to the current or last active workflow. Every `/goop-discuss` invocation creates a fresh workflowId, a new git branch, and ultimately a new PR.
+
 ## Immediate action
 
 Load the interview protocol first:
@@ -25,31 +27,46 @@ goop_reference({ name: "discovery-interview" })
 
 ## Steps
 
-1. Check current state with `goop_state({ action: "get" })`.
-2. If a `workflow-id` is provided, create and bind it via `goop_state`:
-   - `goop_state({ action: "create-workflow", workflowId: "<id>" })`
-   - `goop_state({ action: "set-active-workflow", workflowId: "<id>" })`
+1. **Create a new workflow** — do not reuse the active one. Infer a kebab-case `workflowId` from the user's prompt (or use the supplied `workflow-id` argument), then:
+   - `goop_state({ action: "create-workflow", workflowId: "<new-id>" })`
+   - `goop_state({ action: "set-active-workflow", workflowId: "<new-id>" })`
+2. **Checkout a new git branch** named after the workflowId before any file writes:
+   - `git checkout -b <workflowId>`
+   - All implementation work for this workflow happens on this branch. Agents must never switch branches mid-workflow or work across multiple branches simultaneously.
 3. Ask all seven discovery categories (vision, must-haves, constraints, out-of-scope, assumptions, risks, and atomic PR preference) directly. Use the `question` tool for structured answers; mark exactly one option `(Recommended)`.
-4. After the vision answer, infer a kebab-case `workflowId` if one was not supplied, then create and bind it before any file writes.
-5. Probe until each category has specifics. Empty must-haves, out-of-scope, or risks are invalid.
-6. Summarize and confirm with the user.
-7. Write REQUIREMENTS.md via `goop_write_db({ doc_type: "requirements", content: "..." })` and call `goop_state({ action: "complete-interview" })`. The tool renders the markdown sidecar automatically.
+4. Probe until each category has specifics. Empty must-haves, out-of-scope, or risks are invalid.
+5. Summarize and confirm with the user.
+6. Write REQUIREMENTS.md via `goop_write_db({ doc_type: "requirements", content: "..." })` and call `goop_state({ action: "complete-interview" })`. The tool renders the markdown sidecar automatically.
    > REQUIREMENTS.md must include a `## Atomic PR Strategy` section.
+7. Remind the user that a PR will be opened against the base branch when the workflow reaches `/goop-accept`.
 8. Suggest `/goop-plan`.
 
 ## Lazy autopilot
 
-If `workflow.lazyAutopilot == true`, infer all six categories from the user's prompt, skip the `question` tool, write REQUIREMENTS.md via `goop_write_db({ doc_type: "requirements", content: "..." })`, then immediately call:
+If `workflow.lazyAutopilot == true`, infer all six categories from the user's prompt, skip the `question` tool, then:
 
-- Infer atomic PR preference as `Yes` (one PR per wave) unless the user's prompt explicitly opts out. Include `## Atomic PR Strategy: Yes — one PR per wave` in the inferred REQUIREMENTS.md.
+1. Create and bind a **new** workflowId (never reuse the active workflow).
+2. Checkout a new git branch: `git checkout -b <workflowId>`.
+3. Write REQUIREMENTS.md via `goop_write_db({ doc_type: "requirements", content: "..." })`.
+   - Infer atomic PR preference as `Yes` (one PR per wave) unless the user's prompt explicitly opts out. Include `## Atomic PR Strategy: Yes — one PR per wave` in the inferred REQUIREMENTS.md.
+4. Immediately call:
 
 ```
 mcp_slashcommand({ command: "/goop-plan" })
 ```
 
+## PR lifecycle
+
+- All commits for this workflow land on the branch created in step 2.
+- At `/goop-accept`, after verification passes and the user confirms, open a PR from `<workflowId>` → base branch via `gh pr create`.
+- Never open the PR before acceptance is confirmed.
+
 ## Anti-patterns
 
-- Skip the six categories.
-- Start writing files before the workflow is bound.
+- Reusing or appending to the current active workflow instead of creating a new one.
+- Starting work on `main` or the previous workflow's branch.
+- Skipping branch creation before file writes.
+- Skip the six discovery categories.
+- Start writing files before the workflow is bound and the branch is checked out.
 - Announce a transition without calling `mcp_slashcommand`.
 - Write REQUIREMENTS.md without a `## Atomic PR Strategy` section.
