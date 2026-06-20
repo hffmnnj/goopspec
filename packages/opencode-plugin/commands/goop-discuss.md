@@ -38,7 +38,7 @@ goop_reference({ name: "discovery-interview" })
 5. Summarize and confirm with the user.
 6. Write REQUIREMENTS.md via `goop_write_db({ doc_type: "requirements", content: "..." })` and call `goop_state({ action: "complete-interview" })`. The tool renders the markdown sidecar automatically.
    > REQUIREMENTS.md must include a `## Atomic PR Strategy` section.
-7. Remind the user that a PR will be opened against the base branch when the workflow reaches `/goop-accept`.
+7. Remind the user that with Atomic PRs, one PR is opened per wave during `/goop-execute`, and `/goop-accept` will offer to merge the full stack in order.
 8. Suggest `/goop-plan`.
 
 ## Lazy autopilot
@@ -57,9 +57,9 @@ mcp_slashcommand({ command: "/goop-plan" })
 
 ## PR lifecycle
 
-- All commits for this workflow land on the branch created in step 2.
-- At `/goop-accept`, after verification passes and the user confirms, open a PR from `<workflowId>` → base branch via `gh pr create`.
-- Never open the PR before acceptance is confirmed.
+- All commits for this workflow land on per-wave branches stacked on each other.
+- With Atomic PRs = Yes, a PR is opened for each wave during `/goop-execute` (Wave N → Wave N-1; Wave 1 → main) — not all at `/goop-accept`.
+- `/goop-accept` presents the full PR stack summary and offers to merge the PRs in order. Never merge before acceptance is confirmed.
 
 ## Anti-patterns
 
