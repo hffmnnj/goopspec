@@ -102,6 +102,17 @@ Start ─┼─ Task B ─┼─ Merge
        └─ Task C ─┘
 ```
 
+### Single-Branch Parallelism Rule
+
+All parallel agents must target the same branch. Never dispatch agents to different branches simultaneously.
+
+Wave branches are sequential — Wave N must be fully merged before Wave N+1 is created. Within a wave, parallel tasks share the wave's single branch.
+
+| Allowed | Forbidden |
+|---------|-----------|
+| 3 agents on `feat/auth-tokens` in parallel | Agent A on `feat/auth`, Agent B on `feat/db` simultaneously |
+| Wave 1 merged, then Wave 2 branch created | Wave 1 and Wave 2 branches both open at the same time |
+
 ### Background Dispatch
 
 Use for research, large test suites, or documentation generation that should not block the main flow.
@@ -204,6 +215,8 @@ Use `goop-explorer` when entering an unfamiliar codebase. The agent should produ
 - Vague delegation prompts missing context or verification.
 - Dispatching parallel agents to tasks that share files.
 - Skipping memory search before delegating research.
+- **Cross-branch parallel dispatch** — dispatching parallel agents to different branches simultaneously. All parallel agents must share one branch.
+- **Premature Wave N+1** — creating Wave N+1 branch before Wave N is merged.
 
 ---
 
