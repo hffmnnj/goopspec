@@ -43,6 +43,26 @@ describe("goop_read_db tool", () => {
     expect(result).toBe("# My Spec\n\nThis is the spec.");
   });
 
+  it("returns assembled section content when sections exist (singular doc_type)", async () => {
+    ctx.db.upsertDocument("default", "spec", "# Blob Spec");
+    ctx.db.upsertSection("default", "spec", "intro", "# Intro", 10);
+    ctx.db.upsertSection("default", "spec", "details", "# Details", 20);
+
+    const tool = createGoopReadDbTool(ctx);
+    const result = await tool.execute({ doc_type: "spec" }, toolCtx);
+
+    expect(result).toBe("# Intro\n\n# Details");
+  });
+
+  it("keeps blob output unchanged when no sections exist (singular doc_type)", async () => {
+    ctx.db.upsertDocument("default", "spec", "# Blob Spec\n\nOriginal body.");
+
+    const tool = createGoopReadDbTool(ctx);
+    const result = await tool.execute({ doc_type: "spec" }, toolCtx);
+
+    expect(result).toBe("# Blob Spec\n\nOriginal body.");
+  });
+
   it("uses active workflow_id when none provided", async () => {
     // Active workflow is "default" by default
     ctx.db.upsertDocument("default", "blueprint", "# Default Blueprint");
@@ -88,6 +108,32 @@ describe("goop_read_db tool", () => {
     expect(result).toContain("---");
     expect(result).toContain("## blueprint");
     expect(result).toContain("# Blueprint Content");
+  });
+
+  it("batch mode: returns assembled content when sections exist", async () => {
+    ctx.db.upsertDocument("default", "spec", "# Blob Spec");
+    ctx.db.upsertDocument("default", "blueprint", "# Blob Blueprint");
+    ctx.db.upsertSection("default", "spec", "intro", "# Intro", 10);
+    ctx.db.upsertSection("default", "spec", "details", "# Details", 20);
+
+    const tool = createGoopReadDbTool(ctx);
+    const result = await tool.execute({ doc_types: ["spec", "blueprint"] }, toolCtx);
+
+    expect(result).toContain("## spec\n\n# Intro\n\n# Details");
+    expect(result).toContain("## blueprint\n\n# Blob Blueprint");
+    expect(result).not.toContain("# Blob Spec");
+  });
+
+  it("batch mode: keeps blob output unchanged when no sections exist", async () => {
+    ctx.db.upsertDocument("default", "spec", "# Spec Content");
+    ctx.db.upsertDocument("default", "blueprint", "# Blueprint Content");
+
+    const tool = createGoopReadDbTool(ctx);
+    const result = await tool.execute({ doc_types: ["spec", "blueprint"] }, toolCtx);
+
+    expect(result).toBe(
+      "## spec\n\n# Spec Content\n\n---\n\n## blueprint\n\n# Blueprint Content",
+    );
   });
 
   it("batch mode: inline 'not found' for missing docs within batch", async () => {

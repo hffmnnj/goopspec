@@ -118,6 +118,15 @@ export interface WaveTaskRow {
   updated_at: number;
 }
 
+/** Raw row from the `v_wave_progress` view. */
+export interface WaveProgressRow {
+  wave_id: number;
+  workflow_id: string;
+  wave_number: number;
+  total_tasks: number;
+  completed_tasks: number;
+}
+
 /** Raw row from the `doc_sections` table. */
 export interface DocSectionRow {
   id: number;
