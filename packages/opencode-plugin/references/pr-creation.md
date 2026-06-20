@@ -8,7 +8,7 @@ Check `## Atomic PR Strategy` in `REQUIREMENTS.md` at the start of every workflo
 
 | Preference | Rule |
 |------------|------|
-| `Yes` | One PR per wave. Create a branch per wave. Merge Wave N before starting Wave N+1. |
+| `Yes` | One PR per wave. Create a branch per wave. Stack Wave N+1 on Wave N. Open PR after each wave against the previous branch. Continue immediately — no merge gate. |
 | `No` | All work goes into one branch. Open a single PR at the end. |
 | `Custom` | Follow the explicit strategy written in `REQUIREMENTS.md`. |
 
@@ -38,11 +38,25 @@ Before creating a branch, check for collisions:
 git branch -a | grep feat/
 ```
 
-## Wave Sequencing Rule
+## Stacked Branch Rule
 
-Wave branches are strictly sequential. Wave N must be fully merged before Wave N+1 is created.
+Each wave branch is created immediately from the previous wave's branch — no waiting for a merge. Wave 1 branches from `main`; Wave N branches from Wave N-1.
 
-Never have two wave branches active simultaneously.
+PRs are opened after each wave against the previous branch: Wave N → Wave N-1; Wave 1 → main.
+
+Only one wave is actively worked on at a time. Multiple open PRs in the stack are expected and correct.
+
+## Stacked PR Model
+
+Wave branches form a stack rooted at `main`:
+
+```
+main ← feat/wave-1 ← feat/wave-2 ← feat/wave-3 ← …
+```
+
+Each PR targets the previous branch. When GitHub merges an upstream PR, it automatically re-targets the next PR in the stack to the new base.
+
+To merge a stack: merge Wave 1 first, then Wave 2 (now re-targeted to main), and so on in order. The accept step handles this automatically when you choose to merge.
 
 ## Single-Branch Parallelism Rule
 
@@ -236,7 +250,7 @@ Each PR should be independently reviewable, mergeable, and understandable withou
 
 **Forbidden Patterns:**
 - Running parallel agents on different branches — creates divergent sources of truth
-- Creating Wave N+1 branch before Wave N is merged — violates wave sequencing
+- Creating Wave N+1 branch from `main` instead of stacking on Wave N's branch — wrong base, breaks the stack
 
 ## Terminology Gate
 
@@ -287,7 +301,7 @@ Before pushing a wave branch and opening a PR:
 
 - [ ] Branch created from latest `main`.
 - [ ] One commit per task minimum — `git log --oneline -5` shows individual commits.
-- [ ] No other wave branches active simultaneously.
+- [ ] Branch is stacked on the previous wave branch (not main, unless this is Wave 1).
 - [ ] PR title follows conventional commit format (`type(scope): description`).
 - [ ] `git diff --name-only main` shows only expected files.
 - [ ] No internal GoopSpec terms in PR title or body (see Terminology Gate).
@@ -303,7 +317,7 @@ Before pushing a wave branch and opening a PR:
 - **Marking comments resolved without addressing them** — let the reviewer decide when their concern is satisfied.
 - **Bundling unrelated changes** — each PR should have one reason to exist; if you can't write a one-line summary, split it.
 - **Cross-branch parallel dispatch** — never run parallel agents on different branches simultaneously; creates divergent sources of truth and merge conflicts.
-- **Premature Wave N+1** — never create Wave N+1 branch before Wave N is merged; violates wave sequencing and causes context loss.
+- **Wrong base** — never create Wave N+1 from `main`; always stack it on Wave N's branch, or the PR stack breaks.
 
 ---
 
