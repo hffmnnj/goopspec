@@ -1,4 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 
 import type { PluginContext, ToolContext } from "../../test-utils.js";
 import {
@@ -62,6 +64,41 @@ describe("goop_blocker tool", () => {
     const resolvedList = await blockerTool.execute({ action: "list", status: "resolved" }, toolCtx);
     expect(resolvedList).toContain("resolved");
     expect(resolvedList).toContain("Reviewer approved migration");
+  });
+
+  it("refreshes STATUS.md immediately after opening a blocker", async () => {
+    const blockerTool = createGoopBlockerTool(ctx);
+
+    const openResult = await blockerTool.execute(
+      { action: "open", description: "Waiting on migration review", severity: "high" },
+      toolCtx,
+    );
+
+    expect(openResult).toContain("Opened blocker #");
+    const statusPath = join(ctx.sdk.directory, ".goopspec", "default", "..", "STATUS.md");
+    const status = readFileSync(statusPath, "utf-8");
+    expect(status).toContain("### Open Blockers");
+    expect(status).toContain("Waiting on migration review");
+  });
+
+  it("refreshes STATUS.md immediately after resolving a blocker", async () => {
+    const blockerTool = createGoopBlockerTool(ctx);
+    await blockerTool.execute(
+      { action: "open", description: "Waiting on migration review", severity: "high" },
+      toolCtx,
+    );
+    const id = ctx.db.getBlockers("default", "open")[0].id;
+
+    const resolveResult = await blockerTool.execute(
+      { action: "resolve", id, resolution: "Reviewer approved migration" },
+      toolCtx,
+    );
+
+    expect(resolveResult).toContain(`Resolved blocker #${id}`);
+    const statusPath = join(ctx.sdk.directory, ".goopspec", "default", "..", "STATUS.md");
+    const status = readFileSync(statusPath, "utf-8");
+    expect(status).not.toContain("### Open Blockers");
+    expect(status).not.toContain("Waiting on migration review");
   });
 
   // -----------------------------------------------------------------------

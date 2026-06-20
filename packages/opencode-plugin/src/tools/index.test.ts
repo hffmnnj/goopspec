@@ -17,6 +17,18 @@ const EXPECTED_TOOL_KEYS = [
   "goop_save_note",
   "goop_search_notes",
   "goop_append_chronicle",
+  "goop_write_section",
+  "goop_read_section",
+  "goop_write_wave",
+  "goop_read_waves",
+  "goop_query_decisions",
+  "goop_record_verification",
+  "goop_read_verifications",
+  "goop_blocker",
+  "goop_write_traceability",
+  "goop_search_docs",
+  "goop_timeline",
+  "goop_dashboard",
   "memory_save",
   "memory_search",
   "memory_forget",
@@ -35,9 +47,9 @@ describe("createTools registry", () => {
 
   afterEach(() => cleanup());
 
-  it("returns exactly 16 tools", () => {
+  it("returns exactly 28 tools", () => {
     const tools = createTools(ctx);
-    expect(Object.keys(tools)).toHaveLength(16);
+    expect(Object.keys(tools)).toHaveLength(28);
   });
 
   it("registers all canonical MCP tool keys", () => {

@@ -522,6 +522,23 @@ describe("GoopSpecDB", () => {
       db.close();
     });
 
+    it("getWorkflowSummaries reads workflow counts ordered by last activity", () => {
+      const db = new GoopSpecDB(":memory:");
+      db.upsertWave("older-wf", { wave_number: 1, status: "completed" });
+      db.upsertWave("newer-wf", { wave_number: 1, status: "pending" });
+      db.upsertBlocker("newer-wf", { description: "Open issue" });
+
+      const rows = db.getWorkflowSummaries();
+
+      expect(rows.map((row) => row.workflow_id)).toEqual(["newer-wf", "older-wf"]);
+      expect(rows[0].total_waves).toBe(1);
+      expect(rows[0].completed_waves).toBe(0);
+      expect(rows[0].open_blockers).toBe(1);
+      expect(rows[0].last_activity).toBeGreaterThanOrEqual(rows[1].last_activity ?? 0);
+
+      db.close();
+    });
+
     it("upsertSection + getSection + getSections + assembleDocument preserve ordering", () => {
       const db = new GoopSpecDB(":memory:");
 

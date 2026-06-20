@@ -31,6 +31,10 @@ packages/opencode-plugin/src/
 ├── tools/                 # MCP tool implementations
 │   ├── goop-read-db/      # Read workflow docs from GoopSpecDB
 │   ├── goop-write-db/     # Write/update workflow docs; auto-renders markdown sidecar
+│   ├── goop-read-section/ # Read structured document sections
+│   ├── goop-write-wave/   # Upsert wave/task progress rows
+│   ├── goop-blocker/      # Open, resolve, and list workflow blockers
+│   ├── goop-dashboard/    # Render cross-workflow dashboard
 │   ├── goop-save-note/    # Save a Field Note to the global knowledge base
 │   ├── goop-search-notes/ # Search Field Notes with FTS + tag filtering
 │   └── ...                # Other tool directories
@@ -195,6 +199,13 @@ export function createMyHook(ctx: PluginContext) {
 7. **Explicit types** - Avoid `any`, define interfaces in `core/types.ts`.
 8. **Minimal comments** - Only document non-obvious logic.
 9. **Atomic commits** - Keep changes focused and small.
+
+## DB Tools Available
+
+- Documents: `goop_read_db`, `goop_write_db`, `goop_append_chronicle`, `goop_read_section`, `goop_write_section`, `goop_search_docs`
+- Waves and tracking: `goop_write_wave`, `goop_read_waves`, `goop_query_decisions`, `goop_record_verification`, `goop_read_verifications`, `goop_blocker`, `goop_write_traceability`
+- Project views: `goop_timeline`, `goop_dashboard`
+- Field Notes: `goop_save_note`, `goop_search_notes`
 
 ## Gotchas (Auto)
 

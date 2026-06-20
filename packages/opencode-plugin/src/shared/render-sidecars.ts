@@ -8,8 +8,10 @@ import { dirname } from "node:path";
 import type { PluginContext, WorkflowState } from "../core/types.js";
 import { DOC_TYPES, type BlockerRow, type DocType, type TraceabilityRow } from "../features/db/types.js";
 import { formatStatus } from "../tools/goop-status/index.js";
+import { buildDashboard } from "./dashboard.js";
 import { logError } from "./logger.js";
 import { getGoopspecRootFilePath, getWorkflowDocPath } from "./paths.js";
+import { buildTimeline, formatTimelineMarkdown } from "./timeline.js";
 
 export const DOC_TYPE_FILENAMES: Record<DocType, string> = {
   spec: "SPEC.md",
@@ -184,6 +186,31 @@ function renderTraceabilityMatrix(ctx: PluginContext, workflowId: string): void 
   }
 }
 
+function renderTimeline(ctx: PluginContext, workflowId: string): void {
+  try {
+    const timelinePath = getWorkflowDocPath(ctx.sdk.directory, workflowId, "TIMELINE.md");
+    const items = buildTimeline(ctx, workflowId);
+
+    if (items.length === 0) {
+      safeUnlink(timelinePath);
+      return;
+    }
+
+    safeWriteFile(timelinePath, formatTimelineMarkdown(items));
+  } catch (error: unknown) {
+    logError(`Failed to render timeline for workflow '${workflowId}'`, error);
+  }
+}
+
+function renderDashboard(ctx: PluginContext): void {
+  try {
+    const dashboardPath = getGoopspecRootFilePath(ctx.sdk.directory, "DASHBOARD.md");
+    safeWriteFile(dashboardPath, buildDashboard(ctx));
+  } catch (error: unknown) {
+    logError("Failed to render dashboard", error);
+  }
+}
+
 export function renderSidecars(
   ctx: PluginContext,
   workflowId: string,
@@ -193,6 +220,8 @@ export function renderSidecars(
     const documents = collectRenderableDocuments(ctx, workflowId);
     renderWorkflowDocuments(ctx, workflowId, documents);
     renderTraceabilityMatrix(ctx, workflowId);
+    renderTimeline(ctx, workflowId);
+    renderDashboard(ctx);
 
     const state = ctx.stateManager.getState();
     const activeId = state.activeWorkflowId;

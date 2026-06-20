@@ -42,6 +42,13 @@ For workflow path resolution:
 - Write workflow docs via `goop_write_db({ doc_type: "...", content: "..." })` — the tool renders the markdown sidecar automatically.
 - `config.json` and `memory.db` are always global files.
 
+## DB Tool Surface
+
+- Documents: `goop_read_db`, `goop_write_db`, `goop_append_chronicle`, `goop_read_section`, `goop_write_section`, `goop_search_docs`.
+- Waves and tracking: `goop_write_wave`, `goop_read_waves`, `goop_query_decisions`, `goop_record_verification`, `goop_read_verifications`, `goop_blocker`, `goop_write_traceability`.
+- Project views: `goop_timeline`, `goop_dashboard`.
+- Field Notes: `goop_save_note`, `goop_search_notes`.
+
 ## Memory-First Protocol
 
 Every agent follows the same loop:
