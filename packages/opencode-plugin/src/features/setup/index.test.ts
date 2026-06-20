@@ -4,6 +4,7 @@ import { join } from "node:path";
 
 import type { StateManager } from "../../core/types.js";
 import { createMockStateManager, setupTestEnvironment } from "../../test-utils.js";
+import { CURRENT_SCHEMA_VERSION } from "../db/migrations.js";
 import {
   DEFAULT_MODEL_MAP,
   detect,
@@ -359,7 +360,7 @@ describe("setup feature", () => {
       init(testDir, stateManager);
       const status = getStatus(testDir);
       // DB schema version matches CURRENT_SCHEMA_VERSION from migrations.ts
-      expect(status.stateVersion).toBe(2);
+      expect(status.stateVersion).toBe(CURRENT_SCHEMA_VERSION);
       expect(status.activeWorkflow).toBeDefined();
     });
   });
