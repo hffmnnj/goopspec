@@ -281,6 +281,18 @@ goop_create_pr({
 
 If the gate blocks, the tool returns a list of violations with line numbers and suggested replacements. Fix the offending lines and retry.
 
+## Verification Checklist
+
+Before pushing a wave branch and opening a PR:
+
+- [ ] Branch created from latest `main`.
+- [ ] One commit per task minimum — `git log --oneline -5` shows individual commits.
+- [ ] No other wave branches active simultaneously.
+- [ ] PR title follows conventional commit format (`type(scope): description`).
+- [ ] `git diff --name-only main` shows only expected files.
+- [ ] No internal GoopSpec terms in PR title or body (see Terminology Gate).
+- [ ] Self-reviewed the diff — would you merge this?
+
 ## Anti-Patterns
 
 - **Giant PRs (>500 lines)** — impossible to review thoroughly; split into smaller, focused PRs.
