@@ -2,6 +2,66 @@
 
 Open pull requests that reviewers want to review.
 
+## Atomic PR Strategy
+
+Check `## Atomic PR Strategy` in `REQUIREMENTS.md` at the start of every workflow.
+
+| Preference | Rule |
+|------------|------|
+| `Yes` | One PR per wave. Create a branch per wave. Merge Wave N before starting Wave N+1. |
+| `No` | All work goes into one branch. Open a single PR at the end. |
+| `Custom` | Follow the explicit strategy written in `REQUIREMENTS.md`. |
+
+Default in lazy-autopilot mode is `Yes`.
+
+## Branch Naming
+
+Format: `feat/<wave-description>`
+
+- Kebab-case only.
+- Keep it brief: 2-4 words.
+- One branch per wave.
+- Create the branch at wave start.
+- Delete the branch after its PR merges.
+
+Examples:
+
+| Good | Bad |
+|------|-----|
+| `feat/auth-tokens` | `feat/new-stuff` |
+| `feat/pr-workflow-improvements` | `feat/wave-2-branch` |
+| `feat/db-migration` | `feat/JWT_and_OAuth` |
+
+Before creating a branch, check for collisions:
+
+```bash
+git branch -a | grep feat/
+```
+
+## Wave Sequencing Rule
+
+Wave branches are strictly sequential. Wave N must be fully merged before Wave N+1 is created.
+
+Never have two wave branches active simultaneously.
+
+## Single-Branch Parallelism Rule
+
+Parallel agents may only run simultaneously on the same branch.
+
+Never dispatch agents to different branches at the same time.
+
+Multiple branches = multiple sources of truth = merge conflicts and context loss.
+
+## Commit Timing
+
+Commit after EACH task completes — not at wave end.
+
+- Minimum: one commit per completed task.
+- A wave with 3 tasks produces ≥3 commits.
+- Verify after each commit: `git log --oneline -5`.
+
+For the exact commit-message style, see `git-workflow.md`.
+
 ## Before You Open a PR
 
 - [ ] All tests pass locally (`bun test packages/opencode-plugin/`)
@@ -174,6 +234,10 @@ Each PR should be independently reviewable, mergeable, and understandable withou
 - Use `feat/<name>`, `fix/<description>`, `chore/<description>`
 - Never encode session identifiers or internal tooling phases into branch names
 
+**Forbidden Patterns:**
+- Running parallel agents on different branches — creates divergent sources of truth
+- Creating Wave N+1 branch before Wave N is merged — violates wave sequencing
+
 ## Terminology Gate
 
 PRs must use plain English. Internal tooling terminology must not appear in PR titles, descriptions, or branch names.
@@ -226,7 +290,9 @@ If the gate blocks, the tool returns a list of violations with line numbers and 
 - **Force-pushing to a PR branch after review has started** — rewrites history reviewers already read; use a new commit instead.
 - **Marking comments resolved without addressing them** — let the reviewer decide when their concern is satisfied.
 - **Bundling unrelated changes** — each PR should have one reason to exist; if you can't write a one-line summary, split it.
+- **Cross-branch parallel dispatch** — never run parallel agents on different branches simultaneously; creates divergent sources of truth and merge conflicts.
+- **Premature Wave N+1** — never create Wave N+1 branch before Wave N is merged; violates wave sequencing and causes context loss.
 
 ---
 
-*PR Creation v1.1 — GoopSpec Reference*
+*PR Creation v1.2 — GoopSpec Reference*
