@@ -2,7 +2,7 @@
  * goop_blocker tool — open, resolve, and list workflow blockers.
  *
  * Persists blocker lifecycle changes to GoopSpecDB and logs blocker events
- * for auditability. Status sidecar rendering is wired in a later wave.
+ * for auditability and refreshes rendered sidecars after mutations.
  *
  * @module tools/goop-blocker
  */
@@ -11,6 +11,7 @@ import { tool } from "../../core/sdk-compat.js";
 import type { ToolContext, ToolDefinition } from "../../core/sdk-compat.js";
 import type { PluginContext } from "../../core/types.js";
 import type { BlockerRow } from "../../features/db/types.js";
+import { renderSidecars } from "../../shared/render-sidecars.js";
 
 const BLOCKER_ACTIONS = ["open", "resolve", "list"] as const;
 type BlockerAction = (typeof BLOCKER_ACTIONS)[number];
@@ -102,6 +103,7 @@ export function createGoopBlockerTool(ctx: PluginContext): ToolDefinition {
               severity: args.severity ?? "medium",
               timestamp: Date.now(),
             });
+            renderSidecars(ctx, workflowId);
 
             return `Opened blocker #${blockerId} for workflow '${workflowId}'.`;
           }
@@ -130,6 +132,7 @@ export function createGoopBlockerTool(ctx: PluginContext): ToolDefinition {
               resolution: args.resolution ?? null,
               timestamp: Date.now(),
             });
+            renderSidecars(ctx, workflowId);
 
             return `Resolved blocker #${blockerId} for workflow '${workflowId}'.`;
           }
