@@ -219,7 +219,7 @@ export class GoopSpecDB {
   appendDocument(workflowId: string, docType: DocType, content: string): void {
     const existing = this.getDocument(workflowId, docType);
     if (existing) {
-      const updated = existing.content + "\n\n" + content;
+      const updated = `${existing.content}\n\n${content}`;
       this.upsertDocument(workflowId, docType, updated);
     } else {
       this.upsertDocument(workflowId, docType, content);
