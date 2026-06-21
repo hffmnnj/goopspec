@@ -1,10 +1,6 @@
 import { describe, expect, it } from "bun:test";
 
-import {
-  FORBIDDEN_TERMS,
-  scanForViolations,
-  suggest,
-} from "./index.js";
+import { FORBIDDEN_TERMS, scanForViolations, suggest } from "./index.js";
 
 // ============================================================================
 // FORBIDDEN_TERMS structure
@@ -229,9 +225,7 @@ describe("scanForViolations", () => {
 
   it('word boundary: "microwave" does NOT match "wave"', () => {
     const result = scanForViolations("Put it in the microwave");
-    const waveMatch = result.find(
-      (v) => v.term === "wave standalone" || v.term === "wave N/N",
-    );
+    const waveMatch = result.find((v) => v.term === "wave standalone" || v.term === "wave N/N");
     expect(waveMatch).toBeUndefined();
   });
 

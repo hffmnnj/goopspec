@@ -32,7 +32,12 @@ describe("goop_write_wave tool", () => {
         status: "in_progress",
         pr_branch: "feat/section-wave-tools",
         tasks: [
-          { task_index: 1, description: "Build section tools", agent: "goop-executor-medium", status: "done" },
+          {
+            task_index: 1,
+            description: "Build section tools",
+            agent: "goop-executor-medium",
+            status: "done",
+          },
           { task_index: 2, description: "Build wave tools", agent: "goop-executor-medium" },
           { task_index: 3, description: "Register tools later", status: "pending" },
         ],

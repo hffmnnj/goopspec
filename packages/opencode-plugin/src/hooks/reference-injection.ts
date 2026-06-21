@@ -21,9 +21,9 @@ import {
   setSignals,
 } from "../features/reference-signals/index.js";
 import {
-  extractTextFromParts,
   type ChatMessageInput,
   type ChatMessageOutput,
+  extractTextFromParts,
 } from "./chat-message.js";
 import { estimateTokens } from "./system-transform.js";
 import type { HookFactory, Hooks } from "./types.js";

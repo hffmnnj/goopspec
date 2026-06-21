@@ -6,7 +6,12 @@ import { existsSync, mkdirSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 
 import type { PluginContext, WorkflowState } from "../core/types.js";
-import { DOC_TYPES, type BlockerRow, type DocType, type TraceabilityRow } from "../features/db/types.js";
+import {
+  type BlockerRow,
+  DOC_TYPES,
+  type DocType,
+  type TraceabilityRow,
+} from "../features/db/types.js";
 import { formatStatus } from "../tools/goop-status/index.js";
 import { buildDashboard } from "./dashboard.js";
 import { logError } from "./logger.js";
@@ -28,7 +33,11 @@ interface RenderableDocument {
   content: string;
 }
 
-function readRenderableDocument(ctx: PluginContext, workflowId: string, docType: DocType): string | null {
+function readRenderableDocument(
+  ctx: PluginContext,
+  workflowId: string,
+  docType: DocType,
+): string | null {
   const sections = ctx.db.getSections(workflowId, docType);
   if (sections.length > 0) {
     const assembled = ctx.db.assembleDocument(workflowId, docType);
@@ -97,7 +106,10 @@ function renderActiveCopies(ctx: PluginContext, documents: RenderableDocument[])
 
   for (const docType of DOC_TYPES) {
     if (renderedTypes.has(docType)) continue;
-    const stalePath = getGoopspecRootFilePath(ctx.sdk.directory, `ACTIVE_${docType.toUpperCase()}.md`);
+    const stalePath = getGoopspecRootFilePath(
+      ctx.sdk.directory,
+      `ACTIVE_${docType.toUpperCase()}.md`,
+    );
     safeUnlink(stalePath);
   }
 }
@@ -127,9 +139,7 @@ function formatOpenBlockers(blockers: BlockerRow[]): string {
   const lines = ["### Open Blockers"];
 
   for (const blocker of blockers) {
-    lines.push(
-      `- #${blocker.id} [${blocker.severity}] ${sanitiseStatusLine(blocker.description)}`,
-    );
+    lines.push(`- #${blocker.id} [${blocker.severity}] ${sanitiseStatusLine(blocker.description)}`);
   }
 
   return lines.join("\n");

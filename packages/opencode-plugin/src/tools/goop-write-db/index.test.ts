@@ -153,7 +153,10 @@ describe("goop_write_db tool", () => {
       ctx.db.upsertDocument("default", "spec", "# Existing Content");
 
       const tool = createGoopWriteDbTool(ctx);
-      await tool.execute({ doc_type: "spec", content: "# Appended Content", mode: "append" }, toolCtx);
+      await tool.execute(
+        { doc_type: "spec", content: "# Appended Content", mode: "append" },
+        toolCtx,
+      );
 
       const doc = ctx.db.getDocument("default", "spec");
       expect(doc?.content).toBe("# Existing Content\n\n# Appended Content");
@@ -196,10 +199,7 @@ describe("goop_write_db tool", () => {
       ctx.db.upsertDocument("default", "blueprint", "# Part One");
 
       const tool = createGoopWriteDbTool(ctx);
-      await tool.execute(
-        { doc_type: "blueprint", content: "# Part Two", mode: "append" },
-        toolCtx,
-      );
+      await tool.execute({ doc_type: "blueprint", content: "# Part Two", mode: "append" }, toolCtx);
 
       const sidecarPath = join(testDir, ".goopspec", "default", "BLUEPRINT.md");
       expect(existsSync(sidecarPath)).toBe(true);

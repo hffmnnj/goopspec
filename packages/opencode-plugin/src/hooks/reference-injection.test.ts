@@ -1,19 +1,9 @@
 import { afterEach, describe, expect, it, spyOn } from "bun:test";
 import type { SdkModel, SdkPart } from "../core/sdk-compat.js";
 import type { ResolvedResource } from "../core/types.js";
-import {
-  clearSignals,
-  getSignals,
-  setSignals,
-} from "../features/reference-signals/index.js";
-import {
-  createMockPluginContext,
-  setupTestEnvironment,
-} from "../test-utils.js";
-import {
-  createReferenceInjectionHook,
-  referenceInjectionFactory,
-} from "./reference-injection.js";
+import { clearSignals, getSignals, setSignals } from "../features/reference-signals/index.js";
+import { createMockPluginContext, setupTestEnvironment } from "../test-utils.js";
+import { createReferenceInjectionHook, referenceInjectionFactory } from "./reference-injection.js";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -345,10 +335,7 @@ describe("chat.message → system-transform integration", () => {
     const hooks = createReferenceInjectionHook(ctx);
 
     // Step 1: chat.message detects keywords
-    await hooks["chat.message"]!(
-      chatInput(),
-      chatOutput("I need to debug this crash"),
-    );
+    await hooks["chat.message"]!(chatInput(), chatOutput("I need to debug this crash"));
 
     // Step 2: system-transform injects references
     const output = { system: [] as string[] };
@@ -369,10 +356,7 @@ describe("chat.message → system-transform integration", () => {
     const hooks = createReferenceInjectionHook(ctx);
 
     // Step 1: chat.message with no keywords
-    await hooks["chat.message"]!(
-      chatInput(),
-      chatOutput("hello world"),
-    );
+    await hooks["chat.message"]!(chatInput(), chatOutput("hello world"));
 
     // Step 2: system-transform — nothing to inject
     const output = { system: ["original"] };

@@ -3,9 +3,9 @@ import { existsSync, lstatSync, mkdirSync, readFileSync, writeFileSync } from "n
 import { join } from "node:path";
 
 import {
+  type PluginContext,
   createMockPluginContext,
   setupTestEnvironment,
-  type PluginContext,
 } from "../test-utils.js";
 import { renderSidecars } from "./render-sidecars.js";
 

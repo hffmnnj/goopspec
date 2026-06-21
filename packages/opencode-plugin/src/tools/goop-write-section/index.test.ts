@@ -113,10 +113,7 @@ describe("goop_write_section tool", () => {
 
   it("uses active workflow_id when none provided", async () => {
     const tool = createGoopWriteSectionTool(ctx);
-    await tool.execute(
-      { doc_type: "adl", section_key: "entry", content: "# ADL Entry" },
-      toolCtx,
-    );
+    await tool.execute({ doc_type: "adl", section_key: "entry", content: "# ADL Entry" }, toolCtx);
 
     const section = ctx.db.getSection("default", "adl", "entry");
     expect(section).not.toBeNull();

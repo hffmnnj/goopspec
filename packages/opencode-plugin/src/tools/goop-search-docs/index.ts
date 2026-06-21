@@ -28,7 +28,8 @@ function formatSnippet(content: string): string {
 }
 
 function formatResult(result: DocumentSearchResult, index: number): string {
-  const sectionLine = result.source === "section" ? `- **section_key:** ${result.section_key ?? ""}` : null;
+  const sectionLine =
+    result.source === "section" ? `- **section_key:** ${result.section_key ?? ""}` : null;
   const metadata = [
     `- **source:** ${result.source}`,
     `- **workflow_id:** ${result.workflow_id}`,
@@ -37,9 +38,14 @@ function formatResult(result: DocumentSearchResult, index: number): string {
     `- **created_at:** ${formatTimestamp(result.created_at)}`,
   ].filter((line): line is string => line !== null);
 
-  return [`### ${index + 1}. ${result.workflow_id}/${result.doc_type}`, ...metadata, "", formatSnippet(result.content), "", "---"].join(
-    "\n",
-  );
+  return [
+    `### ${index + 1}. ${result.workflow_id}/${result.doc_type}`,
+    ...metadata,
+    "",
+    formatSnippet(result.content),
+    "",
+    "---",
+  ].join("\n");
 }
 
 // ---------------------------------------------------------------------------
@@ -56,8 +62,14 @@ export function createGoopSearchDocsTool(ctx: PluginContext): ToolDefinition {
       workflow_id: tool.schema.string().optional().describe("Filter to a workflow ID (optional)"),
       doc_type: tool.schema.string().optional().describe("Filter to a document type (optional)"),
       section_key: tool.schema.string().optional().describe("Filter to a section key (optional)"),
-      since: tool.schema.number().optional().describe("Filter to results created at or after this unix second"),
-      until: tool.schema.number().optional().describe("Filter to results created at or before this unix second"),
+      since: tool.schema
+        .number()
+        .optional()
+        .describe("Filter to results created at or after this unix second"),
+      until: tool.schema
+        .number()
+        .optional()
+        .describe("Filter to results created at or before this unix second"),
       limit: tool.schema.number().optional().describe("Max results (default 20)"),
     },
     async execute(

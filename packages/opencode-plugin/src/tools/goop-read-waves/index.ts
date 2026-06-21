@@ -78,12 +78,12 @@ export function createGoopReadWavesTool(ctx: PluginContext): ToolDefinition {
     ): Promise<string> {
       try {
         const workflowId = args.workflow_id ?? ctx.stateManager.getState().activeWorkflowId;
-        const waves = args.wave_number !== undefined
-          ? [ctx.db.getWave(workflowId, args.wave_number)].filter((w): w is WaveRow => w !== null)
-          : ctx.db.getWaves(workflowId);
-        const filteredWaves = args.status !== undefined
-          ? waves.filter((wave) => wave.status === args.status)
-          : waves;
+        const waves =
+          args.wave_number !== undefined
+            ? [ctx.db.getWave(workflowId, args.wave_number)].filter((w): w is WaveRow => w !== null)
+            : ctx.db.getWaves(workflowId);
+        const filteredWaves =
+          args.status !== undefined ? waves.filter((wave) => wave.status === args.status) : waves;
 
         if (filteredWaves.length === 0) {
           const scope = args.wave_number !== undefined ? `wave ${args.wave_number}` : "waves";
