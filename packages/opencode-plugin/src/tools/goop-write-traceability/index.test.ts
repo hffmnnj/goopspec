@@ -82,3 +82,58 @@ describe("goop_write_traceability tool", () => {
     expect(payload.timestamp).toBeGreaterThan(0);
   });
 });
+
+describe("goop_write_traceability batch mode (items[])", () => {
+  let ctx: PluginContext;
+  let toolCtx: ToolContext;
+  let cleanup: () => void;
+
+  beforeEach(() => {
+    const env = setupTestEnvironment("goop-write-traceability-batch");
+    cleanup = env.cleanup;
+    ctx = createMockPluginContext({ testDir: env.testDir, db: env.db });
+    toolCtx = createMockToolContext();
+  });
+
+  afterEach(() => cleanup());
+
+  it("returns empty result for empty items array", async () => {
+    const tool = createGoopWriteTraceabilityTool(ctx);
+    const result = await tool.execute({ requirement_key: "MH1", items: [] }, toolCtx);
+    expect(result).toContain("0/0 succeeded");
+  });
+
+  it("writes single-element items array", async () => {
+    const tool = createGoopWriteTraceabilityTool(ctx);
+    const result = await tool.execute(
+      {
+        requirement_key: "MH1",
+        items: [{ requirement_key: "MH1", wave_number: 1 }],
+      },
+      toolCtx,
+    );
+    expect(result).toContain("1/1 succeeded");
+  });
+
+  it("writes multi-element items array", async () => {
+    const tool = createGoopWriteTraceabilityTool(ctx);
+    const result = await tool.execute(
+      {
+        requirement_key: "MH1",
+        items: [
+          { requirement_key: "MH1", wave_number: 1, task_index: 1 },
+          { requirement_key: "MH2", wave_number: 2, task_index: 1 },
+          { requirement_key: "MH3", wave_number: 2, task_index: 2 },
+        ],
+      },
+      toolCtx,
+    );
+    expect(result).toContain("3/3 succeeded");
+  });
+
+  it("backward-compat: single-row path works when items absent", async () => {
+    const tool = createGoopWriteTraceabilityTool(ctx);
+    const result = await tool.execute({ requirement_key: "MH1", wave_number: 1 }, toolCtx);
+    expect(result).toContain("MH1");
+  });
+});

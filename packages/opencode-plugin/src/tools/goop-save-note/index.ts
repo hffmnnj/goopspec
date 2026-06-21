@@ -12,6 +12,8 @@
 import { tool } from "../../core/sdk-compat.js";
 import type { ToolContext, ToolDefinition } from "../../core/sdk-compat.js";
 import type { PluginContext } from "../../core/types.js";
+import type { BatchItemResult, BatchResult } from "../../features/db/batch.js";
+import { formatBatchResult } from "../../features/db/batch.js";
 
 // ---------------------------------------------------------------------------
 // ID generation
@@ -55,6 +57,22 @@ export function createGoopSaveNoteTool(ctx: PluginContext): ToolDefinition {
         .string()
         .optional()
         .describe("Originating project (optional, defaults to project name from paths)"),
+      items: tool.schema
+        .array(
+          tool.schema.object({
+            title: tool.schema.string().describe("Brief summary of the note"),
+            body: tool.schema.string().describe("Full note content (markdown)"),
+            tags: tool.schema.array(tool.schema.string()).describe("Categorization tags"),
+            source_agent: tool.schema.string().describe("Which agent is saving"),
+            importance: tool.schema
+              .number()
+              .optional()
+              .describe("Importance level 1-10 (default 5)"),
+            workflow_id: tool.schema.string().optional().describe("Originating workflow"),
+            project_id: tool.schema.string().optional().describe("Originating project"),
+          }),
+        )
+        .optional(),
     },
     async execute(
       args: {
@@ -65,10 +83,66 @@ export function createGoopSaveNoteTool(ctx: PluginContext): ToolDefinition {
         importance?: number;
         workflow_id?: string;
         project_id?: string;
+        items?: Array<{
+          title: string;
+          body: string;
+          tags: string[];
+          source_agent: string;
+          importance?: number;
+          workflow_id?: string;
+          project_id?: string;
+        }>;
       },
       _context: ToolContext,
     ): Promise<string> {
       try {
+        if (args.items !== undefined) {
+          const batchItems: BatchItemResult[] = [];
+          let succeeded = 0;
+          let failed = 0;
+
+          for (const [index, item] of args.items.entries()) {
+            const itemImportance = item.importance ?? 5;
+            if (itemImportance < 1 || itemImportance > 10) {
+              batchItems.push({
+                index,
+                ok: false,
+                detail: `importance out of range (${itemImportance})`,
+              });
+              failed++;
+              continue;
+            }
+
+            try {
+              const id = generateNoteId();
+              ctx.db.saveNote({
+                id,
+                title: item.title,
+                body: item.body,
+                tags: JSON.stringify(item.tags),
+                source_agent: item.source_agent,
+                importance: itemImportance,
+                workflow_id: item.workflow_id ?? null,
+                project_id: item.project_id ?? null,
+              });
+              batchItems.push({ index, ok: true, detail: `saved ${id}` });
+              succeeded++;
+            } catch (error: unknown) {
+              const msg = error instanceof Error ? error.message : String(error);
+              batchItems.push({ index, ok: false, detail: msg });
+              failed++;
+            }
+          }
+
+          const result: BatchResult = {
+            total: args.items.length,
+            succeeded,
+            failed,
+            items: batchItems,
+          };
+          return formatBatchResult(result, "save-note");
+        }
+
         const importance = args.importance ?? 5;
 
         if (importance < 1 || importance > 10) {
