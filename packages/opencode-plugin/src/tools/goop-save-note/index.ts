@@ -64,7 +64,10 @@ export function createGoopSaveNoteTool(ctx: PluginContext): ToolDefinition {
             body: tool.schema.string().describe("Full note content (markdown)"),
             tags: tool.schema.array(tool.schema.string()).describe("Categorization tags"),
             source_agent: tool.schema.string().describe("Which agent is saving"),
-            importance: tool.schema.number().optional().describe("Importance level 1-10 (default 5)"),
+            importance: tool.schema
+              .number()
+              .optional()
+              .describe("Importance level 1-10 (default 5)"),
             workflow_id: tool.schema.string().optional().describe("Originating workflow"),
             project_id: tool.schema.string().optional().describe("Originating project"),
           }),
@@ -101,7 +104,11 @@ export function createGoopSaveNoteTool(ctx: PluginContext): ToolDefinition {
           for (const [index, item] of args.items.entries()) {
             const itemImportance = item.importance ?? 5;
             if (itemImportance < 1 || itemImportance > 10) {
-              batchItems.push({ index, ok: false, detail: `importance out of range (${itemImportance})` });
+              batchItems.push({
+                index,
+                ok: false,
+                detail: `importance out of range (${itemImportance})`,
+              });
               failed++;
               continue;
             }

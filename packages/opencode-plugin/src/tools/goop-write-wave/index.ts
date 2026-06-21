@@ -9,8 +9,8 @@
 
 import { tool } from "../../core/sdk-compat.js";
 import type { ToolContext, ToolDefinition } from "../../core/sdk-compat.js";
-import { runBatch, formatBatchResult } from "../../features/db/batch.js";
 import type { PluginContext } from "../../core/types.js";
+import { formatBatchResult, runBatch } from "../../features/db/batch.js";
 import { renderSidecars } from "../../shared/render-sidecars.js";
 
 interface InlineWaveTask {

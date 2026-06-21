@@ -39,89 +39,89 @@ describe("scanForViolations", () => {
     const result = scanForViolations("Completed wave of changes");
     const match = result.find((v) => v.term === "wave standalone");
     expect(match).toBeDefined();
-    expect(match!.severity).toBe("error");
-    expect(match!.match.toLowerCase()).toBe("wave");
+    expect(match?.severity).toBe("error");
+    expect(match?.match.toLowerCase()).toBe("wave");
   });
 
   it('detects "wave 2/4" pattern (error)', () => {
     const result = scanForViolations("Finished wave 2/4");
     const match = result.find((v) => v.term === "wave N/N");
     expect(match).toBeDefined();
-    expect(match!.severity).toBe("error");
-    expect(match!.match).toBe("wave 2/4");
+    expect(match?.severity).toBe("error");
+    expect(match?.match).toBe("wave 2/4");
   });
 
   it('detects "task 2.1" pattern (error)', () => {
     const result = scanForViolations("Implements task 2.1");
     const match = result.find((v) => v.term === "task N.N");
     expect(match).toBeDefined();
-    expect(match!.severity).toBe("error");
+    expect(match?.severity).toBe("error");
   });
 
   it('detects "must-have" (error)', () => {
     const result = scanForViolations("This is a must-have feature");
     const match = result.find((v) => v.term === "must-have");
     expect(match).toBeDefined();
-    expect(match!.severity).toBe("error");
+    expect(match?.severity).toBe("error");
   });
 
   it('detects "must haves" (error)', () => {
     const result = scanForViolations("All must haves are done");
     const match = result.find((v) => v.term === "must-have");
     expect(match).toBeDefined();
-    expect(match!.severity).toBe("error");
+    expect(match?.severity).toBe("error");
   });
 
   it('detects "nice-to-have" (error)', () => {
     const result = scanForViolations("This is a nice-to-have");
     const match = result.find((v) => v.term === "nice-to-have");
     expect(match).toBeDefined();
-    expect(match!.severity).toBe("error");
+    expect(match?.severity).toBe("error");
   });
 
   it('detects "MH-3" pattern (error)', () => {
     const result = scanForViolations("Implements MH-3");
     const match = result.find((v) => v.term === "MH-digits");
     expect(match).toBeDefined();
-    expect(match!.severity).toBe("error");
-    expect(match!.replacement).toBe("requirement");
+    expect(match?.severity).toBe("error");
+    expect(match?.replacement).toBe("requirement");
   });
 
   it('detects "NH-1" pattern (error)', () => {
     const result = scanForViolations("Also covers NH-1");
     const match = result.find((v) => v.term === "NH-digits");
     expect(match).toBeDefined();
-    expect(match!.severity).toBe("error");
-    expect(match!.replacement).toBe("enhancement");
+    expect(match?.severity).toBe("error");
+    expect(match?.replacement).toBe("enhancement");
   });
 
   it('detects "goop-executor" (error)', () => {
     const result = scanForViolations("Delegated to goop-executor");
     const match = result.find((v) => v.term === "goop-executor variants");
     expect(match).toBeDefined();
-    expect(match!.severity).toBe("error");
+    expect(match?.severity).toBe("error");
   });
 
   it('detects "goop-executor-medium" (error)', () => {
     const result = scanForViolations("Run by goop-executor-medium");
     const match = result.find((v) => v.term === "goop-executor variants");
     expect(match).toBeDefined();
-    expect(match!.severity).toBe("error");
-    expect(match!.match).toBe("goop-executor-medium");
+    expect(match?.severity).toBe("error");
+    expect(match?.match).toBe("goop-executor-medium");
   });
 
   it('detects "chronicle" (error)', () => {
     const result = scanForViolations("Updated the chronicle");
     const match = result.find((v) => v.term === "chronicle");
     expect(match).toBeDefined();
-    expect(match!.severity).toBe("error");
+    expect(match?.severity).toBe("error");
   });
 
   it('detects "ADL" uppercase (error)', () => {
     const upper = scanForViolations("Logged in ADL");
     const adlMatch = upper.find((v) => v.term === "ADL");
     expect(adlMatch).toBeDefined();
-    expect(adlMatch!.severity).toBe("error");
+    expect(adlMatch?.severity).toBe("error");
   });
 
   it("detects 'adl' lowercase (case-insensitive)", () => {
@@ -133,28 +133,28 @@ describe("scanForViolations", () => {
     const result = scanForViolations("This is the wiring task");
     const match = result.find((v) => v.term === "wiring task");
     expect(match).toBeDefined();
-    expect(match!.severity).toBe("error");
+    expect(match?.severity).toBe("error");
   });
 
   it('detects "spec locked" (error)', () => {
     const result = scanForViolations("The spec locked state is set");
     const match = result.find((v) => v.term === "spec locked");
     expect(match).toBeDefined();
-    expect(match!.severity).toBe("error");
+    expect(match?.severity).toBe("error");
   });
 
   it('detects "acceptance gate" (error)', () => {
     const result = scanForViolations("Passed the acceptance gate");
     const match = result.find((v) => v.term === "acceptance gate");
     expect(match).toBeDefined();
-    expect(match!.severity).toBe("error");
+    expect(match?.severity).toBe("error");
   });
 
   it('detects "deviation rule" (error)', () => {
     const result = scanForViolations("Applied deviation rule 3");
     const match = result.find((v) => v.term === "deviation rule");
     expect(match).toBeDefined();
-    expect(match!.severity).toBe("error");
+    expect(match?.severity).toBe("error");
   });
 
   // -----------------------------------------------------------------------
@@ -165,21 +165,21 @@ describe("scanForViolations", () => {
     const result = scanForViolations("See the blueprint for details");
     const match = result.find((v) => v.term === "blueprint");
     expect(match).toBeDefined();
-    expect(match!.severity).toBe("warn");
+    expect(match?.severity).toBe("warn");
   });
 
   it('detects "handoff" (warn) — NOT error', () => {
     const result = scanForViolations("Prepared the handoff document");
     const match = result.find((v) => v.term === "handoff");
     expect(match).toBeDefined();
-    expect(match!.severity).toBe("warn");
+    expect(match?.severity).toBe("warn");
   });
 
   it('detects "goopspec" (warn) — NOT error', () => {
     const result = scanForViolations("Built with goopspec");
     const match = result.find((v) => v.term === "goopspec");
     expect(match).toBeDefined();
-    expect(match!.severity).toBe("warn");
+    expect(match?.severity).toBe("warn");
   });
 
   it("detects standalone 'executor' as warn severity", () => {
@@ -197,7 +197,7 @@ describe("scanForViolations", () => {
     const result = scanForViolations("Completed WAVE of work");
     const match = result.find((v) => v.term === "wave standalone");
     expect(match).toBeDefined();
-    expect(match!.match).toBe("WAVE");
+    expect(match?.match).toBe("WAVE");
   });
 
   it('case-insensitive: "Must-Have" matches', () => {
@@ -215,8 +215,8 @@ describe("scanForViolations", () => {
     const result = scanForViolations(text);
     const match = result.find((v) => v.term === "wave standalone");
     expect(match).toBeDefined();
-    expect(match!.line).toBe(2);
-    expect(match!.column).toBeGreaterThan(0);
+    expect(match?.line).toBe(2);
+    expect(match?.column).toBeGreaterThan(0);
   });
 
   // -----------------------------------------------------------------------
@@ -258,13 +258,14 @@ describe("scanForViolations", () => {
     const result = scanForViolations("Found a wave here");
     expect(result.length).toBeGreaterThan(0);
 
-    const v = result[0]!;
-    expect(typeof v.term).toBe("string");
-    expect(typeof v.match).toBe("string");
-    expect(typeof v.line).toBe("number");
-    expect(typeof v.column).toBe("number");
-    expect(["error", "warn"]).toContain(v.severity);
-    expect(typeof v.replacement).toBe("string");
+    const v = result[0];
+    expect(v).toBeDefined();
+    expect(typeof v?.term).toBe("string");
+    expect(typeof v?.match).toBe("string");
+    expect(typeof v?.line).toBe("number");
+    expect(typeof v?.column).toBe("number");
+    expect(["error", "warn"]).toContain(v?.severity);
+    expect(typeof v?.replacement).toBe("string");
   });
 });
 

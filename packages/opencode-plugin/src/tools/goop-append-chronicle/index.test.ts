@@ -39,15 +39,18 @@ describe("goop_append_chronicle tool", () => {
     const doc = ctx.db.getDocument("default", "chronicle");
     expect(doc).not.toBeNull();
 
-    const content = doc!.content;
+    const content = doc?.content;
+    expect(content).toBeDefined();
 
     // Must contain a ### heading
     expect(content).toMatch(/^### /);
 
     // Extract the ISO timestamp from the heading
-    const match = content.match(/^### ([^\n]+)/);
+    const match = content?.match(/^### ([^\n]+)/);
     expect(match).not.toBeNull();
-    const ts = new Date(match![1]);
+    const timestamp = match?.[1];
+    expect(timestamp).toBeDefined();
+    const ts = new Date(timestamp ?? "");
     expect(ts.getTime()).toBeGreaterThanOrEqual(before.getTime() - 1000);
     expect(ts.getTime()).toBeLessThanOrEqual(after.getTime() + 1000);
 
@@ -92,7 +95,7 @@ describe("goop_append_chronicle tool", () => {
 
     const doc = ctx.db.getDocument("default", "chronicle");
     expect(doc).not.toBeNull();
-    expect(doc!.content).toContain("Active workflow entry.");
+    expect(doc?.content).toContain("Active workflow entry.");
 
     // Should NOT have written to any other workflow
     const otherDoc = ctx.db.getDocument("other-wf", "chronicle");
@@ -110,7 +113,7 @@ describe("goop_append_chronicle tool", () => {
     // Document written to custom-wf
     const customDoc = ctx.db.getDocument("custom-wf", "chronicle");
     expect(customDoc).not.toBeNull();
-    expect(customDoc!.content).toContain("Custom workflow entry.");
+    expect(customDoc?.content).toContain("Custom workflow entry.");
 
     // chronicle_events row belongs to custom-wf
     const events = ctx.db.getChronicleEvents("custom-wf");

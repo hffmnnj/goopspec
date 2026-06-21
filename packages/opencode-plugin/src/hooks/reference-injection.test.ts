@@ -43,6 +43,17 @@ function mockResources(...names: string[]): ResolvedResource[] {
   }));
 }
 
+function requireHook<T extends keyof ReturnType<typeof createReferenceInjectionHook>>(
+  hooks: ReturnType<typeof createReferenceInjectionHook>,
+  name: T,
+): NonNullable<ReturnType<typeof createReferenceInjectionHook>[T]> {
+  const handler = hooks[name];
+  if (!handler) {
+    throw new Error(`Missing ${name} hook`);
+  }
+  return handler;
+}
+
 // ---------------------------------------------------------------------------
 // Factory shape
 // ---------------------------------------------------------------------------
@@ -93,7 +104,7 @@ describe("chat.message handler", () => {
       resources: mockResources("debugging"),
     });
     const hooks = createReferenceInjectionHook(ctx);
-    const handler = hooks["chat.message"]!;
+    const handler = requireHook(hooks, "chat.message");
 
     await handler(chatInput(), chatOutput("I need to debug this issue"));
 
@@ -106,7 +117,7 @@ describe("chat.message handler", () => {
       resources: mockResources("pr-creation"),
     });
     const hooks = createReferenceInjectionHook(ctx);
-    const handler = hooks["chat.message"]!;
+    const handler = requireHook(hooks, "chat.message");
 
     await handler(chatInput(), chatOutput("open a PR for this feature"));
 
@@ -117,7 +128,7 @@ describe("chat.message handler", () => {
   it("does not set signals when no keywords match", async () => {
     const ctx = createMockPluginContext();
     const hooks = createReferenceInjectionHook(ctx);
-    const handler = hooks["chat.message"]!;
+    const handler = requireHook(hooks, "chat.message");
 
     await handler(chatInput(), chatOutput("hello world"));
 
@@ -127,7 +138,7 @@ describe("chat.message handler", () => {
   it("does not set signals for empty text", async () => {
     const ctx = createMockPluginContext();
     const hooks = createReferenceInjectionHook(ctx);
-    const handler = hooks["chat.message"]!;
+    const handler = requireHook(hooks, "chat.message");
 
     await handler(chatInput(), chatOutput("   "));
 
@@ -137,7 +148,7 @@ describe("chat.message handler", () => {
   it("graceful degradation: does not crash on error", async () => {
     const ctx = createMockPluginContext();
     const hooks = createReferenceInjectionHook(ctx);
-    const handler = hooks["chat.message"]!;
+    const handler = requireHook(hooks, "chat.message");
 
     const consoleSpy = spyOn(console, "error").mockImplementation(() => {});
 
@@ -164,7 +175,7 @@ describe("experimental.chat.system.transform handler", () => {
       resources: mockResources("debugging"),
     });
     const hooks = createReferenceInjectionHook(ctx);
-    const handler = hooks["experimental.chat.system.transform"]!;
+    const handler = requireHook(hooks, "experimental.chat.system.transform");
 
     // Pre-set signals manually
     setSignals(SESSION_ID, ["debugging"]);
@@ -184,7 +195,7 @@ describe("experimental.chat.system.transform handler", () => {
       resources: mockResources("debugging", "pr-creation"),
     });
     const hooks = createReferenceInjectionHook(ctx);
-    const handler = hooks["experimental.chat.system.transform"]!;
+    const handler = requireHook(hooks, "experimental.chat.system.transform");
 
     setSignals(SESSION_ID, ["debugging", "pr-creation"]);
 
@@ -202,7 +213,7 @@ describe("experimental.chat.system.transform handler", () => {
       resources: mockResources("debugging"),
     });
     const hooks = createReferenceInjectionHook(ctx);
-    const handler = hooks["experimental.chat.system.transform"]!;
+    const handler = requireHook(hooks, "experimental.chat.system.transform");
 
     setSignals(SESSION_ID, ["debugging"]);
 
@@ -218,7 +229,7 @@ describe("experimental.chat.system.transform handler", () => {
       resources: mockResources("debugging"),
     });
     const hooks = createReferenceInjectionHook(ctx);
-    const handler = hooks["experimental.chat.system.transform"]!;
+    const handler = requireHook(hooks, "experimental.chat.system.transform");
 
     // No signals set
     const output = { system: ["original prompt"] };
@@ -232,7 +243,7 @@ describe("experimental.chat.system.transform handler", () => {
       resources: mockResources("debugging"),
     });
     const hooks = createReferenceInjectionHook(ctx);
-    const handler = hooks["experimental.chat.system.transform"]!;
+    const handler = requireHook(hooks, "experimental.chat.system.transform");
 
     setSignals(SESSION_ID, ["debugging"]);
 
@@ -256,7 +267,7 @@ describe("experimental.chat.system.transform handler", () => {
       ],
     });
     const hooks = createReferenceInjectionHook(ctx);
-    const handler = hooks["experimental.chat.system.transform"]!;
+    const handler = requireHook(hooks, "experimental.chat.system.transform");
 
     setSignals(SESSION_ID, ["debugging"]);
 
@@ -277,7 +288,7 @@ describe("experimental.chat.system.transform handler", () => {
     // Resolver has no resources — resolve returns null
     const ctx = createMockPluginContext({ resources: [] });
     const hooks = createReferenceInjectionHook(ctx);
-    const handler = hooks["experimental.chat.system.transform"]!;
+    const handler = requireHook(hooks, "experimental.chat.system.transform");
 
     setSignals(SESSION_ID, ["debugging", "nonexistent"]);
 
@@ -304,7 +315,7 @@ describe("experimental.chat.system.transform handler", () => {
     const consoleSpy = spyOn(console, "error").mockImplementation(() => {});
 
     const hooks = createReferenceInjectionHook(ctx);
-    const handler = hooks["experimental.chat.system.transform"]!;
+    const handler = requireHook(hooks, "experimental.chat.system.transform");
 
     setSignals(SESSION_ID, ["debugging"]);
 
@@ -335,11 +346,11 @@ describe("chat.message → system-transform integration", () => {
     const hooks = createReferenceInjectionHook(ctx);
 
     // Step 1: chat.message detects keywords
-    await hooks["chat.message"]!(chatInput(), chatOutput("I need to debug this crash"));
+    await hooks["chat.message"]?.(chatInput(), chatOutput("I need to debug this crash"));
 
     // Step 2: system-transform injects references
     const output = { system: [] as string[] };
-    await hooks["experimental.chat.system.transform"]!(sysInput(), output);
+    await hooks["experimental.chat.system.transform"]?.(sysInput(), output);
 
     expect(output.system.length).toBe(1);
     expect(output.system[0]).toContain("<goopspec_references>");
@@ -356,11 +367,11 @@ describe("chat.message → system-transform integration", () => {
     const hooks = createReferenceInjectionHook(ctx);
 
     // Step 1: chat.message with no keywords
-    await hooks["chat.message"]!(chatInput(), chatOutput("hello world"));
+    await hooks["chat.message"]?.(chatInput(), chatOutput("hello world"));
 
     // Step 2: system-transform — nothing to inject
     const output = { system: ["original"] };
-    await hooks["experimental.chat.system.transform"]!(sysInput(), output);
+    await hooks["experimental.chat.system.transform"]?.(sysInput(), output);
 
     expect(output.system).toEqual(["original"]);
   });
