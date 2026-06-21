@@ -193,7 +193,7 @@ describe("createGoopCreatePrTool", () => {
       );
 
       expect(spawnCalls).toHaveLength(1);
-      const args = spawnCalls[0]!.args as string[];
+      const args = spawnCalls[0]?.args as string[];
       expect(args).toContain("--base");
       const baseIdx = args.indexOf("--base");
       expect(args[baseIdx + 1]).toBe("develop");
@@ -212,7 +212,7 @@ describe("createGoopCreatePrTool", () => {
       );
 
       expect(spawnCalls).toHaveLength(1);
-      const args = spawnCalls[0]!.args as string[];
+      const args = spawnCalls[0]?.args as string[];
       expect(args).toContain("--draft");
     });
 
@@ -231,7 +231,7 @@ describe("createGoopCreatePrTool", () => {
       );
 
       expect(spawnCalls).toHaveLength(1);
-      const args1 = spawnCalls[0]!.args as string[];
+      const args1 = spawnCalls[0]?.args as string[];
       expect(args1).not.toContain("--draft");
 
       // Reset calls
@@ -248,7 +248,7 @@ describe("createGoopCreatePrTool", () => {
       );
 
       expect(spawnCalls).toHaveLength(1);
-      const args2 = spawnCalls[0]!.args as string[];
+      const args2 = spawnCalls[0]?.args as string[];
       expect(args2).not.toContain("--draft");
     });
 
@@ -264,7 +264,7 @@ describe("createGoopCreatePrTool", () => {
       );
 
       expect(spawnCalls).toHaveLength(1);
-      const args = spawnCalls[0]!.args as string[];
+      const args = spawnCalls[0]?.args as string[];
       const baseIdx = args.indexOf("--base");
       expect(baseIdx).toBeGreaterThan(-1);
       expect(args[baseIdx + 1]).toBe("main");

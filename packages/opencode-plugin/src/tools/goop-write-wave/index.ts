@@ -10,6 +10,7 @@
 import { tool } from "../../core/sdk-compat.js";
 import type { ToolContext, ToolDefinition } from "../../core/sdk-compat.js";
 import type { PluginContext } from "../../core/types.js";
+import { formatBatchResult, runBatch } from "../../features/db/batch.js";
 import { renderSidecars } from "../../shared/render-sidecars.js";
 
 interface InlineWaveTask {
@@ -24,6 +25,20 @@ interface TaskStatusUpdate {
   status: string;
 }
 
+interface WavePayload {
+  wave_number: number;
+  title?: string;
+  status?: string;
+  pr_branch?: string;
+  pr_url?: string;
+  tasks?: InlineWaveTask[];
+}
+
+interface BulkTaskStatusUpdate {
+  task_index: number;
+  status: string;
+}
+
 // ---------------------------------------------------------------------------
 // Tool factory
 // ---------------------------------------------------------------------------
@@ -32,7 +47,8 @@ export function createGoopWriteWaveTool(ctx: PluginContext): ToolDefinition {
   return tool({
     description:
       "Write or update wave metadata and optional inline wave tasks in GoopSpecDB. " +
-      "Use task_update to change one task status without rewriting the wave.\n\n" +
+      "Use task_update to change one task status without rewriting the wave. " +
+      "Use items for batch wave writes or task_updates for bulk task status updates.\n\n" +
       "Args:\n" +
       "- wave_number: Wave number to create, update, or target\n" +
       "- title: Optional wave title\n" +
@@ -41,7 +57,9 @@ export function createGoopWriteWaveTool(ctx: PluginContext): ToolDefinition {
       "- pr_url: Optional pull request URL\n" +
       "- tasks: Optional inline task objects { task_index, description?, agent?, status? }\n" +
       "- task_update: Optional single task status update { task_index, status }\n" +
-      "- workflow_id: Optional workflow ID (defaults to active workflow)",
+      "- workflow_id: Optional workflow ID (defaults to active workflow)\n" +
+      "- items: Optional batch wave payloads\n" +
+      "- task_updates: Optional bulk task status updates for wave_number",
     args: {
       wave_number: tool.schema.number(),
       title: tool.schema.string().optional(),
@@ -65,6 +83,35 @@ export function createGoopWriteWaveTool(ctx: PluginContext): ToolDefinition {
         })
         .optional(),
       workflow_id: tool.schema.string().optional(),
+      items: tool.schema
+        .array(
+          tool.schema.object({
+            wave_number: tool.schema.number(),
+            title: tool.schema.string().optional(),
+            status: tool.schema.string().optional(),
+            pr_branch: tool.schema.string().optional(),
+            pr_url: tool.schema.string().optional(),
+            tasks: tool.schema
+              .array(
+                tool.schema.object({
+                  task_index: tool.schema.number(),
+                  description: tool.schema.string().optional(),
+                  agent: tool.schema.string().optional(),
+                  status: tool.schema.string().optional(),
+                }),
+              )
+              .optional(),
+          }),
+        )
+        .optional(),
+      task_updates: tool.schema
+        .array(
+          tool.schema.object({
+            task_index: tool.schema.number(),
+            status: tool.schema.string(),
+          }),
+        )
+        .optional(),
     },
     async execute(
       args: {
@@ -76,11 +123,74 @@ export function createGoopWriteWaveTool(ctx: PluginContext): ToolDefinition {
         tasks?: InlineWaveTask[];
         task_update?: TaskStatusUpdate;
         workflow_id?: string;
+        items?: WavePayload[];
+        task_updates?: BulkTaskStatusUpdate[];
       },
       _context: ToolContext,
     ): Promise<string> {
       try {
         const workflowId = args.workflow_id ?? ctx.stateManager.getState().activeWorkflowId;
+
+        if (args.items !== undefined) {
+          const result = runBatch(ctx.db, args.items, (item) => {
+            ctx.db.upsertWave(workflowId, {
+              wave_number: item.wave_number,
+              title: item.title,
+              status: item.status,
+              pr_branch: item.pr_branch,
+              pr_url: item.pr_url,
+            });
+
+            const wave = ctx.db.getWave(workflowId, item.wave_number);
+            if (wave === null) {
+              throw new Error(`wave ${item.wave_number} not found after upsert`);
+            }
+
+            for (const task of item.tasks ?? []) {
+              ctx.db.upsertWaveTask({
+                wave_id: wave.id,
+                workflow_id: workflowId,
+                task_index: task.task_index,
+                description: task.description,
+                agent: task.agent,
+                status: task.status,
+              });
+            }
+
+            ctx.db.appendEvent(workflowId, "wave_write", {
+              wave_number: item.wave_number,
+              task_count: item.tasks?.length ?? 0,
+              mode: "wave_upsert",
+              timestamp: Date.now(),
+            });
+
+            return `wrote wave ${item.wave_number}`;
+          });
+          renderSidecars(ctx, workflowId);
+          return formatBatchResult(result, "write-wave");
+        }
+
+        if (args.task_updates !== undefined) {
+          const wave = ctx.db.getWave(workflowId, args.wave_number);
+          if (wave === null) {
+            return `No wave ${args.wave_number} found for workflow '${workflowId}'. Use goop_write_wave to create it.`;
+          }
+
+          const result = runBatch(ctx.db, args.task_updates, (update) => {
+            ctx.db.setWaveTaskStatus(wave.id, update.task_index, update.status);
+            ctx.db.appendEvent(workflowId, "wave_write", {
+              wave_number: args.wave_number,
+              task_index: update.task_index,
+              status: update.status,
+              mode: "task_update",
+              timestamp: Date.now(),
+            });
+
+            return `updated task ${update.task_index} to ${update.status}`;
+          });
+          renderSidecars(ctx, workflowId);
+          return formatBatchResult(result, "write-wave-task-updates");
+        }
 
         if (args.task_update !== undefined) {
           const wave = ctx.db.getWave(workflowId, args.wave_number);

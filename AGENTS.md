@@ -223,4 +223,6 @@ export function createMyHook(ctx: PluginContext) {
 
 - **Memory is in-process via `bun:sqlite`.** The memory feature runs inside the plugin process using SQLite with FTS5 + LIKE fallback. There is no separate worker process and no `port-37777` service.
 
+- **Prefer `items[]` batch mode for multi-write turns.** All five write tools (`goop_write_db`, `goop_write_section`, `goop_write_wave`, `goop_write_traceability`, `goop_save_note`) now accept an optional `items[]` parameter. When writing more than one doc/section/wave/row/note in a turn, use the batch form to minimize tool calls and wrap writes in a single transaction. Single-item usage is unchanged and still supported.
+
 - **Knowledge lives in `references/`, not `skills/`.** GoopSpec 1.0.0 removed the skills feature. Use `goop_reference` to load the 13 consolidated reference documents (including `field-notes-protocol`).

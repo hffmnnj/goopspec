@@ -246,4 +246,90 @@ describe("goop_save_note tool", () => {
     expect(note?.workflow_id).toBeNull();
     expect(note?.project_id).toBeNull();
   });
+
+  describe("goop_save_note batch mode (items[])", () => {
+    it("returns empty result for empty items array", async () => {
+      const tool = createGoopSaveNoteTool(ctx);
+      const result = await tool.execute(
+        {
+          title: "",
+          body: "",
+          tags: [],
+          source_agent: "test",
+          items: [],
+        },
+        toolCtx,
+      );
+      expect(result).toContain("0/0 succeeded");
+    });
+
+    it("saves single-element items array", async () => {
+      const tool = createGoopSaveNoteTool(ctx);
+      const result = await tool.execute(
+        {
+          title: "",
+          body: "",
+          tags: [],
+          source_agent: "test",
+          items: [{ title: "Note 1", body: "Body 1", tags: ["a"], source_agent: "goop-tester" }],
+        },
+        toolCtx,
+      );
+      expect(result).toContain("1/1 succeeded");
+    });
+
+    it("saves multi-element items array", async () => {
+      const tool = createGoopSaveNoteTool(ctx);
+      const result = await tool.execute(
+        {
+          title: "",
+          body: "",
+          tags: [],
+          source_agent: "test",
+          items: [
+            { title: "Note A", body: "A", tags: ["x"], source_agent: "agent" },
+            { title: "Note B", body: "B", tags: ["y"], source_agent: "agent" },
+            { title: "Note C", body: "C", tags: ["z"], source_agent: "agent" },
+          ],
+        },
+        toolCtx,
+      );
+      expect(result).toContain("3/3 succeeded");
+    });
+
+    it("surfaces per-item validation failures for invalid importance without failing others", async () => {
+      const tool = createGoopSaveNoteTool(ctx);
+      const result = await tool.execute(
+        {
+          title: "",
+          body: "",
+          tags: [],
+          source_agent: "test",
+          items: [
+            { title: "Valid", body: "Body", tags: [], source_agent: "agent", importance: 5 },
+            { title: "Bad", body: "Body", tags: [], source_agent: "agent", importance: 99 },
+            { title: "Also Valid", body: "Body", tags: [], source_agent: "agent", importance: 3 },
+          ],
+        },
+        toolCtx,
+      );
+      expect(result).toContain("2/3 succeeded");
+      expect(result).toContain("FAIL");
+    });
+
+    it("backward-compat: single-note path works when items absent", async () => {
+      const tool = createGoopSaveNoteTool(ctx);
+      const result = await tool.execute(
+        {
+          title: "Single Note",
+          body: "Body",
+          tags: ["test"],
+          source_agent: "agent",
+        },
+        toolCtx,
+      );
+      expect(result).toContain("Field Note saved:");
+      expect(result).toContain("fn_");
+    });
+  });
 });
