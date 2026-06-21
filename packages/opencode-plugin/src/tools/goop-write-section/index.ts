@@ -10,6 +10,7 @@
 import { tool } from "../../core/sdk-compat.js";
 import type { ToolContext, ToolDefinition } from "../../core/sdk-compat.js";
 import type { PluginContext } from "../../core/types.js";
+import { formatBatchResult, runBatch } from "../../features/db/batch.js";
 import { DOC_TYPES } from "../../features/db/types.js";
 import type { DocType } from "../../features/db/types.js";
 import { DOC_TYPE_FILENAMES, renderSidecars } from "../../shared/render-sidecars.js";
@@ -28,13 +29,24 @@ export function createGoopWriteSectionTool(ctx: PluginContext): ToolDefinition {
       "- section_key: Stable key for the section to write\n" +
       "- content: Markdown body for the section\n" +
       "- position: Optional ordering position for assembly\n" +
-      "- workflow_id: Optional workflow ID (defaults to active workflow)",
+      "- workflow_id: Optional workflow ID (defaults to active workflow)\n" +
+      "- items: Optional batch of section writes for the same workflow_id",
     args: {
       doc_type: tool.schema.enum(DOC_TYPES),
       section_key: tool.schema.string(),
       content: tool.schema.string(),
       position: tool.schema.number().optional(),
       workflow_id: tool.schema.string().optional(),
+      items: tool.schema
+        .array(
+          tool.schema.object({
+            doc_type: tool.schema.enum(DOC_TYPES),
+            section_key: tool.schema.string(),
+            content: tool.schema.string(),
+            position: tool.schema.number().optional(),
+          }),
+        )
+        .optional(),
     },
     async execute(
       args: {
@@ -43,10 +55,39 @@ export function createGoopWriteSectionTool(ctx: PluginContext): ToolDefinition {
         content: string;
         position?: number;
         workflow_id?: string;
+        items?: Array<{
+          doc_type: DocType;
+          section_key: string;
+          content: string;
+          position?: number;
+        }>;
       },
       _context: ToolContext,
     ): Promise<string> {
       try {
+        if (args.items !== undefined) {
+          const workflowId = args.workflow_id ?? ctx.stateManager.getState().activeWorkflowId;
+          const result = runBatch(ctx.db, args.items, (item) => {
+            ctx.db.upsertSection(
+              workflowId,
+              item.doc_type,
+              item.section_key,
+              item.content,
+              item.position,
+            );
+            ctx.db.appendEvent(workflowId, "doc_section_write", {
+              doc_type: item.doc_type,
+              section_key: item.section_key,
+              timestamp: Date.now(),
+            });
+
+            return `wrote ${item.doc_type}/${item.section_key}`;
+          });
+
+          renderSidecars(ctx, workflowId);
+          return formatBatchResult(result, "write-section");
+        }
+
         const workflowId = args.workflow_id ?? ctx.stateManager.getState().activeWorkflowId;
 
         ctx.db.upsertSection(

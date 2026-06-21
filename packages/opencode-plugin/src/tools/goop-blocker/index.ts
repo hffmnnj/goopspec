@@ -113,7 +113,9 @@ export function createGoopBlockerTool(ctx: PluginContext): ToolDefinition {
               return "Error: 'id' is required for resolve action.";
             }
 
-            const existing = ctx.db.getBlockers(workflowId).find((blocker) => blocker.id === args.id);
+            const existing = ctx.db
+              .getBlockers(workflowId)
+              .find((blocker) => blocker.id === args.id);
             if (!existing) {
               return `Blocker #${args.id} not found for workflow '${workflowId}'.`;
             }

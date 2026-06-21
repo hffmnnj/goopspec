@@ -1,9 +1,9 @@
 import { afterEach, describe, expect, it } from "bun:test";
 import {
+  KEYWORD_PATTERNS,
   clearSignals,
   detectReferences,
   getSignals,
-  KEYWORD_PATTERNS,
   setSignals,
 } from "./index.js";
 

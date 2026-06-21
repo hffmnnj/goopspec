@@ -50,7 +50,10 @@ export function clearSignals(sessionId: string): void {
  * Patterns are case-insensitive (the `i` flag is set on each RegExp).
  */
 export const KEYWORD_PATTERNS: ReadonlyArray<readonly [RegExp, readonly string[]]> = [
-  [/\b(debug|debugging|error|crash|stack.?trace|exception|breakpoint|not working|broken|failing)\b/i, ["debugging"]],
+  [
+    /\b(debug|debugging|error|crash|stack.?trace|exception|breakpoint|not working|broken|failing)\b/i,
+    ["debugging"],
+  ],
   [/\b(pr|pull.?request|open.?pr|create.?pr|gh pr|merge request|review)\b/i, ["pr-creation"]],
   [/\b(dogfood|dogfooding|manual.?test|test.?manually|eat.?your.?own)\b/i, ["dogfooding"]],
   [/\b(commit|branch|git|stash|rebase|cherry.?pick)\b/i, ["git-workflow"]],

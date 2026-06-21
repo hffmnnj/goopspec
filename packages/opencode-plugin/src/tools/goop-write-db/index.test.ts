@@ -153,7 +153,10 @@ describe("goop_write_db tool", () => {
       ctx.db.upsertDocument("default", "spec", "# Existing Content");
 
       const tool = createGoopWriteDbTool(ctx);
-      await tool.execute({ doc_type: "spec", content: "# Appended Content", mode: "append" }, toolCtx);
+      await tool.execute(
+        { doc_type: "spec", content: "# Appended Content", mode: "append" },
+        toolCtx,
+      );
 
       const doc = ctx.db.getDocument("default", "spec");
       expect(doc?.content).toBe("# Existing Content\n\n# Appended Content");
@@ -196,16 +199,62 @@ describe("goop_write_db tool", () => {
       ctx.db.upsertDocument("default", "blueprint", "# Part One");
 
       const tool = createGoopWriteDbTool(ctx);
-      await tool.execute(
-        { doc_type: "blueprint", content: "# Part Two", mode: "append" },
-        toolCtx,
-      );
+      await tool.execute({ doc_type: "blueprint", content: "# Part Two", mode: "append" }, toolCtx);
 
       const sidecarPath = join(testDir, ".goopspec", "default", "BLUEPRINT.md");
       expect(existsSync(sidecarPath)).toBe(true);
 
       const sidecarContent = await Bun.file(sidecarPath).text();
       expect(sidecarContent).toBe("# Part One\n\n# Part Two");
+    });
+  });
+
+  describe("goop_write_db batch mode (items[])", () => {
+    it("returns empty result for empty items array", async () => {
+      const tool = createGoopWriteDbTool(ctx);
+      const result = await tool.execute({ doc_type: "spec", content: "", items: [] }, toolCtx);
+      expect(result).toContain("0/0 succeeded");
+    });
+
+    it("writes single-element items array", async () => {
+      const tool = createGoopWriteDbTool(ctx);
+      const result = await tool.execute(
+        {
+          doc_type: "spec",
+          content: "",
+          items: [{ doc_type: "spec", content: "# Batch Spec" }],
+        },
+        toolCtx,
+      );
+      expect(result).toContain("1/1 succeeded");
+      const doc = ctx.db.getDocument("default", "spec");
+      expect(doc?.content).toBe("# Batch Spec");
+    });
+
+    it("writes multi-element items array", async () => {
+      const tool = createGoopWriteDbTool(ctx);
+      const result = await tool.execute(
+        {
+          doc_type: "spec",
+          content: "",
+          items: [
+            { doc_type: "spec", content: "# Spec" },
+            { doc_type: "blueprint", content: "# Blueprint" },
+            { doc_type: "requirements", content: "# Reqs" },
+          ],
+        },
+        toolCtx,
+      );
+      expect(result).toContain("3/3 succeeded");
+      expect(ctx.db.getDocument("default", "spec")?.content).toBe("# Spec");
+      expect(ctx.db.getDocument("default", "blueprint")?.content).toBe("# Blueprint");
+    });
+
+    it("backward-compat: single-item path works when items absent", async () => {
+      const tool = createGoopWriteDbTool(ctx);
+      const result = await tool.execute({ doc_type: "adl", content: "# ADL" }, toolCtx);
+      expect(result).toContain("Written adl");
+      expect(ctx.db.getDocument("default", "adl")?.content).toBe("# ADL");
     });
   });
 });

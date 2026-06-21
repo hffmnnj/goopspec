@@ -47,49 +47,49 @@ export interface Violation {
 export const FORBIDDEN_TERMS: TermRule[] = [
   {
     name: "wave N/N",
-    pattern: new RegExp("\\bwave\\s+\\d+/\\d+\\b", "gi"),
+    pattern: /\bwave\s+\d+\/\d+\b/gi,
     replacement: "phase N of N",
     severity: "error",
   },
   {
     name: "wave standalone",
-    pattern: new RegExp("\\bwaves?\\b", "gi"),
+    pattern: /\bwaves?\b/gi,
     replacement: "phase",
     severity: "error",
   },
   {
     name: "task N.N",
-    pattern: new RegExp("\\btask\\s+\\d+\\.\\d+\\b", "gi"),
+    pattern: /\btask\s+\d+\.\d+\b/gi,
     replacement: "change",
     severity: "error",
   },
   {
     name: "nice-to-have",
-    pattern: new RegExp("\\bnice[- ]?to[- ]?haves?\\b", "gi"),
+    pattern: /\bnice[- ]?to[- ]?haves?\b/gi,
     replacement: "enhancement",
     severity: "error",
   },
   {
     name: "must-have",
-    pattern: new RegExp("\\bmust[- ]?haves?\\b", "gi"),
+    pattern: /\bmust[- ]?haves?\b/gi,
     replacement: "requirement",
     severity: "error",
   },
   {
     name: "MH-digits",
-    pattern: new RegExp("\\bMH-\\d+\\b", "gi"),
+    pattern: /\bMH-\d+\b/gi,
     replacement: "requirement",
     severity: "error",
   },
   {
     name: "NH-digits",
-    pattern: new RegExp("\\bNH-\\d+\\b", "gi"),
+    pattern: /\bNH-\d+\b/gi,
     replacement: "enhancement",
     severity: "error",
   },
   {
     name: "goop-executor variants",
-    pattern: new RegExp("\\bgoop-executor(-\\w+)?\\b", "gi"),
+    pattern: /\bgoop-executor(-\w+)?\b/gi,
     replacement: "agent",
     severity: "error",
   },
@@ -101,55 +101,55 @@ export const FORBIDDEN_TERMS: TermRule[] = [
   },
   {
     name: "chronicle",
-    pattern: new RegExp("\\bchronicle\\b", "gi"),
+    pattern: /\bchronicle\b/gi,
     replacement: "change log",
     severity: "error",
   },
   {
     name: "ADL",
-    pattern: new RegExp("\\bADL\\b", "gi"),
+    pattern: /\bADL\b/gi,
     replacement: "decision log",
     severity: "error",
   },
   {
     name: "wiring task",
-    pattern: new RegExp("\\bwiring\\s+task\\b", "gi"),
+    pattern: /\bwiring\s+task\b/gi,
     replacement: "integration step",
     severity: "error",
   },
   {
     name: "spec locked",
-    pattern: new RegExp("\\bspec\\s+locked\\b", "gi"),
+    pattern: /\bspec\s+locked\b/gi,
     replacement: "requirements finalized",
     severity: "error",
   },
   {
     name: "acceptance gate",
-    pattern: new RegExp("\\bacceptance\\s+gate\\b", "gi"),
+    pattern: /\bacceptance\s+gate\b/gi,
     replacement: "review checkpoint",
     severity: "error",
   },
   {
     name: "deviation rule",
-    pattern: new RegExp("\\bdeviation\\s+rule\\b", "gi"),
+    pattern: /\bdeviation\s+rule\b/gi,
     replacement: "exception handling",
     severity: "error",
   },
   {
     name: "blueprint",
-    pattern: new RegExp("\\bblueprint\\b", "gi"),
+    pattern: /\bblueprint\b/gi,
     replacement: "plan",
     severity: "warn",
   },
   {
     name: "handoff",
-    pattern: new RegExp("\\bhandoff\\b", "gi"),
+    pattern: /\bhandoff\b/gi,
     replacement: "handover",
     severity: "warn",
   },
   {
     name: "goopspec",
-    pattern: new RegExp("\\bgoopspec\\b", "gi"),
+    pattern: /\bgoopspec\b/gi,
     replacement: "the tool",
     severity: "warn",
   },
@@ -176,9 +176,9 @@ export function scanForViolations(text: string): Violation[] {
 
       for (const rule of FORBIDDEN_TERMS) {
         rule.pattern.lastIndex = 0;
-        let execResult: RegExpExecArray | null;
+        let execResult = rule.pattern.exec(line);
 
-        while ((execResult = rule.pattern.exec(line)) !== null) {
+        while (execResult !== null) {
           violations.push({
             term: rule.name,
             match: execResult[0],
@@ -187,6 +187,7 @@ export function scanForViolations(text: string): Violation[] {
             severity: rule.severity,
             replacement: rule.replacement,
           });
+          execResult = rule.pattern.exec(line);
         }
       }
     }

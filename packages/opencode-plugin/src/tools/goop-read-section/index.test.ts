@@ -30,20 +30,14 @@ describe("goop_read_section tool", () => {
     ctx.db.upsertSection("default", "spec", "overview", "# Overview");
 
     const tool = createGoopReadSectionTool(ctx);
-    const result = await tool.execute(
-      { doc_type: "spec", section_key: "overview" },
-      toolCtx,
-    );
+    const result = await tool.execute({ doc_type: "spec", section_key: "overview" }, toolCtx);
 
     expect(result).toBe("# Overview");
   });
 
   it("returns not found message for a missing section_key", async () => {
     const tool = createGoopReadSectionTool(ctx);
-    const result = await tool.execute(
-      { doc_type: "spec", section_key: "missing" },
-      toolCtx,
-    );
+    const result = await tool.execute({ doc_type: "spec", section_key: "missing" }, toolCtx);
 
     expect(result).toContain("No section 'missing' found");
     expect(result).toContain("goop_write_section");

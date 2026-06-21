@@ -113,7 +113,12 @@ describe("goop_state tool", () => {
       const activeId = state.activeWorkflowId;
       const activeWorkflow = state.workflows[activeId];
       expect(readFileSync(statusPath, "utf-8")).toBe(
-        formatStatus(activeId, activeWorkflow, ctx.stateManager.listWorkflowIds(), ctx.sdk.directory),
+        formatStatus(
+          activeId,
+          activeWorkflow,
+          ctx.stateManager.listWorkflowIds(),
+          ctx.sdk.directory,
+        ),
       );
       expect(readFileSync(statusPath, "utf-8")).toContain("✓ Spec Locked");
     });

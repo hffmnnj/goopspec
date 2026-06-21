@@ -10,6 +10,7 @@
 import type { ToolDefinition } from "../core/sdk-compat.js";
 import type { PluginContext } from "../core/types.js";
 import { createGoopAdlTool } from "./goop-adl/index.js";
+import { createGoopAppendChronicleTool } from "./goop-append-chronicle/index.js";
 import { createGoopCheckpointTool } from "./goop-checkpoint/index.js";
 import { createGoopReadDbTool } from "./goop-read-db/index.js";
 import { createGoopReferenceTool } from "./goop-reference/index.js";
@@ -19,7 +20,6 @@ import { createGoopSetupTool } from "./goop-setup/index.js";
 import { createGoopSpecTool } from "./goop-spec/index.js";
 import { createGoopStateTool } from "./goop-state/index.js";
 import { createGoopStatusTool } from "./goop-status/index.js";
-import { createGoopAppendChronicleTool } from "./goop-append-chronicle/index.js";
 import { createGoopWriteDbTool } from "./goop-write-db/index.js";
 
 // --- DB architecture upgrade tools ---

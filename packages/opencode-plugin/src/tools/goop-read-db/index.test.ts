@@ -131,9 +131,7 @@ describe("goop_read_db tool", () => {
     const tool = createGoopReadDbTool(ctx);
     const result = await tool.execute({ doc_types: ["spec", "blueprint"] }, toolCtx);
 
-    expect(result).toBe(
-      "## spec\n\n# Spec Content\n\n---\n\n## blueprint\n\n# Blueprint Content",
-    );
+    expect(result).toBe("## spec\n\n# Spec Content\n\n---\n\n## blueprint\n\n# Blueprint Content");
   });
 
   it("batch mode: inline 'not found' for missing docs within batch", async () => {

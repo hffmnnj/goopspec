@@ -769,6 +769,10 @@ export class GoopSpecDB {
     );
   }
 
+  runTransaction<T>(fn: () => T): T {
+    return this.db.transaction(fn)();
+  }
+
   // -----------------------------------------------------------------------
   // Private: FTS5 note search
   // -----------------------------------------------------------------------
@@ -1012,9 +1016,7 @@ export class GoopSpecDB {
       )
       .all(sectionFilters.params);
 
-    return [...documents, ...sections]
-      .sort((a, b) => b.created_at - a.created_at)
-      .slice(0, limit);
+    return [...documents, ...sections].sort((a, b) => b.created_at - a.created_at).slice(0, limit);
   }
 
   private buildSectionFilters(
