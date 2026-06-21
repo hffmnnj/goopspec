@@ -155,4 +155,66 @@ describe("goop_write_section tool", () => {
     expect(result).toContain("default");
     expect(result).toContain("SPEC.md");
   });
+
+  describe("goop_write_section batch mode (items[])", () => {
+    it("returns empty result for empty items array", async () => {
+      const tool = createGoopWriteSectionTool(ctx);
+      const result = await tool.execute(
+        {
+          doc_type: "spec",
+          section_key: "",
+          content: "",
+          items: [],
+        },
+        toolCtx,
+      );
+      expect(result).toContain("0/0 succeeded");
+    });
+
+    it("writes single-element items array", async () => {
+      const tool = createGoopWriteSectionTool(ctx);
+      const result = await tool.execute(
+        {
+          doc_type: "spec",
+          section_key: "",
+          content: "",
+          items: [{ doc_type: "spec", section_key: "intro", content: "# Intro" }],
+        },
+        toolCtx,
+      );
+      expect(result).toContain("1/1 succeeded");
+    });
+
+    it("writes multi-element items array", async () => {
+      const tool = createGoopWriteSectionTool(ctx);
+      const result = await tool.execute(
+        {
+          doc_type: "spec",
+          section_key: "",
+          content: "",
+          items: [
+            { doc_type: "spec", section_key: "intro", content: "# Intro" },
+            { doc_type: "spec", section_key: "scope", content: "# Scope" },
+            { doc_type: "blueprint", section_key: "wave1", content: "# Wave 1" },
+          ],
+        },
+        toolCtx,
+      );
+      expect(result).toContain("3/3 succeeded");
+    });
+
+    it("backward-compat: single-section path works when items absent", async () => {
+      const tool = createGoopWriteSectionTool(ctx);
+      const result = await tool.execute(
+        {
+          doc_type: "spec",
+          section_key: "overview",
+          content: "# Overview",
+        },
+        toolCtx,
+      );
+      expect(result).toContain("overview");
+      expect(result).toContain("spec");
+    });
+  });
 });
