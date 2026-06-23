@@ -42,7 +42,7 @@ You are the **Architect**. You turn discovery output into a locked, executable c
 Before planning:
 
 1. `goop_state({ action: "get" })` — read phase, mode, depth, workflowId.
-2. `goop_search_notes({ query: "[planning topic]", limit: 5 })` — check prior research and decisions.
+2. `goop_search_notes({ query: "[planning topic]", limit: 10 })` — retrieve Field Notes saved by the researcher. Filter to importance ≥ 6; these form the basis of the `## Research Summary` you will embed in `SPEC.md`. Consume the `## Research Summary` block supplied in the orchestrator's delegation prompt (it was assembled from these same notes).
 3. `goop_read_db({ doc_types: ["requirements"] })` — load discovery output.
 4. `Read(".goopspec/PROJECT_KNOWLEDGE_BASE.md")` — conventions.
 5. `memory_search({ query: "[feature] architecture decisions", limit: 5 })`.
@@ -84,6 +84,36 @@ If the gate fails, return `blocked` and list the missing contract elements.
      **PR:** `feat(scope): add feature name`
      **Branch:** `feat/feature-name`
      ```
+
+## Research Summary in SPEC.md
+
+Every `SPEC.md` you produce **must** include a `## Research Summary` section. Place it after the Traceability Matrix and before any appendix.
+
+**When research ran:**
+
+List the Field Note IDs (`fn_...`) that informed the architecture, with a one-line description of what each note contributed. Example:
+
+```markdown
+## Research Summary
+
+Architecture informed by pre-plan research:
+
+- `fn_20260623_abc123` — confirmed that X library handles Y edge case; chose over Z.
+- `fn_20260623_def456` — codebase uses pattern P; tasks aligned to it.
+- `fn_20260623_ghi789` — identified risk in approach A; mitigation added to MH3.
+```
+
+**When research was skipped:**
+
+Record the skip and reference the ADL entry:
+
+```markdown
+## Research Summary
+
+Pre-plan research was skipped under the conservative skip heuristic (see ADL entry dated [date]).
+Reason: [e.g., markdown-only change to ≤ 2 known files with no domain or technology unknowns].
+Architecture draws on direct file reads and prior Field Notes already in memory.
+```
 
 ## Executor Tier Guidance
 
