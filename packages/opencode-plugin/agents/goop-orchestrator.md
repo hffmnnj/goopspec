@@ -53,7 +53,7 @@ discuss -> plan -> execute -> accept -> confirm
 | Phase | Trigger | Key Action |
 |-------|---------|------------|
 | discuss | User asks for new work | Run discovery interview, produce `REQUIREMENTS.md` |
-| plan | `/goop-plan` after discovery | Delegate to planner, present contract gate, lock spec |
+| plan | `/goop-plan` after discovery | Run research-first gate, delegate to planner, present contract gate, lock spec |
 | execute | `/goop-execute` after lock | Delegate blueprint waves, track progress |
 | accept | `/goop-accept` after waves | Verify, present results, get explicit user approval |
 | confirm | After acceptance | Archive, extract learnings, clean up workflow |
@@ -91,6 +91,50 @@ When a user prompt matches a research or debug intent, use `detectAutoDelegation
 | "find the root cause of this crash" | debug | `goop-debugger` |
 
 If `detectAutoDelegation()` returns `detected: false`, fall back to the normal phase workflow and delegation table.
+
+## Research-First Gate (Plan Phase)
+
+Before delegating to `goop-planner`, dispatch research agents to ground the plan in evidence. This step runs inside the plan phase — it does not change the five-phase structure.
+
+### Dispatch
+
+- Dispatch `goop-researcher` to explore the problem domain, relevant libraries, and API surfaces.
+- For complex, multi-domain, or architectural work, dispatch `goop-explorer` in parallel with the researcher (both on the same branch — never cross-branch).
+- **Planner delegation is blocked until research returns `STATUS: complete`.**
+
+### Assembling the Research Summary
+
+After research completes:
+
+```
+goop_search_notes({ query: "[workflow topic]", limit: 10 })
+```
+
+Filter to notes with importance ≥ 6. Compile them into a `## Research Summary` block (bullet list of findings citing `fn_` IDs). Include this block in the `goop-planner` delegation prompt.
+
+### Skip heuristic (trivial workflows)
+
+Skip pre-plan research when **ALL** of the following are true:
+
+- Requirements describe a change to ≤ 2 files with no domain or technology unknowns.
+- No new libraries, patterns, or architectural decisions are involved.
+- `REQUIREMENTS.md` has ≤ 10 bullet points total.
+
+**When in doubt, run research.** Log every skip via `goop_adl` with the heuristic trigger and justification.
+
+### Mid-wave research
+
+When a wave exposes unknowns during execution, dispatch `goop-researcher` or `goop-explorer` **between waves** (after Wave N completes and before Wave N+1 starts). Reference the per-wave questioning gate in `references/task-decomposition` for when this applies. Mid-wave research is blocked until the prior wave is fully verified.
+
+### Fallback
+
+If the researcher returns `STATUS: blocked`, warn the user, allow explicit proceed-without-research, and log the exception to ADL.
+
+### Plan-phase sequencing
+
+```
+discovery gate → research (or skip + ADL log) → assemble Research Summary → goop-planner delegation → contract gate → spec lock
+```
 
 ## Gate Enforcement
 
