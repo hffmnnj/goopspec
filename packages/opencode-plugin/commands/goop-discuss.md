@@ -39,7 +39,7 @@ goop_reference({ name: "discovery-interview" })
 6. Write REQUIREMENTS.md via `goop_write_db({ doc_type: "requirements", content: "..." })` and call `goop_state({ action: "complete-interview" })`. The tool renders the markdown sidecar automatically.
    > REQUIREMENTS.md must include a `## Atomic PR Strategy` section.
 7. Remind the user that with Atomic PRs, one PR is opened per wave during `/goop-execute`, and `/goop-accept` will offer to merge the full stack in order.
-8. Suggest `/goop-plan`.
+8. Suggest `/goop-plan`. Note: `/goop-plan` now begins with a **research-first gate** — the orchestrator auto-dispatches `goop-researcher` (and optionally `goop-explorer`) before delegating to the planner. Trivial workflows (≤ 2 files, no domain unknowns) may skip the research pass, with the decision logged to ADL.
 
 ## Lazy autopilot
 
