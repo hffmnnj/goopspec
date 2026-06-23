@@ -341,6 +341,63 @@ describe("goop_state tool", () => {
   });
 
   // -----------------------------------------------------------------------
+  // set-atomic-pr
+  // -----------------------------------------------------------------------
+
+  describe("action: set-atomic-pr", () => {
+    it("enables atomic PRs", async () => {
+      const tool = createGoopStateTool(ctx);
+      const result = await tool.execute(
+        { action: "set-atomic-pr", enabled: true },
+        createMockToolContext(),
+      );
+      expect(result).toContain("ON");
+      expect(ctx.stateManager.getActiveWorkflow().atomicPREnabled).toBe(true);
+    });
+
+    it("disables atomic PRs", async () => {
+      ctx.stateManager.updateWorkflow({ atomicPREnabled: true });
+      const tool = createGoopStateTool(ctx);
+      const result = await tool.execute(
+        { action: "set-atomic-pr", enabled: false },
+        createMockToolContext(),
+      );
+      expect(result).toContain("OFF");
+      expect(ctx.stateManager.getActiveWorkflow().atomicPREnabled).toBe(false);
+    });
+
+    it("rejects missing enabled param", async () => {
+      const tool = createGoopStateTool(ctx);
+      const result = await tool.execute({ action: "set-atomic-pr" }, createMockToolContext());
+      expect(result).toContain("Error");
+      expect(result).toContain("enabled");
+    });
+
+    it("GET shows Atomic PRs line when set to true", async () => {
+      ctx.stateManager.updateWorkflow({ atomicPREnabled: true });
+      const tool = createGoopStateTool(ctx);
+      const result = await tool.execute({ action: "get" }, createMockToolContext());
+      expect(result).toContain("Atomic PRs");
+      expect(result).toContain("ON");
+    });
+
+    it("GET shows Atomic PRs line when set to false", async () => {
+      ctx.stateManager.updateWorkflow({ atomicPREnabled: false });
+      const tool = createGoopStateTool(ctx);
+      const result = await tool.execute({ action: "get" }, createMockToolContext());
+      expect(result).toContain("Atomic PRs");
+      expect(result).toContain("OFF");
+    });
+
+    it("GET does not show Atomic PRs line when undefined", async () => {
+      // Default state has atomicPREnabled: undefined
+      const tool = createGoopStateTool(ctx);
+      const result = await tool.execute({ action: "get" }, createMockToolContext());
+      expect(result).not.toContain("Atomic PRs");
+    });
+  });
+
+  // -----------------------------------------------------------------------
   // update-wave
   // -----------------------------------------------------------------------
 
