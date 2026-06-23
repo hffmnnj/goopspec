@@ -45,7 +45,7 @@ goop_reference({ name: "discovery-interview" })
 7. Write REQUIREMENTS.md via `goop_write_db({ doc_type: "requirements", content: "..." })` and call `goop_state({ action: "complete-interview" })`. The tool renders the markdown sidecar automatically.
    > REQUIREMENTS.md must include a `## Atomic PR Strategy` section.
 8. Remind the user that with Atomic PRs, one PR is opened per wave during `/goop-execute`, and `/goop-accept` will offer to merge the full stack **newest-first** (Wave N → Wave 1 → main).
-8. Suggest `/goop-plan`.
+9. Suggest `/goop-plan`.
 
 ## Lazy autopilot
 
@@ -54,7 +54,9 @@ If `workflow.lazyAutopilot == true`, infer all six categories from the user's pr
 1. Create and bind a **new** workflowId (never reuse the active workflow).
 2. Checkout a new git branch: `git checkout -b <workflowId>`.
 3. Write REQUIREMENTS.md via `goop_write_db({ doc_type: "requirements", content: "..." })`.
-   - Infer atomic PR preference as `Yes` (one PR per wave) unless the user's prompt explicitly opts out. Include `## Atomic PR Strategy: Yes — one PR per wave` in the inferred REQUIREMENTS.md.
+   - Decide atomic PR preference by **inferred wave count**: ≥ 3 waves → Yes; ≤ 2 waves → No. Do not always default to Yes.
+   - Include `## Atomic PR Strategy: Yes — one PR per wave` if enabled, or `## Atomic PR Strategy: No — single PR` if not.
+   - Immediately after writing REQUIREMENTS.md, call `goop_state({ action: "set-atomic-pr", enabled: <true|false> })` to persist the decision in state.
 4. Immediately call:
 
 ```
@@ -76,3 +78,6 @@ mcp_slashcommand({ command: "/goop-plan" })
 - Start writing files before the workflow is bound and the branch is checked out.
 - Announce a transition without calling `mcp_slashcommand`.
 - Write REQUIREMENTS.md without a `## Atomic PR Strategy` section.
+- Skip the atomic PR `question` tool call in interactive mode.
+- Forget to call `goop_state({ action: "set-atomic-pr", enabled: ... })` after writing REQUIREMENTS.md.
+- Default lazy autopilot atomic PRs to Yes without checking inferred wave count.
