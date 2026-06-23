@@ -96,6 +96,8 @@ export interface WorkflowState {
   totalWaves: number;
   autopilot: boolean;
   lazyAutopilot: boolean;
+  /** When set, overrides the REQUIREMENTS.md Atomic PR Strategy value. undefined = not set, fall back to REQUIREMENTS.md. */
+  atomicPREnabled?: boolean;
   gitignoreGoopspec?: boolean;
   checkpoint?: string;
 }
