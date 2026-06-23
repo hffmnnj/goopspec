@@ -36,9 +36,15 @@ goop_reference({ name: "discovery-interview" })
 3. Ask all seven discovery categories (vision, must-haves, constraints, out-of-scope, assumptions, risks, and atomic PR preference) directly. Use the `question` tool for structured answers; mark exactly one option `(Recommended)`.
 4. Probe until each category has specifics. Empty must-haves, out-of-scope, or risks are invalid.
 5. Summarize and confirm with the user.
-6. Write REQUIREMENTS.md via `goop_write_db({ doc_type: "requirements", content: "..." })` and call `goop_state({ action: "complete-interview" })`. The tool renders the markdown sidecar automatically.
+6. Ask the user about atomic PRs using the `question` tool before writing REQUIREMENTS.md:
+   > **Do you want to use atomic PRs for this workflow?** (One PR per wave, stacked and merged newest-first at accept time — Wave N → Wave N-1 → … → Wave 1 → main.)
+   - `Yes — one PR per wave (Recommended)`
+   - `No — single PR for all work`
+
+   Write the answer into the `## Atomic PR Strategy` section of REQUIREMENTS.md. Then call `goop_state({ action: "set-atomic-pr", enabled: <true|false> })` to persist the choice in state.
+7. Write REQUIREMENTS.md via `goop_write_db({ doc_type: "requirements", content: "..." })` and call `goop_state({ action: "complete-interview" })`. The tool renders the markdown sidecar automatically.
    > REQUIREMENTS.md must include a `## Atomic PR Strategy` section.
-7. Remind the user that with Atomic PRs, one PR is opened per wave during `/goop-execute`, and `/goop-accept` will offer to merge the full stack in order.
+8. Remind the user that with Atomic PRs, one PR is opened per wave during `/goop-execute`, and `/goop-accept` will offer to merge the full stack **newest-first** (Wave N → Wave 1 → main).
 8. Suggest `/goop-plan`.
 
 ## Lazy autopilot
@@ -59,7 +65,7 @@ mcp_slashcommand({ command: "/goop-plan" })
 
 - All commits for this workflow land on per-wave branches stacked on each other.
 - With Atomic PRs = Yes, a PR is opened for each wave during `/goop-execute` (Wave N → Wave N-1; Wave 1 → main) — not all at `/goop-accept`.
-- `/goop-accept` presents the full PR stack summary and offers to merge the PRs in order. Never merge before acceptance is confirmed.
+- `/goop-accept` presents the full PR stack summary and offers to merge the PRs **newest-first** (Wave N → Wave N-1 → … → Wave 1 → main). Never merge before acceptance is confirmed.
 
 ## Anti-patterns
 
