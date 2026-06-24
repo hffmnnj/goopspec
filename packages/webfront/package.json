@@ -8,7 +8,8 @@
     "build": "vite build",
     "preview": "vite preview",
     "typecheck": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
-    "check": "bun run typecheck"
+    "check": "bun run typecheck",
+    "test": "bun test --preload ./svelte-test-loader.ts"
   },
   "dependencies": {
     "@hugeicons/core-free-icons": "latest",

@@ -1,0 +1,3 @@
+preload = ["/home/james/Documents/goopspec/packages/webfront/src/lib/test/svelte-preload.ts"]
+[test]
+preload = ["/home/james/Documents/goopspec/packages/webfront/src/lib/test/svelte-preload.ts"]
