@@ -17,6 +17,7 @@
   import { chat } from '$lib/stores/chat.svelte.js';
   import { layout } from '$lib/stores/layout.svelte.js';
   import { filterSessions } from '$lib/sessions/search.js';
+  import { buildSessionHierarchy, type SessionTreeNode } from '$lib/sessions/hierarchy.js';
   import type { Project } from '$lib/api/types.js';
 
   interface SessionsLike {
@@ -60,6 +61,7 @@
 
   let searchQuery = $state('');
   let diffSessionId = $state<string | null>(null);
+  let collapsedSessionIds = $state(new Set<string>());
   const diffTitle = $derived(
     diffSessionId ? store.sorted.find((s) => s.id === diffSessionId)?.title ?? 'Session' : ''
   );
@@ -68,6 +70,7 @@
   const activeId = $derived(activeSession.activeId ?? activeSessionId ?? chat.activeSessionId);
 
   const items = $derived(filterSessions(store.sorted, searchQuery));
+  const tree = $derived(buildSessionHierarchy(items));
   const isLoading = $derived(store.loading);
   const errorMsg = $derived(store.error);
   const isEmpty = $derived(!isLoading && !errorMsg && items.length === 0);
@@ -111,6 +114,17 @@
     diffSessionId = null;
   }
 
+  function isExpanded(id: string): boolean {
+    return !collapsedSessionIds.has(id);
+  }
+
+  function toggleChildren(id: string): void {
+    const next = new Set(collapsedSessionIds);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    collapsedSessionIds = next;
+  }
+
   function onOverlayKeydown(event: KeyboardEvent): void {
     if (event.key === 'Escape') {
       event.preventDefault();
@@ -118,6 +132,42 @@
     }
   }
 </script>
+
+{#snippet renderSessionNode(node: SessionTreeNode, level: number)}
+  <li class="list-item" class:list-item--child={level > 0} style={`--level: ${level}`}>
+    <div class="session-row">
+      {#if node.children.length > 0}
+        <button
+          type="button"
+          class="children-toggle"
+          aria-label={`${isExpanded(node.session.id) ? 'Collapse' : 'Expand'} child sessions for ${node.session.title}`}
+          aria-expanded={isExpanded(node.session.id)}
+          onclick={() => toggleChildren(node.session.id)}
+        >
+          {isExpanded(node.session.id) ? '▾' : '▸'}
+        </button>
+      {:else}
+        <span class="children-spacer" aria-hidden="true"></span>
+      {/if}
+      <SessionCard
+        session={node.session}
+        active={node.session.id === activeId}
+        childCount={node.children.length}
+        onselect={handleSelect}
+        onrename={handleRename}
+        ondelete={handleDelete}
+        onviewdiff={handleViewDiff}
+      />
+    </div>
+    {#if node.children.length > 0 && isExpanded(node.session.id)}
+      <ul class="child-list" role="group" aria-label={`Child sessions for ${node.session.title}`}>
+        {#each node.children as child (child.session.id)}
+          {@render renderSessionNode(child, level + 1)}
+        {/each}
+      </ul>
+    {/if}
+  </li>
+{/snippet}
 
 <GlassSurface variant="panel" element="aside" class="session-sidebar" aria-label="Sessions">
   <div class="sidebar-body" class:sidebar-body--phone={railOrientation === 'horizontal'}>
@@ -182,17 +232,8 @@
       </div>
     {:else}
       <ul class="list" role="listbox" aria-label="Session list">
-        {#each items as session (session.id)}
-          <li class="list-item">
-            <SessionCard
-              {session}
-              active={session.id === activeId}
-              onselect={handleSelect}
-              onrename={handleRename}
-              ondelete={handleDelete}
-              onviewdiff={handleViewDiff}
-            />
-          </li>
+        {#each tree as node (node.session.id)}
+          {@render renderSessionNode(node, 0)}
         {/each}
       </ul>
     {/if}
@@ -350,6 +391,45 @@
 
   .list-item {
     margin: 0;
+  }
+
+  .session-row {
+    display: grid;
+    grid-template-columns: 1rem minmax(0, 1fr);
+    gap: 0.125rem;
+    align-items: stretch;
+    margin-left: calc(var(--level, 0) * 0.875rem);
+  }
+
+  .children-toggle,
+  .children-spacer {
+    align-self: center;
+    width: 1rem;
+    height: 1rem;
+  }
+
+  .children-toggle {
+    border: 0;
+    padding: 0;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--text-muted);
+    cursor: pointer;
+    line-height: 1;
+  }
+
+  .children-toggle:hover {
+    color: var(--text-primary);
+    background-color: var(--bg-surface);
+  }
+
+  .child-list {
+    list-style: none;
+    margin: 0.125rem 0 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.125rem;
   }
 
   /* ---- Skeleton loading ---- */

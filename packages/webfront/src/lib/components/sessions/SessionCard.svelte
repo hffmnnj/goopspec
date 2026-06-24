@@ -29,6 +29,7 @@
     onrename?: (id: string, title: string) => void;
     ondelete?: (id: string) => void;
     onviewdiff?: (id: string) => void;
+    childCount?: number;
   }
 
   let {
@@ -38,6 +39,7 @@
     onrename,
     ondelete,
     onviewdiff,
+    childCount = 0,
   }: SessionCardProps = $props();
 
   const ICON = 13;
@@ -157,12 +159,17 @@
       <p class="preview">{preview}</p>
     {/if}
 
-    {#if meta.hasMessages || meta.hasCost}
+    {#if meta.hasMessages || meta.hasCost || childCount > 0}
       <div class="meta" aria-hidden={false}>
         {#if meta.hasMessages}
           <span class="chip" title={`${meta.messages} messages`}>
             <HugeiconsIcon icon={MessageMultiple01Icon} size={ICON} strokeWidth={STROKE} color="currentColor" />
             {meta.messages}
+          </span>
+        {/if}
+        {#if childCount > 0}
+          <span class="chip" title={`${childCount} child sessions`}>
+            {childCount} child{childCount === 1 ? '' : 'ren'}
           </span>
         {/if}
         {#if meta.hasCost}

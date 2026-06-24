@@ -5,6 +5,7 @@ export interface Session {
   title: string;
   createdAt: string;
   updatedAt: string;
+  parentID?: string;
   messageCount?: number;
   cost?: number;
 }
