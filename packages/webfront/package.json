@@ -11,10 +11,11 @@
     "check": "bun run typecheck"
   },
   "dependencies": {
+    "@hugeicons/core-free-icons": "latest",
+    "@hugeicons/svelte": "latest",
     "bits-ui": "^2.18.1",
     "clsx": "^2.1.1",
     "mode-watcher": "^1.1.0",
-    "phosphor-svelte": "latest",
     "tailwind-merge": "^3.6.0"
   },
   "devDependencies": {

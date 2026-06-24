@@ -1,6 +1,6 @@
 <script lang="ts">
-  import Sun from 'phosphor-svelte/lib/Sun';
-  import Moon from 'phosphor-svelte/lib/Moon';
+  import { HugeiconsIcon } from '@hugeicons/svelte';
+  import { Sun03Icon, Moon02Icon } from '@hugeicons/core-free-icons';
   import { theme, toggleTheme } from '$lib/stores/theme.svelte';
 
   let isDark = $derived(theme.current === 'dark');
@@ -19,11 +19,11 @@
   <span class="icon" aria-hidden="true">
     {#if isDark}
       <span class="swap">
-        <Moon size={18} weight="fill" />
+        <HugeiconsIcon icon={Moon02Icon} size={18} color="currentColor" strokeWidth={1.5} />
       </span>
     {:else}
       <span class="swap">
-        <Sun size={18} weight="fill" />
+        <HugeiconsIcon icon={Sun03Icon} size={18} color="currentColor" strokeWidth={1.5} />
       </span>
     {/if}
   </span>
