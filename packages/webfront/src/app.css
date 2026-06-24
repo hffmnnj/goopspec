@@ -1,0 +1,68 @@
+@import 'tailwindcss';
+@import './lib/styles/tokens.css';
+@import './lib/styles/a11y.css';
+@import './lib/styles/glass.css';
+@import './lib/styles/responsive.css';
+@import './lib/styles/foldable.css';
+
+@plugin '@tailwindcss/container-queries';
+
+@font-face {
+  font-family: 'Geist';
+  src: url('/fonts/geist.woff2') format('woff2');
+  font-weight: 100 900;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Geist Mono';
+  src: url('/fonts/geist-mono.woff2') format('woff2');
+  font-weight: 100 900;
+  font-display: swap;
+}
+
+/* ---------------------------------------------------------------------------
+ * Base element styling — driven entirely by design tokens (tokens.css).
+ * `:root` defaults to the dark palette so non-JS / pre-hydration renders
+ * the dark theme with no flash; the theme store swaps `data-theme` at runtime.
+ * ------------------------------------------------------------------------- */
+:root {
+  font-family: var(--font-sans);
+  background-color: var(--bg-base);
+  color: var(--text-primary);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+html {
+  background-color: var(--bg-base);
+}
+
+body {
+  min-width: 320px;
+  min-height: 100vh;
+  margin: 0;
+  background-color: var(--bg-base);
+  color: var(--text-primary);
+}
+
+/* Smooth palette crossfade on theme change — disabled for reduced motion. */
+html,
+body {
+  transition:
+    background-color var(--transition-base),
+    color var(--transition-base);
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+  color: inherit;
+}
+
+::selection {
+  background-color: var(--accent-soft);
+}
