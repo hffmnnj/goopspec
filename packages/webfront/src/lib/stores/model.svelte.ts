@@ -69,11 +69,11 @@ class ModelStore {
 
   /** Seed the available providers and choose a default if needed. */
   setProviders(providers: Provider[]): void {
-    this.providers = providers;
+    this.providers = Array.isArray(providers) ? providers : [];
     const stored = readStored();
 
     if (stored) {
-      const match = findModel(providers, stored.modelId);
+      const match = findModel(this.providers, stored.modelId);
       if (match && match.providerId === stored.providerId) {
         this.selectedProviderId = stored.providerId;
         this.selectedModelId = stored.modelId;
@@ -81,8 +81,8 @@ class ModelStore {
       }
     }
 
-    const firstProvider = providers[0];
-    const firstModel = firstProvider?.models[0];
+    const firstProvider = this.providers[0];
+    const firstModel = firstProvider?.models.find((candidate) => candidate.id === firstProvider.defaultModelId) ?? firstProvider?.models[0];
     if (firstProvider && firstModel) {
       this.selectedProviderId = firstProvider.id;
       this.selectedModelId = firstModel.id;

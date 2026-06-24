@@ -381,7 +381,7 @@
                 <li class="provider">
                   <p class="provider-name">{provider.name}</p>
                   <ul class="model-list">
-                    {#each provider.models as model (model.id)}
+                    {#each (Array.isArray(provider.models) ? provider.models : []) as model (model.id)}
                       <li class="model">
                         <span class="model-name">{model.name}</span>
                         {#if formatContext(model.context)}
