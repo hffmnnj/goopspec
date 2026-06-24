@@ -186,6 +186,38 @@ describe('OpenCode REST client', () => {
     );
   });
 
+  it('normalizes OpenCode message envelopes from GET /session/{id}/message', async () => {
+    const fetchMock = mock(() => Promise.resolve(jsonResponse([
+      {
+        info: { id: 'msg-user', role: 'user', time: { created: 1760000000000 } },
+        parts: [{ id: 'part-1', type: 'text', text: 'hello' }]
+      },
+      {
+        info: { id: 'msg-assistant', role: 'assistant', providerID: 'anthropic', modelID: 'claude', time: { created: 1760000001000 } },
+        parts: [{ id: 'part-2', type: 'text', text: 'hi' }]
+      }
+    ])));
+    globalThis.fetch = fetchMock as unknown as typeof fetch;
+
+    await expect(createClient('http://localhost:4096').getMessages('s1')).resolves.toEqual([
+      expect.objectContaining({ id: 'msg-user', role: 'user', parts: [{ type: 'text', text: 'hello' }] }),
+      expect.objectContaining({ id: 'msg-assistant', role: 'assistant', provider: 'anthropic', model: 'claude', parts: [{ type: 'text', text: 'hi' }] })
+    ]);
+  });
+
+  it('normalizes OpenCode session time and parentID fields', async () => {
+    const fetchMock = mock(() => Promise.resolve(jsonResponse([
+      { id: 'parent', title: 'Parent', time: { created: 1760000000000, updated: 1760000001000 } },
+      { id: 'child', title: 'Child', parentID: 'parent', time: { created: 1760000002000, updated: 1760000003000 } }
+    ])));
+    globalThis.fetch = fetchMock as unknown as typeof fetch;
+
+    await expect(createClient('http://localhost:4096').listSessions()).resolves.toEqual([
+      expect.objectContaining({ id: 'parent', createdAt: '2025-10-09T08:53:20.000Z', updatedAt: '2025-10-09T08:53:21.000Z' }),
+      expect.objectContaining({ id: 'child', parentID: 'parent', createdAt: '2025-10-09T08:53:22.000Z', updatedAt: '2025-10-09T08:53:23.000Z' })
+    ]);
+  });
+
   it('deletes sessions with DELETE /session/{id}', async () => {
     const fetchMock = mock(() => Promise.resolve(new Response(null, { status: 204 })));
     globalThis.fetch = fetchMock as unknown as typeof fetch;

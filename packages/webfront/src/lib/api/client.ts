@@ -48,6 +48,11 @@ const EVENT_TYPES = [
 
 type RawRecord = Record<string, unknown>;
 
+type RawOpenCodeMessageEnvelope = {
+  info?: unknown;
+  parts?: unknown;
+};
+
 function asRecord(value: unknown): RawRecord {
   return typeof value === 'object' && value !== null ? (value as RawRecord) : {};
 }
@@ -58,6 +63,16 @@ function asString(value: unknown, fallback = ''): string {
 
 function asOptionalString(value: unknown): string | undefined {
   return typeof value === 'string' ? value : undefined;
+}
+
+function asOptionalNumber(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+}
+
+function timestampToIso(value: unknown, fallback = new Date().toISOString()): string {
+  if (typeof value === 'string' && value.length > 0) return value;
+  if (typeof value === 'number' && Number.isFinite(value)) return new Date(value).toISOString();
+  return fallback;
 }
 
 function parseData(data: string): unknown {
@@ -73,6 +88,110 @@ function parseData(data: string): unknown {
 function unwrapData<T>(value: unknown): T {
   const record = asRecord(value);
   return (record.data ?? value) as T;
+}
+
+function normalizeSession(value: unknown): Session {
+  const raw = asRecord(value);
+  const time = asRecord(raw.time);
+  const createdAt = timestampToIso(raw.createdAt ?? time.created);
+  const updatedAt = timestampToIso(raw.updatedAt ?? time.updated ?? time.created, createdAt);
+  const summary = asRecord(raw.summary);
+
+  return {
+    ...(raw as unknown as Partial<Session>),
+    id: asString(raw.id),
+    title: asString(raw.title, 'Untitled session'),
+    createdAt,
+    updatedAt,
+    parentID: asOptionalString(raw.parentID),
+    messageCount: asOptionalNumber(raw.messageCount),
+    cost: asOptionalNumber(raw.cost ?? summary.cost),
+  };
+}
+
+function normalizeTextPart(raw: RawRecord): MessagePart | undefined {
+  const text = asString(raw.text);
+  return text.length > 0 ? { type: 'text', text } : undefined;
+}
+
+function normalizeToolPart(raw: RawRecord): MessagePart | undefined {
+  const state = asRecord(raw.state);
+  const status = asOptionalString(state.status);
+  const id = asOptionalString(raw.id ?? raw.callID);
+  const tool = asString(raw.tool, 'tool');
+
+  if (status === 'completed' || status === 'error') {
+    return {
+      type: 'tool-result',
+      id,
+      tool,
+      output: state.output,
+      error: asOptionalString(state.error),
+    };
+  }
+
+  return {
+    type: 'tool-invoke',
+    id,
+    tool,
+    input: state.input,
+  };
+}
+
+function normalizeMessagePart(value: unknown): MessagePart | undefined {
+  const raw = asRecord(value);
+  const type = asString(raw.type);
+
+  switch (type) {
+    case 'text':
+      return normalizeTextPart(raw);
+    case 'tool':
+      return normalizeToolPart(raw);
+    case 'tool-invoke':
+      return mapToolInvoke(raw);
+    case 'tool-result':
+      return mapToolResult(raw);
+    case 'step-start':
+      return { type: 'step-start', id: asOptionalString(raw.id), title: asOptionalString(raw.title ?? raw.snapshot) };
+    case 'step-finish':
+      return {
+        type: 'step-finish',
+        id: asOptionalString(raw.id),
+        title: asOptionalString(raw.title ?? raw.reason ?? raw.snapshot),
+        status: asOptionalString(raw.status) as 'success' | 'error' | 'cancelled' | undefined,
+      };
+    default:
+      return undefined;
+  }
+}
+
+function normalizeMessage(value: unknown): Message {
+  const envelope = asRecord(value as RawOpenCodeMessageEnvelope);
+  const info = asRecord(envelope.info ?? value);
+  const rawParts = Array.isArray(envelope.parts)
+    ? envelope.parts
+    : Array.isArray(info.parts)
+      ? info.parts
+      : [];
+  const createdAt = timestampToIso(info.createdAt ?? asRecord(info.time).created);
+  const updatedAt = timestampToIso(info.updatedAt ?? asRecord(info.time).completed, createdAt);
+  const role = asString(info.role, 'assistant') as Message['role'];
+
+  return {
+    ...(info as unknown as Partial<Message>),
+    id: asString(info.id),
+    role,
+    parts: rawParts.map(normalizeMessagePart).filter((part): part is MessagePart => part !== undefined),
+    createdAt,
+    updatedAt,
+    cost: asOptionalNumber(info.cost),
+    model: asOptionalString(info.model ?? info.modelID),
+    provider: asOptionalString(info.provider ?? info.providerID),
+  };
+}
+
+function normalizeMessages(value: unknown): Message[] {
+  return Array.isArray(value) ? value.map(normalizeMessage) : [];
 }
 
 function messageIdFrom(raw: RawRecord): string | undefined {
@@ -274,15 +393,21 @@ export function createClient(baseUrl?: string): OpenCodeClient {
       source.onmessage = (event) => handler(toGlobalEvent(event.data));
       return { close: () => source.close() };
     },
-    listSessions: (directory?: string) => request<Session[]>('session', {}, directoryParam(directory)),
+    listSessions: async (directory?: string) => {
+      const payload = await request<unknown>('session', {}, directoryParam(directory));
+      return Array.isArray(payload) ? payload.map(normalizeSession) : [];
+    },
     createSession: (opts: CreateSessionOptions = {}) =>
-      request<Session>('session', { method: 'POST', body: JSON.stringify(opts) }, directoryParam(opts.directory)),
+      request<unknown>('session', { method: 'POST', body: JSON.stringify(opts) }, directoryParam(opts.directory)).then(normalizeSession),
     deleteSession: async (id: string) => {
       await request<void>(`session/${encodeURIComponent(id)}`, { method: 'DELETE' });
     },
     renameSession: (id: string, title: string) =>
-      request<Session>(`session/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify({ title }) }),
-    getMessages: (sessionId: string) => request<Message[]>(`session/${encodeURIComponent(sessionId)}/message`),
+      request<unknown>(`session/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify({ title }) }).then(normalizeSession),
+    getMessages: async (sessionId: string) => {
+      const payload = await request<unknown>(`session/${encodeURIComponent(sessionId)}/message`);
+      return normalizeMessages(payload);
+    },
     async getSessionDiff(sessionId: string): Promise<FileDiff[]> {
       try {
         const diffs = await request<FileDiff[]>(`session/${encodeURIComponent(sessionId)}/diff`);
@@ -292,10 +417,10 @@ export function createClient(baseUrl?: string): OpenCodeClient {
       }
     },
     sendMessage: (sessionId: string, input: SendMessageInput, directory?: string) =>
-      request<Message>(`session/${encodeURIComponent(sessionId)}/message`, {
+      request<unknown>(`session/${encodeURIComponent(sessionId)}/message`, {
         method: 'POST',
         body: JSON.stringify(input)
-      }, directoryParam(directory)),
+      }, directoryParam(directory)).then(normalizeMessage),
     subscribeEvents(sessionId: string, handlers: EventHandlers): Unsubscribe {
       if (typeof EventSource === 'undefined') {
         const error = new Error('EventSource is not available in this environment');
