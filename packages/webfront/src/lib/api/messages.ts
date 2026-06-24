@@ -79,15 +79,20 @@ export function toolParts(message: Message): Array<ToolInvokePart | ToolResultPa
 /**
  * Group adjacent parts so the renderer can interleave prose and tool blocks
  * while preserving order. Consecutive text parts collapse into one group so
- * Markdown renders as a single document rather than fragmented blocks.
+ * Markdown renders as a single document rather than fragmented blocks. A
+ * tool-invoke is paired with its matching tool-result (same `id`) into one
+ * tool group so the card renders invoke + result together (T4).
  */
 export type PartGroup =
   | { kind: 'text'; text: string }
-  | { kind: 'tool'; part: ToolInvokePart | ToolResultPart }
+  | { kind: 'tool'; invoke?: ToolInvokePart; result?: ToolResultPart }
   | { kind: 'step'; part: StepStartPart | StepFinishPart };
 
 export function groupParts(parts: MessagePart[]): PartGroup[] {
   const groups: PartGroup[] = [];
+  // Map a tool id → the tool group it belongs to, so a later result can attach
+  // to the invoke that opened the call (parts may arrive out of order/split).
+  const toolGroupById = new Map<string, Extract<PartGroup, { kind: 'tool' }>>();
 
   for (const part of parts) {
     if (isTextPart(part)) {
@@ -97,8 +102,19 @@ export function groupParts(parts: MessagePart[]): PartGroup[] {
       } else {
         groups.push({ kind: 'text', text: part.text });
       }
-    } else if (isToolPart(part)) {
-      groups.push({ kind: 'tool', part });
+    } else if (isToolInvokePart(part)) {
+      const group: Extract<PartGroup, { kind: 'tool' }> = { kind: 'tool', invoke: part };
+      groups.push(group);
+      if (part.id) toolGroupById.set(part.id, group);
+    } else if (isToolResultPart(part)) {
+      const existing = part.id ? toolGroupById.get(part.id) : undefined;
+      if (existing) {
+        existing.result = part;
+      } else {
+        // A result with no preceding invoke (id missing or invoke not seen):
+        // render it as its own card.
+        groups.push({ kind: 'tool', result: part });
+      }
     } else {
       groups.push({ kind: 'step', part });
     }

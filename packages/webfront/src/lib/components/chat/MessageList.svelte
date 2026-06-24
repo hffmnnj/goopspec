@@ -5,6 +5,7 @@
   import type { Message } from '$lib/api/types.js';
   import { groupParts } from '$lib/api/messages.js';
   import Markdown from './Markdown.svelte';
+  import ToolCard from './ToolCard.svelte';
 
   interface MessageListProps {
     messages: Message[];
@@ -63,11 +64,7 @@
             {#if group.kind === 'text'}
               <Markdown text={group.text} />
             {:else if group.kind === 'tool'}
-              <!-- T4 builds the real ToolCard; placeholder keeps order intact. -->
-              <div class="tool-placeholder">
-                <span class="tool-name">{group.part.tool ?? 'tool'}</span>
-                <span class="tool-hint">tool call</span>
-              </div>
+              <ToolCard invoke={group.invoke} result={group.result} />
             {/if}
           {/each}
 
@@ -149,29 +146,6 @@
 
   .row--user .bubble {
     color: var(--text-secondary);
-  }
-
-  .tool-placeholder {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.5rem;
-    margin: 0.375rem 0;
-    padding: 0.25rem 0.625rem;
-    font-family: var(--font-mono);
-    font-size: 0.75rem;
-    color: var(--text-secondary);
-    background-color: var(--bg-surface);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-sm);
-  }
-
-  .tool-name {
-    color: var(--text-primary);
-    font-weight: 500;
-  }
-
-  .tool-hint {
-    color: var(--text-muted);
   }
 
   .cursor {
