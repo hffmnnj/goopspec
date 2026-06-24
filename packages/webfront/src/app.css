@@ -1,6 +1,9 @@
 @import 'tailwindcss';
 @import './lib/styles/tokens.css';
+@import './lib/styles/a11y.css';
 @import './lib/styles/glass.css';
+@import './lib/styles/responsive.css';
+@import './lib/styles/foldable.css';
 
 @plugin '@tailwindcss/container-queries';
 
@@ -60,25 +63,6 @@ select {
   color: inherit;
 }
 
-/* Consistent, accent-tinted focus ring across interactive elements. */
-:where(a, button, input, textarea, select, [tabindex]):focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
-  border-radius: var(--radius-sm);
-}
-
 ::selection {
   background-color: var(--accent-soft);
-}
-
-/* Honor user motion preferences globally. */
-@media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
-    animation-duration: 0.001ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.001ms !important;
-    scroll-behavior: auto !important;
-  }
 }

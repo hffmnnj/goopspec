@@ -67,7 +67,7 @@
   }
 
   .prose :global(a) {
-    color: var(--accent);
+    color: var(--accent-text);
     text-decoration: underline;
     text-underline-offset: 2px;
     text-decoration-thickness: 1px;

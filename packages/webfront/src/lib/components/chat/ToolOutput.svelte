@@ -76,7 +76,7 @@
   }
 
   .text.error {
-    color: #f87171;
+    color: var(--danger-text);
     background-color: rgba(248, 113, 113, 0.06);
   }
 
@@ -104,7 +104,7 @@
   }
 
   .more:focus-visible {
-    outline: 2px solid var(--accent);
+    outline: 2px solid var(--focus-ring);
     outline-offset: 2px;
   }
 

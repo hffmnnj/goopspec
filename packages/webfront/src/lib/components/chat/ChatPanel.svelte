@@ -1,9 +1,15 @@
 <script lang="ts">
-  import { HugeiconsIcon } from '@hugeicons/svelte';
-  import { BubbleChatIcon } from '@hugeicons/core-free-icons';
+  import { MessageAdd01Icon } from '@hugeicons/core-free-icons';
   import { chat as defaultChat, type ChatStore } from '$lib/stores/chat.svelte.js';
+  import { createClient } from '$lib/api/client.js';
+  import type { OpenCodeClient } from '$lib/api/types.js';
   import MessageList from './MessageList.svelte';
   import MessageInput from './MessageInput.svelte';
+  import AgentSelector from '$lib/components/AgentSelector.svelte';
+  import ModelSwitcher from '$lib/components/ModelSwitcher.svelte';
+  import ShareButton from '$lib/components/sessions/ShareButton.svelte';
+  import EmptyState from '$lib/components/states/EmptyState.svelte';
+  import ErrorState from '$lib/components/states/ErrorState.svelte';
 
   interface ChatPanelProps {
     /** Chat store to bind to; defaults to the shared singleton. */
@@ -14,6 +20,12 @@
     disabled?: boolean;
     /** Interrupt handler — wired to the streaming reducer by T3.2 / Wave 8. */
     onstop?: () => void;
+    /** Override the OpenCode client used by the model switcher. */
+    client?: OpenCodeClient;
+    /** Text to append to the message composer, e.g. a selected file mention. */
+    composerInsertText?: string;
+    /** Monotonic signal for composerInsertText. */
+    composerInsertNonce?: number;
   }
 
   let {
@@ -21,7 +33,12 @@
     title = 'New conversation',
     disabled = false,
     onstop,
+    client,
+    composerInsertText,
+    composerInsertNonce = 0,
   }: ChatPanelProps = $props();
+
+  const switcherClient = $derived(client ?? createClient());
 
   const isEmpty = $derived(!chat.loading && chat.messages.length === 0);
 
@@ -33,12 +50,25 @@
 <section class="chat-panel" aria-label="Conversation">
   <header class="chat-header">
     <h1 class="chat-title">{title}</h1>
-    <!-- Reserved: model switcher (Wave 6) + cost ticker (NH-04) mount here. -->
-    <div class="header-slot"></div>
+    <div class="header-slot">
+      <AgentSelector client={switcherClient} />
+      <ModelSwitcher client={switcherClient} />
+      <ShareButton
+        {title}
+        sessionId={chat.activeSessionId}
+        messages={chat.messages}
+      />
+    </div>
   </header>
 
   {#if chat.error}
-    <div class="chat-error" role="alert">{chat.error}</div>
+    <div class="chat-error-region">
+      <ErrorState
+        inline
+        title="Message failed"
+        message={chat.error}
+      />
+    </div>
   {/if}
 
   <div class="chat-body">
@@ -55,12 +85,13 @@
         {/each}
       </div>
     {:else if isEmpty}
-      <div class="empty" role="status">
-        <span class="empty-icon" aria-hidden="true">
-          <HugeiconsIcon icon={BubbleChatIcon} size={28} strokeWidth={1.5} color="currentColor" />
-        </span>
-        <p class="empty-title">Start a conversation</p>
-        <p class="empty-sub">Send a message to begin.</p>
+      <div class="empty-wrap">
+        <EmptyState
+          icon={MessageAdd01Icon}
+          iconSize={28}
+          title="Start a conversation"
+          description="Send a message to begin a new conversation."
+        />
       </div>
     {:else}
       <MessageList messages={chat.messages} streaming={chat.streaming} />
@@ -73,6 +104,8 @@
       {onstop}
       streaming={chat.streaming}
       disabled={disabled || chat.loading}
+      insertText={composerInsertText}
+      insertNonce={composerInsertNonce}
     />
   </footer>
 </section>
@@ -111,14 +144,8 @@
     gap: 0.5rem;
   }
 
-  .chat-error {
+  .chat-error-region {
     margin: 0.75rem 1.25rem 0;
-    padding: 0.625rem 0.875rem;
-    font-size: 0.8125rem;
-    color: #ef4444;
-    background-color: rgba(239, 68, 68, 0.1);
-    border: 1px solid rgba(239, 68, 68, 0.25);
-    border-radius: var(--radius);
   }
 
   .chat-body {
@@ -136,41 +163,11 @@
     margin: 0 auto;
   }
 
-  .empty {
+  .empty-wrap {
     flex: 1;
     display: flex;
-    flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 0.5rem;
-    text-align: center;
-    color: var(--text-secondary);
-  }
-
-  .empty-icon {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 3.5rem;
-    height: 3.5rem;
-    margin-bottom: 0.5rem;
-    border-radius: var(--radius-full);
-    color: var(--text-muted);
-    background-color: var(--bg-elevated);
-    border: 1px solid var(--border);
-  }
-
-  .empty-title {
-    margin: 0;
-    font-size: 1rem;
-    font-weight: 600;
-    color: var(--text-primary);
-  }
-
-  .empty-sub {
-    margin: 0;
-    font-size: 0.875rem;
-    color: var(--text-muted);
   }
 
   .skeleton {

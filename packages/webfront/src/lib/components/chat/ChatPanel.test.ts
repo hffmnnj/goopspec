@@ -1,4 +1,6 @@
 import { beforeEach, describe, expect, it, mock } from 'bun:test';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import type { Message, MessageRole, OpenCodeClient, SendMessageInput } from '$lib/api/types.js';
 import { createChatStore } from '$lib/stores/chat.svelte.js';
 import {
@@ -33,9 +35,11 @@ function createMockClient(): OpenCodeClient {
     ),
     subscribeEvents: () => () => undefined,
     listProviders: mock(() => Promise.resolve([])),
+    listAgents: mock(() => Promise.resolve([])),
     getConfig: mock(() => Promise.resolve({})),
     updateConfig: mock(() => Promise.resolve({})),
     readFile: mock(() => Promise.resolve('')),
+    listDirectory: mock(() => Promise.resolve([])),
   } as unknown as OpenCodeClient;
 }
 
@@ -163,6 +167,17 @@ describe('chat store', () => {
     store.messages = [message({ id: 'a1', role: assistantRole, parts: [{ type: 'text', text: 'x' }] })];
 
     expect(store.editLastUserMessage()).toBeNull();
+  });
+});
+
+describe('ChatPanel header wiring', () => {
+  it('places AgentSelector immediately before ModelSwitcher', () => {
+    const source = readFileSync(fileURLToPath(new URL('./ChatPanel.svelte', import.meta.url)), 'utf8');
+
+    expect(source.indexOf('<AgentSelector client={switcherClient} />')).toBeGreaterThan(-1);
+    expect(source.indexOf('<AgentSelector client={switcherClient} />')).toBeLessThan(
+      source.indexOf('<ModelSwitcher client={switcherClient} />')
+    );
   });
 });
 
