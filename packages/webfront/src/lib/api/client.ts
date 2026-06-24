@@ -3,15 +3,18 @@ import type {
   CreateSessionOptions,
   EventHandlers,
   FileEntry,
+  GlobalEvent,
   Message,
   MessagePart,
   OpenCodeClient,
   OpenCodeConfig,
   Provider,
+  Project,
   SSEEvent,
   SendMessageInput,
   Session,
-  Unsubscribe
+  Unsubscribe,
+  VcsInfo
 } from './types';
 
 export class OpenCodeApiError extends Error {
@@ -227,6 +230,16 @@ function makeUrl(baseUrl: string, path: string, params?: Record<string, string>)
   return url.toString();
 }
 
+function directoryParam(directory?: string): Record<string, string> | undefined {
+  return directory ? { directory } : undefined;
+}
+
+function toGlobalEvent(data: string): GlobalEvent {
+  const parsed = parseData(data);
+  const record = asRecord(parsed);
+  return { ...record, type: asString(record.type, 'message') };
+}
+
 export function createClient(baseUrl?: string): OpenCodeClient {
   const resolveRoot = () => (baseUrl ?? getServerUrl()).trim().replace(/\/+$/, '');
 
@@ -249,20 +262,31 @@ export function createClient(baseUrl?: string): OpenCodeClient {
   }
 
   return {
-    listSessions: () => request<Session[]>('session'),
+    listProjects: () => request<Project[]>('project'),
+    getCurrentProject: () => request<Project | null>('project/current'),
+    getPath: () => request<{ path: string }>('path'),
+    getVcsInfo: () => request<VcsInfo>('vcs'),
+    subscribeGlobalEvents(handler: (event: GlobalEvent) => void): { close(): void } {
+      if (typeof EventSource === 'undefined') return { close: () => undefined };
+
+      const source = new EventSource(makeUrl(resolveRoot(), 'event'));
+      source.onmessage = (event) => handler(toGlobalEvent(event.data));
+      return { close: () => source.close() };
+    },
+    listSessions: (directory?: string) => request<Session[]>('session', {}, directoryParam(directory)),
     createSession: (opts: CreateSessionOptions = {}) =>
-      request<Session>('session', { method: 'POST', body: JSON.stringify(opts) }),
+      request<Session>('session', { method: 'POST', body: JSON.stringify(opts) }, directoryParam(opts.directory)),
     deleteSession: async (id: string) => {
       await request<void>(`session/${encodeURIComponent(id)}`, { method: 'DELETE' });
     },
     renameSession: (id: string, title: string) =>
       request<Session>(`session/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify({ title }) }),
     getMessages: (sessionId: string) => request<Message[]>(`session/${encodeURIComponent(sessionId)}/message`),
-    sendMessage: (sessionId: string, input: SendMessageInput) =>
+    sendMessage: (sessionId: string, input: SendMessageInput, directory?: string) =>
       request<Message>(`session/${encodeURIComponent(sessionId)}/message`, {
         method: 'POST',
         body: JSON.stringify(input)
-      }),
+      }, directoryParam(directory)),
     subscribeEvents(sessionId: string, handlers: EventHandlers): Unsubscribe {
       if (typeof EventSource === 'undefined') {
         const error = new Error('EventSource is not available in this environment');

@@ -58,9 +58,71 @@ describe('OpenCode server config', () => {
 
 describe('OpenCode REST client', () => {
   const originalFetch = globalThis.fetch;
+  const originalEventSource = globalThis.EventSource;
 
   afterEach(() => {
     globalThis.fetch = originalFetch;
+    Object.defineProperty(globalThis, 'EventSource', { configurable: true, value: originalEventSource });
+  });
+
+  it('lists projects from GET /project', async () => {
+    const projects = [{ id: 'p1', worktree: '/repo', time: { created: 1 }, vcs: 'git' as const }];
+    const fetchMock = mock(() => Promise.resolve(jsonResponse(projects)));
+    globalThis.fetch = fetchMock as unknown as typeof fetch;
+
+    await expect(createClient('http://localhost:4096').listProjects()).resolves.toEqual(projects);
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://localhost:4096/project',
+      expect.objectContaining({ headers: expect.objectContaining({ Accept: 'application/json' }) })
+    );
+  });
+
+  it('loads the current project from GET /project/current', async () => {
+    const project = { id: 'p1', worktree: '/repo', time: { created: 1 } };
+    const fetchMock = mock(() => Promise.resolve(jsonResponse(project)));
+    globalThis.fetch = fetchMock as unknown as typeof fetch;
+
+    await expect(createClient('http://localhost:4096').getCurrentProject()).resolves.toEqual(project);
+    expect(fetchMock).toHaveBeenCalledWith('http://localhost:4096/project/current', expect.any(Object));
+  });
+
+  it('loads the server path from GET /path', async () => {
+    const fetchMock = mock(() => Promise.resolve(jsonResponse({ path: '/repo' })));
+    globalThis.fetch = fetchMock as unknown as typeof fetch;
+
+    await expect(createClient('http://localhost:4096').getPath()).resolves.toEqual({ path: '/repo' });
+    expect(fetchMock).toHaveBeenCalledWith('http://localhost:4096/path', expect.any(Object));
+  });
+
+  it('loads vcs info from GET /vcs', async () => {
+    const vcs = { branch: 'main', dirty: true, ahead: 1, behind: 2 };
+    const fetchMock = mock(() => Promise.resolve(jsonResponse(vcs)));
+    globalThis.fetch = fetchMock as unknown as typeof fetch;
+
+    await expect(createClient('http://localhost:4096').getVcsInfo()).resolves.toEqual(vcs);
+    expect(fetchMock).toHaveBeenCalledWith('http://localhost:4096/vcs', expect.any(Object));
+  });
+
+  it('subscribes to the global event stream', () => {
+    const close = mock(() => undefined);
+    const created: { url: string; source: EventSource; close: typeof close }[] = [];
+    class MockEventSource {
+      onmessage: ((event: MessageEvent<string>) => void) | null = null;
+      constructor(readonly url: string) {
+        created.push({ url, source: this as unknown as EventSource, close });
+      }
+      close = close;
+    }
+    Object.defineProperty(globalThis, 'EventSource', { configurable: true, value: MockEventSource });
+    const handler = mock(() => undefined);
+
+    const subscription = createClient('http://localhost:4096').subscribeGlobalEvents(handler);
+    created[0].source.onmessage?.({ data: JSON.stringify({ type: 'project.updated', id: 'p1' }) } as MessageEvent<string>);
+    subscription.close();
+
+    expect(created[0].url).toBe('http://localhost:4096/event');
+    expect(handler).toHaveBeenCalledWith({ type: 'project.updated', id: 'p1' });
+    expect(close).toHaveBeenCalled();
   });
 
   it('lists sessions from GET /session', async () => {
@@ -74,6 +136,18 @@ describe('OpenCode REST client', () => {
     );
   });
 
+  it('adds directory query params when listing sessions', async () => {
+    const fetchMock = mock(() => Promise.resolve(jsonResponse([])));
+    globalThis.fetch = fetchMock as unknown as typeof fetch;
+
+    await createClient('http://localhost:4096').listSessions('/home/user/project a');
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://localhost:4096/session?directory=%2Fhome%2Fuser%2Fproject+a',
+      expect.any(Object)
+    );
+  });
+
   it('creates sessions with POST /session', async () => {
     const session = { id: 's1', title: 'New', createdAt: 'now', updatedAt: 'now' };
     const fetchMock = mock(() => Promise.resolve(jsonResponse(session)));
@@ -83,6 +157,32 @@ describe('OpenCode REST client', () => {
     expect(fetchMock).toHaveBeenCalledWith(
       'http://localhost:4096/session',
       expect.objectContaining({ method: 'POST', body: JSON.stringify({ title: 'New' }) })
+    );
+  });
+
+  it('passes session directory in body and query when creating sessions', async () => {
+    const session = { id: 's1', title: 'New', createdAt: 'now', updatedAt: 'now' };
+    const fetchMock = mock(() => Promise.resolve(jsonResponse(session)));
+    globalThis.fetch = fetchMock as unknown as typeof fetch;
+
+    await createClient('http://localhost:4096').createSession({ title: 'New', directory: '/repo' });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://localhost:4096/session?directory=%2Frepo',
+      expect.objectContaining({ method: 'POST', body: JSON.stringify({ title: 'New', directory: '/repo' }) })
+    );
+  });
+
+  it('adds directory query params when sending messages', async () => {
+    const message = { id: 'm1', role: 'assistant', parts: [], createdAt: 'now' };
+    const fetchMock = mock(() => Promise.resolve(jsonResponse(message)));
+    globalThis.fetch = fetchMock as unknown as typeof fetch;
+
+    await createClient('http://localhost:4096').sendMessage('s1', { text: 'hello' }, '/repo');
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://localhost:4096/session/s1/message?directory=%2Frepo',
+      expect.objectContaining({ method: 'POST', body: JSON.stringify({ text: 'hello' }) })
     );
   });
 

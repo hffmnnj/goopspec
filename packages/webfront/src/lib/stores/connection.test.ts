@@ -10,6 +10,11 @@ describe('ConnectionStore', () => {
 
   beforeEach(() => {
     client = {
+      listProjects: mock(() => Promise.resolve([])),
+      getCurrentProject: mock(() => Promise.resolve(null)),
+      getPath: mock(() => Promise.resolve({ path: '' })),
+      getVcsInfo: mock(() => Promise.resolve(null)),
+      subscribeGlobalEvents: () => ({ close: () => undefined }),
       listSessions: mock(() => Promise.resolve([])),
       createSession: mock(() => Promise.resolve({ id: 's1', title: '', createdAt: '', updatedAt: '' })),
       deleteSession: mock(() => Promise.resolve()),

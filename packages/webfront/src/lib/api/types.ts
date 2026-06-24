@@ -50,6 +50,26 @@ export interface OpenCodeConfig {
   [key: string]: unknown;
 }
 
+export type Project = {
+  id: string;
+  worktree: string;
+  vcsDir?: string;
+  vcs?: 'git';
+  time: { created: number; initialized?: number };
+};
+
+export type VcsInfo = {
+  branch: string;
+  dirty: boolean;
+  ahead: number;
+  behind: number;
+} | null;
+
+export type GlobalEvent = {
+  type: string;
+  [key: string]: unknown;
+};
+
 /**
  * A single entry in the workspace file tree — either a file or a directory.
  * `children` is populated lazily by the file tree as directories are expanded;
@@ -87,6 +107,7 @@ export type SSEEvent =
 export interface CreateSessionOptions {
   title?: string;
   path?: string;
+  directory?: string;
 }
 
 export interface SendMessageInput {
@@ -105,12 +126,17 @@ export interface EventHandlers {
 export type Unsubscribe = () => void;
 
 export interface OpenCodeClient {
-  listSessions(): Promise<Session[]>;
+  listProjects(): Promise<Project[]>;
+  getCurrentProject(): Promise<Project | null>;
+  getPath(): Promise<{ path: string }>;
+  getVcsInfo(): Promise<VcsInfo>;
+  subscribeGlobalEvents(handler: (event: GlobalEvent) => void): { close(): void };
+  listSessions(directory?: string): Promise<Session[]>;
   createSession(opts?: CreateSessionOptions): Promise<Session>;
   deleteSession(id: string): Promise<void>;
   renameSession(id: string, title: string): Promise<Session>;
   getMessages(sessionId: string): Promise<Message[]>;
-  sendMessage(sessionId: string, input: SendMessageInput): Promise<Message>;
+  sendMessage(sessionId: string, input: SendMessageInput, directory?: string): Promise<Message>;
   subscribeEvents(sessionId: string, handlers: EventHandlers): Unsubscribe;
   listProviders(): Promise<Provider[]>;
   getConfig(): Promise<OpenCodeConfig>;
