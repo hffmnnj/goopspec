@@ -40,6 +40,7 @@ class ConnectionStore {
   private globalEventsSubscription: { close(): void } | null = null;
   private healthCheckInterval: ReturnType<typeof setInterval> | null = null;
   private lifecycleId = 0;
+  private readonly globalEventListeners = new Set<(event: GlobalEvent) => void>();
 
   current = $state<ConnectionState>({
     status: 'disconnected',
@@ -117,7 +118,20 @@ class ConnectionStore {
     this.globalEventsSubscription = null;
   }
 
+  /**
+   * Subscribe to the global SSE event stream. Listeners receive every
+   * {@link GlobalEvent} the connection observes (e.g. `vcs.branch.updated`),
+   * letting view components react without owning their own EventSource.
+   * Returns an unsubscribe function.
+   */
+  onGlobalEvent(listener: (event: GlobalEvent) => void): () => void {
+    this.globalEventListeners.add(listener);
+    return () => this.globalEventListeners.delete(listener);
+  }
+
   private handleGlobalEvent = (event: GlobalEvent): void => {
+    for (const listener of this.globalEventListeners) listener(event);
+
     if (event.type === 'server.connected') {
       this.current.status = 'connected';
       this.current.error = null;

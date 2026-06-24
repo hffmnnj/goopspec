@@ -8,6 +8,7 @@
   import SessionCard from './SessionCard.svelte';
   import SessionSearch from './SessionSearch.svelte';
   import ProjectRail from './ProjectRail.svelte';
+  import VcsBadge from './VcsBadge.svelte';
   import { sessions as defaultStore } from '$lib/stores/sessions.svelte.js';
   import { projects as defaultProjects } from '$lib/stores/projects.svelte.js';
   import { activeSession } from '$lib/stores/active-session.svelte.js';
@@ -107,7 +108,10 @@
     />
     <div class="sidebar-main">
   <header class="header">
-    <h2 class="heading">Sessions</h2>
+    <div class="header-title">
+      <h2 class="heading">Sessions</h2>
+      <VcsBadge />
+    </div>
     <button
       type="button"
       class="new-btn"
@@ -220,8 +224,16 @@
     padding: 0.5rem 0.5rem 0.5rem 0.75rem;
   }
 
+  .header-title {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    min-width: 0;
+  }
+
   .heading {
     margin: 0;
+    flex: 0 0 auto;
     font-size: 0.75rem;
     font-weight: 600;
     letter-spacing: 0.04em;
