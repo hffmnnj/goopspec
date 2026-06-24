@@ -9,14 +9,18 @@
     "preview": "vite preview",
     "typecheck": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
     "check": "bun run typecheck",
-    "test": "bun test --preload ./svelte-test-loader.ts"
+    "test": "bun test"
   },
   "dependencies": {
     "@hugeicons/core-free-icons": "latest",
     "@hugeicons/svelte": "latest",
     "bits-ui": "^2.18.1",
     "clsx": "^2.1.1",
+    "dompurify": "^3.2.4",
+    "isomorphic-dompurify": "^2.20.0",
+    "marked": "^15.0.6",
     "mode-watcher": "^1.1.0",
+    "shiki": "^1.29.2",
     "tailwind-merge": "^3.6.0"
   },
   "devDependencies": {
