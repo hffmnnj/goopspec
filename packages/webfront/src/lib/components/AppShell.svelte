@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { goto } from '$app/navigation';
   import { HugeiconsIcon } from '@hugeicons/svelte';
   import {
     SidebarLeft01Icon,
@@ -22,6 +23,7 @@
   import { sessions } from '$lib/stores/sessions.svelte.js';
 
   import SessionSidebar from './sessions/SessionSidebar.svelte';
+  import AddProjectPicker from './sessions/AddProjectPicker.svelte';
   import ChatPanel from './chat/ChatPanel.svelte';
   import FileSearch from './files/FileSearch.svelte';
   import FileTree from './files/FileTree.svelte';
@@ -39,6 +41,8 @@
   import { useKeyboard } from '$lib/keyboard/actions.svelte.js';
   import { registerDefaultShortcuts } from '$lib/keyboard/shortcuts.js';
   import { initToastBindings } from '$lib/stores/toast-bindings.svelte.js';
+  import { projectRoute } from '$lib/routing/navigation.js';
+  import type { Project } from '$lib/api/types.js';
 
   interface AppShellProps {
     /** Override the layout store (tests / storybook). */
@@ -134,6 +138,16 @@
 
   function closeSettings(): void {
     ui.settingsOpen = false;
+  }
+
+  function closeAddProject(): void {
+    ui.addProjectOpen = false;
+  }
+
+  function handleAddProject(project: Project): void {
+    projects.openProject(project);
+    closeAddProject();
+    void goto(projectRoute(project));
   }
 
   function closeOverlays(): void {
@@ -511,6 +525,13 @@
 
 <!-- Global overlays -->
 <SettingsPanel open={ui.settingsOpen} onclose={closeSettings} />
+{#if ui.addProjectOpen}
+  <AddProjectPicker
+    available={projects.unopenedAvailable()}
+    onpick={handleAddProject}
+    onclose={closeAddProject}
+  />
+{/if}
 <CommandPalette />
 <ShortcutHelp />
 <ToastContainer />

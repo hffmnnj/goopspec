@@ -10,8 +10,8 @@
     avatarClass,
     avatarAriaCurrent,
   } from './project-rail.js';
-  import AddProjectPicker from './AddProjectPicker.svelte';
   import ProjectPopover from './ProjectPopover.svelte';
+  import { ui } from '$lib/stores/ui.svelte.js';
 
   interface ProjectRailProps {
     /** Opened projects to render, one avatar per entry. */
@@ -41,8 +41,6 @@
     projects,
     activeId = null,
     onSelect,
-    available = [],
-    onOpen,
     onClose,
     colorIndexFor,
     onSelectSession,
@@ -51,7 +49,6 @@
 
   const isEmpty = $derived(projects.length === 0);
 
-  let pickerOpen = $state(false);
   let hoveredId = $state<string | null>(null);
   let hoverTimer: ReturnType<typeof setTimeout> | undefined;
 
@@ -82,13 +79,8 @@
     hoveredId = null;
   }
 
-  function togglePicker(): void {
-    pickerOpen = !pickerOpen;
-  }
-
-  function handleOpen(project: Project): void {
-    pickerOpen = false;
-    onOpen?.(project);
+  function openProjectPicker(): void {
+    ui.addProjectOpen = true;
   }
 </script>
 
@@ -150,20 +142,12 @@
       class="rail-avatar rail-avatar--add"
       aria-label="Add project"
       aria-haspopup="dialog"
-      aria-expanded={pickerOpen}
+      aria-expanded={ui.addProjectOpen}
       title="Add project"
-      onclick={togglePicker}
+      onclick={openProjectPicker}
     >
       <HugeiconsIcon icon={Add01Icon} size={16} strokeWidth={1.75} color="currentColor" />
     </button>
-    {#if pickerOpen}
-      <AddProjectPicker
-        {available}
-        {orientation}
-        onpick={handleOpen}
-        onclose={() => (pickerOpen = false)}
-      />
-    {/if}
   </div>
 </nav>
 

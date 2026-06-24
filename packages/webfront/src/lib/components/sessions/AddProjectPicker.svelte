@@ -26,14 +26,23 @@
   let pathInput = $state('');
   let container = $state<HTMLDivElement | null>(null);
   let firstField = $state<HTMLInputElement | null>(null);
+  let previouslyFocused: HTMLElement | null = null;
 
   const trimmedPath = $derived(pathInput.trim());
   const canSubmitPath = $derived(trimmedPath.length > 0);
 
-  onMount(async () => {
-    await tick();
-    firstField?.focus();
+  onMount(() => {
+    previouslyFocused = document.activeElement as HTMLElement | null;
+    void tick().then(() => firstField?.focus());
+    return () => previouslyFocused?.focus?.();
   });
+
+  function focusables(): HTMLElement[] {
+    if (!container) return [];
+    const selector =
+      'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+    return Array.from(container.querySelectorAll<HTMLElement>(selector));
+  }
 
   function projectFromPath(path: string): Project {
     return { id: path, worktree: path, time: { created: Date.now() } };
@@ -54,27 +63,53 @@
     if (event.key === 'Escape') {
       event.preventDefault();
       onclose?.();
+      return;
+    }
+    if (event.key !== 'Tab') return;
+
+    const elements = focusables();
+    if (elements.length === 0) return;
+    const first = elements[0];
+    const last = elements[elements.length - 1];
+    const active = document.activeElement as HTMLElement | null;
+    if (event.shiftKey && active === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && active === last) {
+      event.preventDefault();
+      first.focus();
     }
   }
 
-  function onFocusOut(event: FocusEvent): void {
-    const next = event.relatedTarget as Node | null;
-    if (next && container?.contains(next)) return;
-    onclose?.();
-  }
 </script>
 
-<div
-  class="picker"
-  class:picker--horizontal={orientation === 'horizontal'}
-  bind:this={container}
-  role="dialog"
-  tabindex="-1"
-  aria-label="Add a project"
-  onkeydown={onKeydown}
-  onfocusout={onFocusOut}
->
+<button
+  type="button"
+  class="picker-backdrop"
+  aria-label="Close add project"
+  data-orientation={orientation}
+  onclick={onclose}
+></button>
+  <div
+    class="picker-panel"
+    bind:this={container}
+    role="dialog"
+    tabindex="-1"
+    aria-modal="true"
+    aria-labelledby="add-project-title"
+    onkeydown={onKeydown}
+  >
   <GlassSurface variant="floating" class="picker-surface">
+    <header class="picker-header">
+      <div>
+        <h2 id="add-project-title" class="picker-title">Add project</h2>
+        <p class="picker-subtitle">Open a worktree or choose one from the server.</p>
+      </div>
+      <button type="button" class="close-button" aria-label="Close add project" onclick={onclose}>
+        ×
+      </button>
+    </header>
+
     <form class="path-form" onsubmit={submitPath}>
       <label class="path-label" for="add-project-path">Open a path</label>
       <div class="path-row">
@@ -109,33 +144,85 @@
       </ul>
     {/if}
   </GlassSurface>
-</div>
+  </div>
 
 <style>
-  .picker {
-    position: absolute;
-    top: 0;
-    left: calc(100% + 0.5rem);
-    z-index: 60;
-    width: 16rem;
-    max-width: min(16rem, calc(100vw - 4rem));
-    animation: picker-in var(--transition-base);
+  .picker-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 1000;
+    display: grid;
+    place-items: center;
+    padding: max(1rem, var(--safe-top)) max(1rem, var(--safe-right)) max(1rem, var(--safe-bottom)) max(1rem, var(--safe-left));
+    background: rgba(4, 7, 12, 0.58);
+    backdrop-filter: blur(10px);
+    animation: backdrop-in var(--transition-base);
+    border: 0;
   }
 
-  .picker--horizontal {
-    top: calc(100% + 0.5rem);
-    left: auto;
-    right: 0;
+  .picker-panel {
+    position: fixed;
+    inset: 50% auto auto 50%;
+    z-index: 1001;
+    transform: translate(-50%, -50%);
+    width: min(34rem, calc(100vw - 2rem));
+    max-height: min(36rem, calc(100vh - 2rem));
+    outline: none;
   }
 
   :global(.picker-surface) {
     display: flex;
     flex-direction: column;
-    gap: 0.5rem;
-    padding: 0.625rem;
-    border-radius: var(--radius);
+    gap: 0.75rem;
+    width: 100%;
+    max-height: inherit;
+    padding: 1rem;
+    border-radius: var(--radius-lg);
     border: 1px solid var(--border);
     box-shadow: 0 0.75rem 2rem rgba(0, 0, 0, 0.3);
+    animation: picker-in var(--transition-base);
+    overflow: hidden;
+  }
+
+  .picker-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1rem;
+  }
+
+  .picker-title {
+    margin: 0;
+    font-size: 1rem;
+    font-weight: 650;
+    color: var(--text-primary);
+  }
+
+  .picker-subtitle {
+    margin: 0.25rem 0 0;
+    font-size: 0.8125rem;
+    color: var(--text-muted);
+  }
+
+  .close-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2rem;
+    height: 2rem;
+    padding: 0;
+    color: var(--text-secondary);
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-full);
+    cursor: pointer;
+    font-size: 1.25rem;
+    line-height: 1;
+  }
+
+  .close-button:hover {
+    color: var(--text-primary);
+    border-color: var(--border-strong);
   }
 
   .path-form {
@@ -262,16 +349,26 @@
   @keyframes picker-in {
     from {
       opacity: 0;
-      transform: translateX(-0.25rem);
+      transform: translateY(0.5rem) scale(0.98);
     }
     to {
       opacity: 1;
-      transform: translateX(0);
+      transform: translateY(0) scale(1);
+    }
+  }
+
+  @keyframes backdrop-in {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
     }
   }
 
   @media (prefers-reduced-motion: reduce) {
-    .picker {
+    .picker-backdrop,
+    :global(.picker-surface) {
       animation: none;
     }
     .path-submit,

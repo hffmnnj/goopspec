@@ -16,7 +16,6 @@
   } from '@hugeicons/core-free-icons';
 
   import GlassSurface from '../GlassSurface.svelte';
-  import AddProjectPicker from '../sessions/AddProjectPicker.svelte';
   import { projectColor } from '../sessions/project-rail.js';
 
   import { projects as defaultProjects, type ProjectsStore } from '$lib/stores/projects.svelte.js';
@@ -26,7 +25,7 @@
   import { ui } from '$lib/stores/ui.svelte.js';
   import { createClient } from '$lib/api/client.js';
   import { fetchSessions } from '$lib/api/sessions.js';
-  import type { OpenCodeClient, Project } from '$lib/api/types.js';
+  import type { OpenCodeClient } from '$lib/api/types.js';
   import { defaultShortcuts } from '$lib/keyboard/shortcuts.js';
   import { formatCombo } from '$lib/keyboard/registry.js';
   import { projectRoute, sessionRoute } from '$lib/routing/navigation.js';
@@ -63,7 +62,6 @@
 
   const apiClient = $derived(client ?? createClient());
 
-  let pickerOpen = $state(false);
   let recentEntries = $state<ProjectSession[]>([]);
 
   const opened = $derived(projectsStore.openedProjects);
@@ -108,17 +106,7 @@
   }
 
   function openPicker(): void {
-    pickerOpen = true;
-  }
-
-  function closePicker(): void {
-    pickerOpen = false;
-  }
-
-  function handlePick(project: Project): void {
-    projectsStore.openProject(project);
-    pickerOpen = false;
-    navigate(projectRoute(project));
+    ui.addProjectOpen = true;
   }
 
   async function handleNewSession(): Promise<void> {
@@ -192,14 +180,6 @@
             <HugeiconsIcon icon={ArrowRight01Icon} size={18} strokeWidth={1.5} color="currentColor" />
           </span>
         </button>
-        {#if pickerOpen}
-          <AddProjectPicker
-            available={projectsStore.unopenedAvailable()}
-            orientation="horizontal"
-            onpick={handlePick}
-            onclose={closePicker}
-          />
-        {/if}
       </div>
 
       <button type="button" class="action-card action-card--accent" onclick={handleNewSession}>

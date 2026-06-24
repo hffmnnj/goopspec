@@ -12,8 +12,10 @@ import type {
   OpenCodeConfig,
   FileDiff,
   Agent,
+  SlashCommand,
   Provider,
   Project,
+  RunCommandInput,
   SSEEvent,
   SendMessageInput,
   Session,
@@ -277,6 +279,30 @@ function normalizeAgents(payload: unknown): Agent[] {
   return Object.entries(asRecord(source))
     .map(([id, agent]) => normalizeAgent(agent, id))
     .filter((agent): agent is Agent => agent !== undefined);
+}
+
+function normalizeCommand(value: unknown, fallbackName = ''): SlashCommand | undefined {
+  const raw = asRecord(value);
+  const name = asString(raw.name ?? raw.id, fallbackName);
+  if (!name) return undefined;
+  return {
+    name,
+    description: asOptionalString(raw.description),
+    agent: asOptionalString(raw.agent),
+    model: asOptionalString(raw.model),
+    template: asOptionalString(raw.template),
+    ...(typeof raw.subtask === 'boolean' ? { subtask: raw.subtask } : {}),
+  };
+}
+
+function normalizeCommands(payload: unknown): SlashCommand[] {
+  const source = asRecord(payload).commands ?? payload;
+  if (Array.isArray(source)) {
+    return source.map((command) => normalizeCommand(command)).filter((command): command is SlashCommand => command !== undefined);
+  }
+  return Object.entries(asRecord(source))
+    .map(([name, command]) => normalizeCommand(command, name))
+    .filter((command): command is SlashCommand => command !== undefined);
 }
 
 function messageIdFrom(raw: RawRecord): string | undefined {
@@ -546,6 +572,12 @@ export function createClient(baseUrl?: string): OpenCodeClient {
       }
     },
     listAgents: async () => normalizeAgents(await request<unknown>('agent')),
+    listCommands: async () => normalizeCommands(await request<unknown>('command')),
+    runCommand: (sessionId: string, input: RunCommandInput, directory?: string) =>
+      request<unknown>(`session/${encodeURIComponent(sessionId)}/command`, {
+        method: 'POST',
+        body: JSON.stringify(input)
+      }, directoryParam(directory)).then(normalizeMessage),
     getConfig: () => request<OpenCodeConfig>('config'),
     updateConfig: (patch: Partial<OpenCodeConfig>) =>
       request<OpenCodeConfig>('config', { method: 'PATCH', body: JSON.stringify(patch) }),

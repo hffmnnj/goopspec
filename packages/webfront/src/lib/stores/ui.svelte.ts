@@ -11,11 +11,13 @@ class UiStore {
   paletteOpen = $state(false);
   helpOpen = $state(false);
   settingsOpen = $state(false);
+  addProjectOpen = $state(false);
 
   closeAll(): void {
     this.paletteOpen = false;
     this.helpOpen = false;
     this.settingsOpen = false;
+    this.addProjectOpen = false;
   }
 
   togglePalette(): void {
@@ -28,6 +30,10 @@ class UiStore {
 
   toggleSettings(): void {
     this.settingsOpen = !this.settingsOpen;
+  }
+
+  toggleAddProject(): void {
+    this.addProjectOpen = !this.addProjectOpen;
   }
 }
 

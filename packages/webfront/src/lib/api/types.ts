@@ -54,6 +54,28 @@ export interface Agent {
   [key: string]: unknown;
 }
 
+/**
+ * An OpenCode slash command, as returned by `GET /command`.
+ *
+ * Mirrors the SDK `Command` shape: `name` is the bare command (no leading
+ * slash), `template` is the prompt template the server expands when the command
+ * runs, and `agent`/`model` optionally pin the run to a specific agent/model.
+ */
+export interface SlashCommand {
+  /** Bare command name without the leading slash (e.g. `help`). */
+  name: string;
+  /** Human-readable description shown in the completion menu. */
+  description?: string;
+  /** Agent the command runs under, when pinned. */
+  agent?: string;
+  /** Model the command runs under, when pinned. */
+  model?: string;
+  /** Prompt template the server expands; presence hints the command takes arguments. */
+  template?: string;
+  /** Whether the command spawns a subtask. */
+  subtask?: boolean;
+}
+
 export interface OpenCodeConfig {
   provider?: string;
   model?: string;
@@ -141,6 +163,18 @@ export interface SendMessageInput {
   parts?: MessagePart[];
 }
 
+/** Request body for `POST /session/{id}/command` (execute a slash command). */
+export interface RunCommandInput {
+  /** Bare command name without the leading slash. */
+  command: string;
+  /** Free-text arguments following the command name. */
+  arguments: string;
+  /** Agent override; falls back to the server default when omitted. */
+  agent?: string;
+  /** Model override in `providerID/modelID` form. */
+  model?: string;
+}
+
 export interface EventHandlers {
   onEvent?: (event: SSEEvent) => void;
   onError?: (error: Error) => void;
@@ -167,9 +201,11 @@ export interface OpenCodeClient {
   getMessages(sessionId: string): Promise<Message[]>;
   getSessionDiff(sessionId: string): Promise<FileDiff[]>;
   sendMessage(sessionId: string, input: SendMessageInput, directory?: string): Promise<Message>;
+  runCommand(sessionId: string, input: RunCommandInput, directory?: string): Promise<Message>;
   subscribeEvents(sessionId: string, handlers: EventHandlers): Unsubscribe;
   listProviders(): Promise<Provider[]>;
   listAgents(): Promise<Agent[]>;
+  listCommands(): Promise<SlashCommand[]>;
   getConfig(): Promise<OpenCodeConfig>;
   updateConfig(patch: Partial<OpenCodeConfig>): Promise<OpenCodeConfig>;
   readFile(path: string): Promise<string>;

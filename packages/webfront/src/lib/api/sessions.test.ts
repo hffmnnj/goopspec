@@ -186,6 +186,29 @@ describe('sessions store', () => {
     expect(client.createSession).toHaveBeenCalledWith({ directory: '/repo/one', title: 'Created' });
   });
 
+  it('creates local fallback sessions in the same unscoped directory used by load', async () => {
+    projectStore.activeProject = { id: 'local', worktree: '/repo/local', time: { created: 1 } };
+    const created = session({ id: 'local-new', title: 'Created' });
+    (client.createSession as ReturnType<typeof mock>).mockImplementation(() => Promise.resolve(created));
+
+    await store.create({ title: 'Created' });
+
+    expect(client.createSession).toHaveBeenCalledWith({ title: 'Created' });
+  });
+
+  it('keeps an optimistically-created session visible when a scoped reload is stale', async () => {
+    projectStore.activeProject = { id: 'p1', worktree: '/repo/one', time: { created: 1 } };
+    const created = session({ id: 'stale-new', title: 'Created' });
+    (client.createSession as ReturnType<typeof mock>).mockImplementation(() => Promise.resolve(created));
+    (client.listSessions as ReturnType<typeof mock>).mockImplementation(() => Promise.resolve([]));
+
+    await store.create({ title: 'Created' });
+    await store.load();
+
+    expect(client.listSessions).toHaveBeenCalledWith('/repo/one');
+    expect(store.sessions.map((s) => s.id)).toContain('stale-new');
+  });
+
   it('reloads sessions when the active project changes', async () => {
     const stop = store.initProjectWatcher();
     projectStore.setActiveProject({ id: 'p1', worktree: '/repo/one', time: { created: 1 } });
