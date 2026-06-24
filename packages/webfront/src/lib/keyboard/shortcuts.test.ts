@@ -42,10 +42,20 @@ describe('defaultShortcuts', () => {
 
   it('cancel closes open overlays', async () => {
     ui.paletteOpen = true;
+    ui.addProjectOpen = true;
     registerDefaultShortcuts(registry);
     const e = keyboardEvent({ key: 'Escape', preventDefault: () => {} });
     await registry.handle(e);
     expect(ui.paletteOpen).toBe(false);
+    expect(ui.addProjectOpen).toBe(false);
+  });
+
+  it('tracks add-project as a global overlay flag', () => {
+    ui.addProjectOpen = false;
+    ui.toggleAddProject();
+    expect(ui.addProjectOpen).toBe(true);
+    ui.closeAll();
+    expect(ui.addProjectOpen).toBe(false);
   });
 
   it('interrupt calls chat.interrupt only while streaming', () => {

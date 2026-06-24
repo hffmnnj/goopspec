@@ -144,16 +144,8 @@ export const defaultShortcuts: Shortcut[] = [
     description: 'Cancel / close overlays',
     category: 'General',
     handler: () => {
-      if (ui.paletteOpen) {
-        ui.paletteOpen = false;
-        return true;
-      }
-      if (ui.helpOpen) {
-        ui.helpOpen = false;
-        return true;
-      }
-      if (ui.settingsOpen) {
-        ui.settingsOpen = false;
+      if (ui.paletteOpen || ui.helpOpen || ui.settingsOpen || ui.addProjectOpen) {
+        ui.closeAll();
         return true;
       }
       if (chat.streaming) {
