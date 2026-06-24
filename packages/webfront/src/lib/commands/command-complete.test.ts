@@ -36,6 +36,16 @@ describe('detectCommandTrigger', () => {
     expect(detectCommandTrigger('', 0)).toBeNull();
   });
 
+  it('does not trigger on @-file mentions (coexistence)', () => {
+    expect(detectCommandTrigger('@src/app.ts', 11)).toBeNull();
+    expect(detectCommandTrigger('look at @file', 13)).toBeNull();
+  });
+
+  it('closes when the slash is deleted', () => {
+    // After deleting the leading slash, the value no longer starts with "/".
+    expect(detectCommandTrigger('help', 4)).toBeNull();
+  });
+
   it('uses the cursor, not the whole value, for the query', () => {
     // Cursor after "/he" even though more text follows.
     expect(detectCommandTrigger('/help', 3)).toEqual({ query: 'he', start: 0 });
