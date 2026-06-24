@@ -6,6 +6,7 @@
   import MessageList from './MessageList.svelte';
   import MessageInput from './MessageInput.svelte';
   import ModelSwitcher from '$lib/components/ModelSwitcher.svelte';
+  import ShareButton from '$lib/components/sessions/ShareButton.svelte';
   import EmptyState from '$lib/components/states/EmptyState.svelte';
   import ErrorState from '$lib/components/states/ErrorState.svelte';
 
@@ -49,6 +50,11 @@
   <header class="chat-header">
     <h1 class="chat-title">{title}</h1>
     <div class="header-slot">
+      <ShareButton
+        {title}
+        sessionId={chat.activeSessionId}
+        messages={chat.messages}
+      />
       <ModelSwitcher client={switcherClient} />
     </div>
   </header>

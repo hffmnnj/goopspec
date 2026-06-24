@@ -186,6 +186,7 @@
     bind:this={triggerEl}
     type="button"
     class="trigger"
+    data-shortcut="workspace-switcher"
     aria-haspopup="menu"
     aria-expanded={open}
     aria-controls={open ? 'workspace-menu' : undefined}

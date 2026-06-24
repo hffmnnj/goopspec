@@ -59,4 +59,29 @@ describe('defaultShortcuts', () => {
 
     chat.streaming = false;
   });
+
+  it('focus-session-list targets the [data-shortcut="session-list"] element and focuses it', () => {
+    const shortcut = defaultShortcuts.find((s) => s.id === 'focus-session-list');
+    expect(shortcut).toBeDefined();
+
+    const calls: string[] = [];
+    let focused = false;
+    const fakeEl = { focus: () => (focused = true) };
+    const original = (globalThis as { document?: unknown }).document;
+    (globalThis as { document?: unknown }).document = {
+      querySelector(selector: string) {
+        calls.push(selector);
+        return fakeEl;
+      },
+    };
+
+    try {
+      const handled = shortcut?.handler(keyboardEvent({ key: 's', ctrlKey: true }));
+      expect(handled).toBe(true);
+      expect(calls).toContain('[data-shortcut="session-list"]');
+      expect(focused).toBe(true);
+    } finally {
+      (globalThis as { document?: unknown }).document = original;
+    }
+  });
 });

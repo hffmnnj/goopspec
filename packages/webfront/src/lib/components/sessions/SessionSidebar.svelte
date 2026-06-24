@@ -92,7 +92,7 @@
 
   <SessionSearch bind:value={searchQuery} />
 
-  <div class="list-region">
+  <div class="list-region" data-shortcut="session-list" tabindex="-1" aria-label="Session list region">
     {#if isLoading && items.length === 0}
       <div class="skeleton-list" aria-busy="true" aria-label="Loading sessions">
         {#each Array.from({ length: SKELETON_COUNT }) as _, i (i)}
@@ -216,6 +216,16 @@
     overflow-y: auto;
     overscroll-behavior: contain;
     padding: 0 0.0625rem;
+    border-radius: var(--radius-sm);
+  }
+
+  .list-region:focus {
+    outline: none;
+  }
+
+  .list-region:focus-visible {
+    outline: 2px solid var(--focus-ring);
+    outline-offset: -2px;
   }
 
   .list {
