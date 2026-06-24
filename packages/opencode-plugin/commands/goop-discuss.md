@@ -36,10 +36,16 @@ goop_reference({ name: "discovery-interview" })
 3. Ask all seven discovery categories (vision, must-haves, constraints, out-of-scope, assumptions, risks, and atomic PR preference) directly. Use the `question` tool for structured answers; mark exactly one option `(Recommended)`.
 4. Probe until each category has specifics. Empty must-haves, out-of-scope, or risks are invalid.
 5. Summarize and confirm with the user.
-6. Write REQUIREMENTS.md via `goop_write_db({ doc_type: "requirements", content: "..." })` and call `goop_state({ action: "complete-interview" })`. The tool renders the markdown sidecar automatically.
+6. Ask the user about atomic PRs using the `question` tool before writing REQUIREMENTS.md:
+   > **Do you want to use atomic PRs for this workflow?** (One PR per wave, stacked and merged newest-first at accept time — Wave N → Wave N-1 → … → Wave 1 → main.)
+   - `Yes — one PR per wave (Recommended)`
+   - `No — single PR for all work`
+
+   Write the answer into the `## Atomic PR Strategy` section of REQUIREMENTS.md. Then call `goop_state({ action: "set-atomic-pr", enabled: <true|false> })` to persist the choice in state.
+7. Write REQUIREMENTS.md via `goop_write_db({ doc_type: "requirements", content: "..." })` and call `goop_state({ action: "complete-interview" })`. The tool renders the markdown sidecar automatically.
    > REQUIREMENTS.md must include a `## Atomic PR Strategy` section.
-7. Remind the user that with Atomic PRs, one PR is opened per wave during `/goop-execute`, and `/goop-accept` will offer to merge the full stack in order.
-8. Suggest `/goop-plan`.
+8. Remind the user that with Atomic PRs, one PR is opened per wave during `/goop-execute`, and `/goop-accept` will offer to merge the full stack **newest-first** (Wave N → Wave 1 → main).
+9. Suggest `/goop-plan`.
 
 ## Lazy autopilot
 
@@ -48,7 +54,9 @@ If `workflow.lazyAutopilot == true`, infer all six categories from the user's pr
 1. Create and bind a **new** workflowId (never reuse the active workflow).
 2. Checkout a new git branch: `git checkout -b <workflowId>`.
 3. Write REQUIREMENTS.md via `goop_write_db({ doc_type: "requirements", content: "..." })`.
-   - Infer atomic PR preference as `Yes` (one PR per wave) unless the user's prompt explicitly opts out. Include `## Atomic PR Strategy: Yes — one PR per wave` in the inferred REQUIREMENTS.md.
+   - Decide atomic PR preference by **inferred wave count**: ≥ 3 waves → Yes; ≤ 2 waves → No. Do not always default to Yes.
+   - Include `## Atomic PR Strategy: Yes — one PR per wave` if enabled, or `## Atomic PR Strategy: No — single PR` if not.
+   - Immediately after writing REQUIREMENTS.md, call `goop_state({ action: "set-atomic-pr", enabled: <true|false> })` to persist the decision in state.
 4. Immediately call:
 
 ```
@@ -59,7 +67,7 @@ mcp_slashcommand({ command: "/goop-plan" })
 
 - All commits for this workflow land on per-wave branches stacked on each other.
 - With Atomic PRs = Yes, a PR is opened for each wave during `/goop-execute` (Wave N → Wave N-1; Wave 1 → main) — not all at `/goop-accept`.
-- `/goop-accept` presents the full PR stack summary and offers to merge the PRs in order. Never merge before acceptance is confirmed.
+- `/goop-accept` presents the full PR stack summary and offers to merge the PRs **newest-first** (Wave N → Wave N-1 → … → Wave 1 → main). Never merge before acceptance is confirmed.
 
 ## Anti-patterns
 
@@ -70,3 +78,6 @@ mcp_slashcommand({ command: "/goop-plan" })
 - Start writing files before the workflow is bound and the branch is checked out.
 - Announce a transition without calling `mcp_slashcommand`.
 - Write REQUIREMENTS.md without a `## Atomic PR Strategy` section.
+- Skip the atomic PR `question` tool call in interactive mode.
+- Forget to call `goop_state({ action: "set-atomic-pr", enabled: ... })` after writing REQUIREMENTS.md.
+- Default lazy autopilot atomic PRs to Yes without checking inferred wave count.

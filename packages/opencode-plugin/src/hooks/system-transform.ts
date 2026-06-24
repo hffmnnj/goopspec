@@ -94,6 +94,10 @@ export function buildStateBlock(workflow: WorkflowState, workflowId: string): st
     lines.push(`autopilot: true${workflow.lazyAutopilot ? " (lazy)" : ""}`);
   }
 
+  if (workflow.atomicPREnabled !== undefined) {
+    lines.push(`atomic_pr: ${workflow.atomicPREnabled}`);
+  }
+
   if (workflow.checkpoint) {
     lines.push(`checkpoint: ${workflow.checkpoint}`);
   }

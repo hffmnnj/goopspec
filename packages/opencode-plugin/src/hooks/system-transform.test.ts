@@ -78,6 +78,27 @@ describe("buildStateBlock", () => {
 
     expect(block).toContain("checkpoint: wave-2-complete");
   });
+
+  it("includes atomic_pr when atomicPREnabled is true", () => {
+    const wf = createDefaultWorkflowState({ atomicPREnabled: true });
+    const block = buildStateBlock(wf, "test");
+
+    expect(block).toContain("atomic_pr: true");
+  });
+
+  it("includes atomic_pr when atomicPREnabled is false", () => {
+    const wf = createDefaultWorkflowState({ atomicPREnabled: false });
+    const block = buildStateBlock(wf, "test");
+
+    expect(block).toContain("atomic_pr: false");
+  });
+
+  it("omits atomic_pr when atomicPREnabled is undefined", () => {
+    const wf = createDefaultWorkflowState();
+    const block = buildStateBlock(wf, "test");
+
+    expect(block).not.toContain("atomic_pr");
+  });
 });
 
 // ---------------------------------------------------------------------------

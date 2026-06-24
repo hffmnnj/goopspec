@@ -62,11 +62,13 @@ Every risk needs impact, likelihood, and mitigation.
 
 ### 7. Atomic PR Strategy
 
-- Would you like atomic PRs for this workflow? One PR per wave, merged before the next begins.
-- Options: `Yes, one PR per wave (Recommended)` / `No, single PR for all work` / `Custom`.
-- Answer is written to REQUIREMENTS.md under `## Atomic PR Strategy`.
+- Would you like atomic PRs for this workflow? One PR per wave, stacked and merged newest-first at accept time (Wave N → Wave N-1 → … → Wave 1 → main).
+- Options: `Yes, one PR per wave (Recommended)` / `No, single PR for all work`.
+- Answer is written to REQUIREMENTS.md under `## Atomic PR Strategy` AND persisted in state via `goop_state({ action: "set-atomic-pr", enabled: <true|false> })`.
 - If `Yes`: the planner will add `**PR:**` and `**Branch:**` fields to every wave in BLUEPRINT.md.
 - If `No`: all work lands in one branch, one PR at the end.
+
+> **Interactive mode**: present this as a `question` tool call with options `Yes — one PR per wave (Recommended)` and `No — single PR`. Record the answer in REQUIREMENTS.md and call `goop_state({ action: "set-atomic-pr", enabled: true/false })` immediately after.
 
 ## Interview Flow
 
@@ -104,8 +106,9 @@ When `workflow.lazyAutopilot == true`:
 - Do not use the `question` tool.
 - Infer a `feat/kebab-case` branch name and create it silently.
 - Write REQUIREMENTS.md via `goop_write_db({ doc_type: "requirements", content: "..." })` directly.
-- Default atomic PR preference to `Yes` (one PR per wave) unless the user's prompt explicitly opts out.
-- Include `## Atomic PR Strategy: Yes — one PR per wave` in the inferred REQUIREMENTS.md.
+- Decide atomic PR preference by inferred wave count: **≥ 3 waves → Yes; ≤ 2 waves → No**. Do not always default to Yes.
+- Include `## Atomic PR Strategy: Yes — one PR per wave` if enabled, or `## Atomic PR Strategy: No — single PR` if not.
+- Record the decision via `goop_state({ action: "set-atomic-pr", enabled: <true|false> })` immediately after writing REQUIREMENTS.md.
 - Proceed to `/goop-plan` immediately without a confirmation gate.
 
 ## REQUIREMENTS.md Template

@@ -56,7 +56,7 @@ main ← feat/wave-1 ← feat/wave-2 ← feat/wave-3 ← …
 
 Each PR targets the previous branch. When GitHub merges an upstream PR, it automatically re-targets the next PR in the stack to the new base.
 
-To merge a stack: merge Wave 1 first, then Wave 2 (now re-targeted to main), and so on in order. The accept step handles this automatically when you choose to merge.
+To merge a stack: merge Wave N (newest) first, then Wave N-1, cascading until Wave 1 merges into main. Each PR carries its accumulated changes into the predecessor branch; Wave 1 delivers everything to main last. **Before (wrong):** Wave 1 first → Wave N last. **After (correct):** Wave N first → Wave 1 last → main. The accept step handles this automatically when you choose to merge.
 
 ## Single-Branch Parallelism Rule
 

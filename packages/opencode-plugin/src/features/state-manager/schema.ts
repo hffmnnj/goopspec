@@ -48,6 +48,7 @@ export function createDefaultWorkflowState(overrides: Partial<WorkflowState> = {
     totalWaves: 0,
     autopilot: false,
     lazyAutopilot: false,
+    atomicPREnabled: undefined,
     ...overrides,
   };
 }

@@ -44,7 +44,7 @@ Before wave decomposition is finalized, validate:
 - Every task maps to a must-have or an explicit enabler.
 - Out-of-scope, assumptions, and risks are captured.
 - The blueprint has 2–4 tasks per wave and clear verification steps.
-- If atomic PRs enabled (REQUIREMENTS.md `## Atomic PR Strategy` is `Yes`): every wave in BLUEPRINT.md must have `**PR:** <title>` and `**Branch:** <name>` fields.
+- If atomic PRs enabled — check `goop_state({ action: "get" })` for `atomicPREnabled: true` first; if undefined, fall back to `## Atomic PR Strategy` in REQUIREMENTS.md — every wave in BLUEPRINT.md must have `**PR:** <title>` and `**Branch:** <name>` fields.
 
 If validation fails, send the planner back to fix gaps.
 
@@ -79,3 +79,4 @@ mcp_slashcommand({ command: "/goop-execute" })
 - Lock a spec that does not cover every must-have.
 - Announce `/goop-execute` without calling `mcp_slashcommand`.
 - Produce a BLUEPRINT.md without `**PR:**` and `**Branch:**` wave fields when atomic PRs are enabled.
+- Read atomic PR preference only from REQUIREMENTS.md when `atomicPREnabled` is present in state.
