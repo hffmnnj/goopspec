@@ -32,10 +32,14 @@ function getChannel(): BroadcastChannel | null {
 }
 
 class ConnectionStore {
+  private static readonly HEALTH_CHECK_INTERVAL_MS = 30_000;
+
   private client: OpenCodeClient;
   private channel: BroadcastChannel | null;
   private abortController: AbortController | null = null;
   private globalEventsSubscription: { close(): void } | null = null;
+  private healthCheckInterval: ReturnType<typeof setInterval> | null = null;
+  private lifecycleId = 0;
 
   current = $state<ConnectionState>({
     status: 'disconnected',
@@ -57,7 +61,23 @@ class ConnectionStore {
         this.setError(data.error);
       }
     });
+
+    if (typeof document !== 'undefined') {
+      document.addEventListener('visibilitychange', this.handleVisibilityChange);
+    }
   }
+
+  private handleVisibilityChange = (): void => {
+    if (typeof document === 'undefined') return;
+    if (document.hidden) {
+      this.stopHealthCheck();
+      return;
+    }
+
+    if (this.current.status === 'connected') {
+      this.startHealthCheck();
+    }
+  };
 
   private setStatus(status: ConnectionStatus, error: string | null = null): void {
     this.current.status = status;
@@ -70,6 +90,7 @@ class ConnectionStore {
     this.current.retryCount = 0;
     this.abortController = null;
     this.startGlobalEventsSubscription();
+    this.startHealthCheck();
   }
 
   private setError(error: string): void {
@@ -77,11 +98,12 @@ class ConnectionStore {
     this.current.error = error;
     this.abortController = null;
     this.stopGlobalEventsSubscription();
+    this.stopHealthCheck();
   }
 
-  private async attemptOnce(signal: AbortSignal): Promise<void> {
+  private async attemptOnce(signal: AbortSignal, lifecycleId: number): Promise<void> {
     await this.client.getConfig();
-    if (signal.aborted) return;
+    if (signal.aborted || lifecycleId !== this.lifecycleId) return;
     this.setConnected();
   }
 
@@ -113,12 +135,39 @@ class ConnectionStore {
     return type.includes('disconnect') || type === 'close' || type === 'closed' || type.endsWith('.close') || type.endsWith('.closed');
   }
 
+  private startHealthCheck(): void {
+    this.stopHealthCheck();
+    if (typeof document !== 'undefined' && document.hidden) return;
+
+    this.healthCheckInterval = setInterval(() => {
+      void this.runHealthCheck();
+    }, ConnectionStore.HEALTH_CHECK_INTERVAL_MS);
+  }
+
+  private stopHealthCheck(): void {
+    if (this.healthCheckInterval !== null) {
+      clearInterval(this.healthCheckInterval);
+      this.healthCheckInterval = null;
+    }
+  }
+
+  private async runHealthCheck(): Promise<void> {
+    if (this.current.status !== 'connected') return;
+
+    try {
+      await this.client.getConfig();
+    } catch (err) {
+      this.handleConnectionDrop(err instanceof Error ? err.message : 'Connection health check failed');
+    }
+  }
+
   private handleConnectionDrop(message: string): void {
     if (this.current.status === 'connecting') return;
 
     this.abortController?.abort();
     this.abortController = null;
     this.stopGlobalEventsSubscription();
+    this.stopHealthCheck();
     this.setStatus('disconnected', message);
     void this.connectWithRetry();
   }
@@ -128,8 +177,10 @@ class ConnectionStore {
    * `connected` or `error`. A previous in-flight attempt is aborted.
    */
   async connect(): Promise<void> {
+    const lifecycleId = ++this.lifecycleId;
     this.abortController?.abort();
     this.stopGlobalEventsSubscription();
+    this.stopHealthCheck();
     const controller = new AbortController();
     this.abortController = controller;
 
@@ -138,9 +189,9 @@ class ConnectionStore {
     this.setStatus('connecting');
 
     try {
-      await this.attemptOnce(controller.signal);
+      await this.attemptOnce(controller.signal, lifecycleId);
     } catch (err) {
-      if (controller.signal.aborted) return;
+      if (controller.signal.aborted || lifecycleId !== this.lifecycleId) return;
       this.setError(err instanceof Error ? err.message : 'Connection failed');
     }
   }
@@ -150,8 +201,10 @@ class ConnectionStore {
    * succeeds, the attempt count is exhausted, or the store is reset.
    */
   async connectWithRetry(maxRetries = 5): Promise<void> {
+    const lifecycleId = ++this.lifecycleId;
     this.abortController?.abort();
     this.stopGlobalEventsSubscription();
+    this.stopHealthCheck();
     this.current.serverUrl = getServerUrl();
     this.current.retryCount = 0;
     this.setStatus('connecting');
@@ -162,10 +215,10 @@ class ConnectionStore {
       this.current.retryCount = attempt;
 
       try {
-        await this.attemptOnce(controller.signal);
+        await this.attemptOnce(controller.signal, lifecycleId);
         return;
       } catch (err) {
-        if (controller.signal.aborted) return;
+        if (controller.signal.aborted || lifecycleId !== this.lifecycleId) return;
         const isLast = attempt === maxRetries;
         const message = err instanceof Error ? err.message : 'Connection failed';
 
@@ -177,6 +230,7 @@ class ConnectionStore {
         this.setStatus('connecting', `${message} — retrying…`);
         this.current.retryCount = attempt;
         await this.delay(2 ** attempt * 250);
+        if (lifecycleId !== this.lifecycleId) return;
       }
     }
   }
@@ -187,9 +241,11 @@ class ConnectionStore {
 
   /** Reset to disconnected and cancel any in-flight attempt. */
   disconnect(): void {
+    this.lifecycleId += 1;
     this.abortController?.abort();
     this.abortController = null;
     this.stopGlobalEventsSubscription();
+    this.stopHealthCheck();
     this.setStatus('disconnected');
     this.current.error = null;
     this.current.retryCount = 0;

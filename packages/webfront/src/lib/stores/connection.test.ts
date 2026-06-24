@@ -4,6 +4,34 @@ import type { GlobalEvent, Message, MessageRole, OpenCodeClient, SendMessageInpu
 
 const assistantRole: MessageRole = 'assistant';
 
+const realSetInterval = globalThis.setInterval;
+const realClearInterval = globalThis.clearInterval;
+let intervalCallbacks = new Map<number, () => void>();
+let nextIntervalId = 1;
+
+function installFakeIntervals(): void {
+  intervalCallbacks = new Map();
+  nextIntervalId = 1;
+  globalThis.setInterval = ((handler: TimerHandler) => {
+    const id = nextIntervalId++;
+    if (typeof handler === 'function') intervalCallbacks.set(id, handler as () => void);
+    return id as unknown as ReturnType<typeof setInterval>;
+  }) as unknown as typeof setInterval;
+  globalThis.clearInterval = ((id?: ReturnType<typeof setInterval>) => {
+    intervalCallbacks.delete(Number(id));
+  }) as typeof clearInterval;
+}
+
+function tickFakeIntervals(): void {
+  for (const callback of Array.from(intervalCallbacks.values())) callback();
+}
+
+function restoreFakeIntervals(): void {
+  globalThis.setInterval = realSetInterval;
+  globalThis.clearInterval = realClearInterval;
+  intervalCallbacks.clear();
+}
+
 describe('ConnectionStore', () => {
   let client: OpenCodeClient;
   let store: ReturnType<typeof createConnectionStore>;
@@ -42,6 +70,7 @@ describe('ConnectionStore', () => {
 
   afterEach(() => {
     store.disconnect();
+    restoreFakeIntervals();
   });
 
   it('starts disconnected', () => {
@@ -155,6 +184,51 @@ describe('ConnectionStore', () => {
     expect(store.current.status).toBe('connected');
     expect(store.current.error).toBeNull();
     expect(store.current.retryCount).toBe(0);
+  });
+
+  it('runs a health check after a successful connection', async () => {
+    installFakeIntervals();
+    const getConfig = mock(() => Promise.resolve({}));
+    client.getConfig = getConfig;
+
+    await store.connect();
+    tickFakeIntervals();
+    await Promise.resolve();
+
+    expect(getConfig).toHaveBeenCalledTimes(2);
+    expect(store.current.status).toBe('connected');
+  });
+
+  it('reconnects when a health check fails', async () => {
+    installFakeIntervals();
+    let calls = 0;
+    client.getConfig = mock(() => {
+      calls += 1;
+      if (calls === 2) return Promise.reject(new Error('health down'));
+      return Promise.resolve({});
+    });
+
+    await store.connect();
+    tickFakeIntervals();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(calls).toBe(3);
+    expect(store.current.status).toBe('connected');
+    expect(client.subscribeGlobalEvents).toHaveBeenCalledTimes(2);
+  });
+
+  it('clears the health-check interval on disconnect', async () => {
+    installFakeIntervals();
+    const getConfig = mock(() => Promise.resolve({}));
+    client.getConfig = getConfig;
+
+    await store.connect();
+    store.disconnect();
+    tickFakeIntervals();
+    await Promise.resolve();
+
+    expect(getConfig).toHaveBeenCalledTimes(1);
   });
 });
 
