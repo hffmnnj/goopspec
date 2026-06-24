@@ -14,7 +14,7 @@ export interface ProviderModel {
 /** Fetch the configured providers (and their models) from the server. */
 export async function fetchProviders(client: OpenCodeClient): Promise<Provider[]> {
   const providers = await client.listProviders();
-  return [...providers].sort((a, b) => a.name.localeCompare(b.name));
+  return (Array.isArray(providers) ? [...providers] : []).sort((a, b) => a.name.localeCompare(b.name));
 }
 
 /**
@@ -23,8 +23,8 @@ export async function fetchProviders(client: OpenCodeClient): Promise<Provider[]
  * settings panel and the model switcher.
  */
 export function flattenModels(providers: Provider[]): ProviderModel[] {
-  return providers.flatMap((provider) =>
-    provider.models.map((model) => ({
+  return (Array.isArray(providers) ? providers : []).flatMap((provider) =>
+    (Array.isArray(provider.models) ? provider.models : []).map((model) => ({
       providerId: provider.id,
       providerName: provider.name,
       model,
@@ -34,8 +34,9 @@ export function flattenModels(providers: Provider[]): ProviderModel[] {
 
 /** Find a single model (with its provider context) by model id. */
 export function findModel(providers: Provider[], modelId: string): ProviderModel | undefined {
-  for (const provider of providers) {
-    const model = provider.models.find((m) => m.id === modelId);
+  for (const provider of Array.isArray(providers) ? providers : []) {
+    const models = Array.isArray(provider.models) ? provider.models : [];
+    const model = models.find((m) => m.id === modelId);
     if (model) {
       return { providerId: provider.id, providerName: provider.name, model };
     }
@@ -49,23 +50,26 @@ export function findModelInProvider(
   providerId: string,
   modelId: string
 ): Model | undefined {
-  return providers
+  return (Array.isArray(providers) ? providers : [])
     .find((provider) => provider.id === providerId)
-    ?.models.find((model) => model.id === modelId);
+    ?.models?.find((model) => model.id === modelId);
 }
 
 /** Group models by provider id, returning a map of providerId → models. */
 export function groupModelsByProvider(providers: Provider[]): Map<string, Model[]> {
   const grouped = new Map<string, Model[]>();
-  for (const provider of providers) {
-    grouped.set(provider.id, [...provider.models]);
+  for (const provider of Array.isArray(providers) ? providers : []) {
+    grouped.set(provider.id, Array.isArray(provider.models) ? [...provider.models] : []);
   }
   return grouped;
 }
 
 /** Total number of models across all providers. */
 export function countModels(providers: Provider[]): number {
-  return providers.reduce((total, provider) => total + provider.models.length, 0);
+  return (Array.isArray(providers) ? providers : []).reduce(
+    (total, provider) => total + (Array.isArray(provider.models) ? provider.models.length : 0),
+    0
+  );
 }
 
 /**
