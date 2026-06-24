@@ -2,6 +2,7 @@ import { getServerUrl } from './config';
 import type {
   CreateSessionOptions,
   EventHandlers,
+  FileEntry,
   Message,
   MessagePart,
   OpenCodeClient,
@@ -151,6 +152,62 @@ export function parseSSEEvent(type: string, data: string): SSEEvent | undefined 
   }
 }
 
+function joinPath(parent: string, name: string): string {
+  if (!parent || parent === '.' || parent === '/') return name;
+  return `${parent.replace(/\/+$/, '')}/${name}`;
+}
+
+function isDirectoryEntry(raw: RawRecord): boolean {
+  const type = asOptionalString(raw.type ?? raw.kind);
+  if (type) return type === 'directory' || type === 'dir' || type === 'folder';
+  if (typeof raw.isDirectory === 'boolean') return raw.isDirectory;
+  if (typeof raw.directory === 'boolean') return raw.directory;
+  return Array.isArray(raw.children) || raw.children != null;
+}
+
+/** Normalize a single server entry (object or bare string) into a {@link FileEntry}. */
+function toFileEntry(value: unknown, parentPath: string): FileEntry {
+  if (typeof value === 'string') {
+    const name = value.replace(/\/+$/, '').split('/').pop() ?? value;
+    return { name, path: joinPath(parentPath, name), type: value.endsWith('/') ? 'directory' : 'file' };
+  }
+
+  const raw = asRecord(value);
+  const path = asString(raw.path ?? raw.fullPath, '');
+  const name = asString(raw.name ?? (path ? path.split('/').pop() : ''), 'unknown');
+  const directory = isDirectoryEntry(raw);
+  const size = typeof raw.size === 'number' ? raw.size : undefined;
+
+  return {
+    name,
+    path: path || joinPath(parentPath, name),
+    type: directory ? 'directory' : 'file',
+    ...(size !== undefined ? { size } : {})
+  };
+}
+
+/** Tolerant parse of a directory-listing payload across plausible server shapes. */
+function parseDirectoryListing(payload: unknown, parentPath: string): FileEntry[] {
+  const record = asRecord(payload);
+  const list = Array.isArray(payload)
+    ? payload
+    : Array.isArray(record.entries)
+      ? record.entries
+      : Array.isArray(record.files)
+        ? record.files
+        : Array.isArray(record.children)
+          ? record.children
+          : [];
+
+  return list
+    .map((entry) => toFileEntry(entry, parentPath))
+    .filter((entry) => entry.name.length > 0)
+    .sort((a, b) => {
+      if (a.type !== b.type) return a.type === 'directory' ? -1 : 1;
+      return a.name.localeCompare(b.name, undefined, { sensitivity: 'base' });
+    });
+}
+
 async function decodeResponse(response: Response): Promise<unknown> {
   const text = await response.text();
   if (!text) return undefined;
@@ -237,6 +294,10 @@ export function createClient(baseUrl = getServerUrl()): OpenCodeClient {
     getConfig: () => request<OpenCodeConfig>('config'),
     updateConfig: (patch: Partial<OpenCodeConfig>) =>
       request<OpenCodeConfig>('config', { method: 'PATCH', body: JSON.stringify(patch) }),
-    readFile: (path: string) => request<string>('file', {}, { path })
+    readFile: (path: string) => request<string>('file', {}, { path }),
+    async listDirectory(path: string): Promise<FileEntry[]> {
+      const payload = await request<unknown>('file', {}, { path });
+      return parseDirectoryListing(payload, path);
+    }
   };
 }

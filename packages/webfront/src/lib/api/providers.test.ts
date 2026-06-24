@@ -23,6 +23,7 @@ function createMockClient(providers: Provider[] = []): OpenCodeClient {
     getConfig: mock(() => Promise.resolve({})),
     updateConfig: mock(() => Promise.resolve({})),
     readFile: mock(() => Promise.resolve('')),
+    listDirectory: mock(() => Promise.resolve([])),
   } as unknown as OpenCodeClient;
 }
 
