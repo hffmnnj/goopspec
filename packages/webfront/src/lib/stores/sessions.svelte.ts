@@ -14,6 +14,8 @@ class SessionsStore {
   loading = $state(false);
   error = $state<string | null>(null);
 
+  private readonly optimisticByDirectory = new Map<string, Session[]>();
+
   /** Sorted newest first by updatedAt */
   sorted = $derived<Session[]>(
     [...this.sessions].sort(
@@ -33,7 +35,28 @@ class SessionsStore {
   }
 
   private createSessionDirectory(): string | undefined {
-    return this.projectStore.activeProject?.worktree ?? workspace.currentPath ?? undefined;
+    const activeProject = this.projectStore.activeProject;
+    if (activeProject?.id === 'local') return undefined;
+    return activeProject?.worktree ?? workspace.currentPath ?? undefined;
+  }
+
+  private directoryKey(directory: string | undefined): string {
+    return directory ?? '__local__';
+  }
+
+  private rememberOptimistic(directory: string | undefined, session: Session): void {
+    const key = this.directoryKey(directory);
+    const existing = this.optimisticByDirectory.get(key) ?? [];
+    this.optimisticByDirectory.set(key, [session, ...existing.filter((s) => s.id !== session.id)]);
+  }
+
+  private mergeOptimistic(directory: string | undefined, loaded: Session[]): Session[] {
+    const optimistic = this.optimisticByDirectory.get(this.directoryKey(directory)) ?? [];
+    if (optimistic.length === 0) return loaded;
+
+    const loadedIds = new Set(loaded.map((session) => session.id));
+    const missing = optimistic.filter((session) => !loadedIds.has(session.id));
+    return missing.length === 0 ? loaded : [...missing, ...loaded];
   }
 
   async load(): Promise<void> {
@@ -41,7 +64,8 @@ class SessionsStore {
     this.error = null;
 
     try {
-      this.sessions = await fetchSessions(this.client, this.activeProjectDirectory());
+      const directory = this.activeProjectDirectory();
+      this.sessions = this.mergeOptimistic(directory, await fetchSessions(this.client, directory));
     } catch (err) {
       this.error = err instanceof Error ? err.message : 'Failed to load sessions';
     } finally {
@@ -55,6 +79,7 @@ class SessionsStore {
     try {
       const directory = this.createSessionDirectory();
       const session = await createSession(this.client, directory ? { directory, ...opts } : opts);
+      this.rememberOptimistic(directory, session);
       // Prepend so it appears immediately in the UI; re-sort on next load.
       this.sessions = [session, ...this.sessions.filter((s) => s.id !== session.id)];
       return session;
