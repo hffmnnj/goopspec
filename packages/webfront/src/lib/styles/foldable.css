@@ -1,0 +1,154 @@
+/**
+ * Foldable / dual-screen layout rules (T9.2).
+ *
+ * When a device is unfolded into two horizontal viewport segments, the shell
+ * renders a two-pane layout: the session/navigation list occupies the left
+ * physical segment and the conversation occupies the right segment, with the
+ * hinge treated as a gutter so no content falls under the fold.
+ *
+ * Composes with `responsive.css`: the layout store reports the foldable state
+ * (`fold` store → `layout.setFoldable`) so the shell carries
+ * `data-mode="foldable"`. These rules size the panes to the physical segments
+ * via `env(viewport-segment-*)` where supported, with graceful fallbacks.
+ */
+
+:root {
+  /* Hinge gutter width — overridden per-fold from segment env vars below. */
+  --fold-hinge-gap: 0px;
+}
+
+/* ---------------------------------------------------------------------------
+ * Horizontal fold (side-by-side segments): Galaxy Fold open, Surface Duo.
+ * Two panes split at the hinge; the gutter spans the physical fold.
+ * ------------------------------------------------------------------------- */
+@media (horizontal-viewport-segments: 2) {
+  :root {
+    /* Gap between the right edge of segment 0 and left edge of segment 1. */
+    --fold-hinge-gap: calc(
+      env(viewport-segment-left 1 0, 0px) - env(viewport-segment-right 0 0, 0px)
+    );
+    /* Width of the left physical segment, used to size the nav pane. */
+    --fold-left-w: env(viewport-segment-right 0 0, 50vw);
+  }
+
+  .app-shell[data-mode='foldable'] {
+    grid-template-columns:
+      [pane-left] var(--fold-left-w, 1fr)
+      [hinge] var(--fold-hinge-gap)
+      [pane-right] minmax(0, 1fr);
+    grid-template-rows: 100dvh;
+  }
+
+  /* Left segment → sessions / navigation. */
+  .app-shell[data-mode='foldable'] .fold-pane--nav {
+    grid-column: pane-left;
+    display: flex;
+    flex-direction: column;
+    border-right: 1px solid var(--border);
+    background-color: var(--bg-elevated);
+    overflow: hidden;
+  }
+
+  /* The hinge gutter — intentionally empty so nothing renders under the fold. */
+  .app-shell[data-mode='foldable'] .fold-hinge {
+    grid-column: hinge;
+    background-color: var(--bg-base);
+  }
+
+  /* Right segment → conversation (+ files as an overlay within this pane). */
+  .app-shell[data-mode='foldable'] .fold-pane--chat {
+    grid-column: pane-right;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    overflow: hidden;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+ * Vertical fold (stacked segments). The shell stays in its single-column
+ * phone layout (which already stacks sensibly); we only ensure the hinge gap
+ * is exposed so chrome can pad around it if needed. No two-pane override here.
+ * ------------------------------------------------------------------------- */
+@media (vertical-viewport-segments: 2) {
+  :root {
+    --fold-hinge-gap: calc(
+      env(viewport-segment-top 0 1, 0px) - env(viewport-segment-bottom 0 0, 0px)
+    );
+  }
+}
+
+/* ---------------------------------------------------------------------------
+ * Foldable shell base (applies regardless of the env() support level). When
+ * the store reports a horizontal fold but the engine lacks segment env vars,
+ * fall back to a clean 50/50 split with a hairline divider as the "hinge".
+ * ------------------------------------------------------------------------- */
+.app-shell[data-mode='foldable'] {
+  display: grid;
+  grid-template-columns: [pane-left] minmax(0, 1fr) [pane-right] minmax(0, 1fr);
+  grid-template-rows: 100dvh;
+  overflow-x: hidden;
+}
+
+.app-shell[data-mode='foldable'] .fold-pane {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+}
+
+.app-shell[data-mode='foldable'] .fold-pane--nav {
+  grid-column: pane-left;
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid var(--border);
+  background-color: var(--bg-elevated);
+  overflow: hidden;
+}
+
+.app-shell[data-mode='foldable'] .fold-pane--chat {
+  grid-column: pane-right;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  overflow: hidden;
+}
+
+/* The hinge element is collapsed to zero when no env-driven gutter exists. */
+.app-shell[data-mode='foldable'] .fold-hinge {
+  display: none;
+}
+
+@media (horizontal-viewport-segments: 2) {
+  .app-shell[data-mode='foldable'] .fold-hinge {
+    display: block;
+  }
+}
+
+/* Files surface as an overlay anchored within the right (chat) pane. */
+.app-shell[data-mode='foldable'] .fold-files-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  background-color: var(--bg-elevated);
+  animation: fold-overlay-in var(--transition-base);
+}
+
+@keyframes fold-overlay-in {
+  from {
+    opacity: 0;
+    transform: translateY(0.5rem);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-shell[data-mode='foldable'] .fold-files-overlay {
+    animation: none;
+  }
+}
