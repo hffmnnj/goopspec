@@ -340,6 +340,7 @@
     padding: clamp(1.5rem, 4vw, 4rem) clamp(1rem, 4vw, 2.5rem) 2.5rem;
     display: flex;
     flex-direction: column;
+    justify-content: flex-start;
     gap: clamp(1.75rem, 4vw, 3rem);
   }
 
@@ -368,7 +369,13 @@
     z-index: 0;
   }
 
-  .hero > :global(*) {
+  /*
+   * Lift the real hero content above the decorative glow. This MUST exclude
+   * `.hero-glow` itself — a blanket `.hero > *` rule would override the glow's
+   * `position: absolute` back to `relative`, dropping it into flow as a ~22rem
+   * tall flex item that pushed all hero content ~352px down the page.
+   */
+  .hero > :global(*:not(.hero-glow)) {
     position: relative;
     z-index: 1;
   }
