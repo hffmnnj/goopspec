@@ -39,9 +39,17 @@
   interface AppShellProps {
     /** Override the layout store (tests / storybook). */
     layoutStore?: LayoutStore;
+    /**
+     * Optional main-content renderer for the chat column. When provided it
+     * replaces the default `ChatPanel` (used by the root route to host the
+     * home page); when omitted the shell renders the conversation as before.
+     * The snippet receives the composer-insert handles so a custom main can
+     * still drive the composer if it chooses to.
+     */
+    main?: import('svelte').Snippet<[{ composerInsertText?: string; composerInsertNonce: number }]>;
   }
 
-  let { layoutStore = defaultLayout }: AppShellProps = $props();
+  let { layoutStore = defaultLayout, main }: AppShellProps = $props();
 
   let fileQuery = $state('');
   let activeFilePath = $state<string | undefined>(undefined);
@@ -196,7 +204,7 @@
       </div>
 
       <div class="chat-region">
-        <ChatPanel {composerInsertText} {composerInsertNonce} />
+        {@render mainContent()}
       </div>
 
       <!-- Files overlay anchored within the chat pane (right segment). -->
@@ -300,7 +308,7 @@
           </div>
         {/if}
       {:else}
-        <ChatPanel {composerInsertText} {composerInsertNonce} />
+        {@render mainContent()}
       {/if}
     </div>
   </main>
@@ -419,6 +427,14 @@
 <div class="install-prompt-host" aria-live="polite">
   <InstallPrompt />
 </div>
+
+{#snippet mainContent()}
+  {#if main}
+    {@render main({ composerInsertText, composerInsertNonce })}
+  {:else}
+    <ChatPanel {composerInsertText} {composerInsertNonce} />
+  {/if}
+{/snippet}
 
 {#snippet filePanelBody()}
   <div class="file-panel">

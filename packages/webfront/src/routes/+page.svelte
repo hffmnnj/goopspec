@@ -1,12 +1,15 @@
 <script lang="ts">
-  import { goto } from '$app/navigation';
+  import AppShell from '$lib/components/AppShell.svelte';
   import EmptyState from '$lib/components/states/EmptyState.svelte';
-  import { encodeProjectPath } from '$lib/routing/path-codec.js';
-  import { projects } from '$lib/stores/projects.svelte.js';
+  import { activeSession } from '$lib/stores/active-session.svelte.js';
+  import { chat } from '$lib/stores/chat.svelte.js';
 
+  // The root route is the no-project landing screen. Unlike the project/session
+  // routes it does not select a session, so clear any lingering active session
+  // and chat history when it mounts.
   $effect(() => {
-    const target = projects.activeProject ?? projects.openedProjects[0];
-    if (target) void goto(`/${encodeProjectPath(target.worktree)}`, { replaceState: true });
+    activeSession.clear();
+    chat.clear();
   });
 </script>
 
@@ -14,16 +17,21 @@
   <title>GoopSpec</title>
 </svelte:head>
 
-<main class="root-state" aria-label="No project selected">
-  <EmptyState
-    title="No project selected"
-    description="Open a project from the sidebar to start working with URL-based project routes."
-  />
-</main>
+<AppShell main={homeMain} />
+
+{#snippet homeMain()}
+  <section class="home-placeholder" aria-label="Home">
+    <EmptyState
+      title="No project selected"
+      description="Open a project from the sidebar to start working."
+    />
+  </section>
+{/snippet}
 
 <style>
-  .root-state {
-    min-height: 100dvh;
+  .home-placeholder {
+    flex: 1 1 auto;
+    min-height: 0;
     display: grid;
     place-items: center;
     padding: 1rem;
