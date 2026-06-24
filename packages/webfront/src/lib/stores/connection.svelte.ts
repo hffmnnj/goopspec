@@ -40,6 +40,7 @@ class ConnectionStore {
   private globalEventsSubscription: { close(): void } | null = null;
   private healthCheckInterval: ReturnType<typeof setInterval> | null = null;
   private lifecycleId = 0;
+  private appConnectionRefCount = 0;
   private readonly globalEventListeners = new Set<(event: GlobalEvent) => void>();
 
   current = $state<ConnectionState>({
@@ -68,6 +69,20 @@ class ConnectionStore {
     }
   }
 
+  private shouldReuseActiveConnection(): boolean {
+    const configuredUrl = getServerUrl();
+    return (this.current.status === 'connected' || this.current.status === 'connecting') && this.current.serverUrl === configuredUrl;
+  }
+
+  private recoverConnection(): void {
+    if (this.shouldReuseActiveConnection()) {
+      if (this.current.status === 'connected') void this.runHealthCheck();
+      return;
+    }
+
+    void this.connectWithRetry();
+  }
+
   private handleVisibilityChange = (): void => {
     if (typeof document === 'undefined') return;
     if (document.hidden) {
@@ -77,7 +92,15 @@ class ConnectionStore {
 
     if (this.current.status === 'connected') {
       this.startHealthCheck();
+      void this.runHealthCheck();
+      return;
     }
+
+    this.recoverConnection();
+  };
+
+  private handleOnline = (): void => {
+    this.recoverConnection();
   };
 
   private setStatus(status: ConnectionStatus, error: string | null = null): void {
@@ -110,7 +133,9 @@ class ConnectionStore {
 
   private startGlobalEventsSubscription(): void {
     this.stopGlobalEventsSubscription();
-    this.globalEventsSubscription = this.client.subscribeGlobalEvents(this.handleGlobalEvent);
+    this.globalEventsSubscription = this.client.subscribeGlobalEvents(this.handleGlobalEvent, {
+      onError: () => this.handleConnectionDrop('OpenCode global event stream failed')
+    });
   }
 
   private stopGlobalEventsSubscription(): void {
@@ -191,6 +216,8 @@ class ConnectionStore {
    * `connected` or `error`. A previous in-flight attempt is aborted.
    */
   async connect(): Promise<void> {
+    if (this.shouldReuseActiveConnection()) return;
+
     const lifecycleId = ++this.lifecycleId;
     this.abortController?.abort();
     this.stopGlobalEventsSubscription();
@@ -215,6 +242,8 @@ class ConnectionStore {
    * succeeds, the attempt count is exhausted, or the store is reset.
    */
   async connectWithRetry(maxRetries = 5): Promise<void> {
+    if (this.shouldReuseActiveConnection()) return;
+
     const lifecycleId = ++this.lifecycleId;
     this.abortController?.abort();
     this.stopGlobalEventsSubscription();
@@ -269,6 +298,30 @@ class ConnectionStore {
   postAppEvent(type: 'app.ready' | 'app.error', error?: string): void {
     this.channel?.postMessage({ type, error });
   }
+
+  /**
+   * Own the OpenCode server connection for the lifetime of the app shell.
+   * Safe to call multiple times: only the first mount starts listeners, and
+   * connect/connectWithRetry guard against duplicate active attempts.
+   */
+  initAppConnection(): () => void {
+    this.appConnectionRefCount += 1;
+
+    if (this.appConnectionRefCount === 1) {
+      if (typeof window !== 'undefined') {
+        window.addEventListener('online', this.handleOnline);
+      }
+      this.recoverConnection();
+    }
+
+    return () => {
+      this.appConnectionRefCount = Math.max(0, this.appConnectionRefCount - 1);
+      if (this.appConnectionRefCount !== 0) return;
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('online', this.handleOnline);
+      }
+    };
+  }
 }
 
 /** Create a connection store bound to a specific client (useful for tests). */
@@ -278,6 +331,10 @@ export function createConnectionStore(client?: OpenCodeClient): ConnectionStore 
 
 /** Reactive connection singleton backed by the configured OpenCode client. */
 export const connection = createConnectionStore();
+
+export function initConnection(): () => void {
+  return connection.initAppConnection();
+}
 
 export function getConnectionState(): ConnectionState {
   return connection.current;

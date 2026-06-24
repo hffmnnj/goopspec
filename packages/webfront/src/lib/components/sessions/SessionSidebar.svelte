@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { goto } from '$app/navigation';
+  import { page } from '$app/state';
   import { onMount } from 'svelte';
   import { HugeiconsIcon } from '@hugeicons/svelte';
   import { Add01Icon, InboxIcon, Alert02Icon, RefreshIcon } from '@hugeicons/core-free-icons';
@@ -17,6 +19,13 @@
   import { chat } from '$lib/stores/chat.svelte.js';
   import { layout } from '$lib/stores/layout.svelte.js';
   import { filterSessions } from '$lib/sessions/search.js';
+  import { buildSessionHierarchy, type SessionTreeNode } from '$lib/sessions/hierarchy.js';
+  import {
+    isNodeExpanded,
+    toggleExpanded,
+    expandActiveParent,
+  } from '$lib/sessions/session-disclosure.js';
+  import { needsNavigation, projectRoute, sessionRoute } from '$lib/routing/navigation.js';
   import type { Project } from '$lib/api/types.js';
 
   interface SessionsLike {
@@ -31,8 +40,13 @@
 
   interface ProjectsLike {
     projects: Project[];
+    availableProjects: Project[];
     activeProject: Project | null;
     setActiveProject(project: Project): void;
+    openProject(project: Project): void;
+    closeProject(projectId: string): void;
+    unopenedAvailable(): Project[];
+    colorIndexFor(id: string): number;
   }
 
   interface SidebarProps {
@@ -60,6 +74,8 @@
 
   let searchQuery = $state('');
   let diffSessionId = $state<string | null>(null);
+  // Tracks *expanded* parents — empty means all children collapsed by default.
+  let expandedSessionIds = $state(new Set<string>());
   const diffTitle = $derived(
     diffSessionId ? store.sorted.find((s) => s.id === diffSessionId)?.title ?? 'Session' : ''
   );
@@ -68,6 +84,7 @@
   const activeId = $derived(activeSession.activeId ?? activeSessionId ?? chat.activeSessionId);
 
   const items = $derived(filterSessions(store.sorted, searchQuery));
+  const tree = $derived(buildSessionHierarchy(items));
   const isLoading = $derived(store.loading);
   const errorMsg = $derived(store.error);
   const isEmpty = $derived(!isLoading && !errorMsg && items.length === 0);
@@ -81,18 +98,41 @@
   });
 
   function handleProjectSelect(project: Project): void {
-    projectsStore.setActiveProject(project);
+    navigate(projectRoute(project));
+  }
+
+  function handleProjectOpen(project: Project): void {
+    navigate(projectRoute(project));
+  }
+
+  function handleProjectClose(projectId: string): void {
+    projectsStore.closeProject(projectId);
+  }
+
+  function handleProjectColorIndex(id: string): number {
+    return projectsStore.colorIndexFor(id);
+  }
+
+  function handlePopoverSession(project: Project, sessionId: string): void {
+    navigate(sessionRoute(project, sessionId));
   }
 
   async function handleCreate(): Promise<void> {
     const created = await store.create();
     const id = (created as { id?: string } | undefined)?.id;
-    if (id) onselect?.(id);
+    const project = projectsStore.activeProject;
+    if (id && project) navigate(sessionRoute(project, id));
+    else if (id) onselect?.(id);
   }
 
   function handleSelect(id: string): void {
-    activeSession.select(id);
+    const project = projectsStore.activeProject;
+    if (project) navigate(sessionRoute(project, id));
     onselect?.(id);
+  }
+
+  function navigate(target: string): void {
+    if (needsNavigation(page.url.pathname, target)) void goto(target);
   }
 
   function handleRename(id: string, title: string): void {
@@ -111,6 +151,20 @@
     diffSessionId = null;
   }
 
+  function isExpanded(id: string): boolean {
+    return isNodeExpanded(expandedSessionIds, id);
+  }
+
+  function toggleChildren(id: string): void {
+    expandedSessionIds = toggleExpanded(expandedSessionIds, id);
+  }
+
+  // Nicety: if the active session is a child, reveal it by expanding its parent.
+  $effect(() => {
+    const next = expandActiveParent(expandedSessionIds, store.sorted, activeId);
+    if (next !== expandedSessionIds) expandedSessionIds = next as Set<string>;
+  });
+
   function onOverlayKeydown(event: KeyboardEvent): void {
     if (event.key === 'Escape') {
       event.preventDefault();
@@ -119,13 +173,54 @@
   }
 </script>
 
+{#snippet renderSessionNode(node: SessionTreeNode, level: number)}
+  <li class="list-item" class:list-item--child={level > 0} style={`--level: ${level}`}>
+    <div class="session-row">
+      {#if node.children.length > 0}
+        <button
+          type="button"
+          class="children-toggle"
+          aria-label={`${isExpanded(node.session.id) ? 'Collapse' : 'Expand'} child sessions for ${node.session.title}`}
+          aria-expanded={isExpanded(node.session.id)}
+          onclick={() => toggleChildren(node.session.id)}
+        >
+          {isExpanded(node.session.id) ? '▾' : '▸'}
+        </button>
+      {:else}
+        <span class="children-spacer" aria-hidden="true"></span>
+      {/if}
+      <SessionCard
+        session={node.session}
+        active={node.session.id === activeId}
+        childCount={node.children.length}
+        onselect={handleSelect}
+        onrename={handleRename}
+        ondelete={handleDelete}
+        onviewdiff={handleViewDiff}
+      />
+    </div>
+    {#if node.children.length > 0 && isExpanded(node.session.id)}
+      <ul class="child-list" role="group" aria-label={`Child sessions for ${node.session.title}`}>
+        {#each node.children as child (child.session.id)}
+          {@render renderSessionNode(child, level + 1)}
+        {/each}
+      </ul>
+    {/if}
+  </li>
+{/snippet}
+
 <GlassSurface variant="panel" element="aside" class="session-sidebar" aria-label="Sessions">
   <div class="sidebar-body" class:sidebar-body--phone={railOrientation === 'horizontal'}>
     <ProjectRail
       projects={projectsStore.projects}
       activeId={projectsStore.activeProject?.id ?? null}
+      available={projectsStore.unopenedAvailable()}
+      colorIndexFor={handleProjectColorIndex}
       orientation={railOrientation}
       onSelect={handleProjectSelect}
+      onOpen={handleProjectOpen}
+      onClose={handleProjectClose}
+      onSelectSession={handlePopoverSession}
     />
     <div class="sidebar-main">
   <header class="header">
@@ -182,17 +277,8 @@
       </div>
     {:else}
       <ul class="list" role="listbox" aria-label="Session list">
-        {#each items as session (session.id)}
-          <li class="list-item">
-            <SessionCard
-              {session}
-              active={session.id === activeId}
-              onselect={handleSelect}
-              onrename={handleRename}
-              ondelete={handleDelete}
-              onviewdiff={handleViewDiff}
-            />
-          </li>
+        {#each tree as node (node.session.id)}
+          {@render renderSessionNode(node, 0)}
         {/each}
       </ul>
     {/if}
@@ -350,6 +436,45 @@
 
   .list-item {
     margin: 0;
+  }
+
+  .session-row {
+    display: grid;
+    grid-template-columns: 1rem minmax(0, 1fr);
+    gap: 0.125rem;
+    align-items: stretch;
+    margin-left: calc(var(--level, 0) * 0.875rem);
+  }
+
+  .children-toggle,
+  .children-spacer {
+    align-self: center;
+    width: 1rem;
+    height: 1rem;
+  }
+
+  .children-toggle {
+    border: 0;
+    padding: 0;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--text-muted);
+    cursor: pointer;
+    line-height: 1;
+  }
+
+  .children-toggle:hover {
+    color: var(--text-primary);
+    background-color: var(--bg-surface);
+  }
+
+  .child-list {
+    list-style: none;
+    margin: 0.125rem 0 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.125rem;
   }
 
   /* ---- Skeleton loading ---- */

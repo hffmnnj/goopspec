@@ -2,6 +2,7 @@ import { createClient } from '../api/client.js';
 import { fetchMessages } from '../api/messages.js';
 import { StreamSubscription } from '../api/stream.js';
 import type { Message, MessagePart, OpenCodeClient, SendMessageInput } from '../api/types.js';
+import { agent } from './agent.svelte.js';
 import { model } from './model.svelte.js';
 
 function now(): string {
@@ -84,6 +85,9 @@ class ChatStore {
     if (model.selectedProviderId && model.selectedModelId) {
       input.providerId = model.selectedProviderId;
       input.modelId = model.selectedModelId;
+    }
+    if (agent.selectedAgentId) {
+      input.agent = agent.selectedAgentId;
     }
     this.beginStreaming();
 

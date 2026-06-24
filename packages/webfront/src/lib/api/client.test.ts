@@ -186,6 +186,89 @@ describe('OpenCode REST client', () => {
     );
   });
 
+  it('normalizes provider payload shapes to arrays with model maps', async () => {
+    const shapes = [
+      [{ id: 'openai', name: 'OpenAI', models: [{ id: 'gpt-4o', name: 'GPT-4o' }] }],
+      { providers: [{ id: 'openai', name: 'OpenAI', models: [{ id: 'gpt-4o', name: 'GPT-4o' }] }] },
+      { providers: { openai: { name: 'OpenAI', models: { 'gpt-4o': { name: 'GPT-4o' } } } }, default: { openai: 'gpt-4o' } },
+      null,
+    ];
+
+    for (const shape of shapes) {
+      const fetchMock = mock(() => Promise.resolve(jsonResponse(shape)));
+      globalThis.fetch = fetchMock as unknown as typeof fetch;
+
+      const providers = await createClient('http://localhost:4096').listProviders();
+
+      expect(Array.isArray(providers)).toBe(true);
+      if (shape) {
+        expect(providers).toEqual([
+          expect.objectContaining({
+            id: 'openai',
+            name: 'OpenAI',
+            models: [expect.objectContaining({ id: 'gpt-4o', name: 'GPT-4o' })],
+          }),
+        ]);
+      } else {
+        expect(providers).toEqual([]);
+      }
+    }
+  });
+
+  it('falls back to GET /provider when GET /config/providers is unavailable', async () => {
+    const fetchMock = mock((url: string) => {
+      if (url.endsWith('/config/providers')) return Promise.resolve(jsonResponse({ error: 'missing' }, { status: 404, statusText: 'Not Found' }));
+      return Promise.resolve(jsonResponse([{ id: 'anthropic', name: 'Anthropic', models: [] }]));
+    });
+    globalThis.fetch = fetchMock as unknown as typeof fetch;
+
+    await expect(createClient('http://localhost:4096').listProviders()).resolves.toEqual([
+      { id: 'anthropic', name: 'Anthropic', models: [] },
+    ]);
+  });
+
+  it('normalizes agent payload shapes to arrays', async () => {
+    const fetchMock = mock(() => Promise.resolve(jsonResponse({ agents: { 'goop-orchestrator': { description: 'Plan work' } } })));
+    globalThis.fetch = fetchMock as unknown as typeof fetch;
+
+    await expect(createClient('http://localhost:4096').listAgents()).resolves.toEqual([
+      expect.objectContaining({ id: 'goop-orchestrator', name: 'goop-orchestrator', description: 'Plan work' }),
+    ]);
+    expect(fetchMock).toHaveBeenCalledWith('http://localhost:4096/agent', expect.any(Object));
+  });
+
+  it('normalizes OpenCode message envelopes from GET /session/{id}/message', async () => {
+    const fetchMock = mock(() => Promise.resolve(jsonResponse([
+      {
+        info: { id: 'msg-user', role: 'user', time: { created: 1760000000000 } },
+        parts: [{ id: 'part-1', type: 'text', text: 'hello' }]
+      },
+      {
+        info: { id: 'msg-assistant', role: 'assistant', providerID: 'anthropic', modelID: 'claude', time: { created: 1760000001000 } },
+        parts: [{ id: 'part-2', type: 'text', text: 'hi' }]
+      }
+    ])));
+    globalThis.fetch = fetchMock as unknown as typeof fetch;
+
+    await expect(createClient('http://localhost:4096').getMessages('s1')).resolves.toEqual([
+      expect.objectContaining({ id: 'msg-user', role: 'user', parts: [{ type: 'text', text: 'hello' }] }),
+      expect.objectContaining({ id: 'msg-assistant', role: 'assistant', provider: 'anthropic', model: 'claude', parts: [{ type: 'text', text: 'hi' }] })
+    ]);
+  });
+
+  it('normalizes OpenCode session time and parentID fields', async () => {
+    const fetchMock = mock(() => Promise.resolve(jsonResponse([
+      { id: 'parent', title: 'Parent', time: { created: 1760000000000, updated: 1760000001000 } },
+      { id: 'child', title: 'Child', parentID: 'parent', time: { created: 1760000002000, updated: 1760000003000 } }
+    ])));
+    globalThis.fetch = fetchMock as unknown as typeof fetch;
+
+    await expect(createClient('http://localhost:4096').listSessions()).resolves.toEqual([
+      expect.objectContaining({ id: 'parent', createdAt: '2025-10-09T08:53:20.000Z', updatedAt: '2025-10-09T08:53:21.000Z' }),
+      expect.objectContaining({ id: 'child', parentID: 'parent', createdAt: '2025-10-09T08:53:22.000Z', updatedAt: '2025-10-09T08:53:23.000Z' })
+    ]);
+  });
+
   it('deletes sessions with DELETE /session/{id}', async () => {
     const fetchMock = mock(() => Promise.resolve(new Response(null, { status: 204 })));
     globalThis.fetch = fetchMock as unknown as typeof fetch;
