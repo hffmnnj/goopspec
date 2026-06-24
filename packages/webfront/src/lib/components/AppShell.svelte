@@ -28,8 +28,10 @@
   // the `ui` store / keyboard registry). T10.3 finalizes command-source wiring.
   import CommandPalette from './CommandPalette.svelte';
   import ShortcutHelp from './ShortcutHelp.svelte';
+  import ToastContainer from './ToastContainer.svelte';
   import { useKeyboard } from '$lib/keyboard/actions.svelte.js';
   import { registerDefaultShortcuts } from '$lib/keyboard/shortcuts.js';
+  import { initToastBindings } from '$lib/stores/toast-bindings.svelte.js';
 
   interface AppShellProps {
     /** Override the layout store (tests / storybook). */
@@ -72,7 +74,9 @@
     registerDefaultShortcuts();
     const stopLayout = layoutStore.init();
     const stopFold = fold.init();
+    const stopToasts = initToastBindings();
     return () => {
+      stopToasts();
       stopFold();
       stopLayout();
     };
@@ -332,6 +336,7 @@
 <SettingsPanel open={ui.settingsOpen} onclose={closeSettings} />
 <CommandPalette />
 <ShortcutHelp />
+<ToastContainer />
 
 {#snippet filePanelBody()}
   <div class="file-panel">
