@@ -22,7 +22,8 @@ describe('ConnectionStore', () => {
       listProviders: mock(() => Promise.resolve([])),
       getConfig: mock(() => Promise.resolve({})),
       updateConfig: mock(() => Promise.resolve({})),
-      readFile: mock(() => Promise.resolve(''))
+      readFile: mock(() => Promise.resolve('')),
+      listDirectory: mock(() => Promise.resolve([]))
     };
     store = createConnectionStore(client);
   });

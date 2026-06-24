@@ -1,3 +1,5 @@
+import type { OpenCodeClient, OpenCodeConfig } from './types.js';
+
 export const DEFAULT_SERVER_URL = 'http://localhost:4096';
 
 const STORAGE_KEY = 'goopspec-server-url';
@@ -46,4 +48,29 @@ export function setServerUrl(url: string): void {
   } catch {
     // Ignore storage failures so private browsing and locked-down browsers can still connect.
   }
+}
+
+/** Validate a server URL without persisting it; returns an error message or null. */
+export function validateServerUrl(url: string): string | null {
+  const normalized = normalizeServerUrl(url);
+  if (!normalized) return 'Server URL cannot be empty';
+  try {
+    new URL(normalized);
+    return null;
+  } catch {
+    return `Invalid server URL: ${url}`;
+  }
+}
+
+/** Read the server-side OpenCode config through the adapter. */
+export function fetchServerConfig(client: OpenCodeClient): Promise<OpenCodeConfig> {
+  return client.getConfig();
+}
+
+/** Patch the server-side OpenCode config through the adapter. */
+export function updateServerConfig(
+  client: OpenCodeClient,
+  patch: Partial<OpenCodeConfig>
+): Promise<OpenCodeConfig> {
+  return client.updateConfig(patch);
 }

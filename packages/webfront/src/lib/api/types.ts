@@ -50,6 +50,24 @@ export interface OpenCodeConfig {
   [key: string]: unknown;
 }
 
+/**
+ * A single entry in the workspace file tree — either a file or a directory.
+ * `children` is populated lazily by the file tree as directories are expanded;
+ * a freshly-listed directory entry has `children` undefined (not yet loaded).
+ */
+export interface FileEntry {
+  /** Display name (basename) of the entry. */
+  name: string;
+  /** Server-relative path used for subsequent reads/listings. */
+  path: string;
+  /** Whether the entry is a file or a directory. */
+  type: 'file' | 'directory';
+  /** Byte size, when the server reports it (files only). */
+  size?: number;
+  /** Lazily-loaded child entries (directories only). */
+  children?: FileEntry[];
+}
+
 export type SSEEvent =
   | { type: 'session.created'; session: Session; raw?: unknown }
   | { type: 'session.updated'; session: Session; raw?: unknown }
@@ -98,4 +116,5 @@ export interface OpenCodeClient {
   getConfig(): Promise<OpenCodeConfig>;
   updateConfig(patch: Partial<OpenCodeConfig>): Promise<OpenCodeConfig>;
   readFile(path: string): Promise<string>;
+  listDirectory(path: string): Promise<FileEntry[]>;
 }

@@ -2,8 +2,11 @@
   import { HugeiconsIcon } from '@hugeicons/svelte';
   import { BubbleChatIcon } from '@hugeicons/core-free-icons';
   import { chat as defaultChat, type ChatStore } from '$lib/stores/chat.svelte.js';
+  import { createClient } from '$lib/api/client.js';
+  import type { OpenCodeClient } from '$lib/api/types.js';
   import MessageList from './MessageList.svelte';
   import MessageInput from './MessageInput.svelte';
+  import ModelSwitcher from '$lib/components/ModelSwitcher.svelte';
 
   interface ChatPanelProps {
     /** Chat store to bind to; defaults to the shared singleton. */
@@ -14,6 +17,8 @@
     disabled?: boolean;
     /** Interrupt handler — wired to the streaming reducer by T3.2 / Wave 8. */
     onstop?: () => void;
+    /** Override the OpenCode client used by the model switcher. */
+    client?: OpenCodeClient;
   }
 
   let {
@@ -21,7 +26,10 @@
     title = 'New conversation',
     disabled = false,
     onstop,
+    client,
   }: ChatPanelProps = $props();
+
+  const switcherClient = $derived(client ?? createClient());
 
   const isEmpty = $derived(!chat.loading && chat.messages.length === 0);
 
@@ -33,8 +41,9 @@
 <section class="chat-panel" aria-label="Conversation">
   <header class="chat-header">
     <h1 class="chat-title">{title}</h1>
-    <!-- Reserved: model switcher (Wave 6) + cost ticker (NH-04) mount here. -->
-    <div class="header-slot"></div>
+    <div class="header-slot">
+      <ModelSwitcher client={switcherClient} />
+    </div>
   </header>
 
   {#if chat.error}
