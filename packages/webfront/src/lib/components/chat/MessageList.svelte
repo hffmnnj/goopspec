@@ -22,6 +22,16 @@
 
   const showJumpButton = $derived(!atBottom && messages.length > 0);
 
+  function messageKey(message: Message, index: number): string {
+    return message.id || `${message.role}-${message.createdAt}-${index}`;
+  }
+
+  function partGroupKey(group: ReturnType<typeof groupParts>[number], index: number): string {
+    if (group.kind === 'tool') return `tool-${group.invoke?.id ?? group.result?.id ?? index}`;
+    if (group.kind === 'step') return `step-${group.part.id ?? group.part.title ?? index}`;
+    return `text-${index}-${group.text.slice(0, 24)}`;
+  }
+
   function isNearBottom(el: HTMLDivElement): boolean {
     return el.scrollHeight - el.scrollTop - el.clientHeight <= BOTTOM_THRESHOLD;
   }
@@ -56,7 +66,7 @@
     {streaming ? 'Assistant response streaming' : ''}
   </div>
   <div class="messages">
-    {#each messages as message (message.id)}
+    {#each messages as message, messageIndex (messageKey(message, messageIndex))}
       <article class="row row--{message.role}" aria-label={`${message.role} message`}>
         <div class="avatar" aria-hidden="true">
           {#if message.role === 'user'}
@@ -67,7 +77,7 @@
         </div>
 
         <div class="bubble">
-          {#each groupParts(message.parts) as group, index (index)}
+          {#each groupParts(message.parts) as group, index (partGroupKey(group, index))}
             {#if group.kind === 'text'}
               <Markdown text={group.text} />
             {:else if group.kind === 'tool'}
