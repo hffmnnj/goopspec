@@ -40,6 +40,8 @@ class ProjectsStore {
   loading = $state(false);
   error = $state<string | null>(null);
 
+  private readonly activeProjectListeners = new Set<(project: Project | null) => void>();
+
   constructor(
     private readonly client: OpenCodeClient,
     private readonly workspaceStore: WorkspaceStore
@@ -65,19 +67,19 @@ class ProjectsStore {
       const current = currentProject
         ? this.projects.find((project) => project.id === currentProject.id) ?? currentProject
         : null;
-      this.activeProject = current ?? this.projects[0] ?? null;
+      this.setActiveProjectInternal(current ?? this.projects[0] ?? null);
     } catch (err) {
       this.error = err instanceof Error ? err.message : 'Failed to load projects';
       const fallback = createFallbackProject(this.workspaceStore.currentPath);
       this.projects = [fallback];
-      this.activeProject = fallback;
+      this.setActiveProjectInternal(fallback);
     } finally {
       this.loading = false;
     }
   }
 
   setActiveProject(project: Project): void {
-    this.activeProject = project;
+    this.setActiveProjectInternal(project);
     writeActiveProjectId(project.id);
   }
 
@@ -85,14 +87,26 @@ class ProjectsStore {
     const persistedId = readActiveProjectId();
     if (!persistedId) return;
     const match = this.projects.find((project) => project.id === persistedId);
-    if (match) this.activeProject = match;
+    if (match) this.setActiveProjectInternal(match);
+  }
+
+  onActiveProjectChange(listener: (project: Project | null) => void): () => void {
+    this.activeProjectListeners.add(listener);
+    return () => this.activeProjectListeners.delete(listener);
   }
 
   reset(): void {
     this.projects = [];
-    this.activeProject = null;
+    this.setActiveProjectInternal(null);
     this.loading = false;
     this.error = null;
+  }
+
+  private setActiveProjectInternal(project: Project | null): void {
+    const previous = this.activeProject;
+    this.activeProject = project;
+    if (previous?.id === project?.id && previous?.worktree === project?.worktree) return;
+    for (const listener of this.activeProjectListeners) listener(project);
   }
 }
 

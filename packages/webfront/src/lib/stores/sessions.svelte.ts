@@ -6,6 +6,7 @@ import {
   renameSession,
 } from '../api/sessions.js';
 import type { CreateSessionOptions, OpenCodeClient, Session } from '../api/types.js';
+import { projects, type ProjectsStore } from './projects.svelte.js';
 import { workspace } from './workspace.svelte.js';
 
 class SessionsStore {
@@ -20,14 +21,27 @@ class SessionsStore {
     )
   );
 
-  constructor(private readonly client: OpenCodeClient) {}
+  constructor(
+    private readonly client: OpenCodeClient,
+    private readonly projectStore: ProjectsStore
+  ) {}
+
+  private activeProjectDirectory(): string | undefined {
+    const activeProject = this.projectStore.activeProject;
+    if (!activeProject || activeProject.id === 'local') return undefined;
+    return activeProject.worktree;
+  }
+
+  private createSessionDirectory(): string | undefined {
+    return this.projectStore.activeProject?.worktree ?? workspace.currentPath ?? undefined;
+  }
 
   async load(): Promise<void> {
     this.loading = true;
     this.error = null;
 
     try {
-      this.sessions = await fetchSessions(this.client);
+      this.sessions = await fetchSessions(this.client, this.activeProjectDirectory());
     } catch (err) {
       this.error = err instanceof Error ? err.message : 'Failed to load sessions';
     } finally {
@@ -39,10 +53,8 @@ class SessionsStore {
     this.error = null;
 
     try {
-      const session = await createSession(this.client, {
-        path: workspace.currentPath ?? undefined,
-        ...opts,
-      });
+      const directory = this.createSessionDirectory();
+      const session = await createSession(this.client, directory ? { directory, ...opts } : opts);
       // Prepend so it appears immediately in the UI; re-sort on next load.
       this.sessions = [session, ...this.sessions.filter((s) => s.id !== session.id)];
       return session;
@@ -81,10 +93,16 @@ class SessionsStore {
   clearError(): void {
     this.error = null;
   }
+
+  initProjectWatcher(): () => void {
+    return this.projectStore.onActiveProjectChange(() => {
+      void this.load();
+    });
+  }
 }
 
-export function createSessionsStore(client?: OpenCodeClient): SessionsStore {
-  return new SessionsStore(client ?? createClient());
+export function createSessionsStore(client?: OpenCodeClient, projectStore?: ProjectsStore): SessionsStore {
+  return new SessionsStore(client ?? createClient(), projectStore ?? projects);
 }
 
 /** Default reactive session store backed by the configured OpenCode client. */

@@ -14,6 +14,8 @@
   import { fold } from '$lib/stores/fold.svelte.js';
   import { ui } from '$lib/stores/ui.svelte.js';
   import { workspace } from '$lib/stores/workspace.svelte.js';
+  import { projects } from '$lib/stores/projects.svelte.js';
+  import { sessions } from '$lib/stores/sessions.svelte.js';
 
   import SessionSidebar from './sessions/SessionSidebar.svelte';
   import ChatPanel from './chat/ChatPanel.svelte';
@@ -80,11 +82,14 @@
   onMount(() => {
     registerDefaultShortcuts();
     workspace.init();
+    void projects.refresh();
+    const stopSessions = sessions.initProjectWatcher();
     const stopLayout = layoutStore.init();
     const stopFold = fold.init();
     const stopToasts = initToastBindings();
     return () => {
       stopToasts();
+      stopSessions();
       stopFold();
       stopLayout();
     };
