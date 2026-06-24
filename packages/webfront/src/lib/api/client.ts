@@ -1,0 +1,242 @@
+import { getServerUrl } from './config';
+import type {
+  CreateSessionOptions,
+  EventHandlers,
+  Message,
+  MessagePart,
+  OpenCodeClient,
+  OpenCodeConfig,
+  Provider,
+  SSEEvent,
+  SendMessageInput,
+  Session,
+  Unsubscribe
+} from './types';
+
+export class OpenCodeApiError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+    readonly body?: unknown
+  ) {
+    super(message);
+    this.name = 'OpenCodeApiError';
+  }
+}
+
+const EVENT_TYPES = [
+  'session.created',
+  'session.updated',
+  'session.deleted',
+  'message.part.text',
+  'message.part.tool-invoke',
+  'message.part.tool-result',
+  'message.part.step-start',
+  'message.part.step-finish',
+  'message.completed',
+  'message.error',
+  'app.ready',
+  'app.error',
+  'session.error',
+  'provider.auth.error'
+] as const;
+
+type RawRecord = Record<string, unknown>;
+
+function asRecord(value: unknown): RawRecord {
+  return typeof value === 'object' && value !== null ? (value as RawRecord) : {};
+}
+
+function asString(value: unknown, fallback = ''): string {
+  return typeof value === 'string' ? value : fallback;
+}
+
+function asOptionalString(value: unknown): string | undefined {
+  return typeof value === 'string' ? value : undefined;
+}
+
+function parseData(data: string): unknown {
+  if (!data) return undefined;
+
+  try {
+    return JSON.parse(data) as unknown;
+  } catch {
+    return data;
+  }
+}
+
+function unwrapData<T>(value: unknown): T {
+  const record = asRecord(value);
+  return (record.data ?? value) as T;
+}
+
+function messageIdFrom(raw: RawRecord): string | undefined {
+  return asOptionalString(raw.messageId ?? raw.messageID ?? raw.message_id);
+}
+
+function errorFrom(raw: RawRecord): string {
+  return asString(raw.error ?? raw.message ?? raw.reason, 'Unknown OpenCode error');
+}
+
+function mapToolInvoke(raw: RawRecord): Extract<MessagePart, { type: 'tool-invoke' }> {
+  const part = asRecord(raw.part ?? raw);
+  return {
+    type: 'tool-invoke',
+    id: asOptionalString(part.id),
+    tool: asString(part.tool ?? part.name, 'tool'),
+    input: part.input ?? part.args
+  };
+}
+
+function mapToolResult(raw: RawRecord): Extract<MessagePart, { type: 'tool-result' }> {
+  const part = asRecord(raw.part ?? raw);
+  return {
+    type: 'tool-result',
+    id: asOptionalString(part.id),
+    tool: asOptionalString(part.tool ?? part.name),
+    output: part.output ?? part.result,
+    error: asOptionalString(part.error)
+  };
+}
+
+function mapStepStart(raw: RawRecord): Extract<MessagePart, { type: 'step-start' }> {
+  const part = asRecord(raw.part ?? raw);
+  return { type: 'step-start', id: asOptionalString(part.id), title: asOptionalString(part.title) };
+}
+
+function mapStepFinish(raw: RawRecord): Extract<MessagePart, { type: 'step-finish' }> {
+  const part = asRecord(raw.part ?? raw);
+  const status = asOptionalString(part.status);
+  return {
+    type: 'step-finish',
+    id: asOptionalString(part.id),
+    title: asOptionalString(part.title),
+    status: status === 'success' || status === 'error' || status === 'cancelled' ? status : undefined
+  };
+}
+
+export function parseSSEEvent(type: string, data: string): SSEEvent | undefined {
+  const parsed = unwrapData<unknown>(parseData(data));
+  const raw = asRecord(parsed);
+
+  switch (type) {
+    case 'session.created':
+    case 'session.updated':
+      return { type, session: unwrapData<Session>(raw.session ?? parsed), raw: parsed };
+    case 'session.deleted':
+      return { type, sessionId: asString(raw.sessionId ?? raw.id), raw: parsed };
+    case 'message.part.text':
+      return { type, messageId: messageIdFrom(raw), text: asString(raw.text ?? raw.content ?? raw.delta), raw: parsed };
+    case 'message.part.tool-invoke':
+      return { type, messageId: messageIdFrom(raw), part: mapToolInvoke(raw), raw: parsed };
+    case 'message.part.tool-result':
+      return { type, messageId: messageIdFrom(raw), part: mapToolResult(raw), raw: parsed };
+    case 'message.part.step-start':
+      return { type, messageId: messageIdFrom(raw), part: mapStepStart(raw), raw: parsed };
+    case 'message.part.step-finish':
+      return { type, messageId: messageIdFrom(raw), part: mapStepFinish(raw), raw: parsed };
+    case 'message.completed':
+      return { type, messageId: messageIdFrom(raw), message: raw.message as Message | undefined, raw: parsed };
+    case 'message.error':
+      return { type, messageId: messageIdFrom(raw), error: errorFrom(raw), raw: parsed };
+    case 'app.ready':
+      return { type, raw: parsed };
+    case 'app.error':
+    case 'session.error':
+      return { type, sessionId: asOptionalString(raw.sessionId), error: errorFrom(raw), raw: parsed } as SSEEvent;
+    case 'provider.auth.error':
+      return { type, providerId: asOptionalString(raw.providerId ?? raw.provider), error: errorFrom(raw), raw: parsed };
+    default:
+      return undefined;
+  }
+}
+
+async function decodeResponse(response: Response): Promise<unknown> {
+  const text = await response.text();
+  if (!text) return undefined;
+
+  try {
+    return JSON.parse(text) as unknown;
+  } catch {
+    return text;
+  }
+}
+
+function makeUrl(baseUrl: string, path: string, params?: Record<string, string>): string {
+  const url = new URL(path, `${baseUrl}/`);
+  for (const [key, value] of Object.entries(params ?? {})) {
+    url.searchParams.set(key, value);
+  }
+  return url.toString();
+}
+
+export function createClient(baseUrl = getServerUrl()): OpenCodeClient {
+  const root = baseUrl.trim().replace(/\/+$/, '');
+
+  async function request<T>(path: string, init: RequestInit = {}, params?: Record<string, string>): Promise<T> {
+    const response = await fetch(makeUrl(root, path, params), {
+      ...init,
+      headers: {
+        Accept: 'application/json',
+        ...(init.body ? { 'Content-Type': 'application/json' } : {}),
+        ...init.headers
+      }
+    });
+
+    const body = await decodeResponse(response);
+    if (!response.ok) {
+      throw new OpenCodeApiError(`OpenCode request failed: ${response.status} ${response.statusText}`, response.status, body);
+    }
+
+    return unwrapData<T>(body);
+  }
+
+  return {
+    listSessions: () => request<Session[]>('session'),
+    createSession: (opts: CreateSessionOptions = {}) =>
+      request<Session>('session', { method: 'POST', body: JSON.stringify(opts) }),
+    deleteSession: async (id: string) => {
+      await request<void>(`session/${encodeURIComponent(id)}`, { method: 'DELETE' });
+    },
+    renameSession: (id: string, title: string) =>
+      request<Session>(`session/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify({ title }) }),
+    getMessages: (sessionId: string) => request<Message[]>(`session/${encodeURIComponent(sessionId)}/message`),
+    sendMessage: (sessionId: string, input: SendMessageInput) =>
+      request<Message>(`session/${encodeURIComponent(sessionId)}/message`, {
+        method: 'POST',
+        body: JSON.stringify(input)
+      }),
+    subscribeEvents(sessionId: string, handlers: EventHandlers): Unsubscribe {
+      if (typeof EventSource === 'undefined') {
+        const error = new Error('EventSource is not available in this environment');
+        handlers.onError?.(error);
+        return () => undefined;
+      }
+
+      const source = new EventSource(makeUrl(root, `session/${encodeURIComponent(sessionId)}/event`));
+      source.onopen = () => handlers.onOpen?.();
+      source.onerror = () => handlers.onError?.(new Error('OpenCode event stream failed'));
+
+      for (const eventType of EVENT_TYPES) {
+        source.addEventListener(eventType, (event) => {
+          const parsed = parseSSEEvent(eventType, event.data);
+          if (parsed) handlers.onEvent?.(parsed);
+        });
+      }
+
+      source.onmessage = (event) => {
+        const raw = asRecord(parseData(event.data));
+        const type = asString(raw.type);
+        const parsed = parseSSEEvent(type, event.data);
+        if (parsed) handlers.onEvent?.(parsed);
+      };
+
+      return () => source.close();
+    },
+    listProviders: () => request<Provider[]>('provider'),
+    getConfig: () => request<OpenCodeConfig>('config'),
+    updateConfig: (patch: Partial<OpenCodeConfig>) =>
+      request<OpenCodeConfig>('config', { method: 'PATCH', body: JSON.stringify(patch) }),
+    readFile: (path: string) => request<string>('file', {}, { path })
+  };
+}
