@@ -29,8 +29,22 @@ export default defineConfig({
         ]
       },
       workbox: {
-        navigateFallback: '/200.html',
-        globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}']
+        // SPA shell handles in-app navigations when the app is cached.
+        navigateFallback: '/index.html',
+        // Never intercept the offline document itself with the SPA shell.
+        navigateFallbackDenylist: [/^\/offline/],
+        globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2,webmanifest}'],
+        // Serve the precached offline page when a navigation can't be fulfilled
+        // (no network and the SPA shell isn't cached yet).
+        runtimeCaching: [
+          {
+            urlPattern: ({ request }) => request.mode === 'navigate',
+            handler: 'NetworkOnly',
+            options: {
+              precacheFallback: { fallbackURL: '/offline.html' }
+            }
+          }
+        ]
       }
     })
   ]

@@ -11,6 +11,11 @@
  *
  *   Accent — light: #4cce4e   dark: #7fef80
  *
+ * WCAG AA note: the brand accents are preserved for filled UI, large marks,
+ * and decorative surfaces. Small accent-colored text and focus outlines use
+ * `--accent-text` / `--focus-ring`, because light-mode #4cce4e does not reach
+ * 4.5:1 against white and white text on #4cce4e does not reach 4.5:1.
+ *
  * `:root` carries the dark palette so non-JS / pre-hydration environments
  * render the default (dark) theme without a flash.
  */
@@ -60,14 +65,26 @@
   --text-muted: #71717a; /* zinc-500 */
 
   --accent: #7fef80;
+  --accent-text: #7fef80;
   --accent-foreground: #09090b; /* dark text on green */
   --accent-hover: #6fe071;
   --accent-soft: rgba(127, 239, 128, 0.12);
+  --focus-ring: #7fef80;
 
   /* Glass tints (consumed by GlassSurface in T1.4) */
   --glass-bg: rgba(24, 24, 27, 0.6);
   --glass-border: rgba(255, 255, 255, 0.1);
   --glass-highlight: rgba(255, 255, 255, 0.06);
+
+  /* Diff tints (consumed by DiffView in T4.2) — added green harmonizes with
+   * the accent but reads clearly as "added"; removed is a calibrated red. */
+  --diff-add-fg: #9be9a8;
+  --diff-add-bg: rgba(127, 239, 128, 0.1);
+  --diff-remove-fg: #f4a8a8;
+  --diff-remove-bg: rgba(248, 113, 113, 0.1);
+  --danger-text: #fca5a5;
+  --info-text: #93c5fd;
+  --warning-text: #facc15;
 }
 
 /* ---------------------------------------------------------------------------
@@ -88,12 +105,24 @@
   --text-muted: #71717a; /* zinc-500 */
 
   --accent: #4cce4e;
-  --accent-foreground: #ffffff;
+  --accent-text: #177c26;
+  --accent-foreground: #09090b;
   --accent-hover: #3fbf41;
   --accent-soft: rgba(76, 206, 78, 0.12);
+  --focus-ring: #177c26;
 
   /* Glass tints (consumed by GlassSurface in T1.4) */
   --glass-bg: rgba(255, 255, 255, 0.6);
   --glass-border: rgba(0, 0, 0, 0.08);
   --glass-highlight: rgba(255, 255, 255, 0.7);
+
+  /* Diff tints (consumed by DiffView in T4.2) — darker text on light tints
+   * for AA contrast in light mode. */
+  --diff-add-fg: #1a7f37;
+  --diff-add-bg: rgba(76, 206, 78, 0.12);
+  --diff-remove-fg: #c0392b;
+  --diff-remove-bg: rgba(220, 53, 69, 0.1);
+  --danger-text: #b91c1c;
+  --info-text: #1d4ed8;
+  --warning-text: #854d0e;
 }
