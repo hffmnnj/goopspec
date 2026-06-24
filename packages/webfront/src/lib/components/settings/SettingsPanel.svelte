@@ -10,7 +10,8 @@
     Loading03Icon,
     Alert02Icon,
     RefreshIcon,
-    CheckmarkCircle02Icon
+    CheckmarkCircle02Icon,
+    Copy01Icon
   } from '@hugeicons/core-free-icons';
   import { theme, setTheme, type Theme } from '$lib/stores/theme.svelte.js';
   import {
@@ -22,6 +23,7 @@
   import { getServerUrl, setServerUrl, validateServerUrl } from '$lib/api/config.js';
   import { createClient } from '$lib/api/client.js';
   import { fetchProviders, countModels, formatContext } from '$lib/api/providers.js';
+  import { copyStartServerCommand, getServerPort, getStartServerCommand } from './server-command.js';
   import type { OpenCodeClient, Provider } from '$lib/api/types.js';
 
   interface SettingsPanelProps {
@@ -62,8 +64,12 @@
   // --- Server --------------------------------------------------------------
   let serverUrlDraft = $state(getServerUrl());
   let serverUrlError = $state<string | null>(null);
+  let serverCommandCopied = $state(false);
+  let serverCommandCopyTimer: ReturnType<typeof setTimeout> | null = null;
   const connectionStatus = $derived(connectionStore.current.status);
   const connectionError = $derived(connectionStore.current.error);
+  const serverPort = $derived(getServerPort(serverUrlDraft));
+  const startServerCommand = $derived(getStartServerCommand(serverUrlDraft));
 
   function saveServerUrl(): void {
     const error = validateServerUrl(serverUrlDraft);
@@ -80,6 +86,16 @@
     saveServerUrl();
     if (serverUrlError) return;
     void connectionStore.connect();
+  }
+
+  async function copyStartCommand(): Promise<void> {
+    await copyStartServerCommand(serverUrlDraft);
+    serverCommandCopied = true;
+    if (serverCommandCopyTimer) clearTimeout(serverCommandCopyTimer);
+    serverCommandCopyTimer = setTimeout(() => {
+      serverCommandCopied = false;
+      serverCommandCopyTimer = null;
+    }, 1600);
   }
 
   // --- Providers & models --------------------------------------------------
@@ -287,6 +303,25 @@
             {#if serverUrlError}
               <p id="server-url-error" class="field-error" role="alert">{serverUrlError}</p>
             {/if}
+            <p class="field-hint">Port: {serverPort}</p>
+          </div>
+
+          <div class="start-server-card" aria-labelledby="start-server-title">
+            <h4 id="start-server-title" class="subgroup-title">Start Server</h4>
+            <p class="field-hint">Run this command to start the OpenCode server:</p>
+            <div class="command-row">
+              <code class="command-text">{startServerCommand}</code>
+              <button
+                type="button"
+                class="action-btn copy-command-btn"
+                aria-label="Copy start server command"
+                onclick={copyStartCommand}
+              >
+                <HugeiconsIcon icon={Copy01Icon} size={14} color="currentColor" strokeWidth={1.5} />
+                {serverCommandCopied ? 'Copied!' : 'Copy'}
+              </button>
+            </div>
+            <p class="field-hint">The port matches your configured server URL.</p>
           </div>
 
           <div class="conn-status" aria-live="polite">
@@ -346,7 +381,7 @@
                 <li class="provider">
                   <p class="provider-name">{provider.name}</p>
                   <ul class="model-list">
-                    {#each provider.models as model (model.id)}
+                    {#each (Array.isArray(provider.models) ? provider.models : []) as model (model.id)}
                       <li class="model">
                         <span class="model-name">{model.name}</span>
                         {#if formatContext(model.context)}
@@ -637,6 +672,57 @@
     margin: 0;
     font-size: 0.75rem;
     color: var(--danger-text);
+  }
+
+  .field-hint {
+    margin: 0;
+    font-size: 0.75rem;
+    color: var(--text-muted);
+  }
+
+  .start-server-card {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    padding: 0.75rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background-color: var(--bg-base);
+  }
+
+  .subgroup-title {
+    margin: 0;
+    font-size: 0.8125rem;
+    font-weight: 600;
+    color: var(--text-primary);
+  }
+
+  .command-row {
+    display: flex;
+    align-items: stretch;
+    min-width: 0;
+    overflow: hidden;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background-color: var(--bg-elevated);
+  }
+
+  .command-text {
+    flex: 1 1 auto;
+    min-width: 0;
+    padding: 0.55rem 0.75rem;
+    overflow-x: auto;
+    font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace);
+    font-size: 0.78125rem;
+    color: var(--text-primary);
+    white-space: nowrap;
+  }
+
+  .copy-command-btn {
+    min-width: 5rem;
+    border-width: 0 0 0 1px;
+    border-radius: 0;
+    background-color: var(--bg-surface);
   }
 
   .conn-status {

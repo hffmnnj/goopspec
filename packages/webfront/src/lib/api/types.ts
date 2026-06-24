@@ -5,6 +5,7 @@ export interface Session {
   title: string;
   createdAt: string;
   updatedAt: string;
+  parentID?: string;
   messageCount?: number;
   cost?: number;
 }
@@ -41,6 +42,16 @@ export interface Provider {
   id: string;
   name: string;
   models: Model[];
+  defaultModelId?: string;
+}
+
+export interface Agent {
+  id: string;
+  name: string;
+  description?: string;
+  mode?: 'primary' | 'subagent' | 'all';
+  hidden?: boolean;
+  [key: string]: unknown;
 }
 
 export interface OpenCodeConfig {
@@ -69,6 +80,18 @@ export type GlobalEvent = {
   type: string;
   [key: string]: unknown;
 };
+
+/** Per-file change for a session, as returned by `GET /session/{id}/diff`. */
+export interface FileDiff {
+  /** Repository-relative file path. */
+  file: string;
+  /** File contents before the session's changes. */
+  before: string;
+  /** File contents after the session's changes. */
+  after: string;
+  additions: number;
+  deletions: number;
+}
 
 /**
  * A single entry in the workspace file tree — either a file or a directory.
@@ -114,11 +137,17 @@ export interface SendMessageInput {
   text: string;
   providerId?: string;
   modelId?: string;
+  agent?: string;
   parts?: MessagePart[];
 }
 
 export interface EventHandlers {
   onEvent?: (event: SSEEvent) => void;
+  onError?: (error: Error) => void;
+  onOpen?: () => void;
+}
+
+export interface GlobalEventHandlers {
   onError?: (error: Error) => void;
   onOpen?: () => void;
 }
@@ -130,15 +159,17 @@ export interface OpenCodeClient {
   getCurrentProject(): Promise<Project | null>;
   getPath(): Promise<{ path: string }>;
   getVcsInfo(): Promise<VcsInfo>;
-  subscribeGlobalEvents(handler: (event: GlobalEvent) => void): { close(): void };
+  subscribeGlobalEvents(handler: (event: GlobalEvent) => void, handlers?: GlobalEventHandlers): { close(): void };
   listSessions(directory?: string): Promise<Session[]>;
   createSession(opts?: CreateSessionOptions): Promise<Session>;
   deleteSession(id: string): Promise<void>;
   renameSession(id: string, title: string): Promise<Session>;
   getMessages(sessionId: string): Promise<Message[]>;
+  getSessionDiff(sessionId: string): Promise<FileDiff[]>;
   sendMessage(sessionId: string, input: SendMessageInput, directory?: string): Promise<Message>;
   subscribeEvents(sessionId: string, handlers: EventHandlers): Unsubscribe;
   listProviders(): Promise<Provider[]>;
+  listAgents(): Promise<Agent[]>;
   getConfig(): Promise<OpenCodeConfig>;
   updateConfig(patch: Partial<OpenCodeConfig>): Promise<OpenCodeConfig>;
   readFile(path: string): Promise<string>;
