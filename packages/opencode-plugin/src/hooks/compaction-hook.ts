@@ -15,6 +15,7 @@
 import type { PluginContext } from "../core/types.js";
 import type { HookFactory, Hooks } from "./types.js";
 import { safeHandler } from "./utils.js";
+import { log } from "../shared/logger.js";
 
 // ---------------------------------------------------------------------------
 // Survival block builder
@@ -116,6 +117,10 @@ export const createCompactionHook: HookFactory = (ctx: PluginContext): Partial<H
       const block = buildWorkflowSurvivalBlock(ctx);
 
       if (block.trim().length > 0) {
+        if (!Array.isArray(output.context)) {
+          output.context = [];
+          log("compaction output.context was absent, initialising");
+        }
         output.context.push(block);
       }
     },

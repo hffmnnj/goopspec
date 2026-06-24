@@ -232,6 +232,36 @@ describe("createCompactionHook", () => {
     expect(output.context).toHaveLength(0);
   });
 
+  it("does not throw when output.context is undefined (defensive guard)", async () => {
+    const ctx = createMockPluginContext({
+      state: {
+        activeWorkflowId: "feat-auth",
+        workflows: {
+          "feat-auth": createDefaultWorkflowState({
+            phase: "execute",
+            specLocked: true,
+            currentWave: 2,
+            totalWaves: 4,
+          }),
+        },
+      },
+    });
+
+    const hooks = createCompactionHook(ctx);
+    const handler = hooks["experimental.session.compacting"];
+    expect(handler).toBeDefined();
+
+    // Simulate abnormal path where context is undefined
+    const output = {} as { context: string[]; prompt?: string };
+    await handler?.({ sessionID: "s1" }, output);
+
+    // Should have initialised context and pushed the block
+    expect(Array.isArray(output.context)).toBe(true);
+    expect(output.context.length).toBeGreaterThan(0);
+    expect(output.context[0]).toContain("feat-auth");
+    expect(output.context[0]).toContain("EXECUTE");
+  });
+
   it("gracefully handles errors without throwing", async () => {
     const ctx = createMockPluginContext();
     // Sabotage the state manager to throw
