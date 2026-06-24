@@ -1,5 +1,6 @@
 import { createClient } from '../api/client.js';
 import { fetchMessages } from '../api/messages.js';
+import { StreamSubscription } from '../api/stream.js';
 import type { Message, MessagePart, OpenCodeClient, SendMessageInput } from '../api/types.js';
 
 function now(): string {
@@ -30,19 +31,21 @@ function userMessage(text: string): Message {
  * can reconcile live tokens into the placeholder without re-fetching.
  */
 class ChatStore {
-  messages = $state<Message[]>([]);
+  messages = $state([] as Message[]);
   loading = $state(false);
   streaming = $state(false);
-  error = $state<string | null>(null);
-  activeSessionId = $state<string | null>(null);
+  error = $state(null as string | null);
+  activeSessionId = $state(null as string | null);
 
   /** Newest assistant message currently receiving streamed parts (T3.2). */
   private streamingMessageId: string | null = null;
+  private streamSubscription: StreamSubscription | null = null;
 
   constructor(private readonly client: OpenCodeClient) {}
 
   /** Load full history for a session and make it the active conversation. */
   async loadHistory(sessionId: string): Promise<void> {
+    this.stopStreamSubscription();
     this.activeSessionId = sessionId;
     this.loading = true;
     this.error = null;
@@ -69,20 +72,24 @@ class ChatStore {
   async sendMessage(text: string): Promise<void> {
     const trimmed = text.trim();
     if (!trimmed || !this.activeSessionId) return;
+    const sessionId = this.activeSessionId;
 
     this.error = null;
     const user = userMessage(trimmed);
+    this.interrupt();
     this.messages = [...this.messages, user];
 
     const input: SendMessageInput = { text: trimmed };
     this.beginStreaming();
 
     try {
-      const reply = await this.client.sendMessage(this.activeSessionId, input);
+      const reply = await this.client.sendMessage(sessionId, input);
+      if (this.activeSessionId !== sessionId) return;
       // Adopt the server-issued message id so streamed parts (keyed by the
       // server messageId) reconcile onto this placeholder. T3.2 wires the
       // event subscription that drives appendStreamingPart for this id.
       this.adoptStreamingMessage(reply);
+      this.startStreamSubscription(sessionId, reply.id);
     } catch (err) {
       this.error = err instanceof Error ? err.message : 'Failed to send message';
       this.finalizeStreaming();
@@ -138,15 +145,33 @@ class ChatStore {
     if (final && this.streamingMessageId) {
       const targetId = this.streamingMessageId;
       this.messages = this.messages.map((message) =>
-        message.id === targetId ? { ...message, ...final, id: targetId } : message
+        message.id === targetId
+          ? {
+              ...message,
+              ...final,
+              id: targetId,
+              parts: final.parts.length ? final.parts : message.parts,
+              updatedAt: final.updatedAt ?? now(),
+            }
+          : message
       );
     }
+    this.stopStreamSubscription();
     this.streaming = false;
     this.streamingMessageId = null;
   }
 
+  /** Stop the active reply stream and mark it as cancelled. */
+  interrupt(): void {
+    if (!this.streaming) return;
+
+    this.appendStreamingPart({ type: 'step-finish', title: 'Interrupted', status: 'cancelled' });
+    this.finalizeStreaming();
+  }
+
   /** Reset to an empty conversation (keeps the active session id). */
   clear(): void {
+    this.stopStreamSubscription();
     this.messages = [];
     this.error = null;
     this.streaming = false;
@@ -173,6 +198,29 @@ class ChatStore {
   clearError(): void {
     this.error = null;
   }
+
+  private startStreamSubscription(sessionId: string, messageId: string): void {
+    this.stopStreamSubscription();
+    const subscription = new StreamSubscription({
+      client: this.client,
+      sessionId,
+      messageId,
+      target: this,
+      onError: (message) => {
+        this.error = message;
+      },
+      onComplete: () => {
+        if (this.streamSubscription === subscription) this.streamSubscription = null;
+      },
+    });
+    this.streamSubscription = subscription;
+    subscription.start();
+  }
+
+  private stopStreamSubscription(): void {
+    this.streamSubscription?.stop();
+    this.streamSubscription = null;
+  }
 }
 
 /**
@@ -188,6 +236,15 @@ function mergePart(parts: MessagePart[], incoming: MessagePart): MessagePart[] {
       return [...parts.slice(0, -1), merged];
     }
   }
+
+  const incomingId = 'id' in incoming ? incoming.id : undefined;
+  if (incomingId) {
+    const index = parts.findIndex(
+      (part) => part.type === incoming.type && 'id' in part && part.id === incomingId
+    );
+    if (index !== -1) return [...parts.slice(0, index), incoming, ...parts.slice(index + 1)];
+  }
+
   return [...parts, incoming];
 }
 
