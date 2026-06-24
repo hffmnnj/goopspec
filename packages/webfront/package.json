@@ -9,7 +9,7 @@
     "preview": "vite preview",
     "typecheck": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
     "check": "bun run typecheck",
-    "test": "bun test --preload ./svelte-test-loader.ts"
+    "test": "bun test"
   },
   "dependencies": {
     "@hugeicons/core-free-icons": "latest",

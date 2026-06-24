@@ -1,20 +1,14 @@
-import { transformSync } from '@babel/core';
-import transformTypeScript from '@babel/plugin-transform-typescript';
 import { compileModule } from 'svelte/compiler';
 
 const EXT = /\.svelte\.(ts|js)$/;
+const tsTranspiler = new Bun.Transpiler({ loader: 'ts', target: 'browser' });
 
 function stripTypeScript(source: string): string {
-  const result = transformSync(source, {
-    filename: 'module.ts',
-    plugins: [transformTypeScript],
-    configFile: false,
-  });
-  return result?.code ?? source;
+  return tsTranspiler.transformSync(source);
 }
 
 function compileSvelteModule(source: string, filename: string): string {
-  const withoutTypes = stripTypeScript(source);
+  const withoutTypes = filename.endsWith('.ts') ? stripTypeScript(source) : source;
   const { js } = compileModule(withoutTypes, {
     filename,
     generate: 'client',
