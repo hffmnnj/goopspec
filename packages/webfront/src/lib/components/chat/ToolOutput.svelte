@@ -1,5 +1,6 @@
 <script lang="ts">
   import CodeBlock from './CodeBlock.svelte';
+  import DiffView from './DiffView.svelte';
   import { normalizeOutput, truncateLines, OUTPUT_LINE_LIMIT } from './tool-card.js';
 
   interface ToolOutputProps {
@@ -27,19 +28,13 @@
   <p class="empty">No output.</p>
 {:else if normalized.kind === 'diff'}
   <!--
-    T4.2 EXTENSION POINT — diff rendering.
-    When the result is an edit/write whose output is a unified diff,
-    T4.2 swaps this branch for <DiffView diff={normalized.text} {tool} />.
-    Until then a plain `diff`-highlighted CodeBlock is the fallback.
+    Inline diff rendering (T4.2). DiffView parses the unified diff and renders
+    line-numbered, color-coded add/remove/context rows with its own collapse
+    affordance, so no outer truncation toggle is applied here.
   -->
   <div class="diff-seam" data-tool={diffTool}>
-    <CodeBlock code={visible} lang="diff" />
+    <DiffView diff={normalized.text} tool={diffTool} />
   </div>
-  {#if clip.truncated}
-    <button type="button" class="more" onclick={() => (expanded = !expanded)}>
-      {expanded ? 'Show less' : `Show ${hiddenLines} more lines`}
-    </button>
-  {/if}
 {:else if normalized.kind === 'json'}
   <CodeBlock code={visible} lang="json" />
   {#if clip.truncated}
