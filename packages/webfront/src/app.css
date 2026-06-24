@@ -2,6 +2,7 @@
 @import './lib/styles/tokens.css';
 @import './lib/styles/glass.css';
 @import './lib/styles/responsive.css';
+@import './lib/styles/foldable.css';
 
 @plugin '@tailwindcss/container-queries';
 

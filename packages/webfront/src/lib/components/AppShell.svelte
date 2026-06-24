@@ -11,6 +11,7 @@
   } from '@hugeicons/core-free-icons';
 
   import { layout as defaultLayout, type LayoutStore } from '$lib/stores/layout.svelte.js';
+  import { fold } from '$lib/stores/fold.svelte.js';
   import { ui } from '$lib/stores/ui.svelte.js';
   import { workspace } from '$lib/stores/workspace.svelte.js';
 
@@ -45,6 +46,8 @@
   const isPhone = $derived(layoutStore.isPhone);
   const isTablet = $derived(layoutStore.isTablet);
   const isDesktop = $derived(layoutStore.isDesktop);
+  // Foldable: two horizontal segments → side-by-side panes (sessions | chat).
+  const isFoldable = $derived(layoutStore.isFoldable);
 
   // On desktop the side columns are inline; on tablet/phone the file panel (and
   // on phone the sidebar) is an overlay drawer rather than a grid column.
@@ -67,7 +70,12 @@
 
   onMount(() => {
     registerDefaultShortcuts();
-    return layoutStore.init();
+    const stopLayout = layoutStore.init();
+    const stopFold = fold.init();
+    return () => {
+      stopFold();
+      stopLayout();
+    };
   });
 
   function handleFileSelect(path: string): void {
@@ -97,6 +105,62 @@
 <a href="#main-content" class="skip-link">Skip to content</a>
 
 <div class="app-shell" data-mode={mode} style:--col-sidebar={colSidebar} style:--col-files={colFiles}>
+  {#if isFoldable}
+    <!-- Foldable two-pane: sessions on the left segment, chat on the right. -->
+    <div class="fold-pane fold-pane--nav" role="navigation" aria-label="Sessions">
+      <SessionSidebar />
+    </div>
+
+    <!-- Hinge gutter — empty so no content sits under the physical fold. -->
+    <div class="fold-hinge" aria-hidden="true"></div>
+
+    <!-- svelte-ignore a11y_no_noninteractive_tabindex -- skip-link focus target -->
+    <main
+      id="main-content"
+      class="fold-pane fold-pane--chat app-shell__col--chat"
+      aria-label="Conversation"
+      tabindex={-1}
+    >
+      <div class="chat-topbar">
+        <span class="topbar-spacer"></span>
+        <SettingsButton onclick={openSettings} />
+        <button
+          type="button"
+          class="chrome-btn"
+          aria-label={layoutStore.filePanelOpen ? 'Close files' : 'Open files'}
+          aria-expanded={layoutStore.filePanelOpen}
+          title="Files"
+          onclick={() => layoutStore.toggleFilePanel()}
+        >
+          <HugeiconsIcon icon={SidebarRight01Icon} size={18} strokeWidth={1.5} color="currentColor" />
+        </button>
+      </div>
+
+      <div class="chat-region">
+        <ChatPanel />
+      </div>
+
+      <!-- Files overlay anchored within the chat pane (right segment). -->
+      {#if layoutStore.filePanelOpen}
+        <aside class="fold-files-overlay" aria-label="Workspace files">
+          <div class="drawer-chrome">
+            <WorkspaceSwitcher />
+            <button
+              type="button"
+              class="chrome-btn"
+              aria-label="Close files"
+              onclick={() => layoutStore.setFilePanel(false)}
+            >
+              <HugeiconsIcon icon={Cancel01Icon} size={18} strokeWidth={1.5} color="currentColor" />
+            </button>
+          </div>
+          <div class="col-fill">
+            {@render filePanelBody()}
+          </div>
+        </aside>
+      {/if}
+    </main>
+  {:else}
   <!-- Left: session sidebar (inline on desktop/tablet) -->
   {#if sidebarInline}
     <div class="app-shell__col app-shell__col--sidebar" role="navigation" aria-label="Sessions">
@@ -229,6 +293,7 @@
         <span class="nav-label">Files</span>
       </button>
     </nav>
+  {/if}
   {/if}
 </div>
 

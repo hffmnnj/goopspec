@@ -29,7 +29,7 @@ export const BREAKPOINTS = {
   desktop: 1024,
 } as const;
 
-export type LayoutMode = 'phone' | 'tablet' | 'desktop';
+export type LayoutMode = 'phone' | 'tablet' | 'desktop' | 'foldable';
 
 /** The focused column on phone, where only one panel is visible at a time. */
 export type MobileView = 'sessions' | 'chat' | 'files';
@@ -40,11 +40,21 @@ function isBrowser(): boolean {
   return typeof window !== 'undefined';
 }
 
-/** Derive the layout mode from a viewport width in CSS pixels. */
+/** Derive the width-based layout mode from a viewport width in CSS pixels. */
 export function deriveMode(width: number): LayoutMode {
   if (width >= BREAKPOINTS.desktop) return 'desktop';
   if (width >= BREAKPOINTS.phone) return 'tablet';
   return 'phone';
+}
+
+/**
+ * Resolve the effective layout mode. A foldable device unfolded into two
+ * horizontal segments takes precedence over the width-derived mode so the
+ * shell renders its two-pane (hinge-aware) layout. Otherwise the width-based
+ * mode applies unchanged.
+ */
+export function resolveMode(width: number, foldable: boolean): LayoutMode {
+  return foldable ? 'foldable' : deriveMode(width);
 }
 
 interface StoredLayout {
@@ -97,14 +107,14 @@ class LayoutStore {
    */
   private foldable = $state(false);
 
-  /** Current layout mode, derived from width (+ foldable seam). */
-  readonly mode = $derived<LayoutMode>(deriveMode(this.width));
+  /** Current layout mode: 'foldable' when two horizontal segments, else width. */
+  readonly mode = $derived<LayoutMode>(resolveMode(this.width, this.foldable));
 
   /** Convenience flags for templates. */
   readonly isPhone = $derived(this.mode === 'phone');
   readonly isTablet = $derived(this.mode === 'tablet');
   readonly isDesktop = $derived(this.mode === 'desktop');
-  /** Exposed for T9.2 to read the seam without widening private state. */
+  /** True when the shell is in its two-pane foldable layout. */
   readonly isFoldable = $derived(this.foldable);
 
   constructor(initialWidth?: number) {
