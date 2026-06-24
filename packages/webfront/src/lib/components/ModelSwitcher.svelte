@@ -383,13 +383,13 @@
   }
 
   .trigger:focus-visible {
-    outline: 2px solid var(--accent);
+    outline: 2px solid var(--focus-ring);
     outline-offset: 2px;
   }
 
   .trigger-icon {
     display: inline-flex;
-    color: var(--accent);
+    color: var(--accent-text);
   }
 
   .trigger-label {
@@ -519,11 +519,11 @@
   }
 
   .option.selected {
-    color: var(--accent);
+    color: var(--accent-text);
   }
 
   .option:focus-visible {
-    outline: 2px solid var(--accent);
+    outline: 2px solid var(--focus-ring);
     outline-offset: -2px;
   }
 
@@ -544,7 +544,7 @@
   .option-check {
     display: inline-flex;
     flex-shrink: 0;
-    color: var(--accent);
+    color: var(--accent-text);
   }
 
   .state {
@@ -564,7 +564,7 @@
 
   .state.error {
     flex-direction: column;
-    color: #ef4444;
+    color: var(--danger-text);
   }
 
   .retry-btn {

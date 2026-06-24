@@ -105,7 +105,7 @@
     height: 2.25rem;
     border-radius: var(--radius);
     background: var(--accent-soft);
-    color: var(--accent);
+    color: var(--accent-text);
   }
 
   .install-prompt__body {
@@ -179,7 +179,7 @@
   }
 
   .install-prompt__btn:focus-visible {
-    outline: 2px solid var(--accent);
+    outline: 2px solid var(--focus-ring);
     outline-offset: 2px;
   }
 
@@ -209,7 +209,7 @@
   }
 
   .install-prompt__close:focus-visible {
-    outline: 2px solid var(--accent);
+    outline: 2px solid var(--focus-ring);
     outline-offset: 2px;
   }
 

@@ -196,7 +196,7 @@
   }
 
   .new-btn:hover {
-    color: var(--accent);
+    color: var(--accent-text);
     border-color: var(--border-strong);
     background-color: var(--bg-surface);
   }
@@ -206,7 +206,7 @@
   }
 
   .new-btn:focus-visible {
-    outline: 2px solid var(--accent);
+    outline: 2px solid var(--focus-ring);
     outline-offset: 2px;
   }
 
@@ -301,7 +301,7 @@
   }
 
   .state--error .state-icon {
-    color: #ef4444;
+    color: var(--danger-text);
     background-color: rgba(239, 68, 68, 0.1);
   }
 
@@ -340,7 +340,7 @@
   .cta-btn {
     color: var(--accent-foreground);
     background-color: var(--accent);
-    border: 1px solid var(--accent);
+    border: 1px solid var(--focus-ring);
   }
 
   .cta-btn:hover {
@@ -366,7 +366,7 @@
 
   .cta-btn:focus-visible,
   .retry-btn:focus-visible {
-    outline: 2px solid var(--accent);
+    outline: 2px solid var(--focus-ring);
     outline-offset: 2px;
   }
 

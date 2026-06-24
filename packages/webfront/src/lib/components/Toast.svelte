@@ -72,13 +72,13 @@
     border-left: 3px solid var(--accent);
   }
   :global(.toast--info) {
-    border-left: 3px solid #3b82f6;
+    border-left: 3px solid var(--info-text);
   }
   :global(.toast--warning) {
-    border-left: 3px solid #f59e0b;
+    border-left: 3px solid var(--warning-text);
   }
   :global(.toast--error) {
-    border-left: 3px solid #ef4444;
+    border-left: 3px solid var(--danger-text);
   }
 
   .toast__icon {
@@ -89,16 +89,16 @@
   }
 
   :global(.toast--success) .toast__icon {
-    color: var(--accent);
+    color: var(--accent-text);
   }
   :global(.toast--info) .toast__icon {
-    color: #3b82f6;
+    color: var(--info-text);
   }
   :global(.toast--warning) .toast__icon {
-    color: #f59e0b;
+    color: var(--warning-text);
   }
   :global(.toast--error) .toast__icon {
-    color: #ef4444;
+    color: var(--danger-text);
   }
 
   .toast__message {
@@ -115,7 +115,7 @@
     padding: 0.3rem 0.55rem;
     font-size: 0.75rem;
     font-weight: 600;
-    color: var(--accent);
+    color: var(--accent-text);
     background-color: transparent;
     border: 1px solid var(--border);
     border-radius: var(--radius-sm);
@@ -155,7 +155,7 @@
 
   .toast__action:focus-visible,
   .toast__dismiss:focus-visible {
-    outline: 2px solid var(--accent);
+    outline: 2px solid var(--focus-ring);
     outline-offset: 2px;
   }
 </style>

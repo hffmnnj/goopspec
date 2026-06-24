@@ -1,0 +1,51 @@
+/* Cross-cutting accessibility primitives shared across the webfront. */
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.sr-only-focusable:focus,
+.sr-only-focusable:focus-visible {
+  position: static;
+  width: auto;
+  height: auto;
+  margin: 0;
+  overflow: visible;
+  clip: auto;
+  white-space: normal;
+}
+
+/* WCAG AA-visible focus ring. Uses --focus-ring rather than --accent because
+ * the light brand accent is intentionally too bright for small text/outline use. */
+:where(a, button, input, textarea, select, [tabindex]):focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
+/* Give placeholder/helper copy enough contrast in both themes. */
+::placeholder {
+  color: var(--text-muted);
+  opacity: 1;
+}
+
+/* Honor user motion preferences globally, including CSS authored before this
+ * import and browser smooth-scroll behavior. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}

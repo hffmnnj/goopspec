@@ -191,12 +191,12 @@
   }
 
   .row:focus-visible {
-    outline: 2px solid var(--accent);
+    outline: 2px solid var(--focus-ring);
     outline-offset: -2px;
   }
 
   .row.active {
-    color: var(--accent);
+    color: var(--accent-text);
     background-color: var(--accent-soft);
   }
 
@@ -232,11 +232,11 @@
   }
 
   .type-icon.dir {
-    color: var(--accent);
+    color: var(--accent-text);
   }
 
   .row.active .type-icon {
-    color: var(--accent);
+    color: var(--accent-text);
   }
 
   .name {
@@ -263,7 +263,7 @@
   }
 
   .child-state.error {
-    color: #ef4444;
+    color: var(--danger-text);
   }
 
   .spin {

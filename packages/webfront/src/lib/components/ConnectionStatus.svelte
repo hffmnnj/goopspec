@@ -23,7 +23,7 @@
     disconnected: 'var(--text-muted)',
     connecting: 'var(--accent)',
     connected: 'var(--accent)',
-    error: '#ef4444'
+    error: 'var(--danger-text)'
   };
 
   function handleClick(): void {
@@ -111,7 +111,7 @@
   }
 
   .connection-status:focus-visible {
-    outline: 2px solid var(--accent);
+    outline: 2px solid var(--focus-ring);
     outline-offset: 2px;
   }
 

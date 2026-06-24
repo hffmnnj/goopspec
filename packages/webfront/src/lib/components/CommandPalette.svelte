@@ -374,7 +374,7 @@
   }
 
   .close-btn:focus-visible {
-    outline: 2px solid var(--accent);
+    outline: 2px solid var(--focus-ring);
     outline-offset: 2px;
   }
 
@@ -438,7 +438,7 @@
   }
 
   .command-row.selected .row-icon {
-    color: var(--accent);
+    color: var(--accent-text);
   }
 
   .row-icon--placeholder {
@@ -495,7 +495,7 @@
   .row-enter {
     display: inline-flex;
     align-items: center;
-    color: var(--accent);
+    color: var(--accent-text);
     flex: 0 0 auto;
   }
 

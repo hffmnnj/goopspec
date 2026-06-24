@@ -74,7 +74,7 @@
     align-items: center;
     justify-content: center;
     flex: 0 0 auto;
-    color: #ef4444;
+    color: var(--danger-text);
   }
 
   .error-state:not(.error-state--inline) .error-state__icon {
@@ -144,7 +144,7 @@
   }
 
   .error-state__retry:focus-visible {
-    outline: 2px solid var(--accent);
+    outline: 2px solid var(--focus-ring);
     outline-offset: 2px;
   }
 

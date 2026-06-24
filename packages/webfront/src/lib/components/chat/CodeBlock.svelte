@@ -127,12 +127,12 @@
   }
 
   .copy:focus-visible {
-    outline: 2px solid var(--accent);
+    outline: 2px solid var(--focus-ring);
     outline-offset: 2px;
   }
 
   .copy.copied {
-    color: var(--accent);
+    color: var(--accent-text);
   }
 
   .copy-text {

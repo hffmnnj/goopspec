@@ -325,13 +325,13 @@
   }
 
   .trigger:focus-visible {
-    outline: 2px solid var(--accent);
+    outline: 2px solid var(--focus-ring);
     outline-offset: 2px;
   }
 
   .trigger-icon {
     display: inline-flex;
-    color: var(--accent);
+    color: var(--accent-text);
   }
 
   .trigger-label {
@@ -448,7 +448,7 @@
   }
 
   .workspace-option.selected {
-    color: var(--accent);
+    color: var(--accent-text);
   }
 
   .option-icon {
@@ -458,7 +458,7 @@
   }
 
   .workspace-option.selected .option-icon {
-    color: var(--accent);
+    color: var(--accent-text);
   }
 
   .option-name {
@@ -472,7 +472,7 @@
   .option-check {
     display: inline-flex;
     flex: 0 0 auto;
-    color: var(--accent);
+    color: var(--accent-text);
   }
 
   .remove-btn {
@@ -505,7 +505,7 @@
   .remove-btn:hover,
   .remove-btn:focus-visible {
     background-color: var(--bg-elevated);
-    color: #ef4444;
+    color: var(--danger-text);
   }
 
   .empty-state {
@@ -536,7 +536,7 @@
   }
 
   .add-input:focus-visible {
-    border-color: var(--accent);
+    border-color: var(--focus-ring);
   }
 
   .add-confirm,

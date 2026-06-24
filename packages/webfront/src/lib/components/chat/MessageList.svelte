@@ -33,7 +33,11 @@
 
   function scrollToBottom(behavior: ScrollBehavior = 'smooth'): void {
     if (!viewport) return;
-    viewport.scrollTo({ top: viewport.scrollHeight, behavior });
+    const reduced =
+      typeof window !== 'undefined' &&
+      typeof window.matchMedia === 'function' &&
+      window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    viewport.scrollTo({ top: viewport.scrollHeight, behavior: reduced ? 'auto' : behavior });
   }
 
   // Auto-follow new content only when the user is already pinned to the bottom,
@@ -48,6 +52,9 @@
 </script>
 
 <div class="message-list" bind:this={viewport} onscroll={handleScroll}>
+  <div class="sr-only" role="status" aria-live="polite" aria-atomic="true">
+    {streaming ? 'Assistant response streaming' : ''}
+  </div>
   <div class="messages">
     {#each messages as message (message.id)}
       <article class="row row--{message.role}" aria-label={`${message.role} message`}>
@@ -199,7 +206,7 @@
   }
 
   .jump:focus-visible {
-    outline: 2px solid var(--accent);
+    outline: 2px solid var(--focus-ring);
     outline-offset: 2px;
   }
 

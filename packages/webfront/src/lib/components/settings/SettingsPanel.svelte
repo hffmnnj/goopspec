@@ -422,7 +422,7 @@
   }
 
   .icon-btn:focus-visible {
-    outline: 2px solid var(--accent);
+    outline: 2px solid var(--focus-ring);
     outline-offset: 2px;
   }
 
@@ -520,7 +520,7 @@
   }
 
   .segment:focus-visible {
-    outline: 2px solid var(--accent);
+    outline: 2px solid var(--focus-ring);
     outline-offset: 2px;
   }
 
@@ -540,7 +540,7 @@
 
   .switch.on {
     background-color: var(--accent);
-    border-color: var(--accent);
+    border-color: var(--focus-ring);
   }
 
   .switch-thumb {
@@ -561,7 +561,7 @@
   }
 
   .switch:focus-visible {
-    outline: 2px solid var(--accent);
+    outline: 2px solid var(--focus-ring);
     outline-offset: 2px;
   }
 
@@ -592,12 +592,12 @@
 
   .text-input:focus-visible {
     outline: none;
-    border-color: var(--accent);
+    border-color: var(--focus-ring);
     box-shadow: 0 0 0 2px var(--accent-soft);
   }
 
   .text-input.invalid {
-    border-color: #ef4444;
+    border-color: var(--danger-text);
   }
 
   .action-btn {
@@ -625,14 +625,14 @@
   }
 
   .action-btn:focus-visible {
-    outline: 2px solid var(--accent);
+    outline: 2px solid var(--focus-ring);
     outline-offset: 2px;
   }
 
   .field-error {
     margin: 0;
     font-size: 0.75rem;
-    color: #ef4444;
+    color: var(--danger-text);
   }
 
   .conn-status {
@@ -646,11 +646,11 @@
   }
 
   .conn.ok {
-    color: var(--accent);
+    color: var(--accent-text);
   }
 
   .conn.err {
-    color: #ef4444;
+    color: var(--danger-text);
   }
 
   .conn.muted {
@@ -719,7 +719,7 @@
   }
 
   .provider-state.state--error {
-    color: #ef4444;
+    color: var(--danger-text);
   }
 
   .state-detail {

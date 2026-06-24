@@ -236,7 +236,7 @@
   }
 
   .session-card:focus-visible {
-    outline: 2px solid var(--accent);
+    outline: 2px solid var(--focus-ring);
     outline-offset: 2px;
   }
 
@@ -315,7 +315,7 @@
     font-weight: 500;
     color: var(--text-primary);
     background-color: var(--bg-base);
-    border: 1px solid var(--accent);
+    border: 1px solid var(--focus-ring);
     border-radius: var(--radius-sm);
     outline: none;
   }
@@ -390,13 +390,13 @@
   }
 
   .icon-btn:focus-visible {
-    outline: 2px solid var(--accent);
+    outline: 2px solid var(--focus-ring);
     outline-offset: 1px;
     opacity: 1;
   }
 
   .icon-btn--danger:hover {
-    color: #ef4444;
+    color: var(--danger-text);
     background-color: rgba(239, 68, 68, 0.12);
   }
 

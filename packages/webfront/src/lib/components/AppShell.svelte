@@ -43,6 +43,8 @@
   let fileQuery = $state('');
   // Held locally for now; T10.3 promotes this into the chat composer.
   let activeFilePath = $state<string | undefined>(undefined);
+  let drawerEl = $state<HTMLElement | null>(null);
+  let previouslyFocused = $state<HTMLElement | null>(null);
 
   const mode = $derived(layoutStore.mode);
   const isPhone = $derived(layoutStore.isPhone);
@@ -59,6 +61,9 @@
   const sidebarOverlay = $derived(isPhone && layoutStore.sidebarOpen);
   const filePanelOverlay = $derived(
     layoutStore.filePanelOpen && (isPhone || isTablet)
+  );
+  const anyDrawerOpen = $derived(
+    sidebarOverlay || filePanelOverlay || (isFoldable && layoutStore.filePanelOpen)
   );
 
   // Grid column widths fed to responsive.css via custom properties.
@@ -102,6 +107,46 @@
     layoutStore.closeOverlays();
     if (isTablet) layoutStore.setFilePanel(false);
   }
+
+  function drawerFocusables(): HTMLElement[] {
+    if (!drawerEl) return [];
+    const selector =
+      'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+    return Array.from(drawerEl.querySelectorAll<HTMLElement>(selector));
+  }
+
+  function trapDrawerFocus(event: KeyboardEvent): void {
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      closeOverlays();
+      return;
+    }
+    if (event.key !== 'Tab') return;
+    const focusable = drawerFocusables();
+    if (focusable.length === 0) return;
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    const active = document.activeElement as HTMLElement | null;
+    if (event.shiftKey && active === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && active === last) {
+      event.preventDefault();
+      first.focus();
+    }
+  }
+
+  $effect(() => {
+    if (!anyDrawerOpen) return;
+    if (typeof document !== 'undefined') {
+      previouslyFocused = document.activeElement as HTMLElement | null;
+    }
+    queueMicrotask(() => {
+      const focusable = drawerFocusables();
+      (focusable[0] ?? drawerEl)?.focus();
+    });
+    return () => previouslyFocused?.focus?.();
+  });
 </script>
 
 <svelte:window use:useKeyboard />
@@ -146,7 +191,15 @@
 
       <!-- Files overlay anchored within the chat pane (right segment). -->
       {#if layoutStore.filePanelOpen}
-        <aside class="fold-files-overlay" aria-label="Workspace files">
+        <div
+          class="fold-files-overlay"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Workspace files"
+          tabindex={-1}
+          bind:this={drawerEl}
+          onkeydown={trapDrawerFocus}
+        >
           <div class="drawer-chrome">
             <WorkspaceSwitcher />
             <button
@@ -161,7 +214,7 @@
           <div class="col-fill">
             {@render filePanelBody()}
           </div>
-        </aside>
+        </div>
       {/if}
     </main>
   {:else}
@@ -303,8 +356,16 @@
 
 <!-- Tablet/phone overlay drawers -->
 {#if sidebarOverlay}
-  <button type="button" class="shell-backdrop" aria-label="Close sessions" onclick={closeOverlays}></button>
-  <aside class="shell-drawer shell-drawer--left" role="navigation" aria-label="Sessions">
+  <button type="button" class="shell-backdrop" aria-hidden="true" tabindex="-1" onclick={closeOverlays}></button>
+  <div
+    class="shell-drawer shell-drawer--left"
+    role="dialog"
+    aria-modal="true"
+    aria-label="Sessions"
+    tabindex={-1}
+    bind:this={drawerEl}
+    onkeydown={trapDrawerFocus}
+  >
     <div class="drawer-chrome">
       <span class="drawer-title">Sessions</span>
       <button type="button" class="chrome-btn" aria-label="Close sessions" onclick={closeOverlays}>
@@ -314,12 +375,20 @@
     <div class="col-fill">
       <SessionSidebar />
     </div>
-  </aside>
+  </div>
 {/if}
 
 {#if filePanelOverlay}
-  <button type="button" class="shell-backdrop" aria-label="Close files" onclick={closeOverlays}></button>
-  <aside class="shell-drawer shell-drawer--right" aria-label="Workspace files">
+  <button type="button" class="shell-backdrop" aria-hidden="true" tabindex="-1" onclick={closeOverlays}></button>
+  <div
+    class="shell-drawer shell-drawer--right"
+    role="dialog"
+    aria-modal="true"
+    aria-label="Workspace files"
+    tabindex={-1}
+    bind:this={drawerEl}
+    onkeydown={trapDrawerFocus}
+  >
     <div class="drawer-chrome">
       <WorkspaceSwitcher />
       <button type="button" class="chrome-btn" aria-label="Close files" onclick={closeOverlays}>
@@ -329,7 +398,7 @@
     <div class="col-fill">
       {@render filePanelBody()}
     </div>
-  </aside>
+  </div>
 {/if}
 
 <!-- Global overlays -->
@@ -482,7 +551,7 @@
   }
 
   .chrome-btn:focus-visible {
-    outline: 2px solid var(--accent);
+    outline: 2px solid var(--focus-ring);
     outline-offset: 2px;
   }
 
@@ -523,11 +592,11 @@
   }
 
   .nav-tab.active {
-    color: var(--accent);
+    color: var(--accent-text);
   }
 
   .nav-tab:focus-visible {
-    outline: 2px solid var(--accent);
+    outline: 2px solid var(--focus-ring);
     outline-offset: -2px;
   }
 

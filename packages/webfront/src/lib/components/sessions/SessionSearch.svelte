@@ -81,7 +81,7 @@
   }
 
   .search-field:focus-within {
-    border-color: var(--accent);
+    border-color: var(--focus-ring);
     background-color: var(--bg-base);
     color: var(--text-primary);
   }
@@ -132,7 +132,7 @@
   }
 
   .clear:focus-visible {
-    outline: 2px solid var(--accent);
+    outline: 2px solid var(--focus-ring);
     outline-offset: 1px;
   }
 
