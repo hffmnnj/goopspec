@@ -1,0 +1,47 @@
+@import 'tailwindcss';
+
+@plugin '@tailwindcss/container-queries';
+
+@font-face {
+  font-family: 'Geist';
+  src: url('/fonts/geist.woff2') format('woff2');
+  font-weight: 100 900;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Geist Mono';
+  src: url('/fonts/geist-mono.woff2') format('woff2');
+  font-weight: 100 900;
+  font-display: swap;
+}
+
+:root {
+  --accent: #4cce4e;
+  --radius: 0.75rem;
+  color-scheme: light;
+  font-family: 'Geist', Inter, ui-sans-serif, system-ui, sans-serif;
+  background: #f7f8f5;
+  color: #10120f;
+}
+
+[data-theme='dark'] {
+  --accent: #7fef80;
+  color-scheme: dark;
+  background: #050805;
+  color: #edf7ed;
+}
+
+body {
+  min-width: 320px;
+  min-height: 100vh;
+  margin: 0;
+  background: inherit;
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
