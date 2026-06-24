@@ -9,7 +9,7 @@
 
 import { createClient } from '$lib/api/client.js';
 import { getServerUrl } from '$lib/api/config.js';
-import type { OpenCodeClient } from '$lib/api/types.js';
+import type { GlobalEvent, OpenCodeClient } from '$lib/api/types.js';
 
 export type ConnectionStatus = 'disconnected' | 'connecting' | 'connected' | 'error';
 
@@ -35,6 +35,7 @@ class ConnectionStore {
   private client: OpenCodeClient;
   private channel: BroadcastChannel | null;
   private abortController: AbortController | null = null;
+  private globalEventsSubscription: { close(): void } | null = null;
 
   current = $state<ConnectionState>({
     status: 'disconnected',
@@ -68,12 +69,14 @@ class ConnectionStore {
     this.current.error = null;
     this.current.retryCount = 0;
     this.abortController = null;
+    this.startGlobalEventsSubscription();
   }
 
   private setError(error: string): void {
     this.current.status = 'error';
     this.current.error = error;
     this.abortController = null;
+    this.stopGlobalEventsSubscription();
   }
 
   private async attemptOnce(signal: AbortSignal): Promise<void> {
@@ -82,12 +85,51 @@ class ConnectionStore {
     this.setConnected();
   }
 
+  private startGlobalEventsSubscription(): void {
+    this.stopGlobalEventsSubscription();
+    this.globalEventsSubscription = this.client.subscribeGlobalEvents(this.handleGlobalEvent);
+  }
+
+  private stopGlobalEventsSubscription(): void {
+    this.globalEventsSubscription?.close();
+    this.globalEventsSubscription = null;
+  }
+
+  private handleGlobalEvent = (event: GlobalEvent): void => {
+    if (event.type === 'server.connected') {
+      this.current.status = 'connected';
+      this.current.error = null;
+      this.current.retryCount = 0;
+      return;
+    }
+
+    if (this.isDisconnectEvent(event)) {
+      this.handleConnectionDrop('Server connection closed');
+    }
+  };
+
+  private isDisconnectEvent(event: GlobalEvent): boolean {
+    const type = event.type.toLowerCase();
+    return type.includes('disconnect') || type === 'close' || type === 'closed' || type.endsWith('.close') || type.endsWith('.closed');
+  }
+
+  private handleConnectionDrop(message: string): void {
+    if (this.current.status === 'connecting') return;
+
+    this.abortController?.abort();
+    this.abortController = null;
+    this.stopGlobalEventsSubscription();
+    this.setStatus('disconnected', message);
+    void this.connectWithRetry();
+  }
+
   /**
    * Try to connect. Transitions from any state into `connecting`, then either
    * `connected` or `error`. A previous in-flight attempt is aborted.
    */
   async connect(): Promise<void> {
     this.abortController?.abort();
+    this.stopGlobalEventsSubscription();
     const controller = new AbortController();
     this.abortController = controller;
 
@@ -108,6 +150,8 @@ class ConnectionStore {
    * succeeds, the attempt count is exhausted, or the store is reset.
    */
   async connectWithRetry(maxRetries = 5): Promise<void> {
+    this.abortController?.abort();
+    this.stopGlobalEventsSubscription();
     this.current.serverUrl = getServerUrl();
     this.current.retryCount = 0;
     this.setStatus('connecting');
@@ -145,6 +189,7 @@ class ConnectionStore {
   disconnect(): void {
     this.abortController?.abort();
     this.abortController = null;
+    this.stopGlobalEventsSubscription();
     this.setStatus('disconnected');
     this.current.error = null;
     this.current.retryCount = 0;

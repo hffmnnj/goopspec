@@ -1,20 +1,27 @@
 import { afterEach, beforeEach, describe, expect, it, mock } from 'bun:test';
 import { createConnectionStore, connection, getConnectionState } from './connection.svelte';
-import type { Message, MessageRole, OpenCodeClient, SendMessageInput } from '$lib/api/types.js';
+import type { GlobalEvent, Message, MessageRole, OpenCodeClient, SendMessageInput } from '$lib/api/types.js';
 
 const assistantRole: MessageRole = 'assistant';
 
 describe('ConnectionStore', () => {
   let client: OpenCodeClient;
   let store: ReturnType<typeof createConnectionStore>;
+  let globalEventHandler: ((event: GlobalEvent) => void) | undefined;
+  let closeGlobalEvents: ReturnType<typeof mock>;
 
   beforeEach(() => {
+    globalEventHandler = undefined;
+    closeGlobalEvents = mock(() => undefined);
     client = {
       listProjects: mock(() => Promise.resolve([])),
       getCurrentProject: mock(() => Promise.resolve(null)),
       getPath: mock(() => Promise.resolve({ path: '' })),
       getVcsInfo: mock(() => Promise.resolve(null)),
-      subscribeGlobalEvents: () => ({ close: () => undefined }),
+      subscribeGlobalEvents: mock((handler: (event: GlobalEvent) => void) => {
+        globalEventHandler = handler;
+        return { close: closeGlobalEvents };
+      }),
       listSessions: mock(() => Promise.resolve([])),
       createSession: mock(() => Promise.resolve({ id: 's1', title: '', createdAt: '', updatedAt: '' })),
       deleteSession: mock(() => Promise.resolve()),
@@ -120,6 +127,34 @@ describe('ConnectionStore', () => {
     await store.connect();
 
     expect(getConfig).toHaveBeenCalledTimes(1);
+  });
+
+  it('starts a global event subscription after connecting', async () => {
+    await store.connect();
+
+    expect(client.subscribeGlobalEvents).toHaveBeenCalledTimes(1);
+    expect(globalEventHandler).toBeDefined();
+  });
+
+  it('closes the global event subscription on disconnect', async () => {
+    await store.connect();
+
+    store.disconnect();
+
+    expect(closeGlobalEvents).toHaveBeenCalledTimes(1);
+    expect(store.current.status).toBe('disconnected');
+  });
+
+  it('handles server.connected global events as a healthy connected state', async () => {
+    await store.connect();
+    store.current.error = 'stale';
+    store.current.retryCount = 2;
+
+    globalEventHandler?.({ type: 'server.connected' });
+
+    expect(store.current.status).toBe('connected');
+    expect(store.current.error).toBeNull();
+    expect(store.current.retryCount).toBe(0);
   });
 });
 
