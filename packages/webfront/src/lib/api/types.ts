@@ -42,6 +42,16 @@ export interface Provider {
   id: string;
   name: string;
   models: Model[];
+  defaultModelId?: string;
+}
+
+export interface Agent {
+  id: string;
+  name: string;
+  description?: string;
+  mode?: 'primary' | 'subagent' | 'all';
+  hidden?: boolean;
+  [key: string]: unknown;
 }
 
 export interface OpenCodeConfig {
@@ -127,6 +137,7 @@ export interface SendMessageInput {
   text: string;
   providerId?: string;
   modelId?: string;
+  agent?: string;
   parts?: MessagePart[];
 }
 
@@ -158,6 +169,7 @@ export interface OpenCodeClient {
   sendMessage(sessionId: string, input: SendMessageInput, directory?: string): Promise<Message>;
   subscribeEvents(sessionId: string, handlers: EventHandlers): Unsubscribe;
   listProviders(): Promise<Provider[]>;
+  listAgents(): Promise<Agent[]>;
   getConfig(): Promise<OpenCodeConfig>;
   updateConfig(patch: Partial<OpenCodeConfig>): Promise<OpenCodeConfig>;
   readFile(path: string): Promise<string>;

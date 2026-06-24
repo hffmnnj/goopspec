@@ -5,6 +5,7 @@
   import type { OpenCodeClient } from '$lib/api/types.js';
   import MessageList from './MessageList.svelte';
   import MessageInput from './MessageInput.svelte';
+  import AgentSelector from '$lib/components/AgentSelector.svelte';
   import ModelSwitcher from '$lib/components/ModelSwitcher.svelte';
   import ShareButton from '$lib/components/sessions/ShareButton.svelte';
   import EmptyState from '$lib/components/states/EmptyState.svelte';
@@ -50,12 +51,13 @@
   <header class="chat-header">
     <h1 class="chat-title">{title}</h1>
     <div class="header-slot">
+      <AgentSelector client={switcherClient} />
+      <ModelSwitcher client={switcherClient} />
       <ShareButton
         {title}
         sessionId={chat.activeSessionId}
         messages={chat.messages}
       />
-      <ModelSwitcher client={switcherClient} />
     </div>
   </header>
 
