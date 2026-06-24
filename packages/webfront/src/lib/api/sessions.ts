@@ -4,8 +4,8 @@ function sortByUpdatedAtDesc(a: Session, b: Session): number {
   return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
 }
 
-export async function fetchSessions(client: OpenCodeClient): Promise<Session[]> {
-  const sessions = await client.listSessions();
+export async function fetchSessions(client: OpenCodeClient, directory?: string): Promise<Session[]> {
+  const sessions = await client.listSessions(directory);
   return [...sessions].sort(sortByUpdatedAtDesc);
 }
 

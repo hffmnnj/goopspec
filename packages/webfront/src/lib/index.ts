@@ -25,6 +25,7 @@ export { default as FileTree } from './components/files/FileTree.svelte';
 export { default as FileTreeNode } from './components/files/FileTreeNode.svelte';
 export { default as SettingsButton } from './components/settings/SettingsButton.svelte';
 export { default as SettingsPanel } from './components/settings/SettingsPanel.svelte';
+export { default as ProjectRail } from './components/sessions/ProjectRail.svelte';
 export { default as SessionCard } from './components/sessions/SessionCard.svelte';
 export { default as SessionSearch } from './components/sessions/SessionSearch.svelte';
 export { default as SessionSidebar } from './components/sessions/SessionSidebar.svelte';
@@ -48,6 +49,7 @@ export * from './stores/connection.svelte.js';
 export * from './stores/fold.svelte.js';
 export * from './stores/layout.svelte.js';
 export * from './stores/model.svelte.js';
+export * from './stores/projects.svelte.js';
 export * from './stores/pwa.svelte.js';
 export * from './stores/sessions.svelte.js';
 export * from './stores/settings.svelte.js';
@@ -56,6 +58,12 @@ export * from './stores/toast.svelte.js';
 export * from './stores/toast-bindings.svelte.js';
 export * from './stores/ui.svelte.js';
 export * from './stores/workspace.svelte.js';
+
+// Routing
+export * from './routing/path-codec.js';
+export * from './routing/navigation.js';
+export * from './routing/route-sync.js';
+export * from './sessions/hierarchy.js';
 
 // Commands and keyboard
 export * from './commands/commands.js';

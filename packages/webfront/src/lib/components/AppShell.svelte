@@ -10,10 +10,16 @@
     InboxIcon,
   } from '@hugeicons/core-free-icons';
 
-  import { layout as defaultLayout, type LayoutStore } from '$lib/stores/layout.svelte.js';
+  import {
+    layout as defaultLayout,
+    SIDEBAR_WIDTH,
+    type LayoutStore,
+  } from '$lib/stores/layout.svelte.js';
   import { fold } from '$lib/stores/fold.svelte.js';
   import { ui } from '$lib/stores/ui.svelte.js';
   import { workspace } from '$lib/stores/workspace.svelte.js';
+  import { projects } from '$lib/stores/projects.svelte.js';
+  import { sessions } from '$lib/stores/sessions.svelte.js';
 
   import SessionSidebar from './sessions/SessionSidebar.svelte';
   import ChatPanel from './chat/ChatPanel.svelte';
@@ -37,9 +43,17 @@
   interface AppShellProps {
     /** Override the layout store (tests / storybook). */
     layoutStore?: LayoutStore;
+    /**
+     * Optional main-content renderer for the chat column. When provided it
+     * replaces the default `ChatPanel` (used by the root route to host the
+     * home page); when omitted the shell renders the conversation as before.
+     * The snippet receives the composer-insert handles so a custom main can
+     * still drive the composer if it chooses to.
+     */
+    main?: import('svelte').Snippet<[{ composerInsertText?: string; composerInsertNonce: number }]>;
   }
 
-  let { layoutStore = defaultLayout }: AppShellProps = $props();
+  let { layoutStore = defaultLayout, main }: AppShellProps = $props();
 
   let fileQuery = $state('');
   let activeFilePath = $state<string | undefined>(undefined);
@@ -47,6 +61,11 @@
   let composerInsertNonce = $state(0);
   let drawerEl = $state<HTMLElement | null>(null);
   let previouslyFocused = $state<HTMLElement | null>(null);
+
+  // Sidebar resize: the handle is a focusable vertical separator. Pointer drag
+  // sets the width live; arrow keys nudge it. Bounds live in the layout store.
+  const RESIZE_STEP = 16;
+  let resizing = $state(false);
 
   const mode = $derived(layoutStore.mode);
   const isPhone = $derived(layoutStore.isPhone);
@@ -68,9 +87,15 @@
     sidebarOverlay || filePanelOverlay || (isFoldable && layoutStore.filePanelOpen)
   );
 
-  // Grid column widths fed to responsive.css via custom properties.
-  const colSidebar = $derived(sidebarInline ? 'var(--shell-sidebar-w)' : '0px');
+  // Grid column widths fed to responsive.css via custom properties. The docked
+  // sidebar width is driven by the layout store so resize + persistence flow
+  // through a single source of truth.
+  const sidebarWidthPx = $derived(`${layoutStore.sidebarWidth}px`);
+  const colSidebar = $derived(sidebarInline ? sidebarWidthPx : '0px');
   const colFiles = $derived(filePanelInline ? 'var(--shell-filepanel-w)' : '0px');
+  // The resize handle is only meaningful when the sidebar is docked inline on a
+  // pointer device (desktop/tablet) — not the phone drawer or foldable segment.
+  const sidebarResizable = $derived(sidebarInline && !isFoldable);
 
   // On phone, only the focused view is shown in the chat column.
   const phoneView = $derived(layoutStore.mobileView);
@@ -80,11 +105,14 @@
   onMount(() => {
     registerDefaultShortcuts();
     workspace.init();
+    void projects.refresh();
+    const stopSessions = sessions.initProjectWatcher();
     const stopLayout = layoutStore.init();
     const stopFold = fold.init();
     const stopToasts = initToastBindings();
     return () => {
       stopToasts();
+      stopSessions();
       stopFold();
       stopLayout();
     };
@@ -111,6 +139,47 @@
   function closeOverlays(): void {
     layoutStore.closeOverlays();
     if (isTablet) layoutStore.setFilePanel(false);
+  }
+
+  function startResize(event: PointerEvent): void {
+    if (event.button !== 0 && event.pointerType === 'mouse') return;
+    event.preventDefault();
+    resizing = true;
+    const handle = event.currentTarget as HTMLElement;
+    handle.setPointerCapture?.(event.pointerId);
+  }
+
+  function moveResize(event: PointerEvent): void {
+    if (!resizing) return;
+    // The sidebar starts at the viewport's left edge, so its width is the
+    // pointer's x position. The store clamps to the allowed bounds.
+    layoutStore.setSidebarWidth(event.clientX);
+  }
+
+  function endResize(event: PointerEvent): void {
+    if (!resizing) return;
+    resizing = false;
+    const handle = event.currentTarget as HTMLElement;
+    handle.releasePointerCapture?.(event.pointerId);
+  }
+
+  function resizeKeydown(event: KeyboardEvent): void {
+    let delta = 0;
+    if (event.key === 'ArrowLeft') delta = -RESIZE_STEP;
+    else if (event.key === 'ArrowRight') delta = RESIZE_STEP;
+    else if (event.key === 'Home') {
+      event.preventDefault();
+      layoutStore.setSidebarWidth(SIDEBAR_WIDTH.min);
+      return;
+    } else if (event.key === 'End') {
+      event.preventDefault();
+      layoutStore.setSidebarWidth(SIDEBAR_WIDTH.max);
+      return;
+    } else {
+      return;
+    }
+    event.preventDefault();
+    layoutStore.nudgeSidebarWidth(delta);
   }
 
   function drawerFocusables(): HTMLElement[] {
@@ -158,7 +227,13 @@
 
 <a href="#main-content" class="skip-link">Skip to content</a>
 
-<div class="app-shell" data-mode={mode} style:--col-sidebar={colSidebar} style:--col-files={colFiles}>
+<div
+  class="app-shell"
+  data-mode={mode}
+  data-resizing={resizing ? 'true' : undefined}
+  style:--col-sidebar={colSidebar}
+  style:--col-files={colFiles}
+>
   {#if isFoldable}
     <!-- Foldable two-pane: sessions on the left segment, chat on the right. -->
     <div class="fold-pane fold-pane--nav" role="navigation" aria-label="Sessions">
@@ -191,7 +266,7 @@
       </div>
 
       <div class="chat-region">
-        <ChatPanel {composerInsertText} {composerInsertNonce} />
+        {@render mainContent()}
       </div>
 
       <!-- Files overlay anchored within the chat pane (right segment). -->
@@ -240,6 +315,34 @@
       <div class="col-fill">
         <SessionSidebar />
       </div>
+      {#if sidebarResizable}
+        <!--
+          A focusable window-splitter: role="separator" with aria-valuenow is an
+          interactive splitter per WAI-ARIA, so the tabindex + pointer/key
+          handlers are intentional. Svelte's linter treats `separator` as
+          non-interactive, hence the ignores.
+        -->
+        <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+        <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+        <div
+          class="sidebar-resizer"
+          class:sidebar-resizer--active={resizing}
+          role="separator"
+          aria-orientation="vertical"
+          aria-label="Resize sidebar"
+          aria-valuemin={SIDEBAR_WIDTH.min}
+          aria-valuemax={SIDEBAR_WIDTH.max}
+          aria-valuenow={layoutStore.sidebarWidth}
+          tabindex="0"
+          onpointerdown={startResize}
+          onpointermove={moveResize}
+          onpointerup={endResize}
+          onpointercancel={endResize}
+          onkeydown={resizeKeydown}
+        >
+          <span class="sidebar-resizer__grip" aria-hidden="true"></span>
+        </div>
+      {/if}
     </div>
   {/if}
 
@@ -295,7 +398,7 @@
           </div>
         {/if}
       {:else}
-        <ChatPanel {composerInsertText} {composerInsertNonce} />
+        {@render mainContent()}
       {/if}
     </div>
   </main>
@@ -415,6 +518,14 @@
   <InstallPrompt />
 </div>
 
+{#snippet mainContent()}
+  {#if main}
+    {@render main({ composerInsertText, composerInsertNonce })}
+  {:else}
+    <ChatPanel {composerInsertText} {composerInsertNonce} />
+  {/if}
+{/snippet}
+
 {#snippet filePanelBody()}
   <div class="file-panel">
     <FileSearch bind:value={fileQuery} />
@@ -435,12 +546,56 @@
 <style>
   /* ---- Column scaffolding ---- */
   .app-shell__col--sidebar {
+    position: relative;
     grid-column: sidebar;
     display: flex;
     flex-direction: column;
     border-right: 1px solid var(--border);
     background-color: var(--bg-elevated);
     overflow: hidden;
+  }
+
+  /* ---- Sidebar resize handle ---- */
+  .sidebar-resizer {
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: 0.5rem;
+    z-index: 5;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    cursor: col-resize;
+    touch-action: none;
+    background-color: transparent;
+  }
+
+  .sidebar-resizer__grip {
+    width: 2px;
+    height: 100%;
+    background-color: transparent;
+    transition: background-color var(--transition-fast);
+  }
+
+  .sidebar-resizer:hover .sidebar-resizer__grip,
+  .sidebar-resizer--active .sidebar-resizer__grip {
+    background-color: var(--accent);
+  }
+
+  .sidebar-resizer:focus-visible {
+    outline: none;
+  }
+
+  .sidebar-resizer:focus-visible .sidebar-resizer__grip {
+    background-color: var(--accent);
+    box-shadow: 0 0 0 1px var(--focus-ring);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .sidebar-resizer__grip {
+      transition: none;
+    }
   }
 
   .app-shell__col--chat {

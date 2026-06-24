@@ -4,6 +4,7 @@
   import {
     PencilEdit01Icon,
     Delete02Icon,
+    GitCompareIcon,
     MessageMultiple01Icon,
     Coins01Icon,
     Tick02Icon,
@@ -27,6 +28,8 @@
     onselect?: (id: string) => void;
     onrename?: (id: string, title: string) => void;
     ondelete?: (id: string) => void;
+    onviewdiff?: (id: string) => void;
+    childCount?: number;
   }
 
   let {
@@ -35,6 +38,8 @@
     onselect,
     onrename,
     ondelete,
+    onviewdiff,
+    childCount = 0,
   }: SessionCardProps = $props();
 
   const ICON = 13;
@@ -109,6 +114,11 @@
     event?.stopPropagation();
     confirmingDelete = false;
   }
+
+  function viewDiff(event?: Event): void {
+    event?.stopPropagation();
+    onviewdiff?.(session.id);
+  }
 </script>
 
 <div
@@ -149,12 +159,17 @@
       <p class="preview">{preview}</p>
     {/if}
 
-    {#if meta.hasMessages || meta.hasCost}
+    {#if meta.hasMessages || meta.hasCost || childCount > 0}
       <div class="meta" aria-hidden={false}>
         {#if meta.hasMessages}
           <span class="chip" title={`${meta.messages} messages`}>
             <HugeiconsIcon icon={MessageMultiple01Icon} size={ICON} strokeWidth={STROKE} color="currentColor" />
             {meta.messages}
+          </span>
+        {/if}
+        {#if childCount > 0}
+          <span class="chip" title={`${childCount} child sessions`}>
+            {childCount} child{childCount === 1 ? '' : 'ren'}
           </span>
         {/if}
         {#if meta.hasCost}
@@ -191,6 +206,15 @@
       </div>
     {:else}
       <div class="actions">
+        <button
+          type="button"
+          class="icon-btn"
+          aria-label="View session diff"
+          title="View diff"
+          onclick={viewDiff}
+        >
+          <HugeiconsIcon icon={GitCompareIcon} size={15} strokeWidth={STROKE} color="currentColor" />
+        </button>
         <button
           type="button"
           class="icon-btn"
@@ -346,25 +370,40 @@
     font-variant-numeric: tabular-nums;
   }
 
+  /*
+   * The action / confirm controls overlay the card's top-right corner instead
+   * of sitting in the flex flow. Keeping them in-flow reserved ~82px of width
+   * even while hidden (opacity:0), which squeezed `.body` to ~80px and forced
+   * session titles to truncate after only a few characters. Absolute
+   * positioning hands that width back to the title so it uses the full sidebar.
+   */
   .actions,
   .confirm {
-    flex: 0 0 auto;
+    position: absolute;
+    top: 0.375rem;
+    right: 0.375rem;
+    z-index: 2;
     display: flex;
     align-items: center;
     gap: 0.125rem;
-    align-self: flex-start;
+    padding: 0.125rem;
+    border-radius: var(--radius-sm);
+    background-color: var(--bg-surface);
+    box-shadow: 0 0 0 1px var(--border);
   }
 
   /* Actions hide by default and reveal on hover OR keyboard focus within the
    * card — never hover-only, so keyboard users can reach rename/delete. */
   .actions {
     opacity: 0;
+    pointer-events: none;
     transition: opacity var(--transition-fast);
   }
 
   .session-card:hover .actions,
   .session-card:focus-within .actions {
     opacity: 1;
+    pointer-events: auto;
   }
 
   .icon-btn {
