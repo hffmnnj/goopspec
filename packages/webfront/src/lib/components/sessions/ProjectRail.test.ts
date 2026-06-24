@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'bun:test';
 import type { Project } from '$lib/api/types.js';
 import {
+  AVATAR_PALETTE,
   PROJECT_AVATAR_COLORS,
   projectColor,
   projectName,
@@ -20,20 +21,49 @@ function project(overrides: Partial<Project> = {}): Project {
   };
 }
 
+describe('AVATAR_PALETTE', () => {
+  it('contains at least 50 colors', () => {
+    expect(AVATAR_PALETTE.length).toBeGreaterThanOrEqual(50);
+  });
+
+  it('contains only distinct colors', () => {
+    expect(new Set(AVATAR_PALETTE).size).toBe(AVATAR_PALETTE.length);
+  });
+
+  it('aliases the legacy PROJECT_AVATAR_COLORS export', () => {
+    expect(PROJECT_AVATAR_COLORS).toBe(AVATAR_PALETTE);
+  });
+
+  it('produces no duplicate colors for N opened projects (N <= palette size)', () => {
+    const n = Math.min(AVATAR_PALETTE.length, 50);
+    const colors = Array.from({ length: n }, (_, i) => projectColor(`id-${i}`, i));
+    expect(new Set(colors).size).toBe(n);
+  });
+});
+
 describe('projectColor', () => {
-  it('returns a color from the fixed palette', () => {
+  it('uses the explicit palette index when provided', () => {
+    expect(projectColor('anything', 0)).toBe(AVATAR_PALETTE[0]);
+    expect(projectColor('anything', 7)).toBe(AVATAR_PALETTE[7]);
+  });
+
+  it('wraps an out-of-range index into the palette', () => {
+    expect(projectColor('x', AVATAR_PALETTE.length)).toBe(AVATAR_PALETTE[0]);
+  });
+
+  it('falls back to a deterministic id hash when no index is given', () => {
     for (const id of ['a', 'p1', 'long-project-id', '/repo/two']) {
-      expect(PROJECT_AVATAR_COLORS).toContain(projectColor(id) as (typeof PROJECT_AVATAR_COLORS)[number]);
+      expect(AVATAR_PALETTE).toContain(projectColor(id));
     }
-  });
-
-  it('is deterministic for the same id', () => {
     expect(projectColor('p1')).toBe(projectColor('p1'));
-    expect(projectColor('repo-two')).toBe(projectColor('repo-two'));
   });
 
-  it('falls back to the first palette color for an empty id', () => {
-    expect(projectColor('')).toBe(PROJECT_AVATAR_COLORS[0]);
+  it('falls back to the first palette color for an empty id and no index', () => {
+    expect(projectColor('')).toBe(AVATAR_PALETTE[0]);
+  });
+
+  it('ignores a negative index and uses the hash fallback', () => {
+    expect(projectColor('p1', -1)).toBe(projectColor('p1'));
   });
 });
 
