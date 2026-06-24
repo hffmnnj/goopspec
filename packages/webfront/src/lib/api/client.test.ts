@@ -237,6 +237,68 @@ describe('OpenCode REST client', () => {
     expect(fetchMock).toHaveBeenCalledWith('http://localhost:4096/agent', expect.any(Object));
   });
 
+  it('lists commands from a bare array (GET /command)', async () => {
+    const fetchMock = mock(() => Promise.resolve(jsonResponse([
+      { name: 'help', description: 'Show help' },
+      { name: 'commit', description: 'Commit changes', template: 'commit $ARGUMENTS', subtask: false },
+    ])));
+    globalThis.fetch = fetchMock as unknown as typeof fetch;
+
+    await expect(createClient('http://localhost:4096').listCommands()).resolves.toEqual([
+      { name: 'help', description: 'Show help' },
+      { name: 'commit', description: 'Commit changes', template: 'commit $ARGUMENTS', subtask: false },
+    ]);
+    expect(fetchMock).toHaveBeenCalledWith('http://localhost:4096/command', expect.any(Object));
+  });
+
+  it('normalizes a wrapped { commands: [] } payload to an array', async () => {
+    const fetchMock = mock(() => Promise.resolve(jsonResponse({ commands: [{ name: 'help' }] })));
+    globalThis.fetch = fetchMock as unknown as typeof fetch;
+
+    await expect(createClient('http://localhost:4096').listCommands()).resolves.toEqual([
+      { name: 'help' },
+    ]);
+  });
+
+  it('normalizes an object-map command payload to an array', async () => {
+    const fetchMock = mock(() => Promise.resolve(jsonResponse({ help: { description: 'Show help' }, clear: {} })));
+    globalThis.fetch = fetchMock as unknown as typeof fetch;
+
+    const result = await createClient('http://localhost:4096').listCommands();
+    expect(result).toEqual([
+      { name: 'help', description: 'Show help' },
+      { name: 'clear' },
+    ]);
+  });
+
+  it('normalizes a null command payload to an empty array', async () => {
+    const fetchMock = mock(() => Promise.resolve(jsonResponse(null)));
+    globalThis.fetch = fetchMock as unknown as typeof fetch;
+
+    await expect(createClient('http://localhost:4096').listCommands()).resolves.toEqual([]);
+  });
+
+  it('runs a command via POST /session/{id}/command', async () => {
+    const fetchMock = mock(() => Promise.resolve(jsonResponse({
+      info: { id: 'msg-1', role: 'assistant', time: { created: 1760000000000 } },
+      parts: [{ id: 'p1', type: 'text', text: 'done' }],
+    })));
+    globalThis.fetch = fetchMock as unknown as typeof fetch;
+
+    await expect(
+      createClient('http://localhost:4096').runCommand('s 1', { command: 'commit', arguments: 'tighten copy', agent: 'goop-orchestrator' })
+    ).resolves.toEqual(
+      expect.objectContaining({ id: 'msg-1', role: 'assistant', parts: [{ type: 'text', text: 'done' }] })
+    );
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://localhost:4096/session/s%201/command',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({ command: 'commit', arguments: 'tighten copy', agent: 'goop-orchestrator' }),
+      })
+    );
+  });
+
   it('normalizes OpenCode message envelopes from GET /session/{id}/message', async () => {
     const fetchMock = mock(() => Promise.resolve(jsonResponse([
       {
