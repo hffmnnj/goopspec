@@ -59,9 +59,13 @@ describe('ConnectionStore', () => {
       sendMessage: mock((_sessionId: string, _input: SendMessageInput) =>
         Promise.resolve({ id: 'm1', role: assistantRole, parts: [], createdAt: '' } as Message)
       ),
+      runCommand: mock((_sessionId: string) =>
+        Promise.resolve({ id: 'm1', role: assistantRole, parts: [], createdAt: '' } as Message)
+      ),
       subscribeEvents: () => () => undefined,
       listProviders: mock(() => Promise.resolve([])),
       listAgents: mock(() => Promise.resolve([])),
+      listCommands: mock(() => Promise.resolve([])),
       getConfig: mock(() => Promise.resolve({})),
       updateConfig: mock(() => Promise.resolve({})),
       readFile: mock(() => Promise.resolve('')),
