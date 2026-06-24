@@ -186,6 +186,57 @@ describe('OpenCode REST client', () => {
     );
   });
 
+  it('normalizes provider payload shapes to arrays with model maps', async () => {
+    const shapes = [
+      [{ id: 'openai', name: 'OpenAI', models: [{ id: 'gpt-4o', name: 'GPT-4o' }] }],
+      { providers: [{ id: 'openai', name: 'OpenAI', models: [{ id: 'gpt-4o', name: 'GPT-4o' }] }] },
+      { providers: { openai: { name: 'OpenAI', models: { 'gpt-4o': { name: 'GPT-4o' } } } }, default: { openai: 'gpt-4o' } },
+      null,
+    ];
+
+    for (const shape of shapes) {
+      const fetchMock = mock(() => Promise.resolve(jsonResponse(shape)));
+      globalThis.fetch = fetchMock as unknown as typeof fetch;
+
+      const providers = await createClient('http://localhost:4096').listProviders();
+
+      expect(Array.isArray(providers)).toBe(true);
+      if (shape) {
+        expect(providers).toEqual([
+          expect.objectContaining({
+            id: 'openai',
+            name: 'OpenAI',
+            models: [expect.objectContaining({ id: 'gpt-4o', name: 'GPT-4o' })],
+          }),
+        ]);
+      } else {
+        expect(providers).toEqual([]);
+      }
+    }
+  });
+
+  it('falls back to GET /provider when GET /config/providers is unavailable', async () => {
+    const fetchMock = mock((url: string) => {
+      if (url.endsWith('/config/providers')) return Promise.resolve(jsonResponse({ error: 'missing' }, { status: 404, statusText: 'Not Found' }));
+      return Promise.resolve(jsonResponse([{ id: 'anthropic', name: 'Anthropic', models: [] }]));
+    });
+    globalThis.fetch = fetchMock as unknown as typeof fetch;
+
+    await expect(createClient('http://localhost:4096').listProviders()).resolves.toEqual([
+      { id: 'anthropic', name: 'Anthropic', models: [] },
+    ]);
+  });
+
+  it('normalizes agent payload shapes to arrays', async () => {
+    const fetchMock = mock(() => Promise.resolve(jsonResponse({ agents: { 'goop-orchestrator': { description: 'Plan work' } } })));
+    globalThis.fetch = fetchMock as unknown as typeof fetch;
+
+    await expect(createClient('http://localhost:4096').listAgents()).resolves.toEqual([
+      expect.objectContaining({ id: 'goop-orchestrator', name: 'goop-orchestrator', description: 'Plan work' }),
+    ]);
+    expect(fetchMock).toHaveBeenCalledWith('http://localhost:4096/agent', expect.any(Object));
+  });
+
   it('normalizes OpenCode message envelopes from GET /session/{id}/message', async () => {
     const fetchMock = mock(() => Promise.resolve(jsonResponse([
       {

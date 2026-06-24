@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'bun:test';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import type { Session } from '$lib/api/types.js';
 import {
   relativeTime,
@@ -157,5 +159,40 @@ describe('resolveRename', () => {
     expect(resolveRename('   ', 'Old')).toBeNull();
     expect(resolveRename('Old', 'Old')).toBeNull();
     expect(resolveRename('  Old  ', 'Old')).toBeNull();
+  });
+});
+
+// Guards the Wave 21 fix (titles truncated after ~7 chars). No DOM render
+// harness exists in this suite, so the CSS contract is asserted from source:
+// the title must flex-grow with ellipsis, and the hover actions must overlay
+// (absolute) rather than reserving in-flow width that squeezes the title.
+describe('SessionCard layout contract (source invariant)', () => {
+  const source = readFileSync(
+    fileURLToPath(new URL('./SessionCard.svelte', import.meta.url)),
+    'utf8'
+  );
+
+  function ruleBody(selector: string): string {
+    const idx = source.indexOf(selector);
+    expect(idx).toBeGreaterThanOrEqual(0);
+    const open = source.indexOf('{', idx);
+    const close = source.indexOf('}', open);
+    return source.slice(open + 1, close);
+  }
+
+  it('lets the title grow to fill the row and ellipsis-truncate', () => {
+    const title = ruleBody('.title {');
+    expect(title).toContain('flex: 1 1 auto');
+    expect(title).toContain('min-width: 0');
+    expect(title).toContain('text-overflow: ellipsis');
+    expect(title).toContain('white-space: nowrap');
+    expect(title).toContain('overflow: hidden');
+  });
+
+  it('overlays the action controls instead of reserving in-flow width', () => {
+    const actions = ruleBody('.actions,\n  .confirm {');
+    expect(actions).toContain('position: absolute');
+    // Hidden actions must not intercept pointer events while transparent.
+    expect(ruleBody('  .actions {\n')).toContain('pointer-events: none');
   });
 });

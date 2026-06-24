@@ -370,25 +370,40 @@
     font-variant-numeric: tabular-nums;
   }
 
+  /*
+   * The action / confirm controls overlay the card's top-right corner instead
+   * of sitting in the flex flow. Keeping them in-flow reserved ~82px of width
+   * even while hidden (opacity:0), which squeezed `.body` to ~80px and forced
+   * session titles to truncate after only a few characters. Absolute
+   * positioning hands that width back to the title so it uses the full sidebar.
+   */
   .actions,
   .confirm {
-    flex: 0 0 auto;
+    position: absolute;
+    top: 0.375rem;
+    right: 0.375rem;
+    z-index: 2;
     display: flex;
     align-items: center;
     gap: 0.125rem;
-    align-self: flex-start;
+    padding: 0.125rem;
+    border-radius: var(--radius-sm);
+    background-color: var(--bg-surface);
+    box-shadow: 0 0 0 1px var(--border);
   }
 
   /* Actions hide by default and reveal on hover OR keyboard focus within the
    * card — never hover-only, so keyboard users can reach rename/delete. */
   .actions {
     opacity: 0;
+    pointer-events: none;
     transition: opacity var(--transition-fast);
   }
 
   .session-card:hover .actions,
   .session-card:focus-within .actions {
     opacity: 1;
+    pointer-events: auto;
   }
 
   .icon-btn {
