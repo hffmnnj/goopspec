@@ -69,7 +69,11 @@
     const error = validateServerUrl(serverUrlDraft);
     serverUrlError = error;
     if (error) return;
+    const previousUrl = getServerUrl();
     setServerUrl(serverUrlDraft);
+    if (getServerUrl() !== previousUrl) {
+      void connectionStore.connect();
+    }
   }
 
   function testConnection(): void {

@@ -227,11 +227,11 @@ function makeUrl(baseUrl: string, path: string, params?: Record<string, string>)
   return url.toString();
 }
 
-export function createClient(baseUrl = getServerUrl()): OpenCodeClient {
-  const root = baseUrl.trim().replace(/\/+$/, '');
+export function createClient(baseUrl?: string): OpenCodeClient {
+  const resolveRoot = () => (baseUrl ?? getServerUrl()).trim().replace(/\/+$/, '');
 
   async function request<T>(path: string, init: RequestInit = {}, params?: Record<string, string>): Promise<T> {
-    const response = await fetch(makeUrl(root, path, params), {
+    const response = await fetch(makeUrl(resolveRoot(), path, params), {
       ...init,
       headers: {
         Accept: 'application/json',
@@ -270,7 +270,7 @@ export function createClient(baseUrl = getServerUrl()): OpenCodeClient {
         return () => undefined;
       }
 
-      const source = new EventSource(makeUrl(root, `session/${encodeURIComponent(sessionId)}/event`));
+      const source = new EventSource(makeUrl(resolveRoot(), `session/${encodeURIComponent(sessionId)}/event`));
       source.onopen = () => handlers.onOpen?.();
       source.onerror = () => handlers.onError?.(new Error('OpenCode event stream failed'));
 

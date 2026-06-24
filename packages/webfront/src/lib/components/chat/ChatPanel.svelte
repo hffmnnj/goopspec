@@ -20,6 +20,10 @@
     onstop?: () => void;
     /** Override the OpenCode client used by the model switcher. */
     client?: OpenCodeClient;
+    /** Text to append to the message composer, e.g. a selected file mention. */
+    composerInsertText?: string;
+    /** Monotonic signal for composerInsertText. */
+    composerInsertNonce?: number;
   }
 
   let {
@@ -28,6 +32,8 @@
     disabled = false,
     onstop,
     client,
+    composerInsertText,
+    composerInsertNonce = 0,
   }: ChatPanelProps = $props();
 
   const switcherClient = $derived(client ?? createClient());
@@ -90,6 +96,8 @@
       {onstop}
       streaming={chat.streaming}
       disabled={disabled || chat.loading}
+      insertText={composerInsertText}
+      insertNonce={composerInsertNonce}
     />
   </footer>
 </section>

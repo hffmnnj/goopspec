@@ -6,6 +6,7 @@ import {
   renameSession,
 } from '../api/sessions.js';
 import type { CreateSessionOptions, OpenCodeClient, Session } from '../api/types.js';
+import { workspace } from './workspace.svelte.js';
 
 class SessionsStore {
   sessions = $state<Session[]>([]);
@@ -38,7 +39,10 @@ class SessionsStore {
     this.error = null;
 
     try {
-      const session = await createSession(this.client, opts);
+      const session = await createSession(this.client, {
+        path: workspace.currentPath ?? undefined,
+        ...opts,
+      });
       // Prepend so it appears immediately in the UI; re-sort on next load.
       this.sessions = [session, ...this.sessions.filter((s) => s.id !== session.id)];
       return session;

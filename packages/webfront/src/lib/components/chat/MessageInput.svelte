@@ -13,6 +13,10 @@
     disabled?: boolean;
     /** Placeholder copy. */
     placeholder?: string;
+    /** Text to insert into the composer when the nonce changes. */
+    insertText?: string;
+    /** Monotonic signal for insertText so selecting the same file twice works. */
+    insertNonce?: number;
   }
 
   let {
@@ -21,6 +25,8 @@
     streaming = false,
     disabled = false,
     placeholder = 'Send a message…',
+    insertText,
+    insertNonce = 0,
   }: MessageInputProps = $props();
 
   let value = $state('');
@@ -62,6 +68,24 @@
   function handleStop(): void {
     onstop?.();
   }
+
+  function insertIntoComposer(text: string): void {
+    if (!text.trim()) return;
+    const mention = text.trim();
+    const needsSpaceBefore = value.length > 0 && !/\s$/.test(value);
+    const prefix = needsSpaceBefore ? ' ' : '';
+    value = `${value}${prefix}${mention} `;
+    queueMicrotask(() => {
+      resize();
+      textarea?.focus();
+      textarea?.setSelectionRange(value.length, value.length);
+    });
+  }
+
+  $effect(() => {
+    if (insertNonce <= 0 || !insertText) return;
+    insertIntoComposer(insertText);
+  });
 </script>
 
 <form

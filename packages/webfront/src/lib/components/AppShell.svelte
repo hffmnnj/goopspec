@@ -29,6 +29,7 @@
   import CommandPalette from './CommandPalette.svelte';
   import ShortcutHelp from './ShortcutHelp.svelte';
   import ToastContainer from './ToastContainer.svelte';
+  import InstallPrompt from './InstallPrompt.svelte';
   import { useKeyboard } from '$lib/keyboard/actions.svelte.js';
   import { registerDefaultShortcuts } from '$lib/keyboard/shortcuts.js';
   import { initToastBindings } from '$lib/stores/toast-bindings.svelte.js';
@@ -41,8 +42,9 @@
   let { layoutStore = defaultLayout }: AppShellProps = $props();
 
   let fileQuery = $state('');
-  // Held locally for now; T10.3 promotes this into the chat composer.
   let activeFilePath = $state<string | undefined>(undefined);
+  let composerInsertText = $state<string | undefined>(undefined);
+  let composerInsertNonce = $state(0);
   let drawerEl = $state<HTMLElement | null>(null);
   let previouslyFocused = $state<HTMLElement | null>(null);
 
@@ -77,6 +79,7 @@
 
   onMount(() => {
     registerDefaultShortcuts();
+    workspace.init();
     const stopLayout = layoutStore.init();
     const stopFold = fold.init();
     const stopToasts = initToastBindings();
@@ -89,6 +92,8 @@
 
   function handleFileSelect(path: string): void {
     activeFilePath = path;
+    composerInsertText = `@${path}`;
+    composerInsertNonce += 1;
     if (isPhone) {
       layoutStore.setMobileView('chat');
       layoutStore.setFilePanel(false);
@@ -186,7 +191,7 @@
       </div>
 
       <div class="chat-region">
-        <ChatPanel />
+        <ChatPanel {composerInsertText} {composerInsertNonce} />
       </div>
 
       <!-- Files overlay anchored within the chat pane (right segment). -->
@@ -290,7 +295,7 @@
           </div>
         {/if}
       {:else}
-        <ChatPanel />
+        <ChatPanel {composerInsertText} {composerInsertNonce} />
       {/if}
     </div>
   </main>
@@ -406,6 +411,9 @@
 <CommandPalette />
 <ShortcutHelp />
 <ToastContainer />
+<div class="install-prompt-host" aria-live="polite">
+  <InstallPrompt />
+</div>
 
 {#snippet filePanelBody()}
   <div class="file-panel">
@@ -610,6 +618,25 @@
     .chrome-btn,
     .nav-tab {
       transition: none;
+    }
+  }
+
+  .install-prompt-host {
+    position: fixed;
+    right: max(1rem, var(--safe-right));
+    bottom: max(1rem, var(--safe-bottom));
+    z-index: 50;
+    pointer-events: none;
+  }
+
+  .install-prompt-host :global(.install-prompt) {
+    pointer-events: auto;
+  }
+
+  @media (max-width: 639px) {
+    .install-prompt-host {
+      right: 1rem;
+      bottom: calc(4.5rem + var(--safe-bottom));
     }
   }
 </style>
