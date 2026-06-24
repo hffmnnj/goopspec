@@ -97,6 +97,31 @@ describe('ConnectionStore', () => {
     expect(order).toEqual(['connecting', 'connecting']);
   });
 
+  it('app boot init auto-connects through the guarded connection path', async () => {
+    const getConfig = mock(() => Promise.resolve({}));
+    client.getConfig = getConfig;
+
+    const cleanup = store.initAppConnection();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(getConfig).toHaveBeenCalledTimes(1);
+    expect(store.current.status).toBe('connected');
+
+    cleanup();
+  });
+
+  it('does not duplicate a connection when already connected', async () => {
+    const getConfig = mock(() => Promise.resolve({}));
+    client.getConfig = getConfig;
+
+    await store.connect();
+    await store.connect();
+
+    expect(getConfig).toHaveBeenCalledTimes(1);
+    expect(client.subscribeGlobalEvents).toHaveBeenCalledTimes(1);
+  });
+
   it('transitions to error when getConfig fails', async () => {
     client.getConfig = mock(() => Promise.reject(new Error('Server unreachable')));
 
@@ -217,6 +242,79 @@ describe('ConnectionStore', () => {
     expect(calls).toBe(3);
     expect(store.current.status).toBe('connected');
     expect(client.subscribeGlobalEvents).toHaveBeenCalledTimes(2);
+  });
+
+  it('reconnects when the global event stream errors', async () => {
+    let globalStreamError: (() => void) | undefined;
+    client.subscribeGlobalEvents = mock((handler, handlers) => {
+      globalEventHandler = handler;
+      globalStreamError = () => handlers?.onError?.(new Error('sse down'));
+      return { close: closeGlobalEvents };
+    });
+
+    await store.connect();
+    globalStreamError?.();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(client.getConfig).toHaveBeenCalledTimes(2);
+    expect(store.current.status).toBe('connected');
+    expect(client.subscribeGlobalEvents).toHaveBeenCalledTimes(2);
+  });
+
+  it('reconnects on visibility regain when disconnected', async () => {
+    const target = new EventTarget();
+    const originalDocument = globalThis.document;
+    Object.defineProperty(globalThis, 'document', {
+      configurable: true,
+      writable: true,
+      value: {
+        hidden: false,
+        addEventListener: target.addEventListener.bind(target),
+        removeEventListener: target.removeEventListener.bind(target)
+      }
+    });
+
+    const visibilityStore = createConnectionStore(client);
+    client.getConfig = mock(() => Promise.resolve({}));
+    target.dispatchEvent(new Event('visibilitychange'));
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(client.getConfig).toHaveBeenCalledTimes(1);
+    expect(visibilityStore.current.status).toBe('connected');
+
+    visibilityStore.disconnect();
+    Object.defineProperty(globalThis, 'document', { configurable: true, writable: true, value: originalDocument });
+  });
+
+  it('reconnects on browser online events after an error', async () => {
+    const target = new EventTarget();
+    const originalWindow = globalThis.window;
+    Object.defineProperty(globalThis, 'window', {
+      configurable: true,
+      writable: true,
+      value: {
+        addEventListener: target.addEventListener.bind(target),
+        removeEventListener: target.removeEventListener.bind(target)
+      }
+    });
+
+    client.getConfig = mock(() => Promise.reject(new Error('offline')));
+    await store.connect();
+    expect(store.current.status).toBe('error');
+
+    client.getConfig = mock(() => Promise.resolve({}));
+    const cleanup = store.initAppConnection();
+    target.dispatchEvent(new Event('online'));
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(client.getConfig).toHaveBeenCalledTimes(1);
+    expect(store.current.status).toBe('connected');
+
+    cleanup();
+    Object.defineProperty(globalThis, 'window', { configurable: true, writable: true, value: originalWindow });
   });
 
   it('clears the health-check interval on disconnect', async () => {

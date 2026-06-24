@@ -136,6 +136,11 @@ export interface EventHandlers {
   onOpen?: () => void;
 }
 
+export interface GlobalEventHandlers {
+  onError?: (error: Error) => void;
+  onOpen?: () => void;
+}
+
 export type Unsubscribe = () => void;
 
 export interface OpenCodeClient {
@@ -143,7 +148,7 @@ export interface OpenCodeClient {
   getCurrentProject(): Promise<Project | null>;
   getPath(): Promise<{ path: string }>;
   getVcsInfo(): Promise<VcsInfo>;
-  subscribeGlobalEvents(handler: (event: GlobalEvent) => void): { close(): void };
+  subscribeGlobalEvents(handler: (event: GlobalEvent) => void, handlers?: GlobalEventHandlers): { close(): void };
   listSessions(directory?: string): Promise<Session[]>;
   createSession(opts?: CreateSessionOptions): Promise<Session>;
   deleteSession(id: string): Promise<void>;

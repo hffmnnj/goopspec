@@ -4,6 +4,7 @@ import type {
   EventHandlers,
   FileEntry,
   GlobalEvent,
+  GlobalEventHandlers,
   Message,
   MessagePart,
   OpenCodeClient,
@@ -386,10 +387,12 @@ export function createClient(baseUrl?: string): OpenCodeClient {
     getCurrentProject: () => request<Project | null>('project/current'),
     getPath: () => request<{ path: string }>('path'),
     getVcsInfo: () => request<VcsInfo>('vcs'),
-    subscribeGlobalEvents(handler: (event: GlobalEvent) => void): { close(): void } {
+    subscribeGlobalEvents(handler: (event: GlobalEvent) => void, handlers?: GlobalEventHandlers): { close(): void } {
       if (typeof EventSource === 'undefined') return { close: () => undefined };
 
       const source = new EventSource(makeUrl(resolveRoot(), 'event'));
+      source.onopen = () => handlers?.onOpen?.();
+      source.onerror = () => handlers?.onError?.(new Error('OpenCode global event stream failed'));
       source.onmessage = (event) => handler(toGlobalEvent(event.data));
       return { close: () => source.close() };
     },
