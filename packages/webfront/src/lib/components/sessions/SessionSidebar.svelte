@@ -7,10 +7,14 @@
   import ConnectionStatus from '../ConnectionStatus.svelte';
   import SessionCard from './SessionCard.svelte';
   import SessionSearch from './SessionSearch.svelte';
+  import ProjectRail from './ProjectRail.svelte';
   import { sessions as defaultStore } from '$lib/stores/sessions.svelte.js';
+  import { projects as defaultProjects } from '$lib/stores/projects.svelte.js';
   import { activeSession } from '$lib/stores/active-session.svelte.js';
   import { chat } from '$lib/stores/chat.svelte.js';
+  import { layout } from '$lib/stores/layout.svelte.js';
   import { filterSessions } from '$lib/sessions/search.js';
+  import type { Project } from '$lib/api/types.js';
 
   interface SessionsLike {
     sorted: import('$lib/api/types.js').Session[];
@@ -22,9 +26,17 @@
     rename(id: string, title: string): Promise<unknown>;
   }
 
+  interface ProjectsLike {
+    projects: Project[];
+    activeProject: Project | null;
+    setActiveProject(project: Project): void;
+  }
+
   interface SidebarProps {
     /** Override the session store (defaults to the shared reactive store). */
     store?: SessionsLike;
+    /** Override the projects store (defaults to the shared reactive store). */
+    projectsStore?: ProjectsLike;
   /**
    * Active session id override. The sidebar now prefers the shared
    * `activeSession` store; this prop lets tests / callers force a specific id.
@@ -36,6 +48,7 @@
 
   let {
     store = defaultStore as unknown as SessionsLike,
+    projectsStore = defaultProjects as unknown as ProjectsLike,
     activeSessionId,
     onselect,
   }: SidebarProps = $props();
@@ -52,9 +65,17 @@
   const errorMsg = $derived(store.error);
   const isEmpty = $derived(!isLoading && !errorMsg && items.length === 0);
 
+  const railOrientation = $derived<'vertical' | 'horizontal'>(
+    layout.isPhone ? 'horizontal' : 'vertical'
+  );
+
   onMount(() => {
     void store.load();
   });
+
+  function handleProjectSelect(project: Project): void {
+    projectsStore.setActiveProject(project);
+  }
 
   async function handleCreate(): Promise<void> {
     const created = await store.create();
@@ -77,6 +98,14 @@
 </script>
 
 <GlassSurface variant="panel" element="aside" class="session-sidebar" aria-label="Sessions">
+  <div class="sidebar-body" class:sidebar-body--phone={railOrientation === 'horizontal'}>
+    <ProjectRail
+      projects={projectsStore.projects}
+      activeId={projectsStore.activeProject?.id ?? null}
+      orientation={railOrientation}
+      onSelect={handleProjectSelect}
+    />
+    <div class="sidebar-main">
   <header class="header">
     <h2 class="heading">Sessions</h2>
     <button
@@ -147,6 +176,8 @@
     <ConnectionStatus />
     <ThemeToggle />
   </footer>
+    </div>
+  </div>
 </GlassSurface>
 
 <style>
@@ -156,8 +187,30 @@
     height: 100%;
     width: 100%;
     min-height: 0;
+    overflow: hidden;
+  }
+
+  .sidebar-body {
+    display: flex;
+    flex-direction: row;
+    flex: 1 1 auto;
+    min-height: 0;
+    height: 100%;
+  }
+
+  .sidebar-main {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+    min-width: 0;
+    min-height: 0;
     padding: 0.5rem;
     gap: 0.25rem;
+  }
+
+  /* Phone: rail collapses to a horizontal chip row above the session list. */
+  .sidebar-body--phone {
+    flex-direction: column;
   }
 
   .header {
