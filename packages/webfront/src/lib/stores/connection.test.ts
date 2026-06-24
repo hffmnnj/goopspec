@@ -61,6 +61,7 @@ describe('ConnectionStore', () => {
       ),
       subscribeEvents: () => () => undefined,
       listProviders: mock(() => Promise.resolve([])),
+      listAgents: mock(() => Promise.resolve([])),
       getConfig: mock(() => Promise.resolve({})),
       updateConfig: mock(() => Promise.resolve({})),
       readFile: mock(() => Promise.resolve('')),
