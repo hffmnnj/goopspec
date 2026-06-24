@@ -4,6 +4,7 @@
   import { ArrowDown01Icon, UserIcon, AiBrain01Icon } from '@hugeicons/core-free-icons';
   import type { Message } from '$lib/api/types.js';
   import { groupParts } from '$lib/api/messages.js';
+  import { showsAvatar } from '$lib/api/message-grouping.js';
   import Markdown from './Markdown.svelte';
   import ToolCard from './ToolCard.svelte';
 
@@ -21,6 +22,16 @@
   const BOTTOM_THRESHOLD = 64;
 
   const showJumpButton = $derived(!atBottom && messages.length > 0);
+
+  function messageKey(message: Message, index: number): string {
+    return message.id || `${message.role}-${message.createdAt}-${index}`;
+  }
+
+  function partGroupKey(group: ReturnType<typeof groupParts>[number], index: number): string {
+    if (group.kind === 'tool') return `tool-${group.invoke?.id ?? group.result?.id ?? index}`;
+    if (group.kind === 'step') return `step-${group.part.id ?? group.part.title ?? index}`;
+    return `text-${index}-${group.text.slice(0, 24)}`;
+  }
 
   function isNearBottom(el: HTMLDivElement): boolean {
     return el.scrollHeight - el.scrollTop - el.clientHeight <= BOTTOM_THRESHOLD;
@@ -56,18 +67,25 @@
     {streaming ? 'Assistant response streaming' : ''}
   </div>
   <div class="messages">
-    {#each messages as message (message.id)}
-      <article class="row row--{message.role}" aria-label={`${message.role} message`}>
+    {#each messages as message, messageIndex (messageKey(message, messageIndex))}
+      {@const hasAvatar = showsAvatar(messages, messageIndex)}
+      <article
+        class="row row--{message.role}"
+        class:row--continuation={!hasAvatar}
+        aria-label={`${message.role} message`}
+      >
         <div class="avatar" aria-hidden="true">
-          {#if message.role === 'user'}
-            <HugeiconsIcon icon={UserIcon} size={16} strokeWidth={1.5} color="currentColor" />
-          {:else}
-            <HugeiconsIcon icon={AiBrain01Icon} size={16} strokeWidth={1.5} color="currentColor" />
+          {#if hasAvatar}
+            {#if message.role === 'user'}
+              <HugeiconsIcon icon={UserIcon} size={16} strokeWidth={1.5} color="currentColor" />
+            {:else}
+              <HugeiconsIcon icon={AiBrain01Icon} size={16} strokeWidth={1.5} color="currentColor" />
+            {/if}
           {/if}
         </div>
 
         <div class="bubble">
-          {#each groupParts(message.parts) as group, index (index)}
+          {#each groupParts(message.parts) as group, index (partGroupKey(group, index))}
             {#if group.kind === 'text'}
               <Markdown text={group.text} />
             {:else if group.kind === 'tool'}
@@ -119,22 +137,40 @@
   }
 
   .row {
+    /* First visual text line box of .bubble: font-size 0.9375rem x line-height 1.65,
+       offset by the bubble's 0.125rem top padding. Used to center the avatar. */
+    --first-line-height: 1.547rem;
+    --bubble-top-pad: 0.125rem;
     display: grid;
     grid-template-columns: 1.75rem 1fr;
     gap: 0.75rem;
     align-items: start;
   }
 
+  /*
+   * The avatar gutter (first grid column) is always reserved so continuation
+   * rows line up under the first message even when no icon is drawn. The chip is
+   * centered against the first content line (--line-height) rather than the top
+   * edge, so it sits beside the first line of prose on tall messages too.
+   */
   .avatar {
     display: inline-flex;
     align-items: center;
     justify-content: center;
     width: 1.75rem;
     height: 1.75rem;
+    /* Vertically center the 1.75rem chip within the first text line box. */
+    margin-top: calc(var(--bubble-top-pad) + (var(--first-line-height) - 1.75rem) / 2);
     border-radius: var(--radius-full);
     border: 1px solid var(--border);
     color: var(--text-secondary);
     background-color: var(--bg-elevated);
+  }
+
+  /* Continuation rows reserve the gutter but render no chip. */
+  .row--continuation .avatar {
+    border-color: transparent;
+    background-color: transparent;
   }
 
   .row--user .avatar {

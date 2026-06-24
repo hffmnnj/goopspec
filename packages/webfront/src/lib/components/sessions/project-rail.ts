@@ -3,28 +3,58 @@
 // a Svelte renderer.
 import type { Project } from '$lib/api/types.js';
 
-/** Fixed palette so a project id always resolves to the same color across reloads. */
-export const PROJECT_AVATAR_COLORS = [
-  '#ef4444',
-  '#f97316',
-  '#eab308',
-  '#22c55e',
-  '#14b8a6',
-  '#3b82f6',
-  '#8b5cf6',
-  '#ec4899',
-] as const;
+/**
+ * 64 distinct avatar colors: 16 evenly-spread hues x 4 sat/light variants,
+ * variants offset between rings so adjacent indices stay distinguishable. Mid
+ * lightness keeps every color legible on both the dark and light themes.
+ */
+export const AVATAR_PALETTE: string[] = (() => {
+  const colors: string[] = [];
+  const hueSteps = 16;
+  const variants = [
+    { s: 65, l: 55 },
+    { s: 75, l: 45 },
+    { s: 55, l: 60 },
+    { s: 70, l: 50 },
+  ];
+  const hueSpan = 360 / hueSteps;
+  for (let v = 0; v < variants.length; v++) {
+    for (let h = 0; h < hueSteps; h++) {
+      const hue = Math.round(hueSpan * h + (v * hueSpan) / variants.length) % 360;
+      colors.push(`hsl(${hue}, ${variants[v].s}%, ${variants[v].l}%)`);
+    }
+  }
+  return colors;
+})();
 
-/** Map a project id to a stable palette color via a dependency-free djb2 hash. */
-export function projectColor(id: string): string {
-  if (!id) return PROJECT_AVATAR_COLORS[0];
+/**
+ * Backwards-compatible export. Older code referenced `PROJECT_AVATAR_COLORS`;
+ * it now aliases the expanded palette.
+ */
+export const PROJECT_AVATAR_COLORS = AVATAR_PALETTE;
+
+/** Dependency-free djb2 hash of a string, normalized to a non-negative int. */
+function hashString(value: string): number {
   let hash = 0;
-  for (let i = 0; i < id.length; i++) {
-    hash = (hash << 5) - hash + id.charCodeAt(i);
+  for (let i = 0; i < value.length; i++) {
+    hash = (hash << 5) - hash + value.charCodeAt(i);
     hash |= 0; // keep within 32-bit range to avoid precision drift
   }
-  const index = Math.abs(hash) % PROJECT_AVATAR_COLORS.length;
-  return PROJECT_AVATAR_COLORS[index];
+  return Math.abs(hash);
+}
+
+/**
+ * Resolve an avatar color. Prefer an explicit, stable palette index assigned
+ * when the project was opened (so the first N opened projects are all unique
+ * and a color never shifts as siblings open/close). Falls back to a
+ * deterministic id hash when no index is supplied (e.g. legacy callers / tests).
+ */
+export function projectColor(id: string, colorIndex?: number): string {
+  if (typeof colorIndex === 'number' && colorIndex >= 0) {
+    return AVATAR_PALETTE[colorIndex % AVATAR_PALETTE.length];
+  }
+  if (!id) return AVATAR_PALETTE[0];
+  return AVATAR_PALETTE[hashString(id) % AVATAR_PALETTE.length];
 }
 
 /** The last non-empty path segment of a worktree, used as the display name. */

@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { goto } from '$app/navigation';
+  import { page } from '$app/state';
   import { onMount } from 'svelte';
   import { HugeiconsIcon } from '@hugeicons/svelte';
   import { Add01Icon, InboxIcon, Alert02Icon, RefreshIcon } from '@hugeicons/core-free-icons';
@@ -8,12 +10,22 @@
   import SessionCard from './SessionCard.svelte';
   import SessionSearch from './SessionSearch.svelte';
   import ProjectRail from './ProjectRail.svelte';
+  import VcsBadge from './VcsBadge.svelte';
+  import SessionDiffPanel from './SessionDiffPanel.svelte';
+  import { Cancel01Icon } from '@hugeicons/core-free-icons';
   import { sessions as defaultStore } from '$lib/stores/sessions.svelte.js';
   import { projects as defaultProjects } from '$lib/stores/projects.svelte.js';
   import { activeSession } from '$lib/stores/active-session.svelte.js';
   import { chat } from '$lib/stores/chat.svelte.js';
   import { layout } from '$lib/stores/layout.svelte.js';
   import { filterSessions } from '$lib/sessions/search.js';
+  import { buildSessionHierarchy, type SessionTreeNode } from '$lib/sessions/hierarchy.js';
+  import {
+    isNodeExpanded,
+    toggleExpanded,
+    expandActiveParent,
+  } from '$lib/sessions/session-disclosure.js';
+  import { needsNavigation, projectRoute, sessionRoute } from '$lib/routing/navigation.js';
   import type { Project } from '$lib/api/types.js';
 
   interface SessionsLike {
@@ -28,8 +40,13 @@
 
   interface ProjectsLike {
     projects: Project[];
+    availableProjects: Project[];
     activeProject: Project | null;
     setActiveProject(project: Project): void;
+    openProject(project: Project): void;
+    closeProject(projectId: string): void;
+    unopenedAvailable(): Project[];
+    colorIndexFor(id: string): number;
   }
 
   interface SidebarProps {
@@ -56,11 +73,18 @@
   const SKELETON_COUNT = 5;
 
   let searchQuery = $state('');
+  let diffSessionId = $state<string | null>(null);
+  // Tracks *expanded* parents — empty means all children collapsed by default.
+  let expandedSessionIds = $state(new Set<string>());
+  const diffTitle = $derived(
+    diffSessionId ? store.sorted.find((s) => s.id === diffSessionId)?.title ?? 'Session' : ''
+  );
 
   // Active-session seam: prefer the T5.2 active-session store, then explicit prop, then chat store.
   const activeId = $derived(activeSession.activeId ?? activeSessionId ?? chat.activeSessionId);
 
   const items = $derived(filterSessions(store.sorted, searchQuery));
+  const tree = $derived(buildSessionHierarchy(items));
   const isLoading = $derived(store.loading);
   const errorMsg = $derived(store.error);
   const isEmpty = $derived(!isLoading && !errorMsg && items.length === 0);
@@ -74,18 +98,41 @@
   });
 
   function handleProjectSelect(project: Project): void {
-    projectsStore.setActiveProject(project);
+    navigate(projectRoute(project));
+  }
+
+  function handleProjectOpen(project: Project): void {
+    navigate(projectRoute(project));
+  }
+
+  function handleProjectClose(projectId: string): void {
+    projectsStore.closeProject(projectId);
+  }
+
+  function handleProjectColorIndex(id: string): number {
+    return projectsStore.colorIndexFor(id);
+  }
+
+  function handlePopoverSession(project: Project, sessionId: string): void {
+    navigate(sessionRoute(project, sessionId));
   }
 
   async function handleCreate(): Promise<void> {
     const created = await store.create();
     const id = (created as { id?: string } | undefined)?.id;
-    if (id) onselect?.(id);
+    const project = projectsStore.activeProject;
+    if (id && project) navigate(sessionRoute(project, id));
+    else if (id) onselect?.(id);
   }
 
   function handleSelect(id: string): void {
-    activeSession.select(id);
+    const project = projectsStore.activeProject;
+    if (project) navigate(sessionRoute(project, id));
     onselect?.(id);
+  }
+
+  function navigate(target: string): void {
+    if (needsNavigation(page.url.pathname, target)) void goto(target);
   }
 
   function handleRename(id: string, title: string): void {
@@ -95,19 +142,92 @@
   function handleDelete(id: string): void {
     void store.remove(id);
   }
+
+  function handleViewDiff(id: string): void {
+    diffSessionId = id;
+  }
+
+  function closeDiff(): void {
+    diffSessionId = null;
+  }
+
+  function isExpanded(id: string): boolean {
+    return isNodeExpanded(expandedSessionIds, id);
+  }
+
+  function toggleChildren(id: string): void {
+    expandedSessionIds = toggleExpanded(expandedSessionIds, id);
+  }
+
+  // Nicety: if the active session is a child, reveal it by expanding its parent.
+  $effect(() => {
+    const next = expandActiveParent(expandedSessionIds, store.sorted, activeId);
+    if (next !== expandedSessionIds) expandedSessionIds = next as Set<string>;
+  });
+
+  function onOverlayKeydown(event: KeyboardEvent): void {
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      closeDiff();
+    }
+  }
 </script>
+
+{#snippet renderSessionNode(node: SessionTreeNode, level: number)}
+  <li class="list-item" class:list-item--child={level > 0} style={`--level: ${level}`}>
+    <div class="session-row">
+      {#if node.children.length > 0}
+        <button
+          type="button"
+          class="children-toggle"
+          aria-label={`${isExpanded(node.session.id) ? 'Collapse' : 'Expand'} child sessions for ${node.session.title}`}
+          aria-expanded={isExpanded(node.session.id)}
+          onclick={() => toggleChildren(node.session.id)}
+        >
+          {isExpanded(node.session.id) ? '▾' : '▸'}
+        </button>
+      {:else}
+        <span class="children-spacer" aria-hidden="true"></span>
+      {/if}
+      <SessionCard
+        session={node.session}
+        active={node.session.id === activeId}
+        childCount={node.children.length}
+        onselect={handleSelect}
+        onrename={handleRename}
+        ondelete={handleDelete}
+        onviewdiff={handleViewDiff}
+      />
+    </div>
+    {#if node.children.length > 0 && isExpanded(node.session.id)}
+      <ul class="child-list" role="group" aria-label={`Child sessions for ${node.session.title}`}>
+        {#each node.children as child (child.session.id)}
+          {@render renderSessionNode(child, level + 1)}
+        {/each}
+      </ul>
+    {/if}
+  </li>
+{/snippet}
 
 <GlassSurface variant="panel" element="aside" class="session-sidebar" aria-label="Sessions">
   <div class="sidebar-body" class:sidebar-body--phone={railOrientation === 'horizontal'}>
     <ProjectRail
       projects={projectsStore.projects}
       activeId={projectsStore.activeProject?.id ?? null}
+      available={projectsStore.unopenedAvailable()}
+      colorIndexFor={handleProjectColorIndex}
       orientation={railOrientation}
       onSelect={handleProjectSelect}
+      onOpen={handleProjectOpen}
+      onClose={handleProjectClose}
+      onSelectSession={handlePopoverSession}
     />
     <div class="sidebar-main">
   <header class="header">
-    <h2 class="heading">Sessions</h2>
+    <div class="header-title">
+      <h2 class="heading">Sessions</h2>
+      <VcsBadge />
+    </div>
     <button
       type="button"
       class="new-btn"
@@ -157,16 +277,8 @@
       </div>
     {:else}
       <ul class="list" role="listbox" aria-label="Session list">
-        {#each items as session (session.id)}
-          <li class="list-item">
-            <SessionCard
-              {session}
-              active={session.id === activeId}
-              onselect={handleSelect}
-              onrename={handleRename}
-              ondelete={handleDelete}
-            />
-          </li>
+        {#each tree as node (node.session.id)}
+          {@render renderSessionNode(node, 0)}
         {/each}
       </ul>
     {/if}
@@ -179,6 +291,30 @@
     </div>
   </div>
 </GlassSurface>
+
+{#if diffSessionId}
+  <div
+    class="diff-overlay"
+    role="dialog"
+    aria-modal="true"
+    aria-label={`File changes for ${diffTitle}`}
+    tabindex="-1"
+    onkeydown={onOverlayKeydown}
+  >
+    <button type="button" class="diff-backdrop" aria-label="Close diff" onclick={closeDiff}></button>
+    <div class="diff-sheet">
+      <header class="diff-sheet-head">
+        <h3 class="diff-sheet-title" title={diffTitle}>{diffTitle}</h3>
+        <button type="button" class="diff-close" aria-label="Close diff" title="Close" onclick={closeDiff}>
+          <HugeiconsIcon icon={Cancel01Icon} size={16} strokeWidth={1.5} color="currentColor" />
+        </button>
+      </header>
+      <div class="diff-sheet-body">
+        <SessionDiffPanel sessionId={diffSessionId} />
+      </div>
+    </div>
+  </div>
+{/if}
 
 <style>
   :global(.session-sidebar) {
@@ -220,8 +356,16 @@
     padding: 0.5rem 0.5rem 0.5rem 0.75rem;
   }
 
+  .header-title {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    min-width: 0;
+  }
+
   .heading {
     margin: 0;
+    flex: 0 0 auto;
     font-size: 0.75rem;
     font-weight: 600;
     letter-spacing: 0.04em;
@@ -292,6 +436,45 @@
 
   .list-item {
     margin: 0;
+  }
+
+  .session-row {
+    display: grid;
+    grid-template-columns: 1rem minmax(0, 1fr);
+    gap: 0.125rem;
+    align-items: stretch;
+    margin-left: calc(var(--level, 0) * 0.875rem);
+  }
+
+  .children-toggle,
+  .children-spacer {
+    align-self: center;
+    width: 1rem;
+    height: 1rem;
+  }
+
+  .children-toggle {
+    border: 0;
+    padding: 0;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--text-muted);
+    cursor: pointer;
+    line-height: 1;
+  }
+
+  .children-toggle:hover {
+    color: var(--text-primary);
+    background-color: var(--bg-surface);
+  }
+
+  .child-list {
+    list-style: none;
+    margin: 0.125rem 0 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.125rem;
   }
 
   /* ---- Skeleton loading ---- */
@@ -444,6 +627,120 @@
     margin-top: 0.25rem;
   }
 
+  /* ---- Session diff overlay ---- */
+  .diff-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 50;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1rem;
+  }
+
+  .diff-backdrop {
+    position: absolute;
+    inset: 0;
+    border: none;
+    padding: 0;
+    background-color: rgba(0, 0, 0, 0.45);
+    cursor: pointer;
+    animation: diff-fade var(--transition-base);
+  }
+
+  .diff-sheet {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    width: min(40rem, 100%);
+    max-height: min(80vh, 100%);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background-color: var(--bg-base);
+    box-shadow: 0 1.25rem 3rem rgba(0, 0, 0, 0.35);
+    overflow: hidden;
+    animation: diff-rise var(--transition-base);
+  }
+
+  .diff-sheet-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    padding: 0.625rem 0.625rem 0.625rem 0.875rem;
+    border-bottom: 1px solid var(--border);
+    background-color: var(--bg-surface);
+  }
+
+  .diff-sheet-title {
+    margin: 0;
+    min-width: 0;
+    font-size: 0.8125rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .diff-close {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 auto;
+    width: 1.875rem;
+    height: 1.875rem;
+    padding: 0;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background-color: var(--bg-elevated);
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition:
+      color var(--transition-fast),
+      border-color var(--transition-fast),
+      background-color var(--transition-fast);
+  }
+
+  .diff-close:hover {
+    color: var(--text-primary);
+    border-color: var(--border-strong);
+    background-color: var(--bg-surface);
+  }
+
+  .diff-close:focus-visible {
+    outline: 2px solid var(--focus-ring);
+    outline-offset: 2px;
+  }
+
+  .diff-sheet-body {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding: 0.75rem;
+  }
+
+  @keyframes diff-fade {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+
+  @keyframes diff-rise {
+    from {
+      opacity: 0;
+      transform: translateY(0.5rem);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
   @media (prefers-reduced-motion: reduce) {
     .sk-line {
       animation: none;
@@ -452,6 +749,13 @@
     .cta-btn:active,
     .retry-btn:active {
       transform: none;
+    }
+    .diff-backdrop,
+    .diff-sheet {
+      animation: none;
+    }
+    .diff-close {
+      transition: none;
     }
   }
 </style>
