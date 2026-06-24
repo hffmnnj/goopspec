@@ -202,19 +202,20 @@ describe("createToolLifecycleHook after handler", () => {
     await beforeHook({ tool: "goop_status", sessionID: "s1", callID }, { args: {} });
     await delay(5);
 
-    const output: { title: string; output: string; metadata: Record<string, unknown> | undefined } = {
-      title: "status",
-      output: "ok",
-      metadata: undefined,
-    };
+    const output: { title: string; output: string; metadata: Record<string, unknown> | undefined } =
+      {
+        title: "status",
+        output: "ok",
+        metadata: undefined,
+      };
 
     await expect(
       afterHook({ tool: "goop_status", sessionID: "s1", callID, args: {} }, output),
     ).resolves.toBeUndefined();
 
     expect(output.metadata).toBeDefined();
-    expect(typeof output.metadata!.durationMs).toBe("number");
-    expect(output.metadata!.durationMs as number).toBeGreaterThanOrEqual(0);
+    expect(typeof output.metadata?.durationMs).toBe("number");
+    expect(output.metadata?.durationMs as number).toBeGreaterThanOrEqual(0);
   });
 
   it("triggers memory distill for significant tool executions", async () => {

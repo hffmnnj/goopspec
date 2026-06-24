@@ -13,9 +13,9 @@
  */
 
 import type { PluginContext } from "../core/types.js";
+import { log } from "../shared/logger.js";
 import type { HookFactory, Hooks } from "./types.js";
 import { safeHandler } from "./utils.js";
-import { log } from "../shared/logger.js";
 
 // ---------------------------------------------------------------------------
 // Survival block builder
