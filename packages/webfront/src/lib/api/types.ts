@@ -49,6 +49,8 @@ export interface Agent {
   id: string;
   name: string;
   description?: string;
+  mode?: 'primary' | 'subagent' | 'all';
+  hidden?: boolean;
   [key: string]: unknown;
 }
 

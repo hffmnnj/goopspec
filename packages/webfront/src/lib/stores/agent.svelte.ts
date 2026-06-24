@@ -32,7 +32,12 @@ function chooseDefault(agents: Agent[], stored: string | null): string | null {
   return agents[0]?.id ?? null;
 }
 
+function isSelectableAgent(agent: Agent): boolean {
+  return agent.mode !== 'subagent' && agent.hidden !== true;
+}
+
 export class AgentStore {
+  allAgents = $state<Agent[]>([]);
   agents = $state<Agent[]>([]);
   selectedAgentId = $state<string | null>(readStored());
   loading = $state(false);
@@ -50,12 +55,14 @@ export class AgentStore {
     this.error = null;
     try {
       const loaded = await this.client.listAgents();
-      this.agents = Array.isArray(loaded) ? loaded : [];
+      this.allAgents = Array.isArray(loaded) ? loaded : [];
+      this.agents = this.allAgents.filter(isSelectableAgent);
       const selected = chooseDefault(this.agents, readStored() ?? this.selectedAgentId);
       this.selectedAgentId = selected;
       if (selected) writeStored(selected);
     } catch (err) {
       this.error = err instanceof Error ? err.message : 'Failed to load agents';
+      this.allAgents = [];
       this.agents = [];
       this.selectedAgentId = readStored() ?? this.selectedAgentId;
     } finally {
@@ -70,6 +77,7 @@ export class AgentStore {
   }
 
   reset(): void {
+    this.allAgents = [];
     this.agents = [];
     this.selectedAgentId = null;
     this.loading = false;

@@ -57,6 +57,41 @@ describe('agent store', () => {
     expect(storage.get('goopspec-selected-agent')).toBe('goop-orchestrator');
   });
 
+  it('exposes only selectable agents and defaults to visible orchestrator', async () => {
+    const storage = installStorage([['goopspec-selected-agent', 'code-reviewer']]);
+    const store = createAgentStore(
+      createMockClient([
+        { id: 'build', name: 'build', mode: 'primary' },
+        { id: 'code-reviewer', name: 'Code Reviewer', mode: 'subagent' },
+        { id: 'goop-orchestrator', name: 'goop-orchestrator', mode: 'primary' },
+        { id: 'doc-writer', name: 'Doc Writer', mode: 'subagent' },
+        { id: 'compaction', name: 'Compaction', mode: 'primary', hidden: true },
+        { id: 'plan', name: 'Plan', mode: 'all' },
+        { id: 'legacy-agent', name: 'Legacy Agent' },
+      ]),
+    );
+
+    await store.refresh();
+
+    expect(store.allAgents.map((candidate) => candidate.id)).toEqual([
+      'build',
+      'code-reviewer',
+      'goop-orchestrator',
+      'doc-writer',
+      'compaction',
+      'plan',
+      'legacy-agent',
+    ]);
+    expect(store.agents.map((candidate) => candidate.id)).toEqual([
+      'build',
+      'goop-orchestrator',
+      'plan',
+      'legacy-agent',
+    ]);
+    expect(store.selectedAgentId).toBe('goop-orchestrator');
+    expect(storage.get('goopspec-selected-agent')).toBe('goop-orchestrator');
+  });
+
   it('restores a persisted selection when available', async () => {
     installStorage([['goopspec-selected-agent', 'goop-executor-high']]);
     const store = createAgentStore(createMockClient());
