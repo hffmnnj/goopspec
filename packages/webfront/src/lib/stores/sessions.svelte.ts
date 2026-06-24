@@ -107,3 +107,5 @@ export function createSessionsStore(client?: OpenCodeClient, projectStore?: Proj
 
 /** Default reactive session store backed by the configured OpenCode client. */
 export const sessions = createSessionsStore();
+
+export type { SessionsStore };

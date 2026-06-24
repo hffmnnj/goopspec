@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { goto } from '$app/navigation';
+  import { page } from '$app/state';
   import { onMount } from 'svelte';
   import { HugeiconsIcon } from '@hugeicons/svelte';
   import { Add01Icon, InboxIcon, Alert02Icon, RefreshIcon } from '@hugeicons/core-free-icons';
@@ -18,6 +20,12 @@
   import { layout } from '$lib/stores/layout.svelte.js';
   import { filterSessions } from '$lib/sessions/search.js';
   import { buildSessionHierarchy, type SessionTreeNode } from '$lib/sessions/hierarchy.js';
+  import {
+    isNodeExpanded,
+    toggleExpanded,
+    expandActiveParent,
+  } from '$lib/sessions/session-disclosure.js';
+  import { needsNavigation, projectRoute, sessionRoute } from '$lib/routing/navigation.js';
   import type { Project } from '$lib/api/types.js';
 
   interface SessionsLike {
@@ -66,7 +74,8 @@
 
   let searchQuery = $state('');
   let diffSessionId = $state<string | null>(null);
-  let collapsedSessionIds = $state(new Set<string>());
+  // Tracks *expanded* parents — empty means all children collapsed by default.
+  let expandedSessionIds = $state(new Set<string>());
   const diffTitle = $derived(
     diffSessionId ? store.sorted.find((s) => s.id === diffSessionId)?.title ?? 'Session' : ''
   );
@@ -89,11 +98,11 @@
   });
 
   function handleProjectSelect(project: Project): void {
-    projectsStore.setActiveProject(project);
+    navigate(projectRoute(project));
   }
 
   function handleProjectOpen(project: Project): void {
-    projectsStore.openProject(project);
+    navigate(projectRoute(project));
   }
 
   function handleProjectClose(projectId: string): void {
@@ -105,19 +114,25 @@
   }
 
   function handlePopoverSession(project: Project, sessionId: string): void {
-    projectsStore.setActiveProject(project);
-    handleSelect(sessionId);
+    navigate(sessionRoute(project, sessionId));
   }
 
   async function handleCreate(): Promise<void> {
     const created = await store.create();
     const id = (created as { id?: string } | undefined)?.id;
-    if (id) onselect?.(id);
+    const project = projectsStore.activeProject;
+    if (id && project) navigate(sessionRoute(project, id));
+    else if (id) onselect?.(id);
   }
 
   function handleSelect(id: string): void {
-    activeSession.select(id);
+    const project = projectsStore.activeProject;
+    if (project) navigate(sessionRoute(project, id));
     onselect?.(id);
+  }
+
+  function navigate(target: string): void {
+    if (needsNavigation(page.url.pathname, target)) void goto(target);
   }
 
   function handleRename(id: string, title: string): void {
@@ -137,15 +152,18 @@
   }
 
   function isExpanded(id: string): boolean {
-    return !collapsedSessionIds.has(id);
+    return isNodeExpanded(expandedSessionIds, id);
   }
 
   function toggleChildren(id: string): void {
-    const next = new Set(collapsedSessionIds);
-    if (next.has(id)) next.delete(id);
-    else next.add(id);
-    collapsedSessionIds = next;
+    expandedSessionIds = toggleExpanded(expandedSessionIds, id);
   }
+
+  // Nicety: if the active session is a child, reveal it by expanding its parent.
+  $effect(() => {
+    const next = expandActiveParent(expandedSessionIds, store.sorted, activeId);
+    if (next !== expandedSessionIds) expandedSessionIds = next as Set<string>;
+  });
 
   function onOverlayKeydown(event: KeyboardEvent): void {
     if (event.key === 'Escape') {

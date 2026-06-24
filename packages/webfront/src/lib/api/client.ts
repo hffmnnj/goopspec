@@ -4,11 +4,14 @@ import type {
   EventHandlers,
   FileEntry,
   GlobalEvent,
+  GlobalEventHandlers,
   Message,
+  Model,
   MessagePart,
   OpenCodeClient,
   OpenCodeConfig,
   FileDiff,
+  Agent,
   Provider,
   Project,
   SSEEvent,
@@ -192,6 +195,88 @@ function normalizeMessage(value: unknown): Message {
 
 function normalizeMessages(value: unknown): Message[] {
   return Array.isArray(value) ? value.map(normalizeMessage) : [];
+}
+
+function normalizeModel(value: unknown, fallbackId = ''): Model | undefined {
+  const raw = asRecord(value);
+  const id = asString(raw.id ?? raw.modelID, fallbackId) || asString(raw.name);
+  if (!id) return undefined;
+
+  return {
+    ...(raw as unknown as Partial<Model>),
+    id,
+    name: asString(raw.name ?? raw.label ?? raw.displayName, id),
+    context: asOptionalNumber(raw.context ?? raw.contextWindow ?? raw.context_window),
+  };
+}
+
+function normalizeModels(value: unknown): Model[] {
+  if (Array.isArray(value)) {
+    return value.map((model) => normalizeModel(model)).filter((model): model is Model => model !== undefined);
+  }
+
+  const raw = asRecord(value);
+  return Object.entries(raw)
+    .map(([id, model]) => normalizeModel(model, id))
+    .filter((model): model is Model => model !== undefined);
+}
+
+function normalizeProvider(value: unknown, fallbackId = '', defaults: Record<string, string> = {}): Provider | undefined {
+  const raw = asRecord(value);
+  const id = asString(raw.id ?? raw.providerID, fallbackId) || asString(raw.name);
+  if (!id) return undefined;
+  const defaultModelId = asOptionalString(raw.defaultModelId ?? raw.defaultModelID ?? raw.default ?? defaults[id]);
+
+  const models = normalizeModels(raw.models ?? raw.model);
+  if (defaultModelId) {
+    models.sort((a, b) => Number(b.id === defaultModelId) - Number(a.id === defaultModelId));
+  }
+
+  return {
+    ...(raw as unknown as Partial<Provider>),
+    id,
+    name: asString(raw.name ?? raw.label ?? raw.displayName, id),
+    models,
+    ...(defaultModelId ? { defaultModelId } : {}),
+  };
+}
+
+function normalizeProviders(payload: unknown): Provider[] {
+  const record = asRecord(payload);
+  const defaultRecord = asRecord(record.default ?? record.defaults);
+  const source = record.providers ?? payload;
+
+  if (Array.isArray(source)) {
+    return source
+      .map((provider) => normalizeProvider(provider, '', defaultRecord as Record<string, string>))
+      .filter((provider): provider is Provider => provider !== undefined);
+  }
+
+  return Object.entries(asRecord(source))
+    .map(([id, provider]) => normalizeProvider(provider, id, defaultRecord as Record<string, string>))
+    .filter((provider): provider is Provider => provider !== undefined);
+}
+
+function normalizeAgent(value: unknown, fallbackId = ''): Agent | undefined {
+  const raw = asRecord(value);
+  const id = asString(raw.id ?? raw.name, fallbackId);
+  if (!id) return undefined;
+  return {
+    ...raw,
+    id,
+    name: asString(raw.name ?? raw.label ?? raw.displayName, id),
+    description: asOptionalString(raw.description),
+  };
+}
+
+function normalizeAgents(payload: unknown): Agent[] {
+  const source = asRecord(payload).agents ?? payload;
+  if (Array.isArray(source)) {
+    return source.map((agent) => normalizeAgent(agent)).filter((agent): agent is Agent => agent !== undefined);
+  }
+  return Object.entries(asRecord(source))
+    .map(([id, agent]) => normalizeAgent(agent, id))
+    .filter((agent): agent is Agent => agent !== undefined);
 }
 
 function messageIdFrom(raw: RawRecord): string | undefined {
@@ -386,10 +471,12 @@ export function createClient(baseUrl?: string): OpenCodeClient {
     getCurrentProject: () => request<Project | null>('project/current'),
     getPath: () => request<{ path: string }>('path'),
     getVcsInfo: () => request<VcsInfo>('vcs'),
-    subscribeGlobalEvents(handler: (event: GlobalEvent) => void): { close(): void } {
+    subscribeGlobalEvents(handler: (event: GlobalEvent) => void, handlers?: GlobalEventHandlers): { close(): void } {
       if (typeof EventSource === 'undefined') return { close: () => undefined };
 
       const source = new EventSource(makeUrl(resolveRoot(), 'event'));
+      source.onopen = () => handlers?.onOpen?.();
+      source.onerror = () => handlers?.onError?.(new Error('OpenCode global event stream failed'));
       source.onmessage = (event) => handler(toGlobalEvent(event.data));
       return { close: () => source.close() };
     },
@@ -448,7 +535,17 @@ export function createClient(baseUrl?: string): OpenCodeClient {
 
       return () => source.close();
     },
-    listProviders: () => request<Provider[]>('provider'),
+    listProviders: async () => {
+      try {
+        return normalizeProviders(await request<unknown>('config/providers'));
+      } catch (error) {
+        if (error instanceof OpenCodeApiError && error.status === 404) {
+          return normalizeProviders(await request<unknown>('provider'));
+        }
+        throw error;
+      }
+    },
+    listAgents: async () => normalizeAgents(await request<unknown>('agent')),
     getConfig: () => request<OpenCodeConfig>('config'),
     updateConfig: (patch: Partial<OpenCodeConfig>) =>
       request<OpenCodeConfig>('config', { method: 'PATCH', body: JSON.stringify(patch) }),
