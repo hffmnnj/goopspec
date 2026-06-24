@@ -80,6 +80,7 @@
     {placeholder}
     {disabled}
     aria-label="Message"
+    data-role="message-input"
     autocomplete="off"
     autocapitalize="sentences"
     spellcheck="true"

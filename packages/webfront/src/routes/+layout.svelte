@@ -2,7 +2,6 @@
   import '../app.css';
   import { onMount } from 'svelte';
   import { initTheme } from '$lib/stores/theme.svelte';
-  import ThemeToggle from '$lib/components/ThemeToggle.svelte';
 
   let { children } = $props();
 
@@ -10,26 +9,19 @@
 </script>
 
 <svelte:head>
-  <title>GoopSpec</title>
   <meta
     name="description"
     content="GoopSpec web frontend for OpenCode-compatible agent workflows"
   />
 </svelte:head>
 
-<main class="relative min-h-screen antialiased">
-  <div class="theme-toggle-slot">
-    <ThemeToggle />
-  </div>
-
+<div class="app-root">
   {@render children?.()}
-</main>
+</div>
 
 <style>
-  .theme-toggle-slot {
-    position: fixed;
-    top: 1rem;
-    right: 1rem;
-    z-index: 50;
+  .app-root {
+    min-height: 100dvh;
+    isolation: isolate;
   }
 </style>

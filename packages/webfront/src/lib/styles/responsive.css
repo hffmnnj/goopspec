@@ -1,0 +1,198 @@
+/**
+ * Responsive app-shell rules — breakpoints, grid templates, overlays.
+ *
+ * The shell sets `data-mode` (phone | tablet | desktop) from the layout store
+ * so the grid template is driven by JS-derived mode, while these CSS rules keep
+ * the layout robust if JS is slow to hydrate (mobile-first defaults + media
+ * queries as a backstop). Breakpoints mirror `BREAKPOINTS` in layout.svelte.ts.
+ *
+ * T9.2 SEAM (foldable): foldable.css will add `@media (horizontal-viewport-segments: 2)`
+ * rules and may target `.app-shell[data-mode='foldable']`. This sheet defines
+ * the column primitives those rules compose with.
+ */
+
+:root {
+  /* Panel sizing — single source for shell columns. */
+  --shell-sidebar-w: 16rem;
+  --shell-filepanel-w: 18rem;
+  --shell-overlay-w: min(20rem, 86vw);
+
+  /* Safe-area insets (notches, home indicator) with a sane fallback. */
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-right: env(safe-area-inset-right, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left: env(safe-area-inset-left, 0px);
+}
+
+/* ---------------------------------------------------------------------------
+ * Shell scaffold — full dynamic-viewport height, no horizontal overflow.
+ * ------------------------------------------------------------------------- */
+.app-shell {
+  position: relative;
+  display: grid;
+  width: 100%;
+  min-height: 100dvh;
+  overflow-x: hidden;
+  background-color: var(--bg-base);
+}
+
+.app-shell__col {
+  position: relative;
+  min-width: 0; /* allow children to shrink; prevents overflow */
+  min-height: 0;
+  height: 100%;
+}
+
+/* ---------------------------------------------------------------------------
+ * Desktop (>= 1024px): three columns. Side columns collapse to 0 when closed.
+ * ------------------------------------------------------------------------- */
+.app-shell[data-mode='desktop'] {
+  grid-template-columns:
+    [sidebar] var(--col-sidebar, var(--shell-sidebar-w))
+    [chat] minmax(0, 1fr)
+    [files] var(--col-files, 0px);
+  grid-template-rows: 100dvh;
+  transition: grid-template-columns var(--transition-base);
+}
+
+/* ---------------------------------------------------------------------------
+ * Tablet (640–1023px): sidebar + chat; file panel becomes an overlay drawer.
+ * ------------------------------------------------------------------------- */
+.app-shell[data-mode='tablet'] {
+  grid-template-columns:
+    [sidebar] var(--col-sidebar, var(--shell-sidebar-w))
+    [chat] minmax(0, 1fr);
+  grid-template-rows: 100dvh;
+  transition: grid-template-columns var(--transition-base);
+}
+
+/* ---------------------------------------------------------------------------
+ * Phone (< 640px): single column. Bottom nav switches views; side panels are
+ * full-height sheets. The chat column always fills; sidebar/files overlay it.
+ * ------------------------------------------------------------------------- */
+.app-shell[data-mode='phone'] {
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr) auto;
+}
+
+/* The single visible phone column. */
+.app-shell[data-mode='phone'] .app-shell__col--chat {
+  grid-column: 1;
+}
+
+/* ---------------------------------------------------------------------------
+ * Overlay / drawer surfaces (tablet file panel, phone sheets).
+ * ------------------------------------------------------------------------- */
+.shell-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  background-color: rgba(0, 0, 0, 0.45);
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  animation: shell-fade-in var(--transition-fast);
+}
+
+.shell-drawer {
+  position: fixed;
+  top: 0;
+  bottom: 0;
+  z-index: 61;
+  width: var(--shell-overlay-w);
+  max-width: 86vw;
+  height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  background-color: var(--bg-elevated);
+  box-shadow: var(--shadow-md);
+}
+
+.shell-drawer--left {
+  left: 0;
+  padding-left: var(--safe-left);
+  border-right: 1px solid var(--border);
+  animation: shell-slide-left var(--transition-base);
+}
+
+.shell-drawer--right {
+  right: 0;
+  padding-right: var(--safe-right);
+  border-left: 1px solid var(--border);
+  animation: shell-slide-right var(--transition-base);
+}
+
+/* ---------------------------------------------------------------------------
+ * Phone bottom navigation — safe-area aware.
+ * ------------------------------------------------------------------------- */
+.shell-nav {
+  grid-column: 1;
+  grid-row: 2;
+  display: flex;
+  align-items: stretch;
+  padding-bottom: var(--safe-bottom);
+  border-top: 1px solid var(--border);
+  background-color: var(--bg-elevated);
+}
+
+/* ---------------------------------------------------------------------------
+ * Skip-to-content link (a11y) — visible only on focus.
+ * ------------------------------------------------------------------------- */
+.skip-link {
+  position: fixed;
+  top: calc(var(--safe-top) + 0.5rem);
+  left: 50%;
+  transform: translate(-50%, -150%);
+  z-index: 80;
+  padding: 0.5rem 0.875rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--accent-foreground);
+  background-color: var(--accent);
+  border-radius: var(--radius-sm);
+  transition: transform var(--transition-fast);
+}
+
+.skip-link:focus-visible {
+  transform: translate(-50%, 0);
+  outline: 2px solid var(--text-primary);
+  outline-offset: 2px;
+}
+
+@keyframes shell-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes shell-slide-left {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+@keyframes shell-slide-right {
+  from {
+    transform: translateX(100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-shell,
+  .shell-backdrop,
+  .shell-drawer--left,
+  .shell-drawer--right,
+  .skip-link {
+    transition: none;
+    animation: none;
+  }
+}
