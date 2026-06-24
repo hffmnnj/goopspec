@@ -12,7 +12,7 @@
  */
 
 import type { PluginContext } from "../core/types.js";
-import { logError } from "../shared/logger.js";
+import { log, logError } from "../shared/logger.js";
 import type { HookFactory, Hooks } from "./types.js";
 import { safeHandler } from "./utils.js";
 
@@ -189,6 +189,10 @@ export function createToolLifecycleHook(ctx: PluginContext): Partial<Hooks> {
 
       // Inject timing metadata if available
       if (startTime != null) {
+        if (output.metadata == null) {
+          log("tool output missing metadata, initialising");
+          output.metadata = {};
+        }
         output.metadata.durationMs = Date.now() - startTime;
       }
 
