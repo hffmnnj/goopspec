@@ -1,6 +1,6 @@
 <script lang="ts">
   import AppShell from '$lib/components/AppShell.svelte';
-  import EmptyState from '$lib/components/states/EmptyState.svelte';
+  import HomePage from '$lib/components/home/HomePage.svelte';
   import { activeSession } from '$lib/stores/active-session.svelte.js';
   import { chat } from '$lib/stores/chat.svelte.js';
 
@@ -20,21 +20,5 @@
 <AppShell main={homeMain} />
 
 {#snippet homeMain()}
-  <section class="home-placeholder" aria-label="Home">
-    <EmptyState
-      title="No project selected"
-      description="Open a project from the sidebar to start working."
-    />
-  </section>
+  <HomePage />
 {/snippet}
-
-<style>
-  .home-placeholder {
-    flex: 1 1 auto;
-    min-height: 0;
-    display: grid;
-    place-items: center;
-    padding: 1rem;
-    background: var(--bg-base);
-  }
-</style>
