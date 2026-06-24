@@ -12,8 +12,10 @@
  */
 
 :root {
-  /* Panel sizing — single source for shell columns. */
-  --shell-sidebar-w: 16rem;
+  /* Panel sizing — single source for shell columns. The sidebar width is a
+     fallback only; the shell drives it from the layout store's persisted,
+     resizable `sidebarWidth` so session titles stay readable. */
+  --shell-sidebar-w: 300px;
   --shell-filepanel-w: 18rem;
   --shell-overlay-w: min(20rem, 86vw);
 
@@ -72,6 +74,13 @@
     [chat] minmax(0, 1fr);
   grid-template-rows: 100%;
   transition: grid-template-columns var(--transition-base);
+}
+
+/* While the user is actively dragging the resize handle, the live width
+   updates every pointer move; the column transition would lag behind and
+   jitter, so suppress it during the drag. */
+.app-shell[data-resizing='true'] {
+  transition: none;
 }
 
 /* ---------------------------------------------------------------------------

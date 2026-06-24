@@ -4,6 +4,8 @@ import {
   deriveMode,
   layout,
   BREAKPOINTS,
+  SIDEBAR_WIDTH,
+  clampSidebarWidth,
 } from './layout.svelte';
 
 function restoreGlobalWindow(): void {
@@ -143,6 +145,72 @@ describe('layout store', () => {
       expect(store.isFoldable).toBe(false);
       store.setFoldable(true);
       expect(store.isFoldable).toBe(true);
+    });
+  });
+
+  describe('sidebar width', () => {
+    it('defaults to the configured default width', () => {
+      const store = createLayoutStore(1280);
+      expect(store.sidebarWidth).toBe(SIDEBAR_WIDTH.default);
+    });
+
+    it('clamps below the minimum', () => {
+      expect(clampSidebarWidth(SIDEBAR_WIDTH.min - 100)).toBe(SIDEBAR_WIDTH.min);
+      const store = createLayoutStore(1280);
+      store.setSidebarWidth(50);
+      expect(store.sidebarWidth).toBe(SIDEBAR_WIDTH.min);
+    });
+
+    it('clamps above the maximum', () => {
+      expect(clampSidebarWidth(SIDEBAR_WIDTH.max + 100)).toBe(SIDEBAR_WIDTH.max);
+      const store = createLayoutStore(1280);
+      store.setSidebarWidth(9999);
+      expect(store.sidebarWidth).toBe(SIDEBAR_WIDTH.max);
+    });
+
+    it('rounds and accepts in-range widths', () => {
+      const store = createLayoutStore(1280);
+      store.setSidebarWidth(312.7);
+      expect(store.sidebarWidth).toBe(313);
+    });
+
+    it('falls back to the default for non-finite input', () => {
+      expect(clampSidebarWidth(Number.NaN)).toBe(SIDEBAR_WIDTH.default);
+    });
+
+    it('nudges the width by a delta, staying clamped', () => {
+      const store = createLayoutStore(1280);
+      store.setSidebarWidth(SIDEBAR_WIDTH.max - 5);
+      store.nudgeSidebarWidth(20);
+      expect(store.sidebarWidth).toBe(SIDEBAR_WIDTH.max);
+      store.setSidebarWidth(SIDEBAR_WIDTH.min + 5);
+      store.nudgeSidebarWidth(-20);
+      expect(store.sidebarWidth).toBe(SIDEBAR_WIDTH.min);
+    });
+
+    it('persists the chosen width to localStorage', () => {
+      const storage = installMockStorage();
+      const store = createLayoutStore(1280);
+      store.setSidebarWidth(320);
+      expect(storage.get('goopspec-sidebar-width')).toBe('320');
+    });
+
+    it('restores a persisted width on construction', () => {
+      installMockStorage(new Map([['goopspec-sidebar-width', '360']]));
+      const store = createLayoutStore(1280);
+      expect(store.sidebarWidth).toBe(360);
+    });
+
+    it('clamps a persisted width that is out of range', () => {
+      installMockStorage(new Map([['goopspec-sidebar-width', '9999']]));
+      const store = createLayoutStore(1280);
+      expect(store.sidebarWidth).toBe(SIDEBAR_WIDTH.max);
+    });
+
+    it('ignores a malformed persisted width', () => {
+      installMockStorage(new Map([['goopspec-sidebar-width', 'not-a-number']]));
+      const store = createLayoutStore(1280);
+      expect(store.sidebarWidth).toBe(SIDEBAR_WIDTH.default);
     });
   });
 
