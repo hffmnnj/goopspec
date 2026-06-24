@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { goto } from '$app/navigation';
+  import { page } from '$app/state';
   import { onMount } from 'svelte';
   import { HugeiconsIcon } from '@hugeicons/svelte';
   import { Add01Icon, InboxIcon, Alert02Icon, RefreshIcon } from '@hugeicons/core-free-icons';
@@ -18,6 +20,7 @@
   import { layout } from '$lib/stores/layout.svelte.js';
   import { filterSessions } from '$lib/sessions/search.js';
   import { buildSessionHierarchy, type SessionTreeNode } from '$lib/sessions/hierarchy.js';
+  import { needsNavigation, projectRoute, sessionRoute } from '$lib/routing/navigation.js';
   import type { Project } from '$lib/api/types.js';
 
   interface SessionsLike {
@@ -89,11 +92,11 @@
   });
 
   function handleProjectSelect(project: Project): void {
-    projectsStore.setActiveProject(project);
+    navigate(projectRoute(project));
   }
 
   function handleProjectOpen(project: Project): void {
-    projectsStore.openProject(project);
+    navigate(projectRoute(project));
   }
 
   function handleProjectClose(projectId: string): void {
@@ -105,19 +108,25 @@
   }
 
   function handlePopoverSession(project: Project, sessionId: string): void {
-    projectsStore.setActiveProject(project);
-    handleSelect(sessionId);
+    navigate(sessionRoute(project, sessionId));
   }
 
   async function handleCreate(): Promise<void> {
     const created = await store.create();
     const id = (created as { id?: string } | undefined)?.id;
-    if (id) onselect?.(id);
+    const project = projectsStore.activeProject;
+    if (id && project) navigate(sessionRoute(project, id));
+    else if (id) onselect?.(id);
   }
 
   function handleSelect(id: string): void {
-    activeSession.select(id);
+    const project = projectsStore.activeProject;
+    if (project) navigate(sessionRoute(project, id));
     onselect?.(id);
+  }
+
+  function navigate(target: string): void {
+    if (needsNavigation(page.url.pathname, target)) void goto(target);
   }
 
   function handleRename(id: string, title: string): void {

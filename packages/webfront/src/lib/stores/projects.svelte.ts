@@ -202,6 +202,20 @@ class ProjectsStore {
     writeActiveProjectId(project.id);
   }
 
+  async ensureProjectPath(projectPath: string): Promise<Project> {
+    if (this.availableProjects.length === 0 && this.openedProjects.length === 0 && !this.loading) {
+      await this.refresh();
+    }
+
+    const match =
+      this.openedProjects.find((project) => project.worktree === projectPath) ??
+      this.availableProjects.find((project) => project.worktree === projectPath) ??
+      this.createPathProject(projectPath);
+
+    this.openProject(match);
+    return match;
+  }
+
   onActiveProjectChange(listener: (project: Project | null) => void): () => void {
     this.activeProjectListeners.add(listener);
     return () => this.activeProjectListeners.delete(listener);
@@ -279,6 +293,14 @@ class ProjectsStore {
     this.activeProject = project;
     if (previous?.id === project?.id && previous?.worktree === project?.worktree) return;
     for (const listener of this.activeProjectListeners) listener(project);
+  }
+
+  private createPathProject(projectPath: string): Project {
+    return {
+      id: projectPath,
+      worktree: projectPath,
+      time: { created: Date.now() },
+    };
   }
 }
 
