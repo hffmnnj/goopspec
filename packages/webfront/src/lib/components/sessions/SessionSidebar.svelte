@@ -6,8 +6,11 @@
   import ThemeToggle from '../ThemeToggle.svelte';
   import ConnectionStatus from '../ConnectionStatus.svelte';
   import SessionCard from './SessionCard.svelte';
+  import SessionSearch from './SessionSearch.svelte';
   import { sessions as defaultStore } from '$lib/stores/sessions.svelte.js';
+  import { activeSession } from '$lib/stores/active-session.svelte.js';
   import { chat } from '$lib/stores/chat.svelte.js';
+  import { filterSessions } from '$lib/sessions/search.js';
 
   interface SessionsLike {
     sorted: import('$lib/api/types.js').Session[];
@@ -22,13 +25,13 @@
   interface SidebarProps {
     /** Override the session store (defaults to the shared reactive store). */
     store?: SessionsLike;
-    /**
-     * Active session id. Seam for T5.2: until the active-session store lands,
-     * fall back to the chat store's `activeSessionId`.
-     */
-    activeSessionId?: string | null;
-    /** Called when a session is selected (T5.2 wires history load). */
-    onselect?: (id: string) => void;
+  /**
+   * Active session id override. The sidebar now prefers the shared
+   * `activeSession` store; this prop lets tests / callers force a specific id.
+   */
+  activeSessionId?: string | null;
+  /** Called when a session is selected (history load is handled internally). */
+  onselect?: (id: string) => void;
   }
 
   let {
@@ -39,10 +42,12 @@
 
   const SKELETON_COUNT = 5;
 
-  // Active-session seam: prefer an explicit prop, else the chat store.
-  const activeId = $derived(activeSessionId ?? chat.activeSessionId);
+  let searchQuery = $state('');
 
-  const items = $derived(store.sorted);
+  // Active-session seam: prefer the T5.2 active-session store, then explicit prop, then chat store.
+  const activeId = $derived(activeSession.activeId ?? activeSessionId ?? chat.activeSessionId);
+
+  const items = $derived(filterSessions(store.sorted, searchQuery));
   const isLoading = $derived(store.loading);
   const errorMsg = $derived(store.error);
   const isEmpty = $derived(!isLoading && !errorMsg && items.length === 0);
@@ -58,6 +63,7 @@
   }
 
   function handleSelect(id: string): void {
+    activeSession.select(id);
     onselect?.(id);
   }
 
@@ -84,7 +90,7 @@
     </button>
   </header>
 
-  <!-- T5.2 seam: insert <SessionSearch> here (search input filters the list). -->
+  <SessionSearch bind:value={searchQuery} />
 
   <div class="list-region">
     {#if isLoading && items.length === 0}
