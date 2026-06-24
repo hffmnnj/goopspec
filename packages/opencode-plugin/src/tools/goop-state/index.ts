@@ -48,6 +48,7 @@ const STATE_ACTIONS = [
   "set-mode",
   "set-depth",
   "set-autopilot",
+  "set-atomic-pr",
   "update-wave",
   "reset",
   "list-workflows",
@@ -94,6 +95,9 @@ function formatGetResponse(
   }
   if (wf.autopilot) {
     lines.push(`- **Autopilot:** ON${wf.lazyAutopilot ? " (lazy)" : ""}`);
+  }
+  if (wf.atomicPREnabled !== undefined) {
+    lines.push(`- **Atomic PRs:** ${wf.atomicPREnabled ? "ON" : "OFF"}`);
   }
 
   if (allIds.length > 1) {
@@ -155,6 +159,7 @@ export function createGoopStateTool(ctx: PluginContext): ToolDefinition {
       "- 'set-mode': Set task mode (requires `mode`)\n" +
       "- 'set-depth': Set workflow depth (requires `depth`)\n" +
       "- 'set-autopilot': Toggle autopilot (requires `autopilot`, optional `lazy`)\n" +
+      "- 'set-atomic-pr': Set atomic PR preference (requires `enabled` boolean); persists atomicPREnabled in state\n" +
       "- 'update-wave': Update wave progress (requires `currentWave`, `totalWaves`)\n" +
       "- 'reset': Reset active workflow to idle\n" +
       "- 'list-workflows': List all workflows\n" +
@@ -167,6 +172,7 @@ export function createGoopStateTool(ctx: PluginContext): ToolDefinition {
       depth: tool.schema.string().optional(),
       autopilot: tool.schema.boolean().optional(),
       lazy: tool.schema.boolean().optional(),
+      enabled: tool.schema.boolean().optional(),
       currentWave: tool.schema.number().optional(),
       totalWaves: tool.schema.number().optional(),
       workflowId: tool.schema.string().optional(),
@@ -180,6 +186,7 @@ export function createGoopStateTool(ctx: PluginContext): ToolDefinition {
         depth?: string;
         autopilot?: boolean;
         lazy?: boolean;
+        enabled?: boolean;
         currentWave?: number;
         totalWaves?: number;
         workflowId?: string;
@@ -210,6 +217,7 @@ function executeAction(
     depth?: string;
     autopilot?: boolean;
     lazy?: boolean;
+    enabled?: boolean;
     currentWave?: number;
     totalWaves?: number;
     workflowId?: string;
@@ -311,6 +319,16 @@ function executeAction(
       renderStatusAfterMutation(ctx);
       const label = args.autopilot ? `ON${args.lazy ? " (lazy)" : ""}` : "OFF";
       return `Autopilot set to **${label}**.`;
+    }
+
+    // -- Atomic PR ----------------------------------------------------------
+    case "set-atomic-pr": {
+      if (args.enabled == null) {
+        return "**Error:** `enabled` (boolean) is required for set-atomic-pr.";
+      }
+      sm.updateWorkflow({ atomicPREnabled: args.enabled });
+      renderStatusAfterMutation(ctx);
+      return `Atomic PRs set to **${args.enabled ? "ON" : "OFF"}**.`;
     }
 
     // -- Wave progress ------------------------------------------------------
