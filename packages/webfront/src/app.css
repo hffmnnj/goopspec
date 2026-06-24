@@ -1,5 +1,6 @@
 @import 'tailwindcss';
 @import './lib/styles/tokens.css';
+@import './lib/styles/glass.css';
 
 @plugin '@tailwindcss/container-queries';
 
