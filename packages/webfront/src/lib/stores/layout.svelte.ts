@@ -29,12 +29,31 @@ export const BREAKPOINTS = {
   desktop: 1024,
 } as const;
 
+/**
+ * Sidebar width bounds (px) for the resizable desktop/tablet sidebar.
+ * `default` is wide enough that session titles read at ~20+ chars without
+ * over-truncating; `min`/`max` clamp the drag handle. Mirrored in CSS via the
+ * `--shell-sidebar-w` custom property the shell sets from `sidebarWidth`.
+ */
+export const SIDEBAR_WIDTH = {
+  min: 240,
+  max: 480,
+  default: 300,
+} as const;
+
+/** Clamp a sidebar width (px) into the allowed [min, max] range. */
+export function clampSidebarWidth(width: number): number {
+  if (!Number.isFinite(width)) return SIDEBAR_WIDTH.default;
+  return Math.min(SIDEBAR_WIDTH.max, Math.max(SIDEBAR_WIDTH.min, Math.round(width)));
+}
+
 export type LayoutMode = 'phone' | 'tablet' | 'desktop' | 'foldable';
 
 /** The focused column on phone, where only one panel is visible at a time. */
 export type MobileView = 'sessions' | 'chat' | 'files';
 
 const STORAGE_KEY = 'goopspec-layout';
+const SIDEBAR_WIDTH_KEY = 'goopspec-sidebar-width';
 
 function isBrowser(): boolean {
   return typeof window !== 'undefined';
@@ -88,6 +107,27 @@ function writeStored(state: StoredLayout): void {
   }
 }
 
+function readStoredWidth(): number | null {
+  if (!isBrowser()) return null;
+  try {
+    const raw = window.localStorage.getItem(SIDEBAR_WIDTH_KEY);
+    if (!raw) return null;
+    const value = Number.parseFloat(raw);
+    return Number.isFinite(value) ? clampSidebarWidth(value) : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeStoredWidth(width: number): void {
+  if (!isBrowser()) return;
+  try {
+    window.localStorage.setItem(SIDEBAR_WIDTH_KEY, String(width));
+  } catch {
+    // Best-effort persistence.
+  }
+}
+
 class LayoutStore {
   /** Left session sidebar open (desktop/tablet collapse; phone overlay). */
   sidebarOpen = $state(true);
@@ -95,6 +135,8 @@ class LayoutStore {
   filePanelOpen = $state(false);
   /** Focused column on phone. Chat is the default view. */
   mobileView = $state<MobileView>('chat');
+  /** Docked sidebar width (px), clamped to SIDEBAR_WIDTH bounds. */
+  sidebarWidth = $state<number>(SIDEBAR_WIDTH.default);
 
   /** Raw viewport width in CSS px; updated by the resize listener. */
   private width = $state<number>(BREAKPOINTS.desktop);
@@ -122,6 +164,8 @@ class LayoutStore {
     const stored = readStored();
     if (stored?.sidebarOpen !== undefined) this.sidebarOpen = stored.sidebarOpen;
     if (stored?.filePanelOpen !== undefined) this.filePanelOpen = stored.filePanelOpen;
+    const storedWidth = readStoredWidth();
+    if (storedWidth !== null) this.sidebarWidth = storedWidth;
   }
 
   /**
@@ -166,6 +210,17 @@ class LayoutStore {
     this.persist();
   }
 
+  /** Set the docked sidebar width (px); clamps and persists the result. */
+  setSidebarWidth(width: number): void {
+    this.sidebarWidth = clampSidebarWidth(width);
+    writeStoredWidth(this.sidebarWidth);
+  }
+
+  /** Nudge the sidebar width by a delta (px); used for keyboard resize. */
+  nudgeSidebarWidth(delta: number): void {
+    this.setSidebarWidth(this.sidebarWidth + delta);
+  }
+
   /** Switch the focused phone column. */
   setMobileView(view: MobileView): void {
     this.mobileView = view;
@@ -186,6 +241,7 @@ class LayoutStore {
     this.mobileView = 'chat';
     this.width = BREAKPOINTS.desktop;
     this.foldable = false;
+    this.sidebarWidth = SIDEBAR_WIDTH.default;
   }
 
   private persist(): void {

@@ -10,14 +10,26 @@
     avatarClass,
     avatarAriaCurrent,
   } from './project-rail.js';
+  import AddProjectPicker from './AddProjectPicker.svelte';
+  import ProjectPopover from './ProjectPopover.svelte';
 
   interface ProjectRailProps {
-    /** Projects to render, one avatar per entry. */
+    /** Opened projects to render, one avatar per entry. */
     projects: Project[];
     /** Id of the currently-active project, if any. */
     activeId?: string | null;
     /** Called when a project avatar is activated. */
     onSelect?: (project: Project) => void;
+    /** Projects available to open but not yet in the rail (add-picker source). */
+    available?: Project[];
+    /** Open/add a project (by picked entry or manual path). */
+    onOpen?: (project: Project) => void;
+    /** Close/remove a project from the rail. */
+    onClose?: (projectId: string) => void;
+    /** Resolve the stable palette index for a project's avatar color. */
+    colorIndexFor?: (id: string) => number;
+    /** Navigate to a specific session within a project (from the hover popover). */
+    onSelectSession?: (project: Project, sessionId: string) => void;
     /**
      * Orientation. `vertical` (default) for the desktop sidebar rail;
      * `horizontal` for the phone chip row above the session list.
@@ -29,13 +41,54 @@
     projects,
     activeId = null,
     onSelect,
+    available = [],
+    onOpen,
+    onClose,
+    colorIndexFor,
+    onSelectSession,
     orientation = 'vertical',
   }: ProjectRailProps = $props();
 
   const isEmpty = $derived(projects.length === 0);
 
+  let pickerOpen = $state(false);
+  let hoveredId = $state<string | null>(null);
+  let hoverTimer: ReturnType<typeof setTimeout> | undefined;
+
+  const HOVER_DELAY = 180;
+
+  function color(project: Project): string {
+    return projectColor(project.id, colorIndexFor?.(project.id));
+  }
+
   function handleSelect(project: Project): void {
     onSelect?.(project);
+  }
+
+  function scheduleHover(id: string): void {
+    clearTimeout(hoverTimer);
+    hoverTimer = setTimeout(() => {
+      hoveredId = id;
+    }, HOVER_DELAY);
+  }
+
+  function showNow(id: string): void {
+    clearTimeout(hoverTimer);
+    hoveredId = id;
+  }
+
+  function clearHover(): void {
+    clearTimeout(hoverTimer);
+    hoveredId = null;
+  }
+
+  function togglePicker(): void {
+    pickerOpen = !pickerOpen;
+  }
+
+  function handleOpen(project: Project): void {
+    pickerOpen = false;
+    onOpen?.(project);
   }
 </script>
 
@@ -45,7 +98,7 @@
   aria-label="Projects"
 >
   {#if isEmpty}
-    <span class="rail-avatar rail-avatar--placeholder" aria-hidden="true" title="No projects yet">
+    <span class="rail-avatar rail-avatar--placeholder" aria-hidden="true" title="No projects opened">
       <HugeiconsIcon icon={Add01Icon} size={16} strokeWidth={1.5} color="currentColor" />
     </span>
   {:else}
@@ -53,22 +106,65 @@
       {#each projects as project (project.id)}
         {@const active = isActiveProject(project, activeId)}
         {@const label = projectLabel(project)}
-        <li class="rail-item">
+        <li
+          class="rail-item"
+          onmouseenter={() => scheduleHover(project.id)}
+          onmouseleave={clearHover}
+        >
           <button
             type="button"
             class={avatarClass(active)}
-            style:--avatar-color={projectColor(project.id)}
+            style:--avatar-color={color(project)}
             aria-current={avatarAriaCurrent(active)}
             aria-label={label}
             title={label}
             onclick={() => handleSelect(project)}
+            onfocus={() => showNow(project.id)}
+            onblur={clearHover}
           >
             <span class="rail-initial" aria-hidden="true">{projectInitial(project.worktree)}</span>
           </button>
+          {#if hoveredId === project.id}
+            <ProjectPopover
+              {project}
+              {orientation}
+              onclose={clearHover}
+              oncloseproject={() => {
+                clearHover();
+                onClose?.(project.id);
+              }}
+              onselectsession={(sessionId) => {
+                clearHover();
+                onSelectSession?.(project, sessionId);
+              }}
+            />
+          {/if}
         </li>
       {/each}
     </ul>
   {/if}
+
+  <div class="rail-add">
+    <button
+      type="button"
+      class="rail-avatar rail-avatar--add"
+      aria-label="Add project"
+      aria-haspopup="dialog"
+      aria-expanded={pickerOpen}
+      title="Add project"
+      onclick={togglePicker}
+    >
+      <HugeiconsIcon icon={Add01Icon} size={16} strokeWidth={1.75} color="currentColor" />
+    </button>
+    {#if pickerOpen}
+      <AddProjectPicker
+        {available}
+        {orientation}
+        onpick={handleOpen}
+        onclose={() => (pickerOpen = false)}
+      />
+    {/if}
+  </div>
 </nav>
 
 <style>
@@ -98,6 +194,7 @@
   }
 
   .rail-item {
+    position: relative;
     margin: 0;
   }
 
@@ -155,6 +252,28 @@
     text-transform: uppercase;
   }
 
+  /* ---- Add-project affordance ---- */
+  .rail-add {
+    position: relative;
+    margin-top: 0.5rem;
+    padding-top: 0.5rem;
+    border-top: 1px solid var(--border);
+    display: flex;
+    justify-content: center;
+    width: 100%;
+  }
+
+  .rail-avatar--add {
+    background-color: var(--bg-elevated);
+    color: var(--text-secondary);
+    border: 1px dashed var(--border-strong);
+  }
+
+  .rail-avatar--add:hover {
+    color: var(--accent-text);
+    border-color: var(--accent);
+  }
+
   /* ---- Horizontal (phone) chip row ---- */
   .project-rail--horizontal {
     flex-direction: row;
@@ -171,6 +290,16 @@
     flex-direction: row;
     align-items: center;
     width: max-content;
+  }
+
+  .project-rail--horizontal .rail-add {
+    margin-top: 0;
+    margin-left: 0.5rem;
+    padding-top: 0;
+    padding-left: 0.5rem;
+    border-top: none;
+    border-left: 1px solid var(--border);
+    width: auto;
   }
 
   @media (prefers-reduced-motion: reduce) {

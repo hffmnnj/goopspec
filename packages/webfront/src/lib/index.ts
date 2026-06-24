@@ -59,6 +59,12 @@ export * from './stores/toast-bindings.svelte.js';
 export * from './stores/ui.svelte.js';
 export * from './stores/workspace.svelte.js';
 
+// Routing
+export * from './routing/path-codec.js';
+export * from './routing/navigation.js';
+export * from './routing/route-sync.js';
+export * from './sessions/hierarchy.js';
+
 // Commands and keyboard
 export * from './commands/commands.js';
 export * from './commands/registry.js';
