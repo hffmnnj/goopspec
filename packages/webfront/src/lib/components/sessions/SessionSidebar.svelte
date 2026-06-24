@@ -32,8 +32,13 @@
 
   interface ProjectsLike {
     projects: Project[];
+    availableProjects: Project[];
     activeProject: Project | null;
     setActiveProject(project: Project): void;
+    openProject(project: Project): void;
+    closeProject(projectId: string): void;
+    unopenedAvailable(): Project[];
+    colorIndexFor(id: string): number;
   }
 
   interface SidebarProps {
@@ -85,6 +90,23 @@
 
   function handleProjectSelect(project: Project): void {
     projectsStore.setActiveProject(project);
+  }
+
+  function handleProjectOpen(project: Project): void {
+    projectsStore.openProject(project);
+  }
+
+  function handleProjectClose(projectId: string): void {
+    projectsStore.closeProject(projectId);
+  }
+
+  function handleProjectColorIndex(id: string): number {
+    return projectsStore.colorIndexFor(id);
+  }
+
+  function handlePopoverSession(project: Project, sessionId: string): void {
+    projectsStore.setActiveProject(project);
+    handleSelect(sessionId);
   }
 
   async function handleCreate(): Promise<void> {
@@ -174,8 +196,13 @@
     <ProjectRail
       projects={projectsStore.projects}
       activeId={projectsStore.activeProject?.id ?? null}
+      available={projectsStore.unopenedAvailable()}
+      colorIndexFor={handleProjectColorIndex}
       orientation={railOrientation}
       onSelect={handleProjectSelect}
+      onOpen={handleProjectOpen}
+      onClose={handleProjectClose}
+      onSelectSession={handlePopoverSession}
     />
     <div class="sidebar-main">
   <header class="header">
