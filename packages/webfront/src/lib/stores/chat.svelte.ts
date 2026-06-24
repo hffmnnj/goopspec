@@ -2,6 +2,7 @@ import { createClient } from '../api/client.js';
 import { fetchMessages } from '../api/messages.js';
 import { StreamSubscription } from '../api/stream.js';
 import type { Message, MessagePart, OpenCodeClient, SendMessageInput } from '../api/types.js';
+import { model } from './model.svelte.js';
 
 function now(): string {
   return new Date().toISOString();
@@ -80,6 +81,10 @@ class ChatStore {
     this.messages = [...this.messages, user];
 
     const input: SendMessageInput = { text: trimmed };
+    if (model.selectedProviderId && model.selectedModelId) {
+      input.providerId = model.selectedProviderId;
+      input.modelId = model.selectedModelId;
+    }
     this.beginStreaming();
 
     try {
