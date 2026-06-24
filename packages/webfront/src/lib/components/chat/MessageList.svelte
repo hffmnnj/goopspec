@@ -4,6 +4,7 @@
   import { ArrowDown01Icon, UserIcon, AiBrain01Icon } from '@hugeicons/core-free-icons';
   import type { Message } from '$lib/api/types.js';
   import { groupParts } from '$lib/api/messages.js';
+  import Markdown from './Markdown.svelte';
 
   interface MessageListProps {
     messages: Message[];
@@ -60,8 +61,7 @@
         <div class="bubble">
           {#each groupParts(message.parts) as group, index (index)}
             {#if group.kind === 'text'}
-              <!-- T3.3 swaps this plain text for the Markdown renderer. -->
-              <p class="text">{group.text}</p>
+              <Markdown text={group.text} />
             {:else if group.kind === 'tool'}
               <!-- T4 builds the real ToolCard; placeholder keeps order intact. -->
               <div class="tool-placeholder">
@@ -149,16 +149,6 @@
 
   .row--user .bubble {
     color: var(--text-secondary);
-  }
-
-  .text {
-    margin: 0;
-    white-space: pre-wrap;
-    overflow-wrap: anywhere;
-  }
-
-  .text + .text {
-    margin-top: 0.5rem;
   }
 
   .tool-placeholder {
