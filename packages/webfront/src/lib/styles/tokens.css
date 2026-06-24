@@ -1,0 +1,128 @@
+/**
+ * GoopSpec Web Frontend — Design Tokens
+ *
+ * Single source of truth for the design system's CSS custom properties.
+ * Imported by `src/app.css`. Tokens are scoped to `[data-theme]` so the
+ * theme store can swap palettes by toggling the attribute on
+ * `document.documentElement`.
+ *
+ * Design language: Apple / Linear / Vercel / Corgi — clean, modern,
+ * slightly warm neutrals with a confident green accent.
+ *
+ *   Accent — light: #4cce4e   dark: #7fef80
+ *
+ * WCAG AA note: the brand accents are preserved for filled UI, large marks,
+ * and decorative surfaces. Small accent-colored text and focus outlines use
+ * `--accent-text` / `--focus-ring`, because light-mode #4cce4e does not reach
+ * 4.5:1 against white and white text on #4cce4e does not reach 4.5:1.
+ *
+ * `:root` carries the dark palette so non-JS / pre-hydration environments
+ * render the default (dark) theme without a flash.
+ */
+
+/* ---------------------------------------------------------------------------
+ * Shared tokens — theme-independent (typography, radii, shadows, motion)
+ * ------------------------------------------------------------------------- */
+:root {
+  /* Font stacks */
+  --font-sans: 'Geist', 'Inter', ui-sans-serif, system-ui, -apple-system,
+    'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  --font-mono: 'Geist Mono', ui-monospace, 'SF Mono', 'Cascadia Code',
+    'JetBrains Mono', Menlo, Consolas, monospace;
+
+  /* Radii */
+  --radius: 0.625rem; /* 10px — default */
+  --radius-sm: 0.375rem; /* 6px */
+  --radius-lg: 1rem; /* 16px */
+  --radius-full: 9999px;
+
+  /* Elevation */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.15);
+  --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.25);
+
+  /* Motion — Apple-style ease-out spring */
+  --transition-fast: 150ms cubic-bezier(0.16, 1, 0.3, 1);
+  --transition-base: 250ms cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* ---------------------------------------------------------------------------
+ * Dark palette — default (applied to :root for no-JS / pre-hydration)
+ * ------------------------------------------------------------------------- */
+:root,
+[data-theme='dark'] {
+  color-scheme: dark;
+
+  --bg-base: #09090b; /* zinc-950 */
+  --bg-elevated: #18181b; /* zinc-900 */
+  --bg-surface: #27272a; /* zinc-800 */
+
+  --border: rgba(255, 255, 255, 0.08);
+  --border-strong: rgba(255, 255, 255, 0.14);
+
+  --text-primary: #fafafa; /* zinc-50 */
+  --text-secondary: #a1a1aa; /* zinc-400 */
+  --text-muted: #71717a; /* zinc-500 */
+
+  --accent: #7fef80;
+  --accent-text: #7fef80;
+  --accent-foreground: #09090b; /* dark text on green */
+  --accent-hover: #6fe071;
+  --accent-soft: rgba(127, 239, 128, 0.12);
+  --focus-ring: #7fef80;
+
+  /* Glass tints (consumed by GlassSurface in T1.4) */
+  --glass-bg: rgba(24, 24, 27, 0.6);
+  --glass-border: rgba(255, 255, 255, 0.1);
+  --glass-highlight: rgba(255, 255, 255, 0.06);
+
+  /* Diff tints (consumed by DiffView in T4.2) — added green harmonizes with
+   * the accent but reads clearly as "added"; removed is a calibrated red. */
+  --diff-add-fg: #9be9a8;
+  --diff-add-bg: rgba(127, 239, 128, 0.1);
+  --diff-remove-fg: #f4a8a8;
+  --diff-remove-bg: rgba(248, 113, 113, 0.1);
+  --danger-text: #fca5a5;
+  --info-text: #93c5fd;
+  --warning-text: #facc15;
+}
+
+/* ---------------------------------------------------------------------------
+ * Light palette
+ * ------------------------------------------------------------------------- */
+[data-theme='light'] {
+  color-scheme: light;
+
+  --bg-base: #ffffff;
+  --bg-elevated: #fafafa; /* zinc-50 */
+  --bg-surface: #f4f4f5; /* zinc-100 */
+
+  --border: rgba(0, 0, 0, 0.08);
+  --border-strong: rgba(0, 0, 0, 0.14);
+
+  --text-primary: #09090b; /* zinc-950 */
+  --text-secondary: #52525b; /* zinc-600 */
+  --text-muted: #71717a; /* zinc-500 */
+
+  --accent: #4cce4e;
+  --accent-text: #177c26;
+  --accent-foreground: #09090b;
+  --accent-hover: #3fbf41;
+  --accent-soft: rgba(76, 206, 78, 0.12);
+  --focus-ring: #177c26;
+
+  /* Glass tints (consumed by GlassSurface in T1.4) */
+  --glass-bg: rgba(255, 255, 255, 0.6);
+  --glass-border: rgba(0, 0, 0, 0.08);
+  --glass-highlight: rgba(255, 255, 255, 0.7);
+
+  /* Diff tints (consumed by DiffView in T4.2) — darker text on light tints
+   * for AA contrast in light mode. */
+  --diff-add-fg: #1a7f37;
+  --diff-add-bg: rgba(76, 206, 78, 0.12);
+  --diff-remove-fg: #c0392b;
+  --diff-remove-bg: rgba(220, 53, 69, 0.1);
+  --danger-text: #b91c1c;
+  --info-text: #1d4ed8;
+  --warning-text: #854d0e;
+}
