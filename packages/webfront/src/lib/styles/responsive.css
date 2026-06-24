@@ -26,13 +26,21 @@
 
 /* ---------------------------------------------------------------------------
  * Shell scaffold — full dynamic-viewport height, no horizontal overflow.
+ *
+ * The shell is locked to exactly one viewport height (`height: 100dvh`) so it
+ * never adds a page-level scrollbar; scrolling happens inside the columns'
+ * own `overflow-y: auto` regions. Using `min-height` here (combined with the
+ * `100dvh` grid row below and the `min-height:100dvh` ancestors) stacked two
+ * viewport heights and produced a phantom outer scrollbar — `height` removes
+ * that double-counting.
  * ------------------------------------------------------------------------- */
 .app-shell {
   position: relative;
   display: grid;
   width: 100%;
-  min-height: 100dvh;
-  overflow-x: hidden;
+  height: 100dvh;
+  max-height: 100dvh;
+  overflow: hidden;
   background-color: var(--bg-base);
 }
 
@@ -51,7 +59,7 @@
     [sidebar] var(--col-sidebar, var(--shell-sidebar-w))
     [chat] minmax(0, 1fr)
     [files] var(--col-files, 0px);
-  grid-template-rows: 100dvh;
+  grid-template-rows: 100%;
   transition: grid-template-columns var(--transition-base);
 }
 
@@ -62,7 +70,7 @@
   grid-template-columns:
     [sidebar] var(--col-sidebar, var(--shell-sidebar-w))
     [chat] minmax(0, 1fr);
-  grid-template-rows: 100dvh;
+  grid-template-rows: 100%;
   transition: grid-template-columns var(--transition-base);
 }
 
