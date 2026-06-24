@@ -8,6 +8,7 @@ import type {
   MessagePart,
   OpenCodeClient,
   OpenCodeConfig,
+  FileDiff,
   Provider,
   Project,
   SSEEvent,
@@ -282,6 +283,14 @@ export function createClient(baseUrl?: string): OpenCodeClient {
     renameSession: (id: string, title: string) =>
       request<Session>(`session/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify({ title }) }),
     getMessages: (sessionId: string) => request<Message[]>(`session/${encodeURIComponent(sessionId)}/message`),
+    async getSessionDiff(sessionId: string): Promise<FileDiff[]> {
+      try {
+        const diffs = await request<FileDiff[]>(`session/${encodeURIComponent(sessionId)}/diff`);
+        return Array.isArray(diffs) ? diffs : [];
+      } catch {
+        return [];
+      }
+    },
     sendMessage: (sessionId: string, input: SendMessageInput, directory?: string) =>
       request<Message>(`session/${encodeURIComponent(sessionId)}/message`, {
         method: 'POST',

@@ -4,6 +4,7 @@
   import {
     PencilEdit01Icon,
     Delete02Icon,
+    GitCompareIcon,
     MessageMultiple01Icon,
     Coins01Icon,
     Tick02Icon,
@@ -27,6 +28,7 @@
     onselect?: (id: string) => void;
     onrename?: (id: string, title: string) => void;
     ondelete?: (id: string) => void;
+    onviewdiff?: (id: string) => void;
   }
 
   let {
@@ -35,6 +37,7 @@
     onselect,
     onrename,
     ondelete,
+    onviewdiff,
   }: SessionCardProps = $props();
 
   const ICON = 13;
@@ -108,6 +111,11 @@
   function cancelDelete(event?: Event): void {
     event?.stopPropagation();
     confirmingDelete = false;
+  }
+
+  function viewDiff(event?: Event): void {
+    event?.stopPropagation();
+    onviewdiff?.(session.id);
   }
 </script>
 
@@ -191,6 +199,15 @@
       </div>
     {:else}
       <div class="actions">
+        <button
+          type="button"
+          class="icon-btn"
+          aria-label="View session diff"
+          title="View diff"
+          onclick={viewDiff}
+        >
+          <HugeiconsIcon icon={GitCompareIcon} size={15} strokeWidth={STROKE} color="currentColor" />
+        </button>
         <button
           type="button"
           class="icon-btn"

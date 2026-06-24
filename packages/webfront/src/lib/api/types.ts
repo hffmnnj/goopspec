@@ -70,6 +70,18 @@ export type GlobalEvent = {
   [key: string]: unknown;
 };
 
+/** Per-file change for a session, as returned by `GET /session/{id}/diff`. */
+export interface FileDiff {
+  /** Repository-relative file path. */
+  file: string;
+  /** File contents before the session's changes. */
+  before: string;
+  /** File contents after the session's changes. */
+  after: string;
+  additions: number;
+  deletions: number;
+}
+
 /**
  * A single entry in the workspace file tree — either a file or a directory.
  * `children` is populated lazily by the file tree as directories are expanded;
@@ -136,6 +148,7 @@ export interface OpenCodeClient {
   deleteSession(id: string): Promise<void>;
   renameSession(id: string, title: string): Promise<Session>;
   getMessages(sessionId: string): Promise<Message[]>;
+  getSessionDiff(sessionId: string): Promise<FileDiff[]>;
   sendMessage(sessionId: string, input: SendMessageInput, directory?: string): Promise<Message>;
   subscribeEvents(sessionId: string, handlers: EventHandlers): Unsubscribe;
   listProviders(): Promise<Provider[]>;

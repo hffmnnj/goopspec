@@ -9,6 +9,8 @@
   import SessionSearch from './SessionSearch.svelte';
   import ProjectRail from './ProjectRail.svelte';
   import VcsBadge from './VcsBadge.svelte';
+  import SessionDiffPanel from './SessionDiffPanel.svelte';
+  import { Cancel01Icon } from '@hugeicons/core-free-icons';
   import { sessions as defaultStore } from '$lib/stores/sessions.svelte.js';
   import { projects as defaultProjects } from '$lib/stores/projects.svelte.js';
   import { activeSession } from '$lib/stores/active-session.svelte.js';
@@ -57,6 +59,10 @@
   const SKELETON_COUNT = 5;
 
   let searchQuery = $state('');
+  let diffSessionId = $state<string | null>(null);
+  const diffTitle = $derived(
+    diffSessionId ? store.sorted.find((s) => s.id === diffSessionId)?.title ?? 'Session' : ''
+  );
 
   // Active-session seam: prefer the T5.2 active-session store, then explicit prop, then chat store.
   const activeId = $derived(activeSession.activeId ?? activeSessionId ?? chat.activeSessionId);
@@ -95,6 +101,21 @@
 
   function handleDelete(id: string): void {
     void store.remove(id);
+  }
+
+  function handleViewDiff(id: string): void {
+    diffSessionId = id;
+  }
+
+  function closeDiff(): void {
+    diffSessionId = null;
+  }
+
+  function onOverlayKeydown(event: KeyboardEvent): void {
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      closeDiff();
+    }
   }
 </script>
 
@@ -169,6 +190,7 @@
               onselect={handleSelect}
               onrename={handleRename}
               ondelete={handleDelete}
+              onviewdiff={handleViewDiff}
             />
           </li>
         {/each}
@@ -183,6 +205,30 @@
     </div>
   </div>
 </GlassSurface>
+
+{#if diffSessionId}
+  <div
+    class="diff-overlay"
+    role="dialog"
+    aria-modal="true"
+    aria-label={`File changes for ${diffTitle}`}
+    tabindex="-1"
+    onkeydown={onOverlayKeydown}
+  >
+    <button type="button" class="diff-backdrop" aria-label="Close diff" onclick={closeDiff}></button>
+    <div class="diff-sheet">
+      <header class="diff-sheet-head">
+        <h3 class="diff-sheet-title" title={diffTitle}>{diffTitle}</h3>
+        <button type="button" class="diff-close" aria-label="Close diff" title="Close" onclick={closeDiff}>
+          <HugeiconsIcon icon={Cancel01Icon} size={16} strokeWidth={1.5} color="currentColor" />
+        </button>
+      </header>
+      <div class="diff-sheet-body">
+        <SessionDiffPanel sessionId={diffSessionId} />
+      </div>
+    </div>
+  </div>
+{/if}
 
 <style>
   :global(.session-sidebar) {
@@ -456,6 +502,120 @@
     margin-top: 0.25rem;
   }
 
+  /* ---- Session diff overlay ---- */
+  .diff-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 50;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1rem;
+  }
+
+  .diff-backdrop {
+    position: absolute;
+    inset: 0;
+    border: none;
+    padding: 0;
+    background-color: rgba(0, 0, 0, 0.45);
+    cursor: pointer;
+    animation: diff-fade var(--transition-base);
+  }
+
+  .diff-sheet {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    width: min(40rem, 100%);
+    max-height: min(80vh, 100%);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background-color: var(--bg-base);
+    box-shadow: 0 1.25rem 3rem rgba(0, 0, 0, 0.35);
+    overflow: hidden;
+    animation: diff-rise var(--transition-base);
+  }
+
+  .diff-sheet-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    padding: 0.625rem 0.625rem 0.625rem 0.875rem;
+    border-bottom: 1px solid var(--border);
+    background-color: var(--bg-surface);
+  }
+
+  .diff-sheet-title {
+    margin: 0;
+    min-width: 0;
+    font-size: 0.8125rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .diff-close {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 auto;
+    width: 1.875rem;
+    height: 1.875rem;
+    padding: 0;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background-color: var(--bg-elevated);
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition:
+      color var(--transition-fast),
+      border-color var(--transition-fast),
+      background-color var(--transition-fast);
+  }
+
+  .diff-close:hover {
+    color: var(--text-primary);
+    border-color: var(--border-strong);
+    background-color: var(--bg-surface);
+  }
+
+  .diff-close:focus-visible {
+    outline: 2px solid var(--focus-ring);
+    outline-offset: 2px;
+  }
+
+  .diff-sheet-body {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding: 0.75rem;
+  }
+
+  @keyframes diff-fade {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+
+  @keyframes diff-rise {
+    from {
+      opacity: 0;
+      transform: translateY(0.5rem);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
   @media (prefers-reduced-motion: reduce) {
     .sk-line {
       animation: none;
@@ -464,6 +624,13 @@
     .cta-btn:active,
     .retry-btn:active {
       transform: none;
+    }
+    .diff-backdrop,
+    .diff-sheet {
+      animation: none;
+    }
+    .diff-close {
+      transition: none;
     }
   }
 </style>

@@ -55,6 +55,7 @@ describe('ConnectionStore', () => {
       deleteSession: mock(() => Promise.resolve()),
       renameSession: mock(() => Promise.resolve({ id: 's1', title: '', createdAt: '', updatedAt: '' })),
       getMessages: mock(() => Promise.resolve([])),
+      getSessionDiff: mock(() => Promise.resolve([])),
       sendMessage: mock((_sessionId: string, _input: SendMessageInput) =>
         Promise.resolve({ id: 'm1', role: assistantRole, parts: [], createdAt: '' } as Message)
       ),
