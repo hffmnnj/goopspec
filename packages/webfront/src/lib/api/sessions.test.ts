@@ -19,6 +19,11 @@ function session(overrides: Partial<Session> = {}): Session {
 
 function createMockClient(): OpenCodeClient {
   return {
+    listProjects: mock(() => Promise.resolve([])),
+    getCurrentProject: mock(() => Promise.resolve(null)),
+    getPath: mock(() => Promise.resolve({ path: '' })),
+    getVcsInfo: mock(() => Promise.resolve(null)),
+    subscribeGlobalEvents: () => ({ close: () => undefined }),
     listSessions: mock(() => Promise.resolve([])),
     createSession: mock(() => Promise.resolve(session())),
     deleteSession: mock(() => Promise.resolve()),
@@ -64,6 +69,12 @@ describe('session service', () => {
     expect(result.map((s) => s.id)).toEqual(['s2', 's1']);
   });
 
+  it('fetchSessions passes through an optional directory scope', async () => {
+    await fetchSessions(client, '/repo/one');
+
+    expect(client.listSessions).toHaveBeenCalledWith('/repo/one');
+  });
+
   it('createSession calls createSession with options', async () => {
     const opts: CreateSessionOptions = { title: 'My Session', path: '/workspace' };
     (client.createSession as ReturnType<typeof mock>).mockImplementation(() =>
@@ -96,14 +107,20 @@ describe('session service', () => {
 
 // Store tests import the compiled .svelte.ts module.
 import { createSessionsStore } from '../stores/sessions.svelte.js';
+import { createProjectsStore } from '../stores/projects.svelte.js';
+import { createWorkspaceStore } from '../stores/workspace.svelte.js';
 
 describe('sessions store', () => {
   let client: OpenCodeClient;
   let store: ReturnType<typeof createSessionsStore>;
+  let projectStore: ReturnType<typeof createProjectsStore>;
+  let workspaceStore: ReturnType<typeof createWorkspaceStore>;
 
   beforeEach(() => {
     client = createMockClient();
-    store = createSessionsStore(client);
+    workspaceStore = createWorkspaceStore();
+    projectStore = createProjectsStore(createMockClient(), workspaceStore);
+    store = createSessionsStore(client, projectStore);
   });
 
   it('loads sessions into reactive state sorted newest first', async () => {
@@ -130,6 +147,22 @@ describe('sessions store', () => {
     expect(store.loading).toBe(false);
   });
 
+  it('scopes load to the active server-backed project', async () => {
+    projectStore.activeProject = { id: 'p1', worktree: '/repo/one', time: { created: 1 } };
+
+    await store.load();
+
+    expect(client.listSessions).toHaveBeenCalledWith('/repo/one');
+  });
+
+  it('omits directory scope for the local fallback project', async () => {
+    projectStore.activeProject = { id: 'local', worktree: '/repo/local', time: { created: 1 } };
+
+    await store.load();
+
+    expect(client.listSessions).toHaveBeenCalledWith(undefined);
+  });
+
   it('create prepends the new session and clears duplicates', async () => {
     const existing = session({ id: 'a', updatedAt: '2026-06-20T00:00:00.000Z' });
     store.sessions = [existing];
@@ -141,6 +174,48 @@ describe('sessions store', () => {
     expect(client.createSession).toHaveBeenCalledWith({ title: 'Created' });
     expect(result?.id).toBe('b');
     expect(store.sessions.map((s) => s.id)).toEqual(['b', 'a']);
+  });
+
+  it('creates sessions in the active project directory', async () => {
+    projectStore.activeProject = { id: 'p1', worktree: '/repo/one', time: { created: 1 } };
+    const created = session({ id: 'b', title: 'Created' });
+    (client.createSession as ReturnType<typeof mock>).mockImplementation(() => Promise.resolve(created));
+
+    await store.create({ title: 'Created' });
+
+    expect(client.createSession).toHaveBeenCalledWith({ directory: '/repo/one', title: 'Created' });
+  });
+
+  it('creates local fallback sessions in the same unscoped directory used by load', async () => {
+    projectStore.activeProject = { id: 'local', worktree: '/repo/local', time: { created: 1 } };
+    const created = session({ id: 'local-new', title: 'Created' });
+    (client.createSession as ReturnType<typeof mock>).mockImplementation(() => Promise.resolve(created));
+
+    await store.create({ title: 'Created' });
+
+    expect(client.createSession).toHaveBeenCalledWith({ title: 'Created' });
+  });
+
+  it('keeps an optimistically-created session visible when a scoped reload is stale', async () => {
+    projectStore.activeProject = { id: 'p1', worktree: '/repo/one', time: { created: 1 } };
+    const created = session({ id: 'stale-new', title: 'Created' });
+    (client.createSession as ReturnType<typeof mock>).mockImplementation(() => Promise.resolve(created));
+    (client.listSessions as ReturnType<typeof mock>).mockImplementation(() => Promise.resolve([]));
+
+    await store.create({ title: 'Created' });
+    await store.load();
+
+    expect(client.listSessions).toHaveBeenCalledWith('/repo/one');
+    expect(store.sessions.map((s) => s.id)).toContain('stale-new');
+  });
+
+  it('reloads sessions when the active project changes', async () => {
+    const stop = store.initProjectWatcher();
+    projectStore.setActiveProject({ id: 'p1', worktree: '/repo/one', time: { created: 1 } });
+    await Promise.resolve();
+
+    expect(client.listSessions).toHaveBeenCalledWith('/repo/one');
+    stop();
   });
 
   it('sets error state when create fails without mutating the list', async () => {

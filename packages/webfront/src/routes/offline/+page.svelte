@@ -111,7 +111,7 @@
     font-size: 0.75rem;
     font-weight: 600;
     letter-spacing: 0.04em;
-    color: var(--accent);
+    color: var(--accent-text);
   }
 
   .offline-card__icon {
@@ -122,7 +122,7 @@
     height: 4.5rem;
     border-radius: var(--radius-full);
     background: var(--accent-soft);
-    color: var(--accent);
+    color: var(--accent-text);
   }
 
   .offline-card__title {
@@ -164,7 +164,7 @@
   }
 
   .offline-card__retry:focus-visible {
-    outline: 2px solid var(--accent);
+    outline: 2px solid var(--focus-ring);
     outline-offset: 2px;
   }
 </style>

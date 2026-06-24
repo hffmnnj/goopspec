@@ -183,7 +183,7 @@
   }
 
   .header:focus-visible {
-    outline: 2px solid var(--accent);
+    outline: 2px solid var(--focus-ring);
     outline-offset: -2px;
   }
 
@@ -226,7 +226,7 @@
   }
 
   .status--running {
-    color: var(--accent);
+    color: var(--accent-text);
     background-color: var(--accent-soft);
   }
   .status--success {
@@ -234,7 +234,7 @@
     background-color: var(--bg-surface);
   }
   .status--error {
-    color: #f87171;
+    color: var(--danger-text);
     background-color: rgba(248, 113, 113, 0.1);
   }
 

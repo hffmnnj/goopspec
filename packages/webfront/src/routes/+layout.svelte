@@ -1,11 +1,21 @@
 <script lang="ts">
   import '../app.css';
   import { onMount } from 'svelte';
+  import { initConnection } from '$lib/stores/connection.svelte.js';
   import { initTheme } from '$lib/stores/theme.svelte';
+  import { settings } from '$lib/stores/settings.svelte';
 
   let { children } = $props();
 
-  onMount(() => initTheme());
+  onMount(() => {
+    const stopTheme = initTheme();
+    const stopConnection = initConnection();
+    settings.applyDom();
+    return () => {
+      stopConnection();
+      stopTheme();
+    };
+  });
 </script>
 
 <svelte:head>

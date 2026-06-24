@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, mock } from 'bun:test';
 import { createModelStore, model } from './model.svelte';
 import type { MessageRole, OpenCodeClient, Provider, SendMessageInput } from '../api/types.js';
+import { agent } from './agent.svelte.js';
 import { createChatStore } from './chat.svelte';
 
 const PROVIDERS: Provider[] = [
@@ -27,8 +28,11 @@ function createMockClient(sendMessage: OpenCodeClient['sendMessage']): OpenCodeC
     renameSession: mock(() => Promise.resolve({ id: 's1', title: '', createdAt: '', updatedAt: '' })),
     getMessages: mock(() => Promise.resolve([])),
     sendMessage,
+    runCommand: mock(() => Promise.resolve({ id: 'm1', role: 'assistant' as MessageRole, parts: [], createdAt: '' })),
     subscribeEvents: () => () => undefined,
     listProviders: mock(() => Promise.resolve(PROVIDERS)),
+    listAgents: mock(() => Promise.resolve([])),
+    listCommands: mock(() => Promise.resolve([])),
     getConfig: mock(() => Promise.resolve({})),
     updateConfig: mock(() => Promise.resolve({})),
     readFile: mock(() => Promise.resolve('')),
@@ -184,11 +188,13 @@ describe('chat store + model selection', () => {
     client = createMockClient(sendMessage);
     chat = createChatStore(client);
     model.reset();
+    agent.reset();
     model.setProviders(PROVIDERS);
   });
 
   afterEach(() => {
     model.reset();
+    agent.reset();
   });
 
   it('sendMessage attaches the selected model from the model store', async () => {
@@ -211,6 +217,19 @@ describe('chat store + model selection', () => {
     await chat.sendMessage('hello');
 
     expect(client.sendMessage).toHaveBeenCalledWith('s1', { text: 'hello' });
+  });
+
+  it('sendMessage attaches the selected agent id', async () => {
+    agent.agents = [{ id: 'goop-orchestrator', name: 'goop-orchestrator' }];
+    agent.select('goop-orchestrator');
+
+    await chat.loadHistory('s1');
+    await chat.sendMessage('hello');
+
+    expect(client.sendMessage).toHaveBeenCalledWith('s1', expect.objectContaining({
+      text: 'hello',
+      agent: 'goop-orchestrator',
+    }));
   });
 });
 

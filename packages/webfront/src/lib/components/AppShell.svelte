@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { goto } from '$app/navigation';
   import { HugeiconsIcon } from '@hugeicons/svelte';
   import {
     SidebarLeft01Icon,
@@ -10,12 +11,19 @@
     InboxIcon,
   } from '@hugeicons/core-free-icons';
 
-  import { layout as defaultLayout, type LayoutStore } from '$lib/stores/layout.svelte.js';
+  import {
+    layout as defaultLayout,
+    SIDEBAR_WIDTH,
+    type LayoutStore,
+  } from '$lib/stores/layout.svelte.js';
   import { fold } from '$lib/stores/fold.svelte.js';
   import { ui } from '$lib/stores/ui.svelte.js';
   import { workspace } from '$lib/stores/workspace.svelte.js';
+  import { projects } from '$lib/stores/projects.svelte.js';
+  import { sessions } from '$lib/stores/sessions.svelte.js';
 
   import SessionSidebar from './sessions/SessionSidebar.svelte';
+  import AddProjectPicker from './sessions/AddProjectPicker.svelte';
   import ChatPanel from './chat/ChatPanel.svelte';
   import FileSearch from './files/FileSearch.svelte';
   import FileTree from './files/FileTree.svelte';
@@ -28,19 +36,40 @@
   // the `ui` store / keyboard registry). T10.3 finalizes command-source wiring.
   import CommandPalette from './CommandPalette.svelte';
   import ShortcutHelp from './ShortcutHelp.svelte';
+  import ToastContainer from './ToastContainer.svelte';
+  import InstallPrompt from './InstallPrompt.svelte';
   import { useKeyboard } from '$lib/keyboard/actions.svelte.js';
   import { registerDefaultShortcuts } from '$lib/keyboard/shortcuts.js';
+  import { initToastBindings } from '$lib/stores/toast-bindings.svelte.js';
+  import { projectRoute } from '$lib/routing/navigation.js';
+  import type { Project } from '$lib/api/types.js';
 
   interface AppShellProps {
     /** Override the layout store (tests / storybook). */
     layoutStore?: LayoutStore;
+    /**
+     * Optional main-content renderer for the chat column. When provided it
+     * replaces the default `ChatPanel` (used by the root route to host the
+     * home page); when omitted the shell renders the conversation as before.
+     * The snippet receives the composer-insert handles so a custom main can
+     * still drive the composer if it chooses to.
+     */
+    main?: import('svelte').Snippet<[{ composerInsertText?: string; composerInsertNonce: number }]>;
   }
 
-  let { layoutStore = defaultLayout }: AppShellProps = $props();
+  let { layoutStore = defaultLayout, main }: AppShellProps = $props();
 
   let fileQuery = $state('');
-  // Held locally for now; T10.3 promotes this into the chat composer.
   let activeFilePath = $state<string | undefined>(undefined);
+  let composerInsertText = $state<string | undefined>(undefined);
+  let composerInsertNonce = $state(0);
+  let drawerEl = $state<HTMLElement | null>(null);
+  let previouslyFocused = $state<HTMLElement | null>(null);
+
+  // Sidebar resize: the handle is a focusable vertical separator. Pointer drag
+  // sets the width live; arrow keys nudge it. Bounds live in the layout store.
+  const RESIZE_STEP = 16;
+  let resizing = $state(false);
 
   const mode = $derived(layoutStore.mode);
   const isPhone = $derived(layoutStore.isPhone);
@@ -58,10 +87,19 @@
   const filePanelOverlay = $derived(
     layoutStore.filePanelOpen && (isPhone || isTablet)
   );
+  const anyDrawerOpen = $derived(
+    sidebarOverlay || filePanelOverlay || (isFoldable && layoutStore.filePanelOpen)
+  );
 
-  // Grid column widths fed to responsive.css via custom properties.
-  const colSidebar = $derived(sidebarInline ? 'var(--shell-sidebar-w)' : '0px');
+  // Grid column widths fed to responsive.css via custom properties. The docked
+  // sidebar width is driven by the layout store so resize + persistence flow
+  // through a single source of truth.
+  const sidebarWidthPx = $derived(`${layoutStore.sidebarWidth}px`);
+  const colSidebar = $derived(sidebarInline ? sidebarWidthPx : '0px');
   const colFiles = $derived(filePanelInline ? 'var(--shell-filepanel-w)' : '0px');
+  // The resize handle is only meaningful when the sidebar is docked inline on a
+  // pointer device (desktop/tablet) — not the phone drawer or foldable segment.
+  const sidebarResizable = $derived(sidebarInline && !isFoldable);
 
   // On phone, only the focused view is shown in the chat column.
   const phoneView = $derived(layoutStore.mobileView);
@@ -70,9 +108,15 @@
 
   onMount(() => {
     registerDefaultShortcuts();
+    workspace.init();
+    void projects.refresh();
+    const stopSessions = sessions.initProjectWatcher();
     const stopLayout = layoutStore.init();
     const stopFold = fold.init();
+    const stopToasts = initToastBindings();
     return () => {
+      stopToasts();
+      stopSessions();
       stopFold();
       stopLayout();
     };
@@ -80,6 +124,8 @@
 
   function handleFileSelect(path: string): void {
     activeFilePath = path;
+    composerInsertText = `@${path}`;
+    composerInsertNonce += 1;
     if (isPhone) {
       layoutStore.setMobileView('chat');
       layoutStore.setFilePanel(false);
@@ -94,17 +140,114 @@
     ui.settingsOpen = false;
   }
 
+  function closeAddProject(): void {
+    ui.addProjectOpen = false;
+  }
+
+  function handleAddProject(project: Project): void {
+    projects.openProject(project);
+    closeAddProject();
+    void goto(projectRoute(project));
+  }
+
   function closeOverlays(): void {
     layoutStore.closeOverlays();
     if (isTablet) layoutStore.setFilePanel(false);
   }
+
+  function startResize(event: PointerEvent): void {
+    if (event.button !== 0 && event.pointerType === 'mouse') return;
+    event.preventDefault();
+    resizing = true;
+    const handle = event.currentTarget as HTMLElement;
+    handle.setPointerCapture?.(event.pointerId);
+  }
+
+  function moveResize(event: PointerEvent): void {
+    if (!resizing) return;
+    // The sidebar starts at the viewport's left edge, so its width is the
+    // pointer's x position. The store clamps to the allowed bounds.
+    layoutStore.setSidebarWidth(event.clientX);
+  }
+
+  function endResize(event: PointerEvent): void {
+    if (!resizing) return;
+    resizing = false;
+    const handle = event.currentTarget as HTMLElement;
+    handle.releasePointerCapture?.(event.pointerId);
+  }
+
+  function resizeKeydown(event: KeyboardEvent): void {
+    let delta = 0;
+    if (event.key === 'ArrowLeft') delta = -RESIZE_STEP;
+    else if (event.key === 'ArrowRight') delta = RESIZE_STEP;
+    else if (event.key === 'Home') {
+      event.preventDefault();
+      layoutStore.setSidebarWidth(SIDEBAR_WIDTH.min);
+      return;
+    } else if (event.key === 'End') {
+      event.preventDefault();
+      layoutStore.setSidebarWidth(SIDEBAR_WIDTH.max);
+      return;
+    } else {
+      return;
+    }
+    event.preventDefault();
+    layoutStore.nudgeSidebarWidth(delta);
+  }
+
+  function drawerFocusables(): HTMLElement[] {
+    if (!drawerEl) return [];
+    const selector =
+      'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+    return Array.from(drawerEl.querySelectorAll<HTMLElement>(selector));
+  }
+
+  function trapDrawerFocus(event: KeyboardEvent): void {
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      closeOverlays();
+      return;
+    }
+    if (event.key !== 'Tab') return;
+    const focusable = drawerFocusables();
+    if (focusable.length === 0) return;
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    const active = document.activeElement as HTMLElement | null;
+    if (event.shiftKey && active === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && active === last) {
+      event.preventDefault();
+      first.focus();
+    }
+  }
+
+  $effect(() => {
+    if (!anyDrawerOpen) return;
+    if (typeof document !== 'undefined') {
+      previouslyFocused = document.activeElement as HTMLElement | null;
+    }
+    queueMicrotask(() => {
+      const focusable = drawerFocusables();
+      (focusable[0] ?? drawerEl)?.focus();
+    });
+    return () => previouslyFocused?.focus?.();
+  });
 </script>
 
 <svelte:window use:useKeyboard />
 
 <a href="#main-content" class="skip-link">Skip to content</a>
 
-<div class="app-shell" data-mode={mode} style:--col-sidebar={colSidebar} style:--col-files={colFiles}>
+<div
+  class="app-shell"
+  data-mode={mode}
+  data-resizing={resizing ? 'true' : undefined}
+  style:--col-sidebar={colSidebar}
+  style:--col-files={colFiles}
+>
   {#if isFoldable}
     <!-- Foldable two-pane: sessions on the left segment, chat on the right. -->
     <div class="fold-pane fold-pane--nav" role="navigation" aria-label="Sessions">
@@ -137,12 +280,20 @@
       </div>
 
       <div class="chat-region">
-        <ChatPanel />
+        {@render mainContent()}
       </div>
 
       <!-- Files overlay anchored within the chat pane (right segment). -->
       {#if layoutStore.filePanelOpen}
-        <aside class="fold-files-overlay" aria-label="Workspace files">
+        <div
+          class="fold-files-overlay"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Workspace files"
+          tabindex={-1}
+          bind:this={drawerEl}
+          onkeydown={trapDrawerFocus}
+        >
           <div class="drawer-chrome">
             <WorkspaceSwitcher />
             <button
@@ -157,7 +308,7 @@
           <div class="col-fill">
             {@render filePanelBody()}
           </div>
-        </aside>
+        </div>
       {/if}
     </main>
   {:else}
@@ -178,6 +329,34 @@
       <div class="col-fill">
         <SessionSidebar />
       </div>
+      {#if sidebarResizable}
+        <!--
+          A focusable window-splitter: role="separator" with aria-valuenow is an
+          interactive splitter per WAI-ARIA, so the tabindex + pointer/key
+          handlers are intentional. Svelte's linter treats `separator` as
+          non-interactive, hence the ignores.
+        -->
+        <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+        <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+        <div
+          class="sidebar-resizer"
+          class:sidebar-resizer--active={resizing}
+          role="separator"
+          aria-orientation="vertical"
+          aria-label="Resize sidebar"
+          aria-valuemin={SIDEBAR_WIDTH.min}
+          aria-valuemax={SIDEBAR_WIDTH.max}
+          aria-valuenow={layoutStore.sidebarWidth}
+          tabindex="0"
+          onpointerdown={startResize}
+          onpointermove={moveResize}
+          onpointerup={endResize}
+          onpointercancel={endResize}
+          onkeydown={resizeKeydown}
+        >
+          <span class="sidebar-resizer__grip" aria-hidden="true"></span>
+        </div>
+      {/if}
     </div>
   {/if}
 
@@ -233,7 +412,7 @@
           </div>
         {/if}
       {:else}
-        <ChatPanel />
+        {@render mainContent()}
       {/if}
     </div>
   </main>
@@ -299,8 +478,16 @@
 
 <!-- Tablet/phone overlay drawers -->
 {#if sidebarOverlay}
-  <button type="button" class="shell-backdrop" aria-label="Close sessions" onclick={closeOverlays}></button>
-  <aside class="shell-drawer shell-drawer--left" role="navigation" aria-label="Sessions">
+  <button type="button" class="shell-backdrop" aria-hidden="true" tabindex="-1" onclick={closeOverlays}></button>
+  <div
+    class="shell-drawer shell-drawer--left"
+    role="dialog"
+    aria-modal="true"
+    aria-label="Sessions"
+    tabindex={-1}
+    bind:this={drawerEl}
+    onkeydown={trapDrawerFocus}
+  >
     <div class="drawer-chrome">
       <span class="drawer-title">Sessions</span>
       <button type="button" class="chrome-btn" aria-label="Close sessions" onclick={closeOverlays}>
@@ -310,12 +497,20 @@
     <div class="col-fill">
       <SessionSidebar />
     </div>
-  </aside>
+  </div>
 {/if}
 
 {#if filePanelOverlay}
-  <button type="button" class="shell-backdrop" aria-label="Close files" onclick={closeOverlays}></button>
-  <aside class="shell-drawer shell-drawer--right" aria-label="Workspace files">
+  <button type="button" class="shell-backdrop" aria-hidden="true" tabindex="-1" onclick={closeOverlays}></button>
+  <div
+    class="shell-drawer shell-drawer--right"
+    role="dialog"
+    aria-modal="true"
+    aria-label="Workspace files"
+    tabindex={-1}
+    bind:this={drawerEl}
+    onkeydown={trapDrawerFocus}
+  >
     <div class="drawer-chrome">
       <WorkspaceSwitcher />
       <button type="button" class="chrome-btn" aria-label="Close files" onclick={closeOverlays}>
@@ -325,13 +520,32 @@
     <div class="col-fill">
       {@render filePanelBody()}
     </div>
-  </aside>
+  </div>
 {/if}
 
 <!-- Global overlays -->
 <SettingsPanel open={ui.settingsOpen} onclose={closeSettings} />
+{#if ui.addProjectOpen}
+  <AddProjectPicker
+    available={projects.unopenedAvailable()}
+    onpick={handleAddProject}
+    onclose={closeAddProject}
+  />
+{/if}
 <CommandPalette />
 <ShortcutHelp />
+<ToastContainer />
+<div class="install-prompt-host" aria-live="polite">
+  <InstallPrompt />
+</div>
+
+{#snippet mainContent()}
+  {#if main}
+    {@render main({ composerInsertText, composerInsertNonce })}
+  {:else}
+    <ChatPanel {composerInsertText} {composerInsertNonce} />
+  {/if}
+{/snippet}
 
 {#snippet filePanelBody()}
   <div class="file-panel">
@@ -353,12 +567,56 @@
 <style>
   /* ---- Column scaffolding ---- */
   .app-shell__col--sidebar {
+    position: relative;
     grid-column: sidebar;
     display: flex;
     flex-direction: column;
     border-right: 1px solid var(--border);
     background-color: var(--bg-elevated);
     overflow: hidden;
+  }
+
+  /* ---- Sidebar resize handle ---- */
+  .sidebar-resizer {
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: 0.5rem;
+    z-index: 5;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    cursor: col-resize;
+    touch-action: none;
+    background-color: transparent;
+  }
+
+  .sidebar-resizer__grip {
+    width: 2px;
+    height: 100%;
+    background-color: transparent;
+    transition: background-color var(--transition-fast);
+  }
+
+  .sidebar-resizer:hover .sidebar-resizer__grip,
+  .sidebar-resizer--active .sidebar-resizer__grip {
+    background-color: var(--accent);
+  }
+
+  .sidebar-resizer:focus-visible {
+    outline: none;
+  }
+
+  .sidebar-resizer:focus-visible .sidebar-resizer__grip {
+    background-color: var(--accent);
+    box-shadow: 0 0 0 1px var(--focus-ring);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .sidebar-resizer__grip {
+      transition: none;
+    }
   }
 
   .app-shell__col--chat {
@@ -477,7 +735,7 @@
   }
 
   .chrome-btn:focus-visible {
-    outline: 2px solid var(--accent);
+    outline: 2px solid var(--focus-ring);
     outline-offset: 2px;
   }
 
@@ -518,11 +776,11 @@
   }
 
   .nav-tab.active {
-    color: var(--accent);
+    color: var(--accent-text);
   }
 
   .nav-tab:focus-visible {
-    outline: 2px solid var(--accent);
+    outline: 2px solid var(--focus-ring);
     outline-offset: -2px;
   }
 
@@ -536,6 +794,25 @@
     .chrome-btn,
     .nav-tab {
       transition: none;
+    }
+  }
+
+  .install-prompt-host {
+    position: fixed;
+    right: max(1rem, var(--safe-right));
+    bottom: max(1rem, var(--safe-bottom));
+    z-index: 50;
+    pointer-events: none;
+  }
+
+  .install-prompt-host :global(.install-prompt) {
+    pointer-events: auto;
+  }
+
+  @media (max-width: 639px) {
+    .install-prompt-host {
+      right: 1rem;
+      bottom: calc(4.5rem + var(--safe-bottom));
     }
   }
 </style>

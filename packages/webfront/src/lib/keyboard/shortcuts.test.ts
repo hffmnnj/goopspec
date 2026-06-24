@@ -42,10 +42,20 @@ describe('defaultShortcuts', () => {
 
   it('cancel closes open overlays', async () => {
     ui.paletteOpen = true;
+    ui.addProjectOpen = true;
     registerDefaultShortcuts(registry);
     const e = keyboardEvent({ key: 'Escape', preventDefault: () => {} });
     await registry.handle(e);
     expect(ui.paletteOpen).toBe(false);
+    expect(ui.addProjectOpen).toBe(false);
+  });
+
+  it('tracks add-project as a global overlay flag', () => {
+    ui.addProjectOpen = false;
+    ui.toggleAddProject();
+    expect(ui.addProjectOpen).toBe(true);
+    ui.closeAll();
+    expect(ui.addProjectOpen).toBe(false);
   });
 
   it('interrupt calls chat.interrupt only while streaming', () => {
@@ -58,5 +68,30 @@ describe('defaultShortcuts', () => {
     expect(shortcut?.when?.()).toBe(true);
 
     chat.streaming = false;
+  });
+
+  it('focus-session-list targets the [data-shortcut="session-list"] element and focuses it', () => {
+    const shortcut = defaultShortcuts.find((s) => s.id === 'focus-session-list');
+    expect(shortcut).toBeDefined();
+
+    const calls: string[] = [];
+    let focused = false;
+    const fakeEl = { focus: () => (focused = true) };
+    const original = (globalThis as { document?: unknown }).document;
+    (globalThis as { document?: unknown }).document = {
+      querySelector(selector: string) {
+        calls.push(selector);
+        return fakeEl;
+      },
+    };
+
+    try {
+      const handled = shortcut?.handler(keyboardEvent({ key: 's', ctrlKey: true }));
+      expect(handled).toBe(true);
+      expect(calls).toContain('[data-shortcut="session-list"]');
+      expect(focused).toBe(true);
+    } finally {
+      (globalThis as { document?: unknown }).document = original;
+    }
   });
 });

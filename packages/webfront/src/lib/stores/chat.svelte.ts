@@ -1,7 +1,10 @@
 import { createClient } from '../api/client.js';
 import { fetchMessages } from '../api/messages.js';
 import { StreamSubscription } from '../api/stream.js';
-import type { Message, MessagePart, OpenCodeClient, SendMessageInput } from '../api/types.js';
+import type { Message, MessagePart, OpenCodeClient, RunCommandInput, SendMessageInput } from '../api/types.js';
+import { parseCommandInput } from '../commands/command-complete.js';
+import { agent } from './agent.svelte.js';
+import { commands } from './commands.svelte.js';
 import { model } from './model.svelte.js';
 
 function now(): string {
@@ -80,15 +83,18 @@ class ChatStore {
     this.interrupt();
     this.messages = [...this.messages, user];
 
-    const input: SendMessageInput = { text: trimmed };
-    if (model.selectedProviderId && model.selectedModelId) {
-      input.providerId = model.selectedProviderId;
-      input.modelId = model.selectedModelId;
-    }
+    const parsedCommand = parseCommandInput(trimmed, commands.commands);
+    const modelRef =
+      model.selectedProviderId && model.selectedModelId
+        ? `${model.selectedProviderId}/${model.selectedModelId}`
+        : undefined;
+
     this.beginStreaming();
 
     try {
-      const reply = await this.client.sendMessage(sessionId, input);
+      const reply = parsedCommand
+        ? await this.client.runCommand(sessionId, this.buildCommandInput(parsedCommand, modelRef))
+        : await this.client.sendMessage(sessionId, this.buildMessageInput(trimmed, modelRef));
       if (this.activeSessionId !== sessionId) return;
       // Adopt the server-issued message id so streamed parts (keyed by the
       // server messageId) reconcile onto this placeholder. T3.2 wires the
@@ -99,6 +105,27 @@ class ChatStore {
       this.error = err instanceof Error ? err.message : 'Failed to send message';
       this.finalizeStreaming();
     }
+  }
+
+  private buildMessageInput(text: string, modelRef?: string): SendMessageInput {
+    const input: SendMessageInput = { text };
+    if (modelRef) {
+      const [providerId, ...rest] = modelRef.split('/');
+      input.providerId = providerId;
+      input.modelId = rest.join('/');
+    }
+    if (agent.selectedAgentId) input.agent = agent.selectedAgentId;
+    return input;
+  }
+
+  private buildCommandInput(
+    parsed: { command: string; arguments: string },
+    modelRef?: string
+  ): RunCommandInput {
+    const input: RunCommandInput = { command: parsed.command, arguments: parsed.arguments };
+    if (agent.selectedAgentId) input.agent = agent.selectedAgentId;
+    if (modelRef) input.model = modelRef;
+    return input;
   }
 
   /* -------------------------------------------------------------------------
