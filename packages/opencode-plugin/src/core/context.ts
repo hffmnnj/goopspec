@@ -6,6 +6,8 @@
  * never propagate — the factory always returns a usable context.
  */
 
+import { mkdirSync } from "node:fs";
+
 import type { PluginInput } from "./sdk-compat.js";
 import type { PluginContext, SessionInfo } from "./types.js";
 
@@ -15,7 +17,7 @@ import { createResourceResolver, defaultReferencePaths } from "../features/resol
 import { createSessionManager } from "../features/session/index.js";
 import { createStateManager } from "../features/state-manager/index.js";
 import { log, logError } from "../shared/logger.js";
-import { getDbPath, getMemoryDbPath, getPackageRoot } from "../shared/paths.js";
+import { getDbPath, getGoopspecDir, getMemoryDbPath, getPackageRoot } from "../shared/paths.js";
 
 /**
  * Build a complete PluginContext from the SDK's PluginInput.
@@ -42,6 +44,13 @@ export async function createPluginContext(input: PluginInput): Promise<PluginCon
   };
 
   // -- GoopSpec database ----------------------------------------------------
+  const goopspecDir = getGoopspecDir(directory);
+  try {
+    mkdirSync(goopspecDir, { recursive: true });
+  } catch (err) {
+    logError("Failed to create .goopspec directory", err);
+  }
+
   const db = new GoopSpecDB(getDbPath(directory));
   log("GoopSpec database initialised");
 

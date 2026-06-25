@@ -1,6 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
+import { existsSync, mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
+import { SqliteMemoryManager } from "../features/memory/index.js";
 import { createHooks } from "../hooks/index.js";
+import { getDbPath, getGoopspecDir, getMemoryDbPath } from "../shared/paths.js";
 import { setupTestEnvironment } from "../test-utils.js";
 import { createTools } from "../tools/index.js";
 import { createPluginContext } from "./context.js";
@@ -138,5 +143,37 @@ describe("createPluginContext()", () => {
     const hooks = createHooks(ctx);
 
     expect(typeof hooks).toBe("object");
+  });
+});
+
+describe("createPluginContext() in a fresh directory", () => {
+  let rawTempDir: string;
+
+  beforeEach(() => {
+    rawTempDir = mkdtempSync(join(tmpdir(), "goopspec-fresh-"));
+  });
+
+  afterEach(() => {
+    rmSync(rawTempDir, { recursive: true, force: true });
+  });
+
+  it("creates .goopspec directory and returns usable context when directory has no .goopspec", async () => {
+    // Sanity check: the directory must truly have no .goopspec before the test.
+    expect(existsSync(getGoopspecDir(rawTempDir))).toBe(false);
+
+    const input = createMockPluginInput(rawTempDir);
+    const ctx = await createPluginContext(input);
+
+    expect(ctx.db).toBeTruthy();
+    expect(ctx.stateManager).toBeTruthy();
+    expect(ctx.memory).toBeTruthy();
+
+    // The directory guard should have created .goopspec/ and both databases.
+    expect(existsSync(getGoopspecDir(rawTempDir))).toBe(true);
+    expect(existsSync(getDbPath(rawTempDir))).toBe(true);
+    expect(existsSync(getMemoryDbPath(rawTempDir))).toBe(true);
+
+    // Memory must be the real SqliteMemoryManager, not the no-op fallback (MH3).
+    expect(ctx.memory).toBeInstanceOf(SqliteMemoryManager);
   });
 });
