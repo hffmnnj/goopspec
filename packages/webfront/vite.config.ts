@@ -47,5 +47,13 @@ export default defineConfig({
         ]
       }
     })
-  ]
+  ],
+  // transformers.js ships its own pre-bundled ESM + ONNX runtime; let Vite load
+  // it as-is rather than pre-bundling (which mangles the WASM/worker assets).
+  optimizeDeps: {
+    exclude: ['@huggingface/transformers']
+  },
+  worker: {
+    format: 'es'
+  }
 });
