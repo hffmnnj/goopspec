@@ -12,9 +12,13 @@ bun run --cwd packages/opencode-plugin test           # Run all plugin tests
 bun run --cwd packages/opencode-plugin lint          # Run Biome lint on src
 bun run --cwd packages/opencode-plugin lint:fix       # Fix Biome issues in src
 bun run --cwd packages/opencode-plugin format        # Format src with Biome
+bun run --cwd packages/cli build          # Build the CLI
+bun run --cwd packages/cli typecheck      # Type check the CLI
+bun run --cwd packages/cli lint           # Lint the CLI
 
 # Testing
 bun test packages/opencode-plugin/                   # Test plugin package
+bun test packages/cli/                    # Run all CLI tests
 bun test packages/opencode-plugin/src/tools/goop-status/index.test.ts  # Single file
 bun test --filter "goop_status"                       # Tests matching pattern
 bun test --watch                                      # Watch mode
@@ -25,6 +29,7 @@ bun test --watch                                      # Watch mode
 ```
 packages/
 └── opencode-plugin/       # @goopspec/opencode-plugin — MCP tools, hooks, and orchestration logic
+└── cli/                   # @goopspec/cli — Interactive CLI for GoopSpec configuration and management
 
 packages/opencode-plugin/src/
 ├── core/                  # Types, config, resolver
@@ -56,6 +61,7 @@ templates/                 # File templates
 | Package | Purpose |
 |---------|---------|
 | `@goopspec/opencode-plugin` | MCP tools, slash commands, hooks, and in-process orchestration — the OpenCode plugin entry point |
+| `@goopspec/cli` | Interactive CLI for configuring GoopSpec, managing the dashboard, and model selection |
 
 ## Code Style
 

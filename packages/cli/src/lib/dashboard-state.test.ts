@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from "bun:test";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { getDashboardState } from "./dashboard-state.js";
@@ -39,22 +39,26 @@ describe("dashboard-state", () => {
     const { mkdirSync } = await import("node:fs");
     mkdirSync(goopspecDir, { recursive: true });
 
-    // Use the current process as a guaranteed live process.
-    writeFileSync(join(goopspecDir, "dashboard.pid"), String(process.pid));
+    const startedAt = new Date(Date.now() - 1000).toISOString();
+    writeFileSync(join(goopspecDir, "dashboard.pid"), JSON.stringify({ pid: process.pid, startedAt }));
 
     const state = await getDashboardState();
     expect(state.running).toBe(true);
     expect(state.pid).toBe(process.pid);
     expect(state.port).toBe(5173);
+    expect(state.startedAt?.toISOString()).toBe(startedAt);
+    expect(state.uptimeMs).toBeGreaterThanOrEqual(0);
   });
 
-  it("returns stopped when pid file points to a dead process", async () => {
+  it("returns stopped and clears stale pid when pid file points to a dead process", async () => {
     const goopspecDir = join(testDir, ".goopspec");
     const { mkdirSync } = await import("node:fs");
     mkdirSync(goopspecDir, { recursive: true });
-    writeFileSync(join(goopspecDir, "dashboard.pid"), "999999");
+    const pidPath = join(goopspecDir, "dashboard.pid");
+    writeFileSync(pidPath, JSON.stringify({ pid: 999999, startedAt: new Date().toISOString() }));
 
     const state = await getDashboardState();
     expect(state).toEqual({ running: false, port: 5173 });
+    expect(existsSync(pidPath)).toBe(false);
   });
 });
