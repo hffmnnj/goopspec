@@ -89,10 +89,12 @@ function TierSelectView({ selectedIndex }: { selectedIndex: number }) {
 
 function PreviewView({
 	targets,
+	dryRunOnly,
 	onConfirm,
 	onCancel,
 }: {
 	targets: RemovalTarget[];
+	dryRunOnly: boolean;
 	onConfirm: () => void;
 	onCancel: () => void;
 }) {
@@ -118,11 +120,20 @@ function PreviewView({
 				</Box>
 			</Panel>
 
-			<Box marginTop={1}>
-				<Text color={colors.highlight}>Proceed with removal? </Text>
-				<ConfirmInput onConfirm={onConfirm} onCancel={onCancel} />
-			</Box>
-			<KeyHints hints={CONFIRM_HINTS} />
+
+			{dryRunOnly ? (
+				<Box marginTop={1}>
+					<Text color={colors.success}>Dry run complete. Nothing was removed.</Text>
+				</Box>
+			) : (
+				<>
+					<Box marginTop={1}>
+						<Text color={colors.highlight}>Proceed with removal? </Text>
+						<ConfirmInput onConfirm={onConfirm} onCancel={onCancel} />
+					</Box>
+					<KeyHints hints={CONFIRM_HINTS} />
+				</>
+			)}
 		</Box>
 	);
 }
@@ -145,9 +156,13 @@ function DoneView({ hadDashboardPid }: { hadDashboardPid: boolean }) {
 	);
 }
 
-function UninstallScreen() {
+interface UninstallScreenProps {
+	dryRun: boolean;
+}
+
+function UninstallScreen({ dryRun }: UninstallScreenProps) {
 	const { exit } = useApp();
-	const [state, setState] = useState<UninstallState>("tier-select");
+	const [state, setState] = useState<UninstallState>(dryRun ? "dry-run" : "tier-select");
 	const [selectedIndex, setSelectedIndex] = useState(0);
 	const [selectedTier, setSelectedTier] = useState<UninstallTier>(
 		TIER_OPTIONS[0]?.tier ?? "config-only",
@@ -170,6 +185,7 @@ function UninstallScreen() {
 		},
 		{
 			isActive:
+				!dryRun &&
 				state !== "done" && state !== "cancelled" && state !== "executing",
 		},
 	);
@@ -189,7 +205,7 @@ function UninstallScreen() {
 				setState("dry-run");
 			}
 		},
-		{ isActive: state === "tier-select" },
+		{ isActive: !dryRun && state === "tier-select" },
 	);
 
 	useEffect(() => {
@@ -230,6 +246,16 @@ function UninstallScreen() {
 	}, [state, targets]);
 
 	useEffect(() => {
+		if (!dryRun || state !== "confirm") return undefined;
+
+		const timer = setTimeout(() => {
+			exit();
+			process.exit(0);
+		}, EXIT_DELAY_MS);
+		return () => clearTimeout(timer);
+	}, [dryRun, state, exit]);
+
+	useEffect(() => {
 		if (state === "cancelled") {
 			const timer = setTimeout(() => exit(), 400);
 			return () => clearTimeout(timer);
@@ -261,6 +287,7 @@ function UninstallScreen() {
 			{state === "confirm" ? (
 				<PreviewView
 					targets={targets}
+					dryRunOnly={dryRun}
 					onConfirm={() => setState("executing")}
 					onCancel={() => setState("cancelled")}
 				/>
@@ -290,7 +317,7 @@ function UninstallScreen() {
 	);
 }
 
-export async function renderUninstallScreen(): Promise<void> {
-	const { waitUntilExit } = render(<UninstallScreen />);
+export async function renderUninstallScreen(options: { dryRun?: boolean } = {}): Promise<void> {
+	const { waitUntilExit } = render(<UninstallScreen dryRun={options.dryRun ?? false} />);
 	await waitUntilExit();
 }
