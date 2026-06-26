@@ -8,7 +8,7 @@
     "goop": "./dist/index.js"
   },
   "scripts": {
-    "build": "bun build src/index.ts --outdir dist --target bun",
+    "build": "bun build src/index.ts --outdir dist --target bun --external cfonts",
     "typecheck": "tsc --noEmit",
     "lint": "biome lint src",
     "lint:fix": "biome lint --write src",
