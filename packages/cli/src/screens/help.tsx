@@ -12,18 +12,28 @@ interface CommandEntry {
 }
 
 const COMMANDS: CommandEntry[] = [
-  { name: "status", description: "Show current project and dashboard status" },
-  { name: "config", description: "Configure GoopSpec" },
-  { name: "models", description: "Assign default and per-role models" },
-  { name: "dashboard start", description: "Start the dashboard" },
-  { name: "dashboard stop", description: "Stop the dashboard" },
-  { name: "dashboard status", description: "Show dashboard process status" },
-  { name: "dashboard open", description: "Open the dashboard in a browser" },
-  { name: "uninstall", description: "Remove GoopSpec files with confirmation" },
-  { name: "help", description: "Show this help" },
+  { name: "status", description: "Show current configuration and system state" },
+  { name: "config", description: "Interactive configuration wizard" },
+  { name: "models", description: "Assign models to agent roles" },
+  { name: "dashboard", description: "Manage the web dashboard [start|stop|status|open]" },
+  { name: "uninstall", description: "Remove GoopSpec configuration and data" },
 ];
 
-const COMMAND_COLUMN_WIDTH = 26;
+const OPTIONS: CommandEntry[] = [
+  { name: "--help, -h", description: "Show this help message" },
+  { name: "--version, -v", description: "Show version" },
+];
+
+const EXAMPLES = [
+  "goop status",
+  "goop config",
+  "goop models",
+  "goop dashboard start",
+  "goop dashboard stop",
+  "goop uninstall --dry-run",
+];
+
+const COMMAND_COLUMN_WIDTH = 18;
 
 function HelpScreen({ unknownCommand }: HelpScreenProps) {
   return (
@@ -48,11 +58,32 @@ function HelpScreen({ unknownCommand }: HelpScreenProps) {
           <Box key={command.name}>
             <Box width={COMMAND_COLUMN_WIDTH}>
               <Text color={colors.primary} bold>
-                goop {command.name}
+                {command.name}
               </Text>
             </Box>
             <Text color={colors.muted}>{command.description}</Text>
           </Box>
+        ))}
+      </Panel>
+
+      <Panel title="Options" variant="subtle">
+        {OPTIONS.map((option) => (
+          <Box key={option.name}>
+            <Box width={COMMAND_COLUMN_WIDTH}>
+              <Text color={colors.primary} bold>
+                {option.name}
+              </Text>
+            </Box>
+            <Text color={colors.muted}>{option.description}</Text>
+          </Box>
+        ))}
+      </Panel>
+
+      <Panel title="Examples" variant="secondary">
+        {EXAMPLES.map((example) => (
+          <Text key={example} color={colors.text}>
+            {example}
+          </Text>
         ))}
       </Panel>
 

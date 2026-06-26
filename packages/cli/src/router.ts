@@ -36,7 +36,7 @@ export async function route(command: string, args: string[]): Promise<void> {
       await renderDashboardScreen(args[0]);
       return;
     case "uninstall":
-      await renderUninstallScreen();
+      await renderUninstallScreen({ dryRun: args.includes("--dry-run") });
       return;
     case "help":
       await renderHelpScreen();
