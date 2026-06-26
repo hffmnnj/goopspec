@@ -6,7 +6,10 @@
     Alert02Icon,
     Copy01Icon,
     Download04Icon,
-    CheckmarkCircle02Icon
+    CheckmarkCircle02Icon,
+    Database02Icon,
+    CheckmarkCircle01Icon,
+    AlertCircleIcon
   } from '@hugeicons/core-free-icons';
   import { createClient } from '$lib/api/client.js';
   import {
@@ -31,6 +34,40 @@
 
   /** Local editable draft for the defaultModel text input. */
   let defaultModelDraft = $state('');
+
+  /** Whether the memory setup card should surface (memory off or unconfigured). */
+  const memoryNeedsSetup = $derived(config !== null && config.raw.memoryEnabled !== true);
+
+  /** Async-resolved presence of the local memory database files. */
+  type DbStatus = 'checking' | 'found' | 'not-found';
+  let dbStatus = $state<DbStatus>('checking');
+
+  const MEMORY_DB_PATHS = ['.goopspec/goopspec.db', '.goopspec/memory.db'] as const;
+
+  // Probe for the memory database files once config is available and memory is
+  // not yet enabled. Any successful read (even of binary content) means the file
+  // exists; an error/404 means it has not been created yet. The check is async
+  // and never blocks rendering of the card.
+  $effect(() => {
+    if (!memoryNeedsSetup) return;
+    let cancelled = false;
+    dbStatus = 'checking';
+    void (async () => {
+      for (const path of MEMORY_DB_PATHS) {
+        try {
+          await client.readFile(path);
+          if (!cancelled) dbStatus = 'found';
+          return;
+        } catch {
+          // Try the next candidate path.
+        }
+      }
+      if (!cancelled) dbStatus = 'not-found';
+    })();
+    return () => {
+      cancelled = true;
+    };
+  });
 
   const ENFORCEMENT_OPTIONS: { value: NonNullable<GoopSpecConfig['enforcement']>; label: string }[] = [
     { value: 'assist', label: 'Assist' },
@@ -138,6 +175,71 @@
       <div class="save-banner" role="alert">
         <HugeiconsIcon icon={Alert02Icon} size={16} color="currentColor" strokeWidth={1.5} />
         <span>{saveError}</span>
+      </div>
+    {/if}
+
+    <!-- Memory setup card (only when memory is off / unconfigured) ---------- -->
+    {#if memoryNeedsSetup}
+      <div
+        class="memory-card"
+        class:memory-card--warn={dbStatus === 'not-found'}
+        role="region"
+        aria-labelledby="memory-setup-title"
+      >
+        <div class="memory-card__head">
+          <span class="memory-card__icon" aria-hidden="true">
+            <HugeiconsIcon icon={Database02Icon} size={20} color="currentColor" strokeWidth={1.5} />
+          </span>
+          <div class="memory-card__heading">
+            <h3 id="memory-setup-title" class="memory-card__title">Memory setup</h3>
+            {@render badge(sourceOf('memoryEnabled'))}
+          </div>
+        </div>
+
+        <p class="memory-card__desc">
+          Memory is disabled or not yet configured. Enable it to allow GoopSpec agents to
+          persist observations and decisions across sessions.
+        </p>
+
+        <div class="memory-card__status" aria-live="polite">
+          {#if dbStatus === 'checking'}
+            <span class="status-dot status-dot--checking" aria-hidden="true">
+              <span class="spin">
+                <HugeiconsIcon icon={Loading03Icon} size={14} color="currentColor" strokeWidth={1.5} />
+              </span>
+            </span>
+            <span class="status-text">Database: checking…</span>
+          {:else if dbStatus === 'found'}
+            <span class="status-dot status-dot--found" aria-hidden="true">
+              <HugeiconsIcon icon={CheckmarkCircle01Icon} size={14} color="currentColor" strokeWidth={1.5} />
+            </span>
+            <span class="status-text">Database: found</span>
+          {:else}
+            <span class="status-dot status-dot--missing" aria-hidden="true">
+              <HugeiconsIcon icon={AlertCircleIcon} size={14} color="currentColor" strokeWidth={1.5} />
+            </span>
+            <span class="status-text">Database: not yet created</span>
+          {/if}
+        </div>
+
+        <div class="memory-card__actions">
+          <button
+            type="button"
+            class="enable-btn"
+            disabled={saving}
+            onclick={() => updateField({ memoryEnabled: true })}
+          >
+            {#if saving}
+              <span class="spin">
+                <HugeiconsIcon icon={Loading03Icon} size={16} color="currentColor" strokeWidth={1.5} />
+              </span>
+              Enabling…
+            {:else}
+              <HugeiconsIcon icon={Database02Icon} size={16} color="currentColor" strokeWidth={1.5} />
+              Enable memory
+            {/if}
+          </button>
+        </div>
       </div>
     {/if}
 
@@ -359,6 +461,151 @@
     border: 1px solid color-mix(in srgb, var(--danger-text) 30%, var(--border));
     border-radius: var(--radius);
     background-color: var(--bg-elevated);
+  }
+
+  /* ---- Memory setup card ---- */
+  .memory-card {
+    display: flex;
+    flex-direction: column;
+    gap: 0.875rem;
+    padding: 1.5rem;
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--accent);
+    border-radius: var(--radius-lg, var(--radius));
+    background-color: var(--bg-elevated);
+  }
+
+  .memory-card--warn {
+    border-left-color: var(--warning-text, var(--danger-text));
+  }
+
+  .memory-card__head {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+  }
+
+  .memory-card__icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2.25rem;
+    height: 2.25rem;
+    flex-shrink: 0;
+    color: var(--accent-text, var(--accent));
+    background-color: var(--accent-soft);
+    border-radius: var(--radius);
+  }
+
+  .memory-card--warn .memory-card__icon {
+    color: var(--warning-text, var(--danger-text));
+    background-color: color-mix(
+      in srgb,
+      var(--warning-text, var(--danger-text)) 14%,
+      transparent
+    );
+  }
+
+  .memory-card__heading {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+  }
+
+  .memory-card__title {
+    margin: 0;
+    font-size: 1rem;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    color: var(--text-primary);
+  }
+
+  .memory-card__desc {
+    margin: 0;
+    font-size: 0.875rem;
+    line-height: 1.5;
+    color: var(--text-secondary);
+    max-width: 44ch;
+  }
+
+  .memory-card__status {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4375rem;
+    align-self: flex-start;
+    padding: 0.3125rem 0.625rem;
+    font-size: 0.75rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-full);
+    background-color: var(--bg-base);
+  }
+
+  .status-dot {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .status-dot--found {
+    color: var(--success-text, var(--accent-text, var(--accent)));
+  }
+
+  .status-dot--missing {
+    color: var(--warning-text, var(--danger-text));
+  }
+
+  .status-dot--checking {
+    color: var(--text-muted);
+  }
+
+  .status-text {
+    color: var(--text-secondary);
+    font-weight: 500;
+  }
+
+  .memory-card__actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+
+  .enable-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.4375rem;
+    padding: 0.625rem 1.125rem;
+    font: inherit;
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: var(--accent-foreground);
+    background-color: var(--accent);
+    border: 1px solid var(--accent);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    transition:
+      background-color var(--transition-fast),
+      box-shadow var(--transition-fast),
+      transform var(--transition-fast);
+  }
+
+  .enable-btn:hover:not(:disabled) {
+    background-color: color-mix(in srgb, var(--accent) 88%, black);
+  }
+
+  .enable-btn:active:not(:disabled) {
+    transform: translateY(1px);
+  }
+
+  .enable-btn:focus-visible {
+    outline: 2px solid var(--focus-ring);
+    outline-offset: 2px;
+  }
+
+  .enable-btn:disabled {
+    cursor: not-allowed;
+    opacity: 0.65;
   }
 
   /* ---- Fields ---- */
@@ -656,6 +903,7 @@
     .switch,
     .switch-thumb,
     .action-btn,
+    .enable-btn,
     .text-input {
       transition: none;
     }
