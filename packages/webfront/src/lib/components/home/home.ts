@@ -8,6 +8,7 @@
  */
 import type { Project, Session } from '$lib/api/types.js';
 import type { ConnectionStatus } from '$lib/stores/connection.svelte.js';
+import type { VoiceError } from '$lib/stores/voice.svelte.js';
 import { projectInitial, projectName } from '$lib/components/sessions/project-rail.js';
 import { relativeTime } from '$lib/components/sessions/session-card.js';
 
@@ -142,6 +143,87 @@ export function describeConnection(
         hint: 'Start the OpenCode server, then open settings to retry.',
       };
   }
+}
+
+/* ---------------------------------------------------------------------------
+ * Setup status cards
+ * ------------------------------------------------------------------------- */
+
+/** A single actionable setup card surfaced on the home screen. */
+export interface SetupCard {
+  /** Stable identifier (also used as the {#each} key). */
+  id: 'server' | 'memory' | 'goopspec' | 'voice';
+  /** Card heading. */
+  title: string;
+  /** One-line explanation of what is unconfigured/degraded. */
+  description: string;
+  /** Settings sub-route the "Configure" action deep-links into. */
+  href: string;
+}
+
+/** Inputs that decide which setup cards are surfaced. */
+export interface SetupCardInputs {
+  /** Live server connection status. */
+  connectionStatus: ConnectionStatus;
+  /**
+   * Resolved GoopSpec config, or `null` when it failed to load. `undefined`
+   * means "still loading" — config-dependent cards are withheld until resolved
+   * so they do not flash on mount.
+   */
+  goopspecConfig: { memoryEnabled?: boolean } | null | undefined;
+  /** Current voice error category, if any. */
+  voiceError: VoiceError;
+}
+
+/**
+ * Decide which setup cards to surface for unconfigured/degraded features.
+ *
+ * Each card hides once its feature is fully configured and deep-links into the
+ * relevant `/settings/*` sub-route. Config-dependent cards (memory, goopspec)
+ * stay hidden while config is still loading (`goopspecConfig === undefined`) to
+ * avoid a flash of setup prompts before the real state is known.
+ */
+export function buildSetupCards(inputs: SetupCardInputs): SetupCard[] {
+  const { connectionStatus, goopspecConfig, voiceError } = inputs;
+  const cards: SetupCard[] = [];
+
+  if (connectionStatus !== 'connected') {
+    cards.push({
+      id: 'server',
+      title: 'Connect to the server',
+      description: 'GoopSpec is not connected to an OpenCode server.',
+      href: '/settings/server',
+    });
+  }
+
+  const configLoaded = goopspecConfig !== undefined;
+
+  if (configLoaded && goopspecConfig === null) {
+    cards.push({
+      id: 'goopspec',
+      title: 'Set up GoopSpec config',
+      description: 'GoopSpec configuration could not be loaded for this project.',
+      href: '/settings/goopspec',
+    });
+  } else if (configLoaded && goopspecConfig?.memoryEnabled === false) {
+    cards.push({
+      id: 'memory',
+      title: 'Enable persistent memory',
+      description: 'Agent memory is turned off. Enable it to retain context across sessions.',
+      href: '/settings/goopspec',
+    });
+  }
+
+  if (voiceError === 'unsupported') {
+    cards.push({
+      id: 'voice',
+      title: 'Voice input unavailable',
+      description: 'Voice input is not supported in this browser. Review voice settings.',
+      href: '/settings/voice',
+    });
+  }
+
+  return cards;
 }
 
 /* ---------------------------------------------------------------------------
