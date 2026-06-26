@@ -111,8 +111,10 @@ function normalizeSlots(value: unknown): Record<string, string> {
 function normalizeClassification(value: unknown): IntentClassification | null {
   if (!isRecord(value) || !isIntentCommand(value.command)) return null;
 
-  const confidence = typeof value.confidence === "number" ? value.confidence : Number(value.confidence);
-  const reasoning = typeof value.reasoning === "string" ? value.reasoning.trim() : "No reasoning provided";
+  const confidence =
+    typeof value.confidence === "number" ? value.confidence : Number(value.confidence);
+  const reasoning =
+    typeof value.reasoning === "string" ? value.reasoning.trim() : "No reasoning provided";
 
   return {
     command: value.command,
@@ -191,7 +193,10 @@ function getCompletionMethod(ctx: PluginContext): CompletionMethod | null {
   return null;
 }
 
-async function classifyWithSdk(ctx: PluginContext, transcript: string): Promise<IntentClassification | null> {
+async function classifyWithSdk(
+  ctx: PluginContext,
+  transcript: string,
+): Promise<IntentClassification | null> {
   const complete = getCompletionMethod(ctx);
   if (complete === null) return null;
 
@@ -288,15 +293,21 @@ export function classifyByKeywords(transcript: string): IntentClassification {
     }
   }
 
-  return { command: "chat", confidence: 0.5, slots: {}, reasoning: "No clear workflow intent detected" };
+  return {
+    command: "chat",
+    confidence: 0.5,
+    slots: {},
+    reasoning: "No clear workflow intent detected",
+  };
 }
 
 function buildIntentResult(args: IntentArgs, classification: IntentClassification): IntentResult {
   const commandString = COMMAND_MAP[classification.command];
+  const canAutoRun =
+    args.hasActiveWorkflow === false ||
+    (args.hasActiveWorkflow === true && args.workflowPhase === "idle");
   const autoRun =
-    classification.confidence >= 0.75 &&
-    classification.command !== "chat" &&
-    (!args.hasActiveWorkflow || args.workflowPhase === "idle");
+    classification.confidence >= 0.75 && classification.command !== "chat" && canAutoRun;
 
   return {
     ...classification,
@@ -322,7 +333,8 @@ function escapeHtmlCommentJson(value: string): string {
 }
 
 function formatResult(args: IntentArgs, result: IntentResult): string {
-  const displayCommand = result.commandString.length > 0 ? `\`${result.commandString}\` (${result.command})` : "chat";
+  const displayCommand =
+    result.commandString.length > 0 ? `\`${result.commandString}\` (${result.command})` : "chat";
   const autoRunText = result.autoRun
     ? `✅ Running \`${result.commandString}\` automatically...`
     : "Not running automatically. Ask a clarification or run the command manually.";
@@ -355,7 +367,12 @@ function formatResult(args: IntentArgs, result: IntentResult): string {
   ].join("\n");
 }
 
-function appendAdl(ctx: PluginContext, type: ADLEntry["type"], description: string, action: string): void {
+function appendAdl(
+  ctx: PluginContext,
+  type: ADLEntry["type"],
+  description: string,
+  action: string,
+): void {
   try {
     ctx.stateManager.appendADL({
       timestamp: new Date().toISOString(),
