@@ -101,7 +101,7 @@ describe("GoopSpec 5-phase integration", () => {
       const tools = createTools(ctx);
 
       const toolNames = Object.keys(tools);
-      expect(toolNames).toHaveLength(28);
+      expect(toolNames).toHaveLength(29);
 
       // Verify all expected tool names are present
       const expectedTools = [
@@ -129,6 +129,7 @@ describe("GoopSpec 5-phase integration", () => {
         "goop_search_docs",
         "goop_timeline",
         "goop_dashboard",
+        "goop_infer_intent",
         "memory_save",
         "memory_search",
         "memory_forget",
@@ -153,7 +154,7 @@ describe("GoopSpec 5-phase integration", () => {
       const tools = createTools(ctx);
       const hooks = createHooks(ctx);
 
-      expect(Object.keys(tools)).toHaveLength(28);
+      expect(Object.keys(tools)).toHaveLength(29);
       expect(typeof hooks).toBe("object");
     });
   });
