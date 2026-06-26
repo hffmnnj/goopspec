@@ -150,14 +150,25 @@ import {
 
 describe('parseSettings', () => {
   it('fills defaults for missing or invalid fields', () => {
-    expect(parseSettings(null)).toEqual({ motion: 'system', density: 'comfortable' });
+    const voiceDefaults = {
+      voiceTtsEnabled: false,
+      voiceSttModel: 'tiny',
+      voiceShortcut: 'mod+m',
+    } as const;
+    expect(parseSettings(null)).toEqual({
+      motion: 'system',
+      density: 'comfortable',
+      ...voiceDefaults,
+    });
     expect(parseSettings({ motion: 'bogus', density: 'compact' })).toEqual({
       motion: 'system',
       density: 'compact',
+      ...voiceDefaults,
     });
     expect(parseSettings({ motion: 'reduced', density: 42 })).toEqual({
       motion: 'reduced',
       density: 'comfortable',
+      ...voiceDefaults,
     });
   });
 });
@@ -220,7 +231,13 @@ describe('settings store persistence', () => {
     store.setDensity('compact');
 
     const persisted = JSON.parse(storage.get('goopspec-settings') ?? '{}');
-    expect(persisted).toEqual({ motion: 'reduced', density: 'compact' });
+    expect(persisted).toEqual({
+      motion: 'reduced',
+      density: 'compact',
+      voiceTtsEnabled: false,
+      voiceSttModel: 'tiny',
+      voiceShortcut: 'mod+m',
+    });
     expect(store.current.motion).toBe('reduced');
     expect(store.current.density).toBe('compact');
   });
@@ -231,10 +248,19 @@ describe('settings store persistence', () => {
 
     store.reset();
 
-    expect(store.current).toEqual({ motion: 'system', density: 'comfortable' });
+    expect(store.current).toEqual({
+      motion: 'system',
+      density: 'comfortable',
+      voiceTtsEnabled: false,
+      voiceSttModel: 'tiny',
+      voiceShortcut: 'mod+m',
+    });
     expect(JSON.parse(storage.get('goopspec-settings') ?? '{}')).toEqual({
       motion: 'system',
       density: 'comfortable',
+      voiceTtsEnabled: false,
+      voiceSttModel: 'tiny',
+      voiceShortcut: 'mod+m',
     });
   });
 });

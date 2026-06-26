@@ -121,6 +121,34 @@
     }
   }
 
+  // --- Mobile push-to-hold ---------------------------------------------------
+  // On touch devices, holding the button records and releasing stops (a
+  // push-to-talk gesture). This runs alongside the click-toggle so pointer
+  // users are unaffected. `suppressNextClick` swallows the synthetic click that
+  // some browsers emit after touchend so it doesn't immediately re-toggle.
+  let suppressNextClick = false;
+
+  function handleTouchStart(event: TouchEvent): void {
+    if (disabled || busy || !supported) return;
+    event.preventDefault();
+    suppressNextClick = true;
+    if (voice.status !== 'recording') void startRecording();
+  }
+
+  function handleTouchEnd(event: TouchEvent): void {
+    if (!suppressNextClick) return;
+    event.preventDefault();
+    if (voice.status === 'recording') void stopRecording();
+  }
+
+  function handleClick(): void {
+    if (suppressNextClick) {
+      suppressNextClick = false;
+      return;
+    }
+    void toggle();
+  }
+
   // The `mod+m` shortcut dispatches a window-level event so it can drive this
   // component without the registry importing the component instance.
   $effect(() => {
@@ -156,7 +184,10 @@
   aria-busy={busy}
   title={label}
   disabled={disabled || busy || !supported}
-  onclick={toggle}
+  onclick={handleClick}
+  ontouchstart={handleTouchStart}
+  ontouchend={handleTouchEnd}
+  ontouchcancel={handleTouchEnd}
 >
   {#if voice.status === 'transcribing' || voice.status === 'loading'}
     <span class="spin" aria-hidden="true">
@@ -185,6 +216,8 @@
     background-color: var(--bg-surface);
     color: var(--text-secondary);
     cursor: pointer;
+    /* Prevent scroll/zoom hijacking the push-to-hold touch gesture. */
+    touch-action: none;
     transition:
       background-color var(--transition-fast),
       color var(--transition-fast),

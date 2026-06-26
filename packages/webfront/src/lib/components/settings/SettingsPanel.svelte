@@ -11,14 +11,19 @@
     Alert02Icon,
     RefreshIcon,
     CheckmarkCircle02Icon,
-    Copy01Icon
+    Copy01Icon,
+    Mic01Icon,
+    VolumeHighIcon
   } from '@hugeicons/core-free-icons';
   import { theme, setTheme, type Theme } from '$lib/stores/theme.svelte.js';
   import {
     settings as defaultSettings,
     type Density,
-    type MotionPreference
+    type MotionPreference,
+    type SttModel
   } from '$lib/stores/settings.svelte.js';
+  import { formatCombo } from '$lib/keyboard/registry.js';
+  import { voice } from '$lib/stores/voice.svelte.js';
   import { connection as defaultConnection } from '$lib/stores/connection.svelte.js';
   import { getServerUrl, setServerUrl, validateServerUrl } from '$lib/api/config.js';
   import { createClient } from '$lib/api/client.js';
@@ -60,6 +65,18 @@
     { value: 'full', label: 'Full' },
     { value: 'reduced', label: 'Reduced' }
   ];
+
+  // --- Voice ---------------------------------------------------------------
+  const STT_MODEL_OPTIONS: { value: SttModel; label: string; hint: string }[] = [
+    { value: 'tiny', label: 'Fast', hint: '27MB' },
+    { value: 'base', label: 'Accurate', hint: '102MB' }
+  ];
+
+  /** Pretty-printed mic shortcut (⌘M on macOS, Ctrl+M elsewhere). */
+  const micShortcutLabel = $derived(formatCombo(settingsStore.current.voiceShortcut));
+
+  /** Whether voice input is usable in this browser (mic + model support). */
+  const voiceUnsupported = $derived(voice.error === 'unsupported');
 
   // --- Server --------------------------------------------------------------
   let serverUrlDraft = $state(getServerUrl());
@@ -263,6 +280,73 @@
             >
               <span class="switch-thumb"></span>
             </button>
+          </div>
+        </section>
+
+        <!-- Voice ----------------------------------------------------------- -->
+        <section class="group" aria-labelledby="group-voice">
+          <h3 id="group-voice" class="group-title">
+            <HugeiconsIcon icon={Mic01Icon} size={16} color="currentColor" strokeWidth={1.5} />
+            Voice
+          </h3>
+
+          <div class="field field--row">
+            <span class="field-text">
+              <label class="field-label" for="tts-toggle">
+                <HugeiconsIcon
+                  icon={VolumeHighIcon}
+                  size={14}
+                  color="currentColor"
+                  strokeWidth={1.5}
+                />
+                Read responses aloud
+              </label>
+              <span class="field-sub">Speaks the assistant's final reply after each response</span>
+            </span>
+            <button
+              id="tts-toggle"
+              type="button"
+              role="switch"
+              aria-label="Read responses aloud"
+              aria-checked={settingsStore.current.voiceTtsEnabled}
+              class="switch"
+              class:on={settingsStore.current.voiceTtsEnabled}
+              onclick={() =>
+                settingsStore.setVoiceTtsEnabled(!settingsStore.current.voiceTtsEnabled)}
+            >
+              <span class="switch-thumb"></span>
+            </button>
+          </div>
+
+          {#if voiceUnsupported}
+            <p class="field-note" role="note">Voice input not supported in this browser.</p>
+          {:else}
+            <div class="field">
+              <span class="field-text">
+                <span class="field-label" id="label-stt-model">Transcription model</span>
+                <span class="field-sub">Affects accuracy and first-load download size</span>
+              </span>
+              <div class="segmented" role="radiogroup" aria-labelledby="label-stt-model">
+                {#each STT_MODEL_OPTIONS as opt (opt.value)}
+                  <button
+                    type="button"
+                    role="radio"
+                    aria-checked={settingsStore.current.voiceSttModel === opt.value}
+                    class="segment"
+                    class:active={settingsStore.current.voiceSttModel === opt.value}
+                    onclick={() => settingsStore.setVoiceSttModel(opt.value)}
+                  >
+                    {opt.label}
+                    <span class="segment-hint">{opt.hint}</span>
+                  </button>
+                {/each}
+              </div>
+            </div>
+          {/if}
+
+          <div class="field field--row">
+            <label class="field-label" for="mic-shortcut">Mic shortcut</label>
+            <kbd id="mic-shortcut" class="shortcut-kbd">{micShortcutLabel}</kbd>
           </div>
         </section>
 
@@ -516,9 +600,47 @@
   }
 
   .field-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
     font-size: 0.8125rem;
     font-weight: 500;
     color: var(--text-primary);
+  }
+
+  /* ---- Field with stacked label + sub-label ---- */
+  .field-text {
+    display: flex;
+    flex-direction: column;
+    gap: 0.1875rem;
+    min-width: 0;
+  }
+
+  .field-sub {
+    font-size: 0.75rem;
+    line-height: 1.4;
+    color: var(--text-muted);
+  }
+
+  .field-note {
+    margin: 0;
+    font-size: 0.8125rem;
+    line-height: 1.4;
+    color: var(--text-muted);
+  }
+
+  /* ---- Read-only shortcut chip ---- */
+  .shortcut-kbd {
+    flex-shrink: 0;
+    padding: 0.25rem 0.5rem;
+    font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace);
+    font-size: 0.75rem;
+    font-weight: 500;
+    color: var(--text-secondary);
+    background-color: var(--bg-base);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    white-space: nowrap;
   }
 
   /* ---- Segmented control ---- */
@@ -547,6 +669,13 @@
     transition:
       color var(--transition-fast),
       background-color var(--transition-fast);
+  }
+
+  .segment-hint {
+    font-size: 0.6875rem;
+    font-weight: 500;
+    opacity: 0.7;
+    font-variant-numeric: tabular-nums;
   }
 
   .segment:hover {
