@@ -8,6 +8,7 @@
     completeCommand,
   } from '$lib/commands/command-complete.js';
   import type { SlashCommand } from '$lib/api/types.js';
+  import MicButton from '$lib/components/voice/MicButton.svelte';
 
   interface MessageInputProps {
     /** Submit handler — receives the trimmed text. */
@@ -275,6 +276,8 @@
       onclick={handleClickSelection}
       onblur={closeMenu}
     ></textarea>
+
+    <MicButton onTranscript={insertIntoComposer} disabled={disabled || streaming} />
 
     {#if streaming}
       <button

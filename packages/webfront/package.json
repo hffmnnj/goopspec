@@ -14,6 +14,8 @@
   "dependencies": {
     "@hugeicons/core-free-icons": "latest",
     "@hugeicons/svelte": "latest",
+    "@huggingface/transformers": "^4.2.0",
+    "@ricky0123/vad-web": "^0.0.30",
     "bits-ui": "^2.18.1",
     "clsx": "^2.1.1",
     "dompurify": "^3.2.4",

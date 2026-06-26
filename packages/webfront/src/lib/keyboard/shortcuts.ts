@@ -2,6 +2,7 @@ import { chat } from '$lib/stores/chat.svelte.js';
 import { sessions } from '$lib/stores/sessions.svelte.js';
 import { activeSession } from '$lib/stores/active-session.svelte.js';
 import { ui } from '$lib/stores/ui.svelte.js';
+import { voice } from '$lib/stores/voice.svelte.js';
 import { KeyboardRegistry, keyboardRegistry, type Shortcut } from './registry.js';
 
 /**
@@ -74,6 +75,20 @@ export const defaultShortcuts: Shortcut[] = [
     handler: () => {
       const list = document.querySelector('[data-shortcut="session-list"]') as HTMLElement | null;
       list?.focus();
+      return true;
+    },
+  },
+  {
+    id: 'voice-mic-toggle',
+    keys: ['mod+m'],
+    description: 'Toggle voice input',
+    category: 'Chat',
+    handler: () => {
+      // The MicButton owns the VAD/STT lifecycle, so route the toggle through a
+      // window event it listens for. Stopping while active still goes through the
+      // component so the mic stream is torn down cleanly.
+      if (voice.isError) voice.reset();
+      document.dispatchEvent(new CustomEvent('goopspec:voice-toggle'));
       return true;
     },
   },

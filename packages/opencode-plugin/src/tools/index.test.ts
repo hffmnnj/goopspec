@@ -29,6 +29,7 @@ const EXPECTED_TOOL_KEYS = [
   "goop_search_docs",
   "goop_timeline",
   "goop_dashboard",
+  "goop_infer_intent",
   "memory_save",
   "memory_search",
   "memory_forget",
@@ -47,9 +48,9 @@ describe("createTools registry", () => {
 
   afterEach(() => cleanup());
 
-  it("returns exactly 28 tools", () => {
+  it("returns exactly 29 tools", () => {
     const tools = createTools(ctx);
-    expect(Object.keys(tools)).toHaveLength(28);
+    expect(Object.keys(tools)).toHaveLength(29);
   });
 
   it("registers all canonical MCP tool keys", () => {

@@ -22,14 +22,26 @@ export type MotionPreference = 'system' | 'reduced' | 'full';
 /** Layout density. */
 export type Density = 'comfortable' | 'compact';
 
+/** Moonshine STT model size: fast (~27MB) or accurate (~102MB). */
+export type SttModel = 'tiny' | 'base';
+
 export interface AppearanceSettings {
   motion: MotionPreference;
   density: Density;
+  /** Read finalized assistant responses aloud via TTS. */
+  voiceTtsEnabled: boolean;
+  /** Selected on-device STT model size. */
+  voiceSttModel: SttModel;
+  /** Keyboard shortcut that toggles the mic. */
+  voiceShortcut: string;
 }
 
 const DEFAULTS: AppearanceSettings = {
   motion: 'system',
   density: 'comfortable',
+  voiceTtsEnabled: false,
+  voiceSttModel: 'tiny',
+  voiceShortcut: 'mod+m',
 };
 
 function isMotion(value: unknown): value is MotionPreference {
@@ -40,12 +52,27 @@ function isDensity(value: unknown): value is Density {
   return value === 'comfortable' || value === 'compact';
 }
 
+function isSttModel(value: unknown): value is SttModel {
+  return value === 'tiny' || value === 'base';
+}
+
 /** Parse a persisted blob into a fully-populated settings object. */
 export function parseSettings(raw: unknown): AppearanceSettings {
   const record = typeof raw === 'object' && raw !== null ? (raw as Record<string, unknown>) : {};
   return {
     motion: isMotion(record.motion) ? record.motion : DEFAULTS.motion,
     density: isDensity(record.density) ? record.density : DEFAULTS.density,
+    voiceTtsEnabled:
+      typeof record.voiceTtsEnabled === 'boolean'
+        ? record.voiceTtsEnabled
+        : DEFAULTS.voiceTtsEnabled,
+    voiceSttModel: isSttModel(record.voiceSttModel)
+      ? record.voiceSttModel
+      : DEFAULTS.voiceSttModel,
+    voiceShortcut:
+      typeof record.voiceShortcut === 'string' && record.voiceShortcut.trim() !== ''
+        ? record.voiceShortcut
+        : DEFAULTS.voiceShortcut,
   };
 }
 
@@ -94,6 +121,21 @@ class SettingsStore {
     this.current.density = density;
     writeStored(this.current);
     this.applyDom();
+  }
+
+  setVoiceTtsEnabled(enabled: boolean): void {
+    this.current.voiceTtsEnabled = enabled;
+    writeStored(this.current);
+  }
+
+  setVoiceSttModel(modelSize: SttModel): void {
+    this.current.voiceSttModel = modelSize;
+    writeStored(this.current);
+  }
+
+  setVoiceShortcut(shortcut: string): void {
+    this.current.voiceShortcut = shortcut;
+    writeStored(this.current);
   }
 
   reset(): void {

@@ -3,6 +3,7 @@ import { fetchMessages } from '../api/messages.js';
 import { StreamSubscription } from '../api/stream.js';
 import type { Message, MessagePart, OpenCodeClient, RunCommandInput, SendMessageInput } from '../api/types.js';
 import { parseCommandInput } from '../commands/command-complete.js';
+import { tts } from '../voice/tts.js';
 import { agent } from './agent.svelte.js';
 import { commands } from './commands.svelte.js';
 import { model } from './model.svelte.js';
@@ -23,6 +24,16 @@ function userMessage(text: string): Message {
     parts: [{ type: 'text', text }],
     createdAt: now(),
   };
+}
+
+/** Join an assistant message's text parts; tool/step/reasoning parts excluded (MH-08). */
+function assistantSpokenText(message: Message | undefined): string {
+  if (!message || message.role !== 'assistant') return '';
+  return message.parts
+    .filter((part): part is Extract<MessagePart, { type: 'text' }> => part.type === 'text')
+    .map((part) => part.text)
+    .join('')
+    .trim();
 }
 
 /**
@@ -80,6 +91,7 @@ class ChatStore {
 
     this.error = null;
     const user = userMessage(trimmed);
+    tts.cancel();
     this.interrupt();
     this.messages = [...this.messages, user];
 
@@ -174,8 +186,8 @@ class ChatStore {
 
   /** Mark the in-flight reply complete and leave the streaming state (T3.2). */
   finalizeStreaming(final?: Message): void {
-    if (final && this.streamingMessageId) {
-      const targetId = this.streamingMessageId;
+    const targetId = this.streamingMessageId;
+    if (final && targetId) {
       this.messages = this.messages.map((message) =>
         message.id === targetId
           ? {
@@ -191,6 +203,13 @@ class ChatStore {
     this.stopStreamSubscription();
     this.streaming = false;
     this.streamingMessageId = null;
+
+    // A `final` message marks a genuine `message.completed`; interrupt and the
+    // send-error path call this without one and must stay silent. tts.speak()
+    // self-gates on voiceTtsEnabled and strips markdown.
+    if (final && !this.error && targetId) {
+      tts.speak(assistantSpokenText(this.messages.find((message) => message.id === targetId)));
+    }
   }
 
   /** Stop the active reply stream and mark it as cancelled. */
