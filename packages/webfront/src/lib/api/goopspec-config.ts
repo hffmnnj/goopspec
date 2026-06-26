@@ -22,6 +22,12 @@ export interface SourcedValue<T> {
 export interface MergedGoopSpecConfig {
 	raw: GoopSpecConfig;
 	sources: Partial<Record<keyof GoopSpecConfig, ConfigSource>>;
+	/**
+	 * Per-role winning source for `agentModels` entries. A role appears here only
+	 * when an explicit override exists in a readable source (project wins over
+	 * internal). Roles absent from this map fall back to "built-in".
+	 */
+	agentModelSources: Record<string, ConfigSource>;
 }
 
 const CONFIG_PATHS = {
@@ -134,7 +140,16 @@ export async function loadMergedGoopspecConfig(
 		// else: 'built-in' (no explicit assignment — callers show "built-in" when source is undefined)
 	}
 
-	return { raw, sources };
+	// Per-role agentModels source: project override wins over internal.
+	const agentModelSources: Record<string, ConfigSource> = {};
+	for (const role of Object.keys(internalModels ?? {})) {
+		agentModelSources[role] = "internal";
+	}
+	for (const role of Object.keys(projectModels ?? {})) {
+		agentModelSources[role] = "project";
+	}
+
+	return { raw, sources, agentModelSources };
 }
 
 /**

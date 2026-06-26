@@ -145,6 +145,33 @@ describe("loadMergedGoopspecConfig", () => {
 
 		expect(result.raw).toEqual({});
 		expect(result.sources).toEqual({});
+		expect(result.agentModelSources).toEqual({});
+	});
+
+	it("tracks per-role agentModels source with project winning over internal", async () => {
+		const client = createMockClient();
+		mockReadFile(client, {
+			".goopspec/config.json": JSON.stringify({
+				agentModels: {
+					orchestrator: "internal/orch",
+					planner: "internal/planner",
+				},
+			}),
+			"goopspec.json": JSON.stringify({
+				agentModels: {
+					planner: "project/planner",
+					verifier: "project/verifier",
+				},
+			}),
+		});
+
+		const result = await loadMergedGoopspecConfig(client);
+
+		expect(result.agentModelSources).toEqual({
+			orchestrator: "internal",
+			planner: "project",
+			verifier: "project",
+		});
 	});
 });
 

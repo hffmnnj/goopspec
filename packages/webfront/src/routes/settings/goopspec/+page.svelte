@@ -93,6 +93,7 @@
       await saveGoopspecConfig(client, updates);
       if (config) {
         config = {
+          ...config,
           raw: { ...config.raw, ...updates },
           // Edits via write-back land in the project goopspec namespace.
           sources: { ...config.sources, ...sourcesForUpdate(updates) }
