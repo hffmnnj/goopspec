@@ -2,6 +2,7 @@
   import { HugeiconsIcon } from '@hugeicons/svelte';
   import { Mic01Icon, Loading03Icon, AlertCircleIcon } from '@hugeicons/core-free-icons';
   import { createSttService, type SttService } from '$lib/voice/stt.js';
+  import { voice, type VoiceError } from '$lib/stores/voice.svelte.js';
 
   interface MicButtonProps {
     /** Called with the finished transcript text (already trimmed, non-empty). */
@@ -12,29 +13,23 @@
 
   let { onTranscript, disabled = false }: MicButtonProps = $props();
 
-  type MicState = 'idle' | 'loading' | 'recording' | 'transcribing' | 'error';
-
-  let state = $state<MicState>('idle');
-
   // Lazily-constructed singletons. Both the VAD and STT worker carry heavy
   // model downloads, so we only build them when the user first records.
   let stt: SttService | null = null;
   // `MicVAD` is typed via the dynamic import to keep this module SSR-safe.
   let vad: Awaited<ReturnType<typeof import('@ricky0123/vad-web').MicVAD.new>> | null = null;
 
-  const isActive = $derived(state === 'recording' || state === 'transcribing');
-  const label = $derived(
-    state === 'recording'
-      ? 'Stop recording'
-      : state === 'transcribing'
-        ? 'Transcribing…'
-        : state === 'loading'
-          ? 'Loading voice model…'
-          : state === 'error'
-            ? 'Voice input failed — click to retry'
-            : 'Start voice input',
+  // Read derived UI state from the shared voice store so the keyboard shortcut
+  // and the ARIA live region stay in sync with this control.
+  const isActive = $derived(voice.isActive);
+  const busy = $derived(voice.isBusy);
+  const label = $derived(voice.ariaLabel);
+
+  // Browser-capability gate. Without getUserMedia there is no path to audio, so
+  // the control is permanently disabled and announces an unsupported error.
+  const supported = $derived(
+    typeof navigator !== 'undefined' && !!navigator.mediaDevices?.getUserMedia,
   );
-  const busy = $derived(state === 'loading' || state === 'transcribing');
 
   function ensureStt(): SttService {
     if (!stt) stt = createSttService();
@@ -42,22 +37,39 @@
   }
 
   async function handleSpeechEnd(audio: Float32Array): Promise<void> {
-    state = 'transcribing';
+    voice.setStatus('transcribing');
     try {
       const text = await ensureStt().transcribe(audio);
       const clean = text.trim();
-      if (clean) onTranscript(clean);
-      state = vad?.listening ? 'recording' : 'idle';
+      if (clean) {
+        voice.setTranscript(clean);
+        onTranscript(clean);
+      }
+      voice.setStatus(vad?.listening ? 'recording' : 'idle');
     } catch {
-      // Transcription failure shouldn't kill the recording session; drop back
-      // to listening if the VAD is still active, otherwise idle.
-      state = vad?.listening ? 'recording' : 'idle';
+      // A model-load/transcription failure shouldn't kill an active session;
+      // surface the error only when the VAD is no longer listening.
+      if (vad?.listening) {
+        voice.setStatus('recording');
+      } else {
+        voice.setError('model-load-failed');
+      }
     }
+  }
+
+  function classifyStartError(error: unknown): NonNullable<VoiceError> {
+    const name = error instanceof Error ? error.name : '';
+    if (name === 'NotAllowedError' || name === 'SecurityError') return 'permission-denied';
+    return 'model-load-failed';
   }
 
   async function startRecording(): Promise<void> {
     if (typeof window === 'undefined') return;
-    state = 'loading';
+    if (!supported) {
+      voice.setError('unsupported');
+      return;
+    }
+    voice.setStatus('loading');
     try {
       const { MicVAD } = await import('@ricky0123/vad-web');
       vad = await MicVAD.new({
@@ -68,15 +80,15 @@
         onnxWASMBasePath: '/vad/',
         onSpeechEnd: handleSpeechEnd,
         onVADMisfire: () => {
-          if (state === 'transcribing') return;
-          state = vad?.listening ? 'recording' : 'idle';
+          if (voice.status === 'transcribing') return;
+          voice.setStatus(vad?.listening ? 'recording' : 'idle');
         },
       });
       await vad.start();
-      state = 'recording';
-    } catch {
+      voice.setStatus('recording');
+    } catch (error) {
       await teardown();
-      state = 'error';
+      voice.setError(classifyStartError(error));
     }
   }
 
@@ -92,17 +104,37 @@
 
   async function stopRecording(): Promise<void> {
     await teardown();
-    state = 'idle';
+    voice.reset();
   }
 
   async function toggle(): Promise<void> {
     if (disabled || busy) return;
-    if (state === 'recording') {
+    if (!supported) {
+      voice.setError('unsupported');
+      return;
+    }
+    if (voice.status === 'recording') {
       await stopRecording();
     } else {
+      // Retrying after an error starts a fresh session.
       await startRecording();
     }
   }
+
+  // The `mod+m` shortcut dispatches a window-level event so it can drive this
+  // component without the registry importing the component instance.
+  $effect(() => {
+    if (typeof document === 'undefined') return;
+    const handler = () => void toggle();
+    document.addEventListener('goopspec:voice-toggle', handler);
+    return () => document.removeEventListener('goopspec:voice-toggle', handler);
+  });
+
+  // Mark the control unsupported on mount so the disabled state and live-region
+  // announcement reflect capability before the user interacts.
+  $effect(() => {
+    if (!supported && voice.status === 'idle') voice.setError('unsupported');
+  });
 
   // Release the mic + worker if the component unmounts mid-recording.
   $effect(() => {
@@ -117,20 +149,20 @@
 <button
   type="button"
   class="action mic"
-  class:recording={state === 'recording'}
-  class:error={state === 'error'}
+  class:recording={voice.status === 'recording'}
+  class:error={voice.isError}
   aria-label={label}
-  aria-pressed={state === 'recording'}
+  aria-pressed={voice.status === 'recording'}
   aria-busy={busy}
   title={label}
-  disabled={disabled || busy}
+  disabled={disabled || busy || !supported}
   onclick={toggle}
 >
-  {#if state === 'transcribing' || state === 'loading'}
+  {#if voice.status === 'transcribing' || voice.status === 'loading'}
     <span class="spin" aria-hidden="true">
       <HugeiconsIcon icon={Loading03Icon} size={18} strokeWidth={1.5} color="currentColor" />
     </span>
-  {:else if state === 'error'}
+  {:else if voice.isError}
     <HugeiconsIcon icon={AlertCircleIcon} size={18} strokeWidth={1.5} color="currentColor" />
   {:else}
     <span class="glyph" class:pulse={isActive}>

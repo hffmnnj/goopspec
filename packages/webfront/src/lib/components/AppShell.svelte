@@ -18,6 +18,7 @@
   } from '$lib/stores/layout.svelte.js';
   import { fold } from '$lib/stores/fold.svelte.js';
   import { ui } from '$lib/stores/ui.svelte.js';
+  import { voice } from '$lib/stores/voice.svelte.js';
   import { workspace } from '$lib/stores/workspace.svelte.js';
   import { projects } from '$lib/stores/projects.svelte.js';
   import { sessions } from '$lib/stores/sessions.svelte.js';
@@ -240,6 +241,11 @@
 <svelte:window use:useKeyboard />
 
 <a href="#main-content" class="skip-link">Skip to content</a>
+
+<!-- Polite ARIA live region announcing voice-capture state to screen readers. -->
+<div class="sr-only" role="status" aria-live="polite" aria-atomic="true">
+  {voice.announcement}
+</div>
 
 <div
   class="app-shell"
