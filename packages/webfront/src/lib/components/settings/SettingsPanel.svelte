@@ -23,6 +23,7 @@
     type SttModel
   } from '$lib/stores/settings.svelte.js';
   import { formatCombo } from '$lib/keyboard/registry.js';
+  import { voice } from '$lib/stores/voice.svelte.js';
   import { connection as defaultConnection } from '$lib/stores/connection.svelte.js';
   import { getServerUrl, setServerUrl, validateServerUrl } from '$lib/api/config.js';
   import { createClient } from '$lib/api/client.js';
@@ -73,6 +74,9 @@
 
   /** Pretty-printed mic shortcut (⌘M on macOS, Ctrl+M elsewhere). */
   const micShortcutLabel = $derived(formatCombo(settingsStore.current.voiceShortcut));
+
+  /** Whether voice input is usable in this browser (mic + model support). */
+  const voiceUnsupported = $derived(voice.error === 'unsupported');
 
   // --- Server --------------------------------------------------------------
   let serverUrlDraft = $state(getServerUrl());
@@ -314,27 +318,31 @@
             </button>
           </div>
 
-          <div class="field">
-            <span class="field-text">
-              <span class="field-label" id="label-stt-model">Transcription model</span>
-              <span class="field-sub">Affects accuracy and first-load download size</span>
-            </span>
-            <div class="segmented" role="radiogroup" aria-labelledby="label-stt-model">
-              {#each STT_MODEL_OPTIONS as opt (opt.value)}
-                <button
-                  type="button"
-                  role="radio"
-                  aria-checked={settingsStore.current.voiceSttModel === opt.value}
-                  class="segment"
-                  class:active={settingsStore.current.voiceSttModel === opt.value}
-                  onclick={() => settingsStore.setVoiceSttModel(opt.value)}
-                >
-                  {opt.label}
-                  <span class="segment-hint">{opt.hint}</span>
-                </button>
-              {/each}
+          {#if voiceUnsupported}
+            <p class="field-note" role="note">Voice input not supported in this browser.</p>
+          {:else}
+            <div class="field">
+              <span class="field-text">
+                <span class="field-label" id="label-stt-model">Transcription model</span>
+                <span class="field-sub">Affects accuracy and first-load download size</span>
+              </span>
+              <div class="segmented" role="radiogroup" aria-labelledby="label-stt-model">
+                {#each STT_MODEL_OPTIONS as opt (opt.value)}
+                  <button
+                    type="button"
+                    role="radio"
+                    aria-checked={settingsStore.current.voiceSttModel === opt.value}
+                    class="segment"
+                    class:active={settingsStore.current.voiceSttModel === opt.value}
+                    onclick={() => settingsStore.setVoiceSttModel(opt.value)}
+                  >
+                    {opt.label}
+                    <span class="segment-hint">{opt.hint}</span>
+                  </button>
+                {/each}
+              </div>
             </div>
-          </div>
+          {/if}
 
           <div class="field field--row">
             <label class="field-label" for="mic-shortcut">Mic shortcut</label>
@@ -610,6 +618,13 @@
 
   .field-sub {
     font-size: 0.75rem;
+    line-height: 1.4;
+    color: var(--text-muted);
+  }
+
+  .field-note {
+    margin: 0;
+    font-size: 0.8125rem;
     line-height: 1.4;
     color: var(--text-muted);
   }
