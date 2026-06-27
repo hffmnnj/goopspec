@@ -1,3 +1,4 @@
+import { goto } from '$app/navigation';
 import {
   Add01Icon,
   Delete02Icon,
@@ -76,7 +77,7 @@ export function builtinCommands(): Command[] {
       icon: Settings01Icon,
       keywords: ['preferences', 'config', 'options'],
       run: () => {
-        ui.settingsOpen = true;
+        void goto('/settings');
       },
     },
     {

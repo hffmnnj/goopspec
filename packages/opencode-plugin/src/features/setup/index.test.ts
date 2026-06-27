@@ -221,6 +221,22 @@ describe("setup feature", () => {
       expect(result.projectName).toBe("new-proj");
       expect(readConfig(freshDir)?.projectName).toBe("new-proj");
     });
+
+    it("updateConfig round-trips enforcement", () => {
+      const merged = updateConfig(testDir, { enforcement: "strict" });
+      expect(merged.enforcement).toBe("strict");
+      expect(readConfig(testDir)?.enforcement).toBe("strict");
+    });
+
+    it("updateConfig round-trips adlEnabled including false", () => {
+      let merged = updateConfig(testDir, { adlEnabled: true });
+      expect(merged.adlEnabled).toBe(true);
+      expect(readConfig(testDir)?.adlEnabled).toBe(true);
+
+      merged = updateConfig(testDir, { adlEnabled: false });
+      expect(merged.adlEnabled).toBe(false);
+      expect(readConfig(testDir)?.adlEnabled).toBe(false);
+    });
   });
 
   // =========================================================================
@@ -445,6 +461,28 @@ describe("setup feature", () => {
   // =========================================================================
 
   describe("normalizeConfig", () => {
+    it("passes through enforcement values that are valid", () => {
+      expect(normalizeConfig({ enforcement: "assist" }).enforcement).toBe("assist");
+      expect(normalizeConfig({ enforcement: "warn" }).enforcement).toBe("warn");
+      expect(normalizeConfig({ enforcement: "strict" }).enforcement).toBe("strict");
+    });
+
+    it("ignores invalid enforcement values", () => {
+      expect(normalizeConfig({ enforcement: "invalid" }).enforcement).toBeUndefined();
+      expect(normalizeConfig({ enforcement: 42 }).enforcement).toBeUndefined();
+      expect(normalizeConfig({ enforcement: true }).enforcement).toBeUndefined();
+    });
+
+    it("passes through adlEnabled booleans", () => {
+      expect(normalizeConfig({ adlEnabled: true }).adlEnabled).toBe(true);
+      expect(normalizeConfig({ adlEnabled: false }).adlEnabled).toBe(false);
+    });
+
+    it("ignores non-boolean adlEnabled values", () => {
+      expect(normalizeConfig({ adlEnabled: "yes" }).adlEnabled).toBeUndefined();
+      expect(normalizeConfig({ adlEnabled: 1 }).adlEnabled).toBeUndefined();
+    });
+
     it("passes through new-format agentModels unchanged", () => {
       const result = normalizeConfig({
         defaultModel: "openai/gpt-4o",

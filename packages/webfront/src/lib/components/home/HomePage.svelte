@@ -16,15 +16,18 @@
   } from '@hugeicons/core-free-icons';
 
   import GlassSurface from '../GlassSurface.svelte';
+  import SetupCards from './SetupCards.svelte';
   import { projectColor } from '../sessions/project-rail.js';
 
   import { projects as defaultProjects, type ProjectsStore } from '$lib/stores/projects.svelte.js';
   import { sessions as defaultSessions, type SessionsStore } from '$lib/stores/sessions.svelte.js';
   import { connection as defaultConnection } from '$lib/stores/connection.svelte.js';
+  import { voice as defaultVoice } from '$lib/stores/voice.svelte.js';
   import { activeSession } from '$lib/stores/active-session.svelte.js';
   import { ui } from '$lib/stores/ui.svelte.js';
   import { createClient } from '$lib/api/client.js';
   import { fetchSessions } from '$lib/api/sessions.js';
+  import { loadMergedGoopspecConfig, type GoopSpecConfig } from '$lib/api/goopspec-config.js';
   import type { OpenCodeClient } from '$lib/api/types.js';
   import { defaultShortcuts } from '$lib/keyboard/shortcuts.js';
   import { formatCombo } from '$lib/keyboard/registry.js';
@@ -32,6 +35,7 @@
   import {
     buildRecentProjects,
     buildRecentSessions,
+    buildSetupCards,
     buildShortcutHints,
     describeConnection,
     isOnboarding,
@@ -46,6 +50,8 @@
     sessionsStore?: SessionsStore;
     /** Override the connection store (tests). */
     connectionStore?: typeof defaultConnection;
+    /** Override the voice store (tests). */
+    voiceStore?: typeof defaultVoice;
     /** Override the API client used to fetch recent sessions (tests). */
     client?: OpenCodeClient;
     /** Override the navigate function (tests). */
@@ -56,6 +62,7 @@
     projectsStore = defaultProjects,
     sessionsStore = defaultSessions,
     connectionStore = defaultConnection,
+    voiceStore = defaultVoice,
     client,
     navigate = (target: string) => void goto(target),
   }: HomePageProps = $props();
@@ -63,6 +70,35 @@
   const apiClient = $derived(client ?? createClient());
 
   let recentEntries = $state<ProjectSession[]>([]);
+
+  /**
+   * GoopSpec config for the setup cards. `undefined` = still loading (cards
+   * withheld to avoid a flash on mount); `null` = load failed.
+   */
+  let goopspecConfig = $state<GoopSpecConfig | null | undefined>(undefined);
+
+  $effect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const merged = await loadMergedGoopspecConfig(apiClient);
+        if (!cancelled) goopspecConfig = merged.raw;
+      } catch {
+        if (!cancelled) goopspecConfig = null;
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  });
+
+  const setupCards = $derived(
+    buildSetupCards({
+      connectionStatus: connectionStore.current.status,
+      goopspecConfig,
+      voiceError: voiceStore.error,
+    })
+  );
 
   const opened = $derived(projectsStore.openedProjects);
   const onboarding = $derived(isOnboarding(opened));
@@ -129,7 +165,7 @@
   }
 
   function openSettings(): void {
-    ui.settingsOpen = true;
+    void goto('/settings/server');
   }
 </script>
 
@@ -197,6 +233,9 @@
         </span>
       </button>
     </section>
+
+    <!-- Setup status cards (only render when a feature is degraded/unconfigured) -->
+    <SetupCards cards={setupCards} {navigate} />
 
     {#if onboarding}
       <!-- First-run onboarding -->
