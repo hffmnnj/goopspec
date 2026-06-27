@@ -43,6 +43,15 @@ function mockReadFile(
 	});
 }
 
+function firstConfigPatch(
+	updateConfig: ReturnType<typeof mock>,
+): { goopspec: GoopSpecConfig } {
+	const calls = updateConfig.mock.calls as unknown as Array<[{ goopspec: GoopSpecConfig }]>;
+	const patch = calls[0]?.[0];
+	if (!patch) throw new Error("updateConfig was not called with a config patch");
+	return patch;
+}
+
 describe("normalizeRaw", () => {
 	it("extracts known scalar fields with correct types", () => {
 		const cfg = normalizeRaw({
@@ -191,7 +200,7 @@ describe("saveGoopspecConfig", () => {
 		await saveGoopspecConfig(client, { enforcement: "strict" });
 
 		expect(updateConfig).toHaveBeenCalled();
-		const patch = updateConfig.mock.calls[0][0] as { goopspec: GoopSpecConfig };
+		const patch = firstConfigPatch(updateConfig);
 		expect(patch.goopspec).toEqual({
 			memoryEnabled: true,
 			defaultModel: "existing/model",
@@ -218,7 +227,7 @@ describe("saveGoopspecConfig", () => {
 			agentThinkingBudgets: { executorLow: 2048 },
 		});
 
-		const patch = updateConfig.mock.calls[0][0] as { goopspec: GoopSpecConfig };
+		const patch = firstConfigPatch(updateConfig);
 		expect(patch.goopspec.agentModels).toEqual({
 			orchestrator: "existing/orch",
 			executorLow: "new/low",
