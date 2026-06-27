@@ -30,7 +30,6 @@
   import FileTree from './files/FileTree.svelte';
   import WorkspaceSwitcher from './WorkspaceSwitcher.svelte';
   import SettingsButton from './settings/SettingsButton.svelte';
-  import SettingsPanel from './settings/SettingsPanel.svelte';
   import ConnectionStatus from './ConnectionStatus.svelte';
 
   // T10.3 SEAM: overlays + keyboard wiring mounted here (they self-register via
@@ -131,14 +130,6 @@
       layoutStore.setMobileView('chat');
       layoutStore.setFilePanel(false);
     }
-  }
-
-  function openSettings(): void {
-    ui.settingsOpen = true;
-  }
-
-  function closeSettings(): void {
-    ui.settingsOpen = false;
   }
 
   function closeAddProject(): void {
@@ -272,7 +263,7 @@
     >
       <div class="chat-topbar">
         <span class="topbar-spacer"></span>
-        <SettingsButton onclick={openSettings} />
+        <SettingsButton />
         <button
           type="button"
           class="chrome-btn"
@@ -390,7 +381,7 @@
 
       <span class="topbar-spacer"></span>
 
-      <SettingsButton onclick={openSettings} />
+      <SettingsButton />
 
       {#if !filePanelInline}
         <button
@@ -530,7 +521,6 @@
 {/if}
 
 <!-- Global overlays -->
-<SettingsPanel open={ui.settingsOpen} onclose={closeSettings} />
 {#if ui.addProjectOpen}
   <AddProjectPicker
     available={projects.unopenedAvailable()}

@@ -129,7 +129,7 @@
   }
 
   function openSettings(): void {
-    ui.settingsOpen = true;
+    void goto('/settings/server');
   }
 </script>
 

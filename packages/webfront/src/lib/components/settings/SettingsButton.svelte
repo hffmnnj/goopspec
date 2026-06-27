@@ -1,13 +1,11 @@
 <script lang="ts">
+  import { goto } from '$app/navigation';
   import { HugeiconsIcon } from '@hugeicons/svelte';
   import { Settings01Icon } from '@hugeicons/core-free-icons';
 
-  interface SettingsButtonProps {
-    /** Invoked when the button is activated. Wire to open the settings panel. */
-    onclick?: () => void;
+  function openSettings(): void {
+    void goto('/settings');
   }
-
-  let { onclick }: SettingsButtonProps = $props();
 </script>
 
 <button
@@ -15,7 +13,7 @@
   class="settings-button"
   aria-label="Open settings"
   title="Settings"
-  {onclick}
+  onclick={openSettings}
 >
   <HugeiconsIcon icon={Settings01Icon} size={18} color="currentColor" strokeWidth={1.5} />
 </button>

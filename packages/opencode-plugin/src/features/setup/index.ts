@@ -28,6 +28,9 @@ import { CURRENT_SCHEMA_VERSION } from "../db/migrations.js";
 
 const CONFIG_FILENAME = "config.json";
 
+export const ENFORCEMENT_MODES = ["assist", "warn", "strict"] as const;
+export type EnforcementMode = (typeof ENFORCEMENT_MODES)[number];
+
 /** Default model recommendations per agent role (MH16). */
 export const DEFAULT_MODEL_MAP: Record<AgentRole, string> = {
   orchestrator: "anthropic/claude-opus-4-6",
@@ -53,6 +56,8 @@ export const DEFAULT_MODEL_MAP: Record<AgentRole, string> = {
 export interface GoopConfig {
   projectName?: string;
   defaultModel?: string;
+  enforcement?: EnforcementMode;
+  adlEnabled?: boolean;
   agentModels?: Partial<Record<string, string>>;
   agentThinkingBudgets?: Partial<Record<string, number>>;
   memoryEnabled?: boolean;
@@ -346,6 +351,13 @@ export function normalizeConfig(raw: Record<string, unknown>): GoopConfig {
 
   if (typeof raw.projectName === "string") config.projectName = raw.projectName;
   if (typeof raw.defaultModel === "string") config.defaultModel = raw.defaultModel;
+  if (
+    typeof raw.enforcement === "string" &&
+    (ENFORCEMENT_MODES as readonly string[]).includes(raw.enforcement)
+  ) {
+    config.enforcement = raw.enforcement as EnforcementMode;
+  }
+  if (typeof raw.adlEnabled === "boolean") config.adlEnabled = raw.adlEnabled;
   if (typeof raw.memoryEnabled === "boolean") config.memoryEnabled = raw.memoryEnabled;
   if (typeof raw.gitignoreGoopspec === "boolean") config.gitignoreGoopspec = raw.gitignoreGoopspec;
 

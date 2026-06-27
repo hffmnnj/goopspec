@@ -1,22 +1,12 @@
 import { afterEach, describe, expect, it, mock } from 'bun:test';
-import { readFileSync } from 'node:fs';
 import { copyStartServerCommand, getStartServerCommand } from './server-command.js';
 
-const settingsPanelSource = readFileSync(new URL('./SettingsPanel.svelte', import.meta.url), 'utf8');
-
-describe('SettingsPanel server command helper', () => {
+describe('server-command helpers', () => {
   afterEach(() => {
     delete (globalThis as Record<string, unknown>).navigator;
   });
 
-  it('renders the Start Server copy-command section', () => {
-    expect(settingsPanelSource).toContain('Start Server');
-    expect(settingsPanelSource).toContain('Run this command to start the OpenCode server:');
-    expect(settingsPanelSource).toContain('aria-label="Copy start server command"');
-  });
-
   it('includes the configured server URL port in the command', () => {
-    expect(settingsPanelSource).toContain('Port: {serverPort}');
     expect(getStartServerCommand('http://localhost:5222')).toBe('opencode serve --port 5222');
   });
 
@@ -27,9 +17,7 @@ describe('SettingsPanel server command helper', () => {
       writable: true,
       value: { clipboard: { writeText } },
     });
-
     await copyStartServerCommand('http://localhost:5222');
-
     expect(writeText).toHaveBeenCalledWith('opencode serve --port 5222');
   });
 });
