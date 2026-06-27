@@ -15,6 +15,7 @@ import { projectRoute, sessionRoute } from '$lib/routing/navigation.js';
 import {
   buildRecentProjects,
   buildRecentSessions,
+  buildSetupCards,
   describeConnection,
   isOnboarding,
   newSessionTarget,
@@ -143,4 +144,75 @@ describe('HomePage connection status', () => {
       if (!connected) expect(info.hint ?? info.label).toBeTruthy();
     });
   }
+});
+
+describe('HomePage setup cards', () => {
+  const healthy = {
+    connectionStatus: 'connected' as ConnectionStatus,
+    goopspecConfig: { memoryEnabled: true },
+    voiceError: null,
+  };
+
+  it('shows no cards when every feature is configured', () => {
+    expect(buildSetupCards(healthy)).toEqual([]);
+  });
+
+  it('shows the server card and links to /settings/server when disconnected', () => {
+    const cards = buildSetupCards({ ...healthy, connectionStatus: 'disconnected' });
+    const server = cards.find((c) => c.id === 'server');
+    expect(server?.href).toBe('/settings/server');
+  });
+
+  it('shows the server card for any non-connected status', () => {
+    for (const status of ['connecting', 'error', 'disconnected'] as ConnectionStatus[]) {
+      const cards = buildSetupCards({ ...healthy, connectionStatus: status });
+      expect(cards.some((c) => c.id === 'server')).toBe(true);
+    }
+  });
+
+  it('shows the memory card and links to /settings/goopspec when memory is disabled', () => {
+    const cards = buildSetupCards({ ...healthy, goopspecConfig: { memoryEnabled: false } });
+    const memory = cards.find((c) => c.id === 'memory');
+    expect(memory?.href).toBe('/settings/goopspec');
+  });
+
+  it('shows the goopspec card and links to /settings/goopspec when config failed to load', () => {
+    const cards = buildSetupCards({ ...healthy, goopspecConfig: null });
+    const goopspec = cards.find((c) => c.id === 'goopspec');
+    expect(goopspec?.href).toBe('/settings/goopspec');
+    // The memory card must not also appear when the whole config is unreadable.
+    expect(cards.some((c) => c.id === 'memory')).toBe(false);
+  });
+
+  it('withholds config-dependent cards while config is still loading', () => {
+    const cards = buildSetupCards({ ...healthy, goopspecConfig: undefined });
+    expect(cards.some((c) => c.id === 'memory' || c.id === 'goopspec')).toBe(false);
+  });
+
+  it('still shows the server card while config is loading', () => {
+    const cards = buildSetupCards({
+      connectionStatus: 'disconnected',
+      goopspecConfig: undefined,
+      voiceError: null,
+    });
+    expect(cards.map((c) => c.id)).toEqual(['server']);
+  });
+
+  it('shows the voice card and links to /settings/voice only when unsupported', () => {
+    expect(buildSetupCards({ ...healthy, voiceError: 'unsupported' }).find((c) => c.id === 'voice')?.href).toBe(
+      '/settings/voice'
+    );
+    expect(buildSetupCards({ ...healthy, voiceError: 'permission-denied' }).some((c) => c.id === 'voice')).toBe(
+      false
+    );
+  });
+
+  it('surfaces every degraded feature at once', () => {
+    const cards = buildSetupCards({
+      connectionStatus: 'disconnected',
+      goopspecConfig: { memoryEnabled: false },
+      voiceError: 'unsupported',
+    });
+    expect(cards.map((c) => c.id)).toEqual(['server', 'memory', 'voice']);
+  });
 });
