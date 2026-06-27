@@ -15,12 +15,31 @@
 /** High-level voice-capture lifecycle. */
 export type VoiceStatus = 'idle' | 'loading' | 'recording' | 'transcribing' | 'error';
 
-/** Fatal error categories surfaced to the user; `null` when there is no error. */
-export type VoiceError = 'permission-denied' | 'model-load-failed' | 'unsupported' | null;
+/**
+ * Fatal error categories surfaced to the user; `null` when there is no error.
+ *
+ * The error is classified by the failing pipeline stage so the message is
+ * actionable: VAD initialisation, STT model load/download, or transcription.
+ * `model-load-failed` is retained as a generic fallback for the rare case a
+ * failure can't be attributed to a specific stage.
+ */
+export type VoiceError =
+  | 'permission-denied'
+  | 'vad-load-failed'
+  | 'stt-load-failed'
+  | 'transcription-failed'
+  | 'model-load-failed'
+  | 'unsupported'
+  | null;
 
 const ERROR_MESSAGES: Record<NonNullable<VoiceError>, string> = {
   'permission-denied':
     'Microphone access denied. Please allow microphone access in browser settings.',
+  'vad-load-failed':
+    'Voice activity detection failed to initialize. Check browser console for details.',
+  'stt-load-failed':
+    'Speech recognition model failed to load. This may be a download issue — try again.',
+  'transcription-failed': 'Transcription failed. Please try speaking again.',
   'model-load-failed': 'Voice model failed to load. Please try again.',
   unsupported: 'Voice input is not supported in this browser.',
 };

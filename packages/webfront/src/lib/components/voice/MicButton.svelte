@@ -46,13 +46,23 @@
         onTranscript(clean);
       }
       voice.setStatus(vad?.listening ? 'recording' : 'idle');
-    } catch {
+    } catch (err) {
+      console.error('[Voice] transcription failed:', err);
       // A model-load/transcription failure shouldn't kill an active session;
-      // surface the error only when the VAD is no longer listening.
+      // surface the error only when the VAD is no longer listening. Distinguish
+      // an STT model download/load failure from a runtime transcription error.
+      const message = err instanceof Error ? err.message.toLowerCase() : '';
       if (vad?.listening) {
         voice.setStatus('recording');
+      } else if (
+        message.includes('load') ||
+        message.includes('model') ||
+        message.includes('download') ||
+        message.includes('pipeline')
+      ) {
+        voice.setError('stt-load-failed');
       } else {
-        voice.setError('model-load-failed');
+        voice.setError('transcription-failed');
       }
     }
   }
@@ -60,7 +70,9 @@
   function classifyStartError(error: unknown): NonNullable<VoiceError> {
     const name = error instanceof Error ? error.name : '';
     if (name === 'NotAllowedError' || name === 'SecurityError') return 'permission-denied';
-    return 'model-load-failed';
+    // Everything else on the start path is a VAD-level failure: dynamic import,
+    // ONNX/WASM/ORT asset load, or `MicVAD.new`/`vad.start()`.
+    return 'vad-load-failed';
   }
 
   async function startRecording(): Promise<void> {
@@ -87,6 +99,7 @@
       await vad.start();
       voice.setStatus('recording');
     } catch (error) {
+      console.error('[Voice] VAD start failed:', error);
       await teardown();
       voice.setError(classifyStartError(error));
     }
