@@ -9,6 +9,10 @@ export function sessionRoute(project: Pick<Project, 'worktree'>, sessionId: stri
   return `${projectRoute(project)}/session/${encodeURIComponent(sessionId)}`;
 }
 
+export function projectSettingsRoute(project: Pick<Project, 'worktree'>): string {
+  return `${projectRoute(project)}/settings`;
+}
+
 export function needsNavigation(currentPathname: string, targetPathname: string): boolean {
   return currentPathname !== targetPathname;
 }
