@@ -24,7 +24,6 @@ export { default as FileSearch } from './components/files/FileSearch.svelte';
 export { default as FileTree } from './components/files/FileTree.svelte';
 export { default as FileTreeNode } from './components/files/FileTreeNode.svelte';
 export { default as SettingsButton } from './components/settings/SettingsButton.svelte';
-export { default as SettingsPanel } from './components/settings/SettingsPanel.svelte';
 export { default as ProjectRail } from './components/sessions/ProjectRail.svelte';
 export { default as SessionCard } from './components/sessions/SessionCard.svelte';
 export { default as SessionSearch } from './components/sessions/SessionSearch.svelte';
