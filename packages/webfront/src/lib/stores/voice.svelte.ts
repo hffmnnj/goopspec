@@ -73,7 +73,7 @@ class VoiceStore {
       case 'transcribing':
         return 'Transcribing speech';
       case 'loading':
-        return 'Loading voice model';
+        return 'Loading speech model';
       default:
         return 'Start voice input';
     }
@@ -91,7 +91,7 @@ class VoiceStore {
   get announcement(): string {
     switch (this.status) {
       case 'loading':
-        return 'Loading voice model…';
+        return 'Loading speech model…';
       case 'recording':
         return 'Listening…';
       case 'transcribing':

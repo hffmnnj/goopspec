@@ -1,7 +1,7 @@
 <script lang="ts">
   import { HugeiconsIcon } from '@hugeicons/svelte';
   import { Mic01Icon, Loading03Icon, AlertCircleIcon } from '@hugeicons/core-free-icons';
-  import { createSttService, type SttService } from '$lib/voice/stt.js';
+  import { createSttService, type SttError, type SttService } from '$lib/voice/stt.js';
   import { voice, type VoiceError } from '$lib/stores/voice.svelte.js';
 
   interface MicButtonProps {
@@ -32,8 +32,25 @@
   );
 
   function ensureStt(): SttService {
-    if (!stt) stt = createSttService();
+    if (!stt) {
+      stt = createSttService();
+      stt.onProgress((status, _progress, message) => {
+        const progressText = (message ?? status).toLowerCase();
+        if (
+          voice.status === 'transcribing' &&
+          (progressText.includes('download') ||
+            progressText.includes('initializ') ||
+            progressText.includes('loading'))
+        ) {
+          voice.setStatus('loading');
+        }
+      });
+    }
     return stt;
+  }
+
+  function getSttErrorStage(error: unknown): SttError['stage'] {
+    return error instanceof Error ? (error as SttError).stage : undefined;
   }
 
   async function handleSpeechEnd(audio: Float32Array): Promise<void> {
@@ -51,9 +68,14 @@
       // A model-load/transcription failure shouldn't kill an active session;
       // surface the error only when the VAD is no longer listening. Distinguish
       // an STT model download/load failure from a runtime transcription error.
+      const stage = getSttErrorStage(err);
       const message = err instanceof Error ? err.message.toLowerCase() : '';
       if (vad?.listening) {
         voice.setStatus('recording');
+      } else if (stage === 'model-load') {
+        voice.setError('stt-load-failed');
+      } else if (stage === 'transcription') {
+        voice.setError('transcription-failed');
       } else if (
         message.includes('load') ||
         message.includes('model') ||

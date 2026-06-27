@@ -10,10 +10,10 @@
  *   { type: 'transcribe', id: number, audio: Float32Array }  // 16kHz mono
  *
  * Message protocol (worker → main):
- *   { type: 'progress', status: string, progress?: number }
+ *   { type: 'progress', id?: number, status: string, message?: string, progress?: number }
  *   { type: 'ready', device: 'webgpu' | 'wasm' }
  *   { type: 'transcript', id: number, text: string }
- *   { type: 'error', id?: number, message: string }
+ *   { type: 'error', id?: number, message: string, stage: 'model-load' | 'transcription' }
  *
  * This module is self-contained — it has no imports from the rest of the app so
  * it bundles cleanly as a module worker (`new Worker(url, { type: 'module' })`).
@@ -35,13 +35,21 @@ type SttDevice = 'webgpu' | 'wasm';
 /** Inbound message shapes the worker understands. */
 type InboundMessage = { type: 'transcribe'; id: number; audio: Float32Array };
 
+type ErrorStage = 'model-load' | 'transcription';
+
+type OutboundMessage =
+  | { type: 'progress'; id?: number; status: string; message?: string; progress?: number }
+  | { type: 'ready'; device: SttDevice }
+  | { type: 'transcript'; id: number; text: string }
+  | { type: 'error'; id?: number; message: string; stage: ErrorStage };
+
 env.useBrowserCache = true;
 env.allowLocalModels = false;
 
 let asrPromise: Promise<AutomaticSpeechRecognitionPipeline> | null = null;
 let activeDevice: SttDevice | null = null;
 
-function post(message: unknown, transfer?: Transferable[]): void {
+function post(message: OutboundMessage, transfer?: Transferable[]): void {
   if (transfer && transfer.length > 0) {
     (self as unknown as Worker).postMessage(message, transfer);
   } else {
@@ -62,7 +70,12 @@ function hasWebGpu(): boolean {
 function reportProgress(info: ProgressInfo): void {
   if (info.status === 'progress') {
     const ratio = typeof info.progress === 'number' ? info.progress / 100 : undefined;
-    post({ type: 'progress', status: `Downloading ${info.file ?? 'model'}`, progress: ratio });
+    post({
+      type: 'progress',
+      status: `Downloading ${info.file ?? 'model'}`,
+      message: 'Downloading speech model...',
+      progress: ratio,
+    });
   } else if (info.status === 'ready') {
     post({ type: 'progress', status: 'Model ready', progress: 1 });
   } else if (info.status === 'initiate') {
@@ -72,7 +85,12 @@ function reportProgress(info: ProgressInfo): void {
 
 /** Build the ASR pipeline on a specific backend device. */
 async function build(device: SttDevice): Promise<AutomaticSpeechRecognitionPipeline> {
-  post({ type: 'progress', status: `Initializing (${device})`, progress: 0 });
+  post({
+    type: 'progress',
+    status: `Initializing (${device})`,
+    message: 'Downloading speech model...',
+    progress: 0,
+  });
   const asr = await pipeline('automatic-speech-recognition', MODEL_ID, {
     device,
     dtype: 'fp32',
@@ -113,9 +131,21 @@ function loadPipeline(): Promise<AutomaticSpeechRecognitionPipeline> {
 
 /** Run transcription for one audio buffer and report the result. */
 async function handleTranscribe(message: InboundMessage): Promise<void> {
+  let asr: AutomaticSpeechRecognitionPipeline;
   try {
-    const asr = await loadPipeline();
-    post({ type: 'progress', status: 'Transcribing', progress: 1 });
+    asr = await loadPipeline();
+  } catch (error) {
+    post({
+      type: 'error',
+      id: message.id,
+      message: error instanceof Error ? error.message : 'Speech model failed to load',
+      stage: 'model-load',
+    });
+    return;
+  }
+
+  try {
+    post({ type: 'progress', id: message.id, status: 'Transcribing', progress: 1 });
     const output = await asr(message.audio);
     const text = Array.isArray(output)
       ? output.map((chunk) => chunk.text).join(' ').trim()
@@ -126,6 +156,7 @@ async function handleTranscribe(message: InboundMessage): Promise<void> {
       type: 'error',
       id: message.id,
       message: error instanceof Error ? error.message : 'Transcription failed',
+      stage: 'transcription',
     });
   }
 }
