@@ -2,16 +2,41 @@ import type { OpenCodeClient } from "./types.js";
 
 export type ConfigSource = "built-in" | "global" | "internal" | "project";
 
+/**
+ * Per-project override block stored under the `projects` namespace.
+ *
+ * The plugin `GoopConfig` is a flat, repo-wide shape with no per-project
+ * scoping. To support a per-project Settings page (MH3) without a plugin-side
+ * schema change, project-scoped overrides are persisted under
+ * `projects[projectId]` inside the same `goopspec` config namespace. Project
+ * values win over the repo-wide values when loading for a given project.
+ */
+export interface ProjectScopedConfig {
+	/** Default agent id for this project (falls back to global default). */
+	defaultAgent?: string;
+	/** Per-role model routing overrides scoped to this project. */
+	agentModels?: Record<string, string>;
+	/** Per-role thinking-budget overrides scoped to this project. */
+	agentThinkingBudgets?: Record<string, number>;
+}
+
 /** Mirrors the plugin GoopConfig interface. */
 export interface GoopSpecConfig {
 	projectName?: string;
 	defaultModel?: string;
+	/** Repo-wide default agent id (global default agent selection). */
+	defaultAgent?: string;
 	agentModels?: Record<string, string>;
 	agentThinkingBudgets?: Record<string, number>;
 	memoryEnabled?: boolean;
 	gitignoreGoopspec?: boolean;
 	enforcement?: "assist" | "warn" | "strict";
 	adlEnabled?: boolean;
+	/**
+	 * Per-project override blocks keyed by project id. Read/written by the
+	 * `/[project]/settings` pages; ignored by the flat plugin GoopConfig.
+	 */
+	projects?: Record<string, ProjectScopedConfig>;
 }
 
 export interface SourcedValue<T> {
@@ -51,6 +76,7 @@ export function normalizeRaw(raw: Record<string, unknown>): GoopSpecConfig {
 	const cfg: GoopSpecConfig = {};
 	if (typeof raw.projectName === "string") cfg.projectName = raw.projectName;
 	if (typeof raw.defaultModel === "string") cfg.defaultModel = raw.defaultModel;
+	if (typeof raw.defaultAgent === "string") cfg.defaultAgent = raw.defaultAgent;
 	if (typeof raw.memoryEnabled === "boolean")
 		cfg.memoryEnabled = raw.memoryEnabled;
 	if (typeof raw.gitignoreGoopspec === "boolean")
@@ -81,7 +107,43 @@ export function normalizeRaw(raw: Record<string, unknown>): GoopSpecConfig {
 			if (typeof v === "number") cfg.agentThinkingBudgets[k] = v;
 		}
 	}
+	if (raw.projects && typeof raw.projects === "object") {
+		cfg.projects = {};
+		for (const [projectId, block] of Object.entries(
+			raw.projects as Record<string, unknown>,
+		)) {
+			if (block && typeof block === "object") {
+				cfg.projects[projectId] = normalizeProjectScoped(
+					block as Record<string, unknown>,
+				);
+			}
+		}
+	}
 	return cfg;
+}
+
+function normalizeProjectScoped(
+	raw: Record<string, unknown>,
+): ProjectScopedConfig {
+	const block: ProjectScopedConfig = {};
+	if (typeof raw.defaultAgent === "string") block.defaultAgent = raw.defaultAgent;
+	if (raw.agentModels && typeof raw.agentModels === "object") {
+		block.agentModels = {};
+		for (const [k, v] of Object.entries(
+			raw.agentModels as Record<string, unknown>,
+		)) {
+			if (typeof v === "string") block.agentModels[k] = v;
+		}
+	}
+	if (raw.agentThinkingBudgets && typeof raw.agentThinkingBudgets === "object") {
+		block.agentThinkingBudgets = {};
+		for (const [k, v] of Object.entries(
+			raw.agentThinkingBudgets as Record<string, unknown>,
+		)) {
+			if (typeof v === "number") block.agentThinkingBudgets[k] = v;
+		}
+	}
+	return block;
 }
 
 // ---- Public API -----------------------------------------------------------
@@ -186,6 +248,207 @@ export async function saveGoopspecConfig(
 	};
 
 	await client.updateConfig({ goopspec: merged });
+}
+
+// ---- Project-scoped config (MH3) ------------------------------------------
+
+/**
+ * Merged config for a single project: project-level overrides
+ * (`projects[projectId]`) layered over the repo-wide merged config.
+ */
+export interface MergedProjectConfig extends MergedGoopSpecConfig {
+	/** The project this view is scoped to. */
+	projectId: string;
+	/** Effective default agent: project override > global > undefined. */
+	defaultAgent?: string;
+	/** Source of the winning default-agent value. */
+	defaultAgentSource: ConfigSource;
+}
+
+/**
+ * Load config scoped to a project. Effective values resolve in the order
+ * project override -> repo-wide config -> built-in. `agentModelSources`
+ * reports "project" for roles overridden in the project block.
+ */
+export async function loadProjectGoopspecConfig(
+	client: OpenCodeClient,
+	projectId: string,
+): Promise<MergedProjectConfig> {
+	const base = await loadMergedGoopspecConfig(client);
+	const projectBlock = base.raw.projects?.[projectId] ?? {};
+
+	const mergedAgentModels =
+		base.raw.agentModels || projectBlock.agentModels
+			? {
+					...(base.raw.agentModels ?? {}),
+					...(projectBlock.agentModels ?? {}),
+				}
+			: undefined;
+	const mergedBudgets =
+		base.raw.agentThinkingBudgets || projectBlock.agentThinkingBudgets
+			? {
+					...(base.raw.agentThinkingBudgets ?? {}),
+					...(projectBlock.agentThinkingBudgets ?? {}),
+				}
+			: undefined;
+
+	const raw: GoopSpecConfig = {
+		...base.raw,
+		agentModels: mergedAgentModels,
+		agentThinkingBudgets: mergedBudgets,
+	};
+
+	// Roles present in the project block win and are marked "project".
+	const agentModelSources: Record<string, ConfigSource> = {
+		...base.agentModelSources,
+	};
+	for (const role of Object.keys(projectBlock.agentModels ?? {})) {
+		agentModelSources[role] = "project";
+	}
+
+	const defaultAgent = projectBlock.defaultAgent ?? base.raw.defaultAgent;
+	const defaultAgentSource: ConfigSource = projectBlock.defaultAgent
+		? "project"
+		: base.raw.defaultAgent
+			? base.sources.defaultAgent ?? "internal"
+			: "built-in";
+
+	return {
+		projectId,
+		raw,
+		sources: base.sources,
+		agentModelSources,
+		defaultAgent,
+		defaultAgentSource,
+	};
+}
+
+/**
+ * Persist project-scoped overrides under `projects[projectId]`. Only the
+ * supplied keys are written; existing project and namespace values are
+ * preserved via deep merge.
+ */
+export async function saveProjectGoopspecConfig(
+	client: OpenCodeClient,
+	projectId: string,
+	updates: ProjectScopedConfig,
+): Promise<void> {
+	const current = await client.getConfig();
+	const existingGoopspec =
+		(current.goopspec as GoopSpecConfig | undefined) ?? {};
+	const existingProjects = existingGoopspec.projects ?? {};
+	const existingBlock = existingProjects[projectId] ?? {};
+
+	const mergedBlock: ProjectScopedConfig = {
+		...existingBlock,
+		...updates,
+		agentModels:
+			updates.agentModels !== undefined
+				? { ...(existingBlock.agentModels ?? {}), ...updates.agentModels }
+				: existingBlock.agentModels,
+		agentThinkingBudgets:
+			updates.agentThinkingBudgets !== undefined
+				? {
+						...(existingBlock.agentThinkingBudgets ?? {}),
+						...updates.agentThinkingBudgets,
+					}
+				: existingBlock.agentThinkingBudgets,
+	};
+
+	const merged: GoopSpecConfig = {
+		...existingGoopspec,
+		projects: { ...existingProjects, [projectId]: mergedBlock },
+	};
+
+	await client.updateConfig({ goopspec: merged });
+}
+
+// ---- Per-project model overrides ------------------------------------------
+//
+// The webfront talks to a single OpenCode server; `updateConfig` is not
+// directory-scoped, so per-project overrides are namespaced INSIDE the goopspec
+// config under `projects[projectPath]`. The key is the decoded project worktree
+// path (see `decodeProjectPath`). This keeps project scope distinct from the
+// global `agentModels` map written by the top-level settings pages.
+
+/** A single project's scoped GoopSpec overrides. */
+export interface ProjectGoopSpecConfig {
+	agentModels?: Record<string, string>;
+}
+
+type ProjectsMap = Record<string, ProjectGoopSpecConfig>;
+
+function readProjectsMap(raw: Record<string, unknown> | undefined): ProjectsMap {
+	const projects = raw?.projects;
+	if (!projects || typeof projects !== "object") return {};
+	const out: ProjectsMap = {};
+	for (const [path, entry] of Object.entries(projects as Record<string, unknown>)) {
+		if (!entry || typeof entry !== "object") continue;
+		const models = (entry as Record<string, unknown>).agentModels;
+		const scoped: ProjectGoopSpecConfig = {};
+		if (models && typeof models === "object") {
+			scoped.agentModels = {};
+			for (const [role, value] of Object.entries(models as Record<string, unknown>)) {
+				if (typeof value === "string") scoped.agentModels[role] = value;
+			}
+		}
+		out[path] = scoped;
+	}
+	return out;
+}
+
+/**
+ * Load the per-project agentModels overrides for a single project path.
+ * Returns an empty map when no project-scoped overrides exist.
+ */
+export async function loadProjectModelOverrides(
+	client: OpenCodeClient,
+	projectPath: string,
+): Promise<Record<string, string>> {
+	const current = await client.getConfig();
+	const goopspec = current.goopspec as Record<string, unknown> | undefined;
+	const projects = readProjectsMap(goopspec);
+	return { ...(projects[projectPath]?.agentModels ?? {}) };
+}
+
+/**
+ * Persist the full set of per-project agentModels overrides for a project,
+ * replacing any previous overrides for that project. Empty/blank values are
+ * dropped so a role reverts to the global default. Other projects are
+ * preserved untouched.
+ */
+export async function saveProjectModelOverrides(
+	client: OpenCodeClient,
+	projectPath: string,
+	agentModels: Record<string, string>,
+): Promise<void> {
+	const current = await client.getConfig();
+	const goopspec = (current.goopspec as Record<string, unknown> | undefined) ?? {};
+	const projects = readProjectsMap(goopspec);
+
+	const cleaned: Record<string, string> = {};
+	for (const [role, value] of Object.entries(agentModels)) {
+		if (typeof value === "string" && value.trim() !== "") cleaned[role] = value;
+	}
+
+	const nextProjects: ProjectsMap = { ...projects };
+	if (Object.keys(cleaned).length === 0) {
+		delete nextProjects[projectPath];
+	} else {
+		nextProjects[projectPath] = { ...nextProjects[projectPath], agentModels: cleaned };
+	}
+
+	await client.updateConfig({
+		goopspec: { ...goopspec, projects: nextProjects },
+	});
+}
+
+/** Remove all per-project overrides for a project, reverting to global defaults. */
+export async function clearProjectModelOverrides(
+	client: OpenCodeClient,
+	projectPath: string,
+): Promise<void> {
+	await saveProjectModelOverrides(client, projectPath, {});
 }
 
 export function toGoopspecJson(config: GoopSpecConfig): string {
