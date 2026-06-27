@@ -363,92 +363,42 @@ export async function saveProjectGoopspecConfig(
 	await client.updateConfig({ goopspec: merged });
 }
 
-// ---- Per-project model overrides ------------------------------------------
-//
-// The webfront talks to a single OpenCode server; `updateConfig` is not
-// directory-scoped, so per-project overrides are namespaced INSIDE the goopspec
-// config under `projects[projectPath]`. The key is the decoded project worktree
-// path (see `decodeProjectPath`). This keeps project scope distinct from the
-// global `agentModels` map written by the top-level settings pages.
-
-/** A single project's scoped GoopSpec overrides. */
-export interface ProjectGoopSpecConfig {
-	agentModels?: Record<string, string>;
-}
-
-type ProjectsMap = Record<string, ProjectGoopSpecConfig>;
-
-function readProjectsMap(raw: Record<string, unknown> | undefined): ProjectsMap {
-	const projects = raw?.projects;
-	if (!projects || typeof projects !== "object") return {};
-	const out: ProjectsMap = {};
-	for (const [path, entry] of Object.entries(projects as Record<string, unknown>)) {
-		if (!entry || typeof entry !== "object") continue;
-		const models = (entry as Record<string, unknown>).agentModels;
-		const scoped: ProjectGoopSpecConfig = {};
-		if (models && typeof models === "object") {
-			scoped.agentModels = {};
-			for (const [role, value] of Object.entries(models as Record<string, unknown>)) {
-				if (typeof value === "string") scoped.agentModels[role] = value;
-			}
-		}
-		out[path] = scoped;
-	}
-	return out;
-}
-
 /**
- * Load the per-project agentModels overrides for a single project path.
- * Returns an empty map when no project-scoped overrides exist.
+ * Replace (not merge) the `agentModels` block for a project. Unlike
+ * {@link saveProjectGoopspecConfig}, which deep-merges and so cannot remove a
+ * role, this rewrites the whole map — required so the models page can drop a
+ * role back to the global default. Blank values are stripped; an empty result
+ * deletes the `agentModels` key while preserving the project's other fields.
  */
-export async function loadProjectModelOverrides(
+export async function replaceProjectAgentModels(
 	client: OpenCodeClient,
-	projectPath: string,
-): Promise<Record<string, string>> {
-	const current = await client.getConfig();
-	const goopspec = current.goopspec as Record<string, unknown> | undefined;
-	const projects = readProjectsMap(goopspec);
-	return { ...(projects[projectPath]?.agentModels ?? {}) };
-}
-
-/**
- * Persist the full set of per-project agentModels overrides for a project,
- * replacing any previous overrides for that project. Empty/blank values are
- * dropped so a role reverts to the global default. Other projects are
- * preserved untouched.
- */
-export async function saveProjectModelOverrides(
-	client: OpenCodeClient,
-	projectPath: string,
+	projectId: string,
 	agentModels: Record<string, string>,
 ): Promise<void> {
 	const current = await client.getConfig();
-	const goopspec = (current.goopspec as Record<string, unknown> | undefined) ?? {};
-	const projects = readProjectsMap(goopspec);
+	const existingGoopspec =
+		(current.goopspec as GoopSpecConfig | undefined) ?? {};
+	const existingProjects = existingGoopspec.projects ?? {};
+	const existingBlock = existingProjects[projectId] ?? {};
 
 	const cleaned: Record<string, string> = {};
 	for (const [role, value] of Object.entries(agentModels)) {
 		if (typeof value === "string" && value.trim() !== "") cleaned[role] = value;
 	}
 
-	const nextProjects: ProjectsMap = { ...projects };
+	const nextBlock: ProjectScopedConfig = { ...existingBlock };
 	if (Object.keys(cleaned).length === 0) {
-		delete nextProjects[projectPath];
+		delete nextBlock.agentModels;
 	} else {
-		nextProjects[projectPath] = { ...nextProjects[projectPath], agentModels: cleaned };
+		nextBlock.agentModels = cleaned;
 	}
 
-	await client.updateConfig({
-		goopspec: { ...goopspec, projects: nextProjects },
-	});
-}
+	const merged: GoopSpecConfig = {
+		...existingGoopspec,
+		projects: { ...existingProjects, [projectId]: nextBlock },
+	};
 
-/** Remove all per-project overrides for a project, reverting to global defaults. */
-export async function clearProjectModelOverrides(
-	client: OpenCodeClient,
-	projectPath: string,
-): Promise<void> {
-	await saveProjectModelOverrides(client, projectPath, {});
+	await client.updateConfig({ goopspec: merged });
 }
 
 export function toGoopspecJson(config: GoopSpecConfig): string {
