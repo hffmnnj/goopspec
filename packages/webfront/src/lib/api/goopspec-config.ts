@@ -80,38 +80,29 @@ async function tryReadJson(
 }
 
 /**
- * Load global GoopSpec config from the OpenCode server's `GET /config`
- * response. The plugin registers agents as "goop-{role}" with their
- * configured model already resolved from ~/.config/opencode/goopspec.json.
- * Strip the prefix to get the canonical role key used by agentModels.
+ * Load global GoopSpec config from `GET /agent`. The GoopSpec plugin
+ * registers agents as "goop-{role}" with their configured model resolved
+ * from ~/.config/opencode/goopspec.json. We strip the prefix and combine
+ * providerID/modelID to reconstruct the canonical agentModels map.
  */
 async function loadGlobalGoopspecConfig(
 	client: OpenCodeClient,
 ): Promise<GoopSpecConfig> {
 	try {
-		const serverConfig = await client.getConfig();
-		// Try explicit goopspec namespace first (populated by PATCH /config)
-		const ns = (serverConfig as Record<string, unknown>).goopspec;
-		if (ns && typeof ns === "object" && !Array.isArray(ns)) {
-			const normalized = normalizeRaw(ns as Record<string, unknown>);
-			if (normalized.agentModels && Object.keys(normalized.agentModels).length > 0) {
-				return normalized;
-			}
-		}
-
-		// Fall back: extract from agents.goop-{role}.model entries
-		const agents = (serverConfig as Record<string, unknown>).agents;
-		if (!agents || typeof agents !== "object" || Array.isArray(agents)) {
-			return {};
-		}
+		const agents = await client.listAgents();
 		const agentModels: Record<string, string> = {};
-		for (const [agentId, agentCfg] of Object.entries(agents as Record<string, unknown>)) {
-			if (agentId.startsWith(AGENT_PREFIX)) {
-				const role = agentId.slice(AGENT_PREFIX.length);
-				const model = typeof (agentCfg as Record<string, unknown>)?.model === "string"
-					? (agentCfg as Record<string, string>).model
-					: undefined;
-				if (model) agentModels[role] = model;
+		for (const agent of agents) {
+			if (!agent.id.startsWith(AGENT_PREFIX)) continue;
+			const role = agent.id.slice(AGENT_PREFIX.length);
+			// The raw agent response spreads all fields; providerID + modelID
+			// are present on the underlying object even if not in the Agent type.
+			const raw = agent as Record<string, unknown>;
+			const modelInfo = raw.model as Record<string, string> | string | undefined;
+			if (typeof modelInfo === "string" && modelInfo) {
+				agentModels[role] = modelInfo;
+			} else if (modelInfo && typeof modelInfo === "object") {
+				const { providerID, modelID } = modelInfo;
+				if (providerID && modelID) agentModels[role] = `${providerID}/${modelID}`;
 			}
 		}
 		return Object.keys(agentModels).length > 0 ? { agentModels } : {};
