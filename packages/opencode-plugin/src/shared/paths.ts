@@ -92,5 +92,6 @@ export function getGlobalConfigPath(): string {
   if (process.env.GOOPSPEC_GLOBAL_CONFIG_PATH) {
     return process.env.GOOPSPEC_GLOBAL_CONFIG_PATH;
   }
-  return join(homedir(), ".config", "opencode", "goopspec.json");
+  const configHome = process.env.XDG_CONFIG_HOME || join(homedir(), ".config");
+  return join(configHome, "opencode", "goopspec.json");
 }

@@ -11,6 +11,7 @@ const EXPECTED_TOOL_KEYS = [
   "goop_adl",
   "goop_checkpoint",
   "goop_setup",
+  "goop_get_global_config",
   "goop_reference",
   "goop_read_db",
   "goop_write_db",
@@ -48,9 +49,9 @@ describe("createTools registry", () => {
 
   afterEach(() => cleanup());
 
-  it("returns exactly 29 tools", () => {
+  it("returns exactly 30 tools", () => {
     const tools = createTools(ctx);
-    expect(Object.keys(tools)).toHaveLength(29);
+    expect(Object.keys(tools)).toHaveLength(30);
   });
 
   it("registers all canonical MCP tool keys", () => {
