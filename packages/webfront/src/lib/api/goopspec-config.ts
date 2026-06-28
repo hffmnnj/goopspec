@@ -56,11 +56,10 @@ export interface MergedGoopSpecConfig {
 }
 
 const CONFIG_PATHS = {
+	global: ".goopspec/global-config.json",
 	internal: ".goopspec/config.json",
 	project: "goopspec.json",
 } as const;
-
-const GLOBAL_CONFIG_PATH = "/opencode/goopspec.json";
 
 async function tryReadJson(
 	client: OpenCodeClient,
@@ -158,7 +157,7 @@ function normalizeProjectScoped(
 export async function loadMergedGoopspecConfig(
 	client: OpenCodeClient,
 ): Promise<MergedGoopSpecConfig> {
-	const globalRaw = await tryReadJson(client, GLOBAL_CONFIG_PATH);
+	const globalRaw = await tryReadJson(client, CONFIG_PATHS.global);
 	const internalRaw = await tryReadJson(client, CONFIG_PATHS.internal);
 	const projectRaw = await tryReadJson(client, CONFIG_PATHS.project);
 

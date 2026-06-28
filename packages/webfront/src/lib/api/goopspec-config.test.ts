@@ -149,7 +149,7 @@ describe("loadMergedGoopspecConfig", () => {
 	it("loads global config as the base layer", async () => {
 		const client = createMockClient();
 		mockReadFile(client, {
-			"/opencode/goopspec.json": JSON.stringify({
+			".goopspec/global-config.json": JSON.stringify({
 				defaultModel: "global/model",
 				memoryEnabled: true,
 			}),
@@ -166,7 +166,7 @@ describe("loadMergedGoopspecConfig", () => {
 	it("overrides global config with internal and project layers", async () => {
 		const client = createMockClient();
 		mockReadFile(client, {
-			"/opencode/goopspec.json": JSON.stringify({
+			".goopspec/global-config.json": JSON.stringify({
 				defaultModel: "global/model",
 				memoryEnabled: true,
 			}),
@@ -205,7 +205,7 @@ describe("loadMergedGoopspecConfig", () => {
 	it("tracks per-role agentModels source with project winning over internal and global", async () => {
 		const client = createMockClient();
 		mockReadFile(client, {
-			"/opencode/goopspec.json": JSON.stringify({
+			".goopspec/global-config.json": JSON.stringify({
 				agentModels: {
 					orchestrator: "global/orch",
 					researcher: "global/researcher",
