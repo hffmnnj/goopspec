@@ -56,10 +56,15 @@ export interface MergedGoopSpecConfig {
 }
 
 const CONFIG_PATHS = {
-	global: ".goopspec/global-config.json",
 	internal: ".goopspec/config.json",
 	project: "goopspec.json",
 } as const;
+
+/**
+ * The GoopSpec plugin prefix on agent IDs registered with OpenCode.
+ * e.g. "goop-orchestrator" → role key "orchestrator"
+ */
+const AGENT_PREFIX = "goop-";
 
 async function tryReadJson(
 	client: OpenCodeClient,
@@ -67,9 +72,51 @@ async function tryReadJson(
 ): Promise<Record<string, unknown> | null> {
 	try {
 		const text = await client.readFile(path);
-		return JSON.parse(text) as Record<string, unknown>;
+		if (!text || Array.isArray(text)) return null;
+		return JSON.parse(text as string) as Record<string, unknown>;
 	} catch {
 		return null;
+	}
+}
+
+/**
+ * Load global GoopSpec config from the OpenCode server's `GET /config`
+ * response. The plugin registers agents as "goop-{role}" with their
+ * configured model already resolved from ~/.config/opencode/goopspec.json.
+ * Strip the prefix to get the canonical role key used by agentModels.
+ */
+async function loadGlobalGoopspecConfig(
+	client: OpenCodeClient,
+): Promise<GoopSpecConfig> {
+	try {
+		const serverConfig = await client.getConfig();
+		// Try explicit goopspec namespace first (populated by PATCH /config)
+		const ns = (serverConfig as Record<string, unknown>).goopspec;
+		if (ns && typeof ns === "object" && !Array.isArray(ns)) {
+			const normalized = normalizeRaw(ns as Record<string, unknown>);
+			if (normalized.agentModels && Object.keys(normalized.agentModels).length > 0) {
+				return normalized;
+			}
+		}
+
+		// Fall back: extract from agents.goop-{role}.model entries
+		const agents = (serverConfig as Record<string, unknown>).agents;
+		if (!agents || typeof agents !== "object" || Array.isArray(agents)) {
+			return {};
+		}
+		const agentModels: Record<string, string> = {};
+		for (const [agentId, agentCfg] of Object.entries(agents as Record<string, unknown>)) {
+			if (agentId.startsWith(AGENT_PREFIX)) {
+				const role = agentId.slice(AGENT_PREFIX.length);
+				const model = typeof (agentCfg as Record<string, unknown>)?.model === "string"
+					? (agentCfg as Record<string, string>).model
+					: undefined;
+				if (model) agentModels[role] = model;
+			}
+		}
+		return Object.keys(agentModels).length > 0 ? { agentModels } : {};
+	} catch {
+		return {};
 	}
 }
 
@@ -157,11 +204,12 @@ function normalizeProjectScoped(
 export async function loadMergedGoopspecConfig(
 	client: OpenCodeClient,
 ): Promise<MergedGoopSpecConfig> {
-	const globalRaw = await tryReadJson(client, CONFIG_PATHS.global);
-	const internalRaw = await tryReadJson(client, CONFIG_PATHS.internal);
-	const projectRaw = await tryReadJson(client, CONFIG_PATHS.project);
+	const [global, internalRaw, projectRaw] = await Promise.all([
+		loadGlobalGoopspecConfig(client),
+		tryReadJson(client, CONFIG_PATHS.internal),
+		tryReadJson(client, CONFIG_PATHS.project),
+	]);
 
-	const global = globalRaw ? normalizeRaw(globalRaw) : {};
 	const internal = internalRaw ? normalizeRaw(internalRaw) : {};
 	const project = projectRaw ? normalizeRaw(projectRaw) : {};
 
