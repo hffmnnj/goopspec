@@ -2,8 +2,10 @@ import { describe, expect, it, mock } from 'bun:test';
 import type { Session } from '$lib/api/types.js';
 import {
   ProjectSessionCache,
+  isActiveSession,
   popoverProjectName,
   recentSessions,
+  sessionHint,
   RECENT_SESSION_LIMIT,
 } from './project-popover.js';
 
@@ -20,6 +22,38 @@ describe('popoverProjectName', () => {
     expect(popoverProjectName('/')).toBe('Untitled project');
     expect(popoverProjectName('')).toBe('Untitled project');
     expect(popoverProjectName(null)).toBe('Untitled project');
+  });
+});
+
+describe('isActiveSession', () => {
+  it('is true only when the ids match', () => {
+    expect(isActiveSession(session('a', '2024-01-01T00:00:00Z'), 'a')).toBe(true);
+    expect(isActiveSession(session('a', '2024-01-01T00:00:00Z'), 'b')).toBe(false);
+  });
+
+  it('is false for null/undefined active ids', () => {
+    expect(isActiveSession(session('a', '2024-01-01T00:00:00Z'), null)).toBe(false);
+    expect(isActiveSession(session('a', '2024-01-01T00:00:00Z'), undefined)).toBe(false);
+  });
+});
+
+describe('sessionHint', () => {
+  it('returns empty when there is nothing to show', () => {
+    expect(sessionHint({})).toBe('');
+    expect(sessionHint({ messageCount: 0 })).toBe('');
+  });
+
+  it('marks sub-sessions', () => {
+    expect(sessionHint({ parentID: 'p1' })).toBe('Sub-session');
+  });
+
+  it('pluralizes the message count', () => {
+    expect(sessionHint({ messageCount: 1 })).toBe('1 message');
+    expect(sessionHint({ messageCount: 5 })).toBe('5 messages');
+  });
+
+  it('joins a sub-session marker with the message count', () => {
+    expect(sessionHint({ parentID: 'p1', messageCount: 3 })).toBe('Sub-session · 3 messages');
   });
 });
 

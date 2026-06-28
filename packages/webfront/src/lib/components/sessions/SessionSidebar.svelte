@@ -25,7 +25,12 @@
     toggleExpanded,
     expandActiveParent,
   } from '$lib/sessions/session-disclosure.js';
-  import { needsNavigation, projectRoute, sessionRoute } from '$lib/routing/navigation.js';
+  import {
+    needsNavigation,
+    projectRoute,
+    projectSettingsRoute,
+    sessionRoute,
+  } from '$lib/routing/navigation.js';
   import type { Project } from '$lib/api/types.js';
 
   interface SessionsLike {
@@ -115,6 +120,21 @@
 
   function handlePopoverSession(project: Project, sessionId: string): void {
     navigate(sessionRoute(project, sessionId));
+  }
+
+  function handlePopoverSettings(project: Project): void {
+    navigate(projectSettingsRoute(project));
+  }
+
+  async function handlePopoverNewSession(project: Project): Promise<void> {
+    // Make the target project active so the session is created in its worktree,
+    // then mirror handleCreate's create-and-navigate flow.
+    if (projectsStore.activeProject?.id !== project.id) {
+      projectsStore.setActiveProject(project);
+    }
+    const created = await store.create();
+    const id = (created as { id?: string } | undefined)?.id;
+    if (id) navigate(sessionRoute(project, id));
   }
 
   async function handleCreate(): Promise<void> {
@@ -221,6 +241,8 @@
       onOpen={handleProjectOpen}
       onClose={handleProjectClose}
       onSelectSession={handlePopoverSession}
+      onOpenSettings={handlePopoverSettings}
+      onNewSession={handlePopoverNewSession}
     />
     <div class="sidebar-main">
   <header class="header">
