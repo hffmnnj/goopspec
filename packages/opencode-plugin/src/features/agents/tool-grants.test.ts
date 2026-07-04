@@ -6,6 +6,11 @@ import { parseAgentMarkdown } from "./index.js";
 
 const AGENTS_DIR = join(import.meta.dirname, "../../../agents");
 
+const MEMORY_TOOL_ALIASES: Record<string, string> = {
+  memory_note: "memory_save",
+  memory_decision: "memory_save",
+};
+
 interface ToolGrantResult {
   agent: string;
   referenced: string[];
@@ -50,7 +55,8 @@ function referencedTools(body: string): string[] {
 }
 
 function isGranted(tool: string, tools: Record<string, boolean>, permission: Record<string, unknown>): boolean {
-  if (tools[tool] === true) return true;
+  const effectiveTool = MEMORY_TOOL_ALIASES[tool] ?? tool;
+  if (tools[effectiveTool] === true) return true;
 
   if (tool === "question") {
     const questionGrant = permission.question;
