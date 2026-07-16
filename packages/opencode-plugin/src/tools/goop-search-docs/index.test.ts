@@ -113,4 +113,42 @@ describe("goop_search_docs tool", () => {
 
     expect(result).toContain("1 result");
   });
+
+  // -----------------------------------------------------------------------
+  // Plural filters
+  // -----------------------------------------------------------------------
+
+  it("filters by doc_types array", async () => {
+    const tool = createGoopSearchDocsTool(ctx);
+    const result = await tool.execute(
+      { query: "sharedneedle", doc_types: ["research", "blueprint"] },
+      toolCtx,
+    );
+
+    expect(result).toContain("**doc_type:** research");
+    expect(result).toContain("**doc_type:** blueprint");
+    expect(result).not.toContain("**doc_type:** chronicle");
+  });
+
+  it("filters by workflow_ids array", async () => {
+    const tool = createGoopSearchDocsTool(ctx);
+    const result = await tool.execute(
+      { query: "sharedneedle", workflow_ids: ["wf-alpha", "wf-gamma"] },
+      toolCtx,
+    );
+
+    expect(result).toContain("**workflow_id:** wf-alpha");
+    expect(result).not.toContain("**workflow_id:** wf-beta");
+  });
+
+  it("filters by section_keys array", async () => {
+    const tool = createGoopSearchDocsTool(ctx);
+    const result = await tool.execute(
+      { query: "sharedneedle", section_keys: ["architecture"] },
+      toolCtx,
+    );
+
+    expect(result).toContain("**section_key:** architecture");
+    expect(result).not.toContain("**section_key:** execution-log");
+  });
 });

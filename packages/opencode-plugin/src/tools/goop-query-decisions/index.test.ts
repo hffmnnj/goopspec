@@ -74,4 +74,67 @@ describe("goop_query_decisions tool", () => {
     expect(result).toContain("Existing tests remain the compatibility gate");
     expect(result.match(/^- \*\*/gm)?.length).toBe(2);
   });
+
+  // -----------------------------------------------------------------------
+  // Batch mode
+  // -----------------------------------------------------------------------
+
+  async function insertDecisionBatch(): Promise<void> {
+    const adlTool = createGoopAdlTool(ctx);
+
+    await adlTool.execute(
+      {
+        action: "append",
+        type: "decision",
+        description: "Rule 2 decision",
+        entry_action: "Added safeguard",
+        rule: 2,
+      },
+      toolCtx,
+    );
+
+    await adlTool.execute(
+      {
+        action: "append",
+        type: "decision",
+        description: "Rule 3 decision",
+        entry_action: "Unblocked issue",
+        rule: 3,
+      },
+      toolCtx,
+    );
+
+    await adlTool.execute(
+      {
+        action: "append",
+        type: "observation",
+        description: "Observation entry",
+        entry_action: "Noted behavior",
+      },
+      toolCtx,
+    );
+  }
+
+  it("filters decisions by array of rules", async () => {
+    await insertDecisionBatch();
+
+    const queryTool = createGoopQueryDecisionsTool(ctx);
+    const result = (await queryTool.execute({ rules: [2, 3] }, toolCtx)) as string;
+
+    expect(result).toContain("Rule 2 decision");
+    expect(result).toContain("Rule 3 decision");
+    expect(result).not.toContain("Observation entry");
+    expect(result.match(/^- \*\*/gm)?.length).toBe(2);
+  });
+
+  it("filters decisions by array of types", async () => {
+    await insertDecisionBatch();
+
+    const queryTool = createGoopQueryDecisionsTool(ctx);
+    const result = (await queryTool.execute({ types: ["decision"] }, toolCtx)) as string;
+
+    expect(result).toContain("Rule 2 decision");
+    expect(result).toContain("Rule 3 decision");
+    expect(result).not.toContain("Observation entry");
+  });
 });
