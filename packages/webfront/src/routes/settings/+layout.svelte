@@ -8,7 +8,6 @@
     CloudServerIcon,
     Settings01Icon,
     AiBrain01Icon,
-    Folder01Icon,
     ArrowLeft02Icon
   } from '@hugeicons/core-free-icons';
 
@@ -25,8 +24,7 @@
     { href: '/settings/voice', label: 'Voice', icon: Mic01Icon },
     { href: '/settings/server', label: 'Server', icon: CloudServerIcon },
     { href: '/settings/goopspec', label: 'GoopSpec', icon: Settings01Icon },
-    { href: '/settings/agents', label: 'Agents', icon: AiBrain01Icon },
-    { href: '/settings/project', label: 'Project', icon: Folder01Icon }
+    { href: '/settings/agents', label: 'Agents', icon: AiBrain01Icon }
   ];
 
   /** Current pathname, reactive to navigation. */
