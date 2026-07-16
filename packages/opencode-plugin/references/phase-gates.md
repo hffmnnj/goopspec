@@ -41,6 +41,10 @@ Specification must be locked before execution.
 
 All bypasses must be logged via `goop_adl`.
 
+### Quick Mode Self-Edit Carve-Out
+
+`/goop-quick` mode permits the orchestrator to make narrow self-edits without delegating, but only when ALL five conditions in the "Self-Edit Authority" section of `commands/goop-quick.md` are met (single file, `.goopspec/` or config-root scope, under 5 lines, no logic implications, quick-mode-only). This does **not** weaken or create an exception to the Spec gate, the Acceptance gate, or the general "orchestrator never implements" rule for anything beyond those five conditions. The Spec gate (`spec_locked == true`) and Acceptance gate (explicit user confirmation) remain absolute and never bypassable.
+
 ## Autopilot Behavior
 
 Autopilot and lazy-autopilot reduce human checkpoints but do not relax rules.

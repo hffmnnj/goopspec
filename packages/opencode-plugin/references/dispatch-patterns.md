@@ -21,6 +21,8 @@ The orchestrator coordinates and delegates. It never implements.
 | "Quickly fix" anything inline | No exceptions |
 | Paste implementation logic into a message | Still writing code |
 
+**Narrow exception — Quick mode self-edit only:** The orchestrator may make trivial self-edits without delegating when ALL five conditions in `commands/goop-quick.md` (Self-Edit Authority) are met: single file, `.goopspec/` or config-root scope only, under 5 lines, no logic implications, and only inside `/goop-quick` mode. Outside those five conditions, every entry in this table remains fully in force — the orchestrator never writes/edit source code, never creates TS/JS files, never "quickly fixes" anything inline, and never implements.
+
 ### Permitted Orchestrator Actions
 
 - Read any file for context.

@@ -165,7 +165,7 @@ Required sections: `STATUS`, `SUMMARY`, `ARTIFACTS`, `VERIFICATION`, `NEXT`.
 
 | Mode | Use | Flow |
 |------|-----|------|
-| **quick** | Small fix, single file, \u003c 30 min | Discuss → Execute → Accept |
+| **quick** | Small fix, single file, \u003c 30 min; orchestrator may self-edit trivial config/docs per the 5-condition test in `commands/goop-quick.md` (Self-Edit Authority) | Discuss → Execute → Accept |
 | **standard** | Feature or moderate work | Full 5-phase workflow |
 | **comprehensive** | Complex system | Full workflow + deep research + parallel agents |
 | **milestone** | Major release | Multiple cycles + archive + git tag |
