@@ -150,7 +150,7 @@ describe("plugin entrypoint", () => {
 
     const v2Tools: Record<string, V2ToolLike> = {};
     const v2Ctx = {
-      options: {},
+      options: { directory: testDir },
       tool: {
         transform: async (callback: (draft: { add: (tool: V2ToolLike) => void }) => void) => {
           const draft = {
@@ -188,13 +188,66 @@ describe("plugin entrypoint", () => {
     const v2Text = (v2StatusOutput as { content: { text: string }[] }).content[0]?.text;
     expect(typeof v2Text).toBe("string");
     expect(v2Text).toContain("GoopSpec");
-    expect(v2Text).toContain("**Project:** goopspec");
-    expect(v2Text).toContain("**Workflow:** opencode-v2-plugin-support");
+    expect(v2Text).toContain("**Project:**");
+    expect(v2Text).toContain("**Workflow:**");
 
     const v1Text = v1StatusOutput as string;
     expect(typeof v1Text).toBe("string");
     expect(v1Text).toContain("GoopSpec");
     expect(v1Text).toContain("**Project:**");
     expect(v1Text).toContain("**Workflow:**");
+    expect(v1Text).toEqual(v2Text);
+  });
+
+  it("V2 setup registers hooks and system-transform output matches V1", async () => {
+    interface V2ToolLike {
+      name: string;
+      execute: (input: unknown, context: unknown) => Promise<unknown>;
+    }
+
+    const v2Tools: Record<string, V2ToolLike> = {};
+    let v2SystemHook: ((event: { system: string[] }) => void | Promise<void>) | undefined;
+    const v2Ctx = {
+      options: { directory: testDir },
+      tool: {
+        transform: async (callback: (draft: { add: (tool: V2ToolLike) => void }) => void) => {
+          const draft = {
+            add(tool: V2ToolLike) {
+              v2Tools[tool.name] = tool;
+            },
+          };
+          callback(draft);
+        },
+      },
+      session: {
+        hook: async (
+          _event: "request",
+          callback: (event: { system: string[] }) => void | Promise<void>,
+        ) => {
+          v2SystemHook = callback;
+        },
+      },
+    } as unknown as Parameters<typeof plugin.setup>[0];
+
+    await plugin.setup(v2Ctx);
+
+    expect(v2SystemHook).toBeDefined();
+    expect(typeof v2SystemHook).toBe("function");
+
+    const v1Input = createMockPluginInput(testDir);
+    const v1Result = await plugin(v1Input);
+    const v1System: string[] = [];
+    await v1Result["experimental.chat.system.transform"]?.(
+      { model: {} as never },
+      { system: v1System },
+    );
+
+    const v2System: string[] = [];
+    await v2SystemHook?.({ system: v2System });
+
+    expect(v2System).toHaveLength(1);
+    expect(v2System).toEqual(v1System);
+    expect(v2System[0]).toContain("<goopspec_state>");
+    expect(v2System[0]).toContain("workflow: default");
   });
 });

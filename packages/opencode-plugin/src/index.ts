@@ -7,6 +7,7 @@
 
 import { createPluginContextV2 } from "./core/context-v2.js";
 import { createPluginContext } from "./core/context.js";
+import { registerHooksV2 } from "./core/hooks-v2.js";
 import type { Plugin } from "./core/sdk-compat.js";
 import { registerToolsV2 } from "./core/tools-v2.js";
 import { V2Plugin, type V2RuntimeContext } from "./core/v2-compat.js";
@@ -35,6 +36,7 @@ const v2Plugin = V2Plugin.define({
       const pluginCtx = await createPluginContextV2(ctx);
       await syncGlobalConfigSidecar(pluginCtx.sdk.directory);
       await registerToolsV2(ctx, pluginCtx);
+      await registerHooksV2(ctx, pluginCtx);
     } catch (error) {
       logError("V2 plugin initialization failed", error);
     }
