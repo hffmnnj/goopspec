@@ -67,7 +67,7 @@ Do not pass full conversation history, verbose logs, unrelated files, or complet
 | Simple config/mechanical | `goop-executor-low` | — |
 | Business logic | `goop-executor-medium` | — |
 | Complex/architectural | `goop-executor-high` | — |
-| UI/UX implementation | `goop-executor-frontend` | — |
+| UI/UX implementation | `goop-executor-frontend-medium` | `goop-executor-frontend-low` / `goop-executor-frontend-high` |
 | Research | `goop-researcher` | `goop-explorer` |
 | Exploration | `goop-explorer` | — |
 | Verification | `goop-verifier` | `goop-tester` |
@@ -81,6 +81,7 @@ Do not pass full conversation history, verbose logs, unrelated files, or complet
 |------------|------|----------------|
 | Simple | `goop-executor-low` | 40% |
 | Standard | `goop-executor-medium` | 60% |
+| Standard UI | `goop-executor-frontend-medium` | 60% |
 | Complex | `goop-executor-high` | 80% |
 | Critical | `goop-executor-high` + thinking | 90% |
 
@@ -195,7 +196,8 @@ Default model assignments optimize cost and quality per task.
 | `goop-executor-high` | strong code | Critical paths, architecture-sensitive code |
 | `goop-executor-medium` | balanced code | Business logic, refactors |
 | `goop-executor-low` | fast code | Mechanical edits, scaffolding |
-| `goop-executor-frontend` | quality reasoning | UI/UX, component architecture |
+| `goop-executor-frontend-medium` | balanced code | Standard UI component work |
+| `goop-executor-frontend-high` | quality reasoning | Design-sensitive UI, component architecture |
 | `goop-researcher` | broad knowledge | Deep research, synthesis |
 | `goop-explorer` | fast lightweight | Codebase mapping, pattern detection |
 | `goop-verifier` | strong code | Spec compliance, security audit |

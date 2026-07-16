@@ -97,6 +97,7 @@ Route by task intent:
 | Business logic / utilities / tests / refactoring | `goop-executor-medium` |
 | Architecture / complex algorithms / security-sensitive | `goop-executor-high` |
 | UI mechanical (markup, simple styling, copy) | `goop-executor-frontend-low` |
+| UI moderate component work (not purely mechanical, not deep design judgment) | `goop-executor-frontend-medium` |
 | UI design-sensitive (components, UX, accessibility, polish) | `goop-executor-frontend-high` |
 | Research / compare options | `goop-researcher` (+ `goop-explorer` in parallel if useful) |
 | Codebase mapping / pattern detection | `goop-explorer` |

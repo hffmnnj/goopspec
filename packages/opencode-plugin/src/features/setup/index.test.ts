@@ -266,6 +266,7 @@ describe("setup feature", () => {
         "executor-medium",
         "executor-high",
         "executor-frontend-low",
+        "executor-frontend-medium",
         "executor-frontend-high",
         "planner",
         "verifier",
@@ -552,6 +553,7 @@ describe("setup feature", () => {
         },
       });
       expect(result.agentModels?.["executor-frontend-high"]).toBe("anthropic/claude-opus-4-6");
+      expect(result.agentModels?.["executor-frontend-medium"]).toBe("anthropic/claude-opus-4-6");
       expect(result.agentModels?.["executor-frontend-low"]).toBe("anthropic/claude-opus-4-6");
       // The partial name should not appear as a key
       expect(result.agentModels?.["executor-frontend"]).toBeUndefined();

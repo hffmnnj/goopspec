@@ -126,7 +126,9 @@ Assign every task an executor tier:
 - `goop-executor-low` — mechanical, bounded edits.
 - `goop-executor-medium` — business logic inside existing architecture.
 - `goop-executor-high` — architecture-sensitive or security-sensitive work.
-- `goop-executor-frontend` — UI/UX work.
+- `goop-executor-frontend-low` — UI mechanical tasks (markup, simple styling, copy).
+- `goop-executor-frontend-medium` — standard component work, UI logic/state wiring, moderate refactors within existing patterns.
+- `goop-executor-frontend-high` — design-sensitive UI work (components, UX, accessibility, polish).
 
 Split mixed frontend/backend tasks into separate subtasks.
 
