@@ -34,18 +34,18 @@ describe("goop_get_global_config tool", () => {
     previousGlobalConfigPath = process.env.GOOPSPEC_GLOBAL_CONFIG_PATH;
     previousXdgConfigHome = process.env.XDG_CONFIG_HOME;
     process.env.GOOPSPEC_GLOBAL_CONFIG_PATH = configPath;
-    delete process.env.XDG_CONFIG_HOME;
+    process.env.XDG_CONFIG_HOME = undefined;
   });
 
   afterEach(async () => {
     if (previousGlobalConfigPath === undefined) {
-      delete process.env.GOOPSPEC_GLOBAL_CONFIG_PATH;
+      process.env.GOOPSPEC_GLOBAL_CONFIG_PATH = undefined;
     } else {
       process.env.GOOPSPEC_GLOBAL_CONFIG_PATH = previousGlobalConfigPath;
     }
 
     if (previousXdgConfigHome === undefined) {
-      delete process.env.XDG_CONFIG_HOME;
+      process.env.XDG_CONFIG_HOME = undefined;
     } else {
       process.env.XDG_CONFIG_HOME = previousXdgConfigHome;
     }

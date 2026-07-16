@@ -8,6 +8,8 @@ import {
   createMockToolContext,
   setupTestEnvironment,
 } from "../../test-utils.js";
+import { createGoopReadDbTool } from "../goop-read-db/index.js";
+import { createGoopWriteSectionTool } from "../goop-write-section/index.js";
 import { createGoopWriteDbTool } from "./index.js";
 
 describe("goop_write_db tool", () => {
@@ -47,6 +49,27 @@ describe("goop_write_db tool", () => {
 
     const doc = ctx.db.getDocument("default", "spec");
     expect(doc?.content).toBe("# Version 2");
+  });
+
+  it("clears existing sections so a later monolithic write becomes authoritative", async () => {
+    const writeSection = createGoopWriteSectionTool(ctx);
+    const writeDocument = createGoopWriteDbTool(ctx);
+    const readDocument = createGoopReadDbTool(ctx);
+
+    await writeSection.execute(
+      { doc_type: "spec", section_key: "earlier", content: "# Earlier Section" },
+      toolCtx,
+    );
+    await writeDocument.execute(
+      { doc_type: "spec", content: "# New Monolithic Document" },
+      toolCtx,
+    );
+
+    expect(ctx.db.getSections("default", "spec")).toEqual([]);
+    expect(ctx.db.resolveDocumentContent("default", "spec")).toBe("# New Monolithic Document");
+    expect(await readDocument.execute({ doc_type: "spec" }, toolCtx)).toBe(
+      "# New Monolithic Document",
+    );
   });
 
   // -----------------------------------------------------------------------
@@ -248,6 +271,27 @@ describe("goop_write_db tool", () => {
       expect(result).toContain("3/3 succeeded");
       expect(ctx.db.getDocument("default", "spec")?.content).toBe("# Spec");
       expect(ctx.db.getDocument("default", "blueprint")?.content).toBe("# Blueprint");
+    });
+
+    it("clears sections for each batch item before writing monolithic content", async () => {
+      ctx.db.upsertSection("default", "spec", "stale", "# Stale");
+      ctx.db.upsertSection("default", "blueprint", "stale", "# Stale");
+      const tool = createGoopWriteDbTool(ctx);
+
+      await tool.execute(
+        {
+          doc_type: "spec",
+          content: "",
+          items: [
+            { doc_type: "spec", content: "# Fresh Spec" },
+            { doc_type: "blueprint", content: "# Fresh Blueprint" },
+          ],
+        },
+        toolCtx,
+      );
+
+      expect(ctx.db.getSections("default", "spec")).toEqual([]);
+      expect(ctx.db.getSections("default", "blueprint")).toEqual([]);
     });
 
     it("backward-compat: single-item path works when items absent", async () => {

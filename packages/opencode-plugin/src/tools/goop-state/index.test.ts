@@ -446,6 +446,29 @@ describe("goop_state tool", () => {
       expect(ctx.stateManager.listWorkflowIds()).toContain("feat-payments");
     });
 
+    it("creates and activates a new workflow in one call", async () => {
+      const tool = createGoopStateTool(ctx);
+      const result = await tool.execute(
+        { action: "create-workflow", workflowId: "feat-payments", activate: true },
+        createMockToolContext(),
+      );
+      expect(result).toContain("feat-payments");
+      expect(result).toContain("created");
+      expect(result).toContain("activated");
+      expect(ctx.stateManager.listWorkflowIds()).toContain("feat-payments");
+      expect(ctx.stateManager.getActiveWorkflowId()).toBe("feat-payments");
+    });
+
+    it("does not activate a new workflow by default", async () => {
+      const tool = createGoopStateTool(ctx);
+      await tool.execute(
+        { action: "create-workflow", workflowId: "feat-payments" },
+        createMockToolContext(),
+      );
+      expect(ctx.stateManager.listWorkflowIds()).toContain("feat-payments");
+      expect(ctx.stateManager.getActiveWorkflowId()).toBe("default");
+    });
+
     it("rejects missing workflowId", async () => {
       const tool = createGoopStateTool(ctx);
       const result = await tool.execute({ action: "create-workflow" }, createMockToolContext());
@@ -462,6 +485,20 @@ describe("goop_state tool", () => {
       );
       expect(result).toContain("feat-auth");
       // Should not throw or duplicate
+      expect(ctx.stateManager.listWorkflowIds().filter((id) => id === "feat-auth")).toHaveLength(1);
+    });
+
+    it("is idempotent for existing workflow and respects activate", async () => {
+      ctx.stateManager.createWorkflow("feat-auth");
+      ctx.stateManager.setActiveWorkflow("default");
+      const tool = createGoopStateTool(ctx);
+      const result = await tool.execute(
+        { action: "create-workflow", workflowId: "feat-auth", activate: true },
+        createMockToolContext(),
+      );
+      expect(result).toContain("feat-auth");
+      expect(result).toContain("activated");
+      expect(ctx.stateManager.getActiveWorkflowId()).toBe("feat-auth");
       expect(ctx.stateManager.listWorkflowIds().filter((id) => id === "feat-auth")).toHaveLength(1);
     });
   });

@@ -121,6 +121,38 @@ describe("route — executor-frontend-low", () => {
   });
 });
 
+describe("route — executor-frontend-medium", () => {
+  it("routes wiring components to existing patterns", () => {
+    const r = route("Wire component to existing patterns");
+    expect(r.agent).toBe("executor-frontend-medium");
+    expect(r.tier).toBe("frontend-medium");
+  });
+
+  it("routes moderate UI refactor tasks", () => {
+    const r = route("Moderate ui refactor of the settings panel");
+    expect(r.agent).toBe("executor-frontend-medium");
+    expect(r.tier).toBe("frontend-medium");
+  });
+
+  it("routes standard component work", () => {
+    const r = route("Build a standard list component with props");
+    expect(r.agent).toBe("executor-frontend-medium");
+    expect(r.tier).toBe("frontend-medium");
+  });
+
+  it("routes component logic tasks", () => {
+    const r = route("Add component logic for the checkout form");
+    expect(r.agent).toBe("executor-frontend-medium");
+    expect(r.tier).toBe("frontend-medium");
+  });
+
+  it("routes shared UI helper creation", () => {
+    const r = route("Create a shared ui helper for date formatting");
+    expect(r.agent).toBe("executor-frontend-medium");
+    expect(r.tier).toBe("frontend-medium");
+  });
+});
+
 describe("route — executor-frontend-high", () => {
   it("routes component creation", () => {
     const r = route("Build a reusable UI component for data tables");
@@ -600,16 +632,17 @@ describe("detectAutoDelegation — MH18 required cases", () => {
 // ---------------------------------------------------------------------------
 
 describe("ROUTING_CATEGORIES", () => {
-  it("contains all 12 categories (7 specialists + 5 executors)", () => {
-    expect(ROUTING_CATEGORIES.length).toBe(12);
+  it("contains all 13 categories (7 specialists + 6 executors)", () => {
+    expect(ROUTING_CATEGORIES.length).toBe(13);
   });
 
-  it("covers all 5 executor tiers", () => {
+  it("covers all 6 executor tiers", () => {
     const tiers = ROUTING_CATEGORIES.filter((c) => c.tier !== undefined).map((c) => c.tier);
     expect(tiers).toContain("low");
     expect(tiers).toContain("medium");
     expect(tiers).toContain("high");
     expect(tiers).toContain("frontend-low");
+    expect(tiers).toContain("frontend-medium");
     expect(tiers).toContain("frontend-high");
   });
 

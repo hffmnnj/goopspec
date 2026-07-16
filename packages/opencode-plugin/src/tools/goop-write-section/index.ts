@@ -15,26 +15,67 @@ import { DOC_TYPES } from "../../features/db/types.js";
 import type { DocType } from "../../features/db/types.js";
 import { DOC_TYPE_FILENAMES, renderSidecars } from "../../shared/render-sidecars.js";
 
+const MIGRATED_LEGACY_CONTENT_KEY = "_migrated-legacy-content";
+
+type WriteSectionItem = {
+  doc_type: DocType;
+  section_key: string;
+  content: string;
+  position?: number;
+};
+
 // ---------------------------------------------------------------------------
 // Tool factory
 // ---------------------------------------------------------------------------
 
 export function createGoopWriteSectionTool(ctx: PluginContext): ToolDefinition {
+  function migrateLegacyContent(workflowId: string, docType: DocType, sectionKey: string): void {
+    if (ctx.db.getSections(workflowId, docType).length > 0) return;
+
+    const legacyContent = ctx.db.getDocument(workflowId, docType)?.content;
+    if (legacyContent === undefined || legacyContent.length === 0) return;
+    if (sectionKey === MIGRATED_LEGACY_CONTENT_KEY) {
+      throw new Error(
+        `Section key '${MIGRATED_LEGACY_CONTENT_KEY}' is reserved for legacy migration`,
+      );
+    }
+
+    ctx.db.upsertSection(workflowId, docType, MIGRATED_LEGACY_CONTENT_KEY, legacyContent, 0);
+  }
+
+  function writeSection(
+    workflowId: string,
+    item: WriteSectionItem,
+    shouldCheckForLegacyContent = true,
+  ): void {
+    if (shouldCheckForLegacyContent) {
+      migrateLegacyContent(workflowId, item.doc_type, item.section_key);
+    }
+    ctx.db.upsertSection(workflowId, item.doc_type, item.section_key, item.content, item.position);
+    ctx.db.appendEvent(workflowId, "doc_section_write", {
+      doc_type: item.doc_type,
+      section_key: item.section_key,
+      timestamp: Date.now(),
+    });
+  }
+
   return tool({
     description:
-      "Write or update a structured workflow document section in GoopSpecDB. " +
+      "Write, update, or delete a structured workflow document section in GoopSpecDB. " +
       "Section writes are separate from full-document goop_write_db writes and render the assembled section sidecar.\n\n" +
       "Args:\n" +
+      "- action: 'write' (default) or 'delete'\n" +
       "- doc_type: Document type (spec, blueprint, chronicle, adl, handoff, requirements, research)\n" +
-      "- section_key: Stable key for the section to write\n" +
-      "- content: Markdown body for the section\n" +
+      "- section_key: Stable key for the section to write or delete\n" +
+      "- content: Markdown body for a section write\n" +
       "- position: Optional ordering position for assembly\n" +
       "- workflow_id: Optional workflow ID (defaults to active workflow)\n" +
       "- items: Optional batch of section writes for the same workflow_id",
     args: {
+      action: tool.schema.enum(["write", "delete"] as const).optional(),
       doc_type: tool.schema.enum(DOC_TYPES),
-      section_key: tool.schema.string(),
-      content: tool.schema.string(),
+      section_key: tool.schema.string().optional(),
+      content: tool.schema.string().optional(),
       position: tool.schema.number().optional(),
       workflow_id: tool.schema.string().optional(),
       items: tool.schema
@@ -50,36 +91,48 @@ export function createGoopWriteSectionTool(ctx: PluginContext): ToolDefinition {
     },
     async execute(
       args: {
+        action?: "write" | "delete";
         doc_type: DocType;
-        section_key: string;
-        content: string;
+        section_key?: string;
+        content?: string;
         position?: number;
         workflow_id?: string;
-        items?: Array<{
-          doc_type: DocType;
-          section_key: string;
-          content: string;
-          position?: number;
-        }>;
+        items?: WriteSectionItem[];
       },
       _context: ToolContext,
     ): Promise<string> {
       try {
-        if (args.items !== undefined) {
-          const workflowId = args.workflow_id ?? ctx.stateManager.getState().activeWorkflowId;
-          const result = runBatch(ctx.db, args.items, (item) => {
-            ctx.db.upsertSection(
-              workflowId,
-              item.doc_type,
-              item.section_key,
-              item.content,
-              item.position,
-            );
-            ctx.db.appendEvent(workflowId, "doc_section_write", {
-              doc_type: item.doc_type,
-              section_key: item.section_key,
+        const action = args.action ?? "write";
+        const workflowId = args.workflow_id ?? ctx.stateManager.getState().activeWorkflowId;
+
+        if (action === "delete") {
+          if (args.items !== undefined) {
+            return "Error in goop_write_section: action 'delete' does not support items";
+          }
+          if (!args.section_key) {
+            return "Error in goop_write_section: section_key is required for action 'delete'";
+          }
+
+          const deleted = ctx.db.deleteSection(workflowId, args.doc_type, args.section_key);
+          if (deleted) {
+            ctx.db.appendEvent(workflowId, "doc_section_delete", {
+              doc_type: args.doc_type,
+              section_key: args.section_key,
               timestamp: Date.now(),
             });
+          }
+          renderSidecars(ctx, workflowId);
+          return deleted
+            ? `Deleted section '${args.section_key}' for ${args.doc_type} in workflow '${workflowId}'.`
+            : `No section '${args.section_key}' found for ${args.doc_type} in workflow '${workflowId}'.`;
+        }
+
+        if (args.items !== undefined) {
+          const checkedDocTypes = new Set<DocType>();
+          const result = runBatch(ctx.db, args.items, (item) => {
+            const shouldCheckForLegacyContent = !checkedDocTypes.has(item.doc_type);
+            checkedDocTypes.add(item.doc_type);
+            writeSection(workflowId, item, shouldCheckForLegacyContent);
 
             return `wrote ${item.doc_type}/${item.section_key}`;
           });
@@ -88,20 +141,15 @@ export function createGoopWriteSectionTool(ctx: PluginContext): ToolDefinition {
           return formatBatchResult(result, "write-section");
         }
 
-        const workflowId = args.workflow_id ?? ctx.stateManager.getState().activeWorkflowId;
+        if (args.section_key === undefined || args.content === undefined) {
+          return "Error in goop_write_section: section_key and content are required for action 'write'";
+        }
 
-        ctx.db.upsertSection(
-          workflowId,
-          args.doc_type,
-          args.section_key,
-          args.content,
-          args.position,
-        );
-
-        ctx.db.appendEvent(workflowId, "doc_section_write", {
+        writeSection(workflowId, {
           doc_type: args.doc_type,
           section_key: args.section_key,
-          timestamp: Date.now(),
+          content: args.content,
+          position: args.position,
         });
 
         const sidecarContent = ctx.db.assembleDocument(workflowId, args.doc_type);

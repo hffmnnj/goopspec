@@ -91,4 +91,32 @@ describe("goop_read_section tool", () => {
 
     expect(result).toBe("# Custom Notes");
   });
+
+  // -----------------------------------------------------------------------
+  // Batch mode
+  // -----------------------------------------------------------------------
+
+  it("returns multiple sections under headings when section_keys is provided", async () => {
+    ctx.db.upsertSection("default", "spec", "overview", "# Overview", 10);
+    ctx.db.upsertSection("default", "spec", "detail", "# Detail", 20);
+    ctx.db.upsertSection("default", "spec", "appendix", "# Appendix", 30);
+
+    const tool = createGoopReadSectionTool(ctx);
+    const result = await tool.execute(
+      { doc_type: "spec", section_keys: ["overview", "appendix"] },
+      toolCtx,
+    );
+
+    expect(result).toBe("## overview\n\n# Overview\n\n---\n\n## appendix\n\n# Appendix");
+  });
+
+  it("falls back to listing all sections when section_keys is empty", async () => {
+    ctx.db.upsertSection("default", "blueprint", "intro", "Intro body", 10);
+    ctx.db.upsertSection("default", "blueprint", "plan", "Plan body", 20);
+
+    const tool = createGoopReadSectionTool(ctx);
+    const result = await tool.execute({ doc_type: "blueprint", section_keys: [] }, toolCtx);
+
+    expect(result).toBe("## intro\n\nIntro body\n\n---\n\n## plan\n\nPlan body");
+  });
 });

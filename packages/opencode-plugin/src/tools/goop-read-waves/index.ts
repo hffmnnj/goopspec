@@ -61,16 +61,19 @@ export function createGoopReadWavesTool(ctx: PluginContext): ToolDefinition {
       "Read workflow waves with task lists and completion ratios from GoopSpecDB.\n\n" +
       "Args:\n" +
       "- wave_number: Optional wave number; omit to read all waves\n" +
+      "- wave_numbers: Optional array of wave numbers for batch loading\n" +
       "- status: Optional wave status filter\n" +
       "- workflow_id: Optional workflow ID (defaults to active workflow)",
     args: {
       wave_number: tool.schema.number().optional(),
+      wave_numbers: tool.schema.array(tool.schema.number()).optional(),
       status: tool.schema.string().optional(),
       workflow_id: tool.schema.string().optional(),
     },
     async execute(
       args: {
         wave_number?: number;
+        wave_numbers?: number[];
         status?: string;
         workflow_id?: string;
       },
@@ -78,20 +81,28 @@ export function createGoopReadWavesTool(ctx: PluginContext): ToolDefinition {
     ): Promise<string> {
       try {
         const workflowId = args.workflow_id ?? ctx.stateManager.getState().activeWorkflowId;
-        const waves =
-          args.wave_number !== undefined
+        const hasBatch = args.wave_numbers !== undefined && args.wave_numbers.length > 0;
+        const waves = hasBatch
+          ? ctx.db.getWaves(workflowId, args.wave_numbers)
+          : args.wave_number !== undefined
             ? [ctx.db.getWave(workflowId, args.wave_number)].filter((w): w is WaveRow => w !== null)
             : ctx.db.getWaves(workflowId);
         const filteredWaves =
           args.status !== undefined ? waves.filter((wave) => wave.status === args.status) : waves;
 
         if (filteredWaves.length === 0) {
-          const scope = args.wave_number !== undefined ? `wave ${args.wave_number}` : "waves";
+          const scope = hasBatch
+            ? `wave numbers [${args.wave_numbers?.join(", ") ?? ""}]`
+            : args.wave_number !== undefined
+              ? `wave ${args.wave_number}`
+              : "waves";
           const status = args.status !== undefined ? ` with status '${args.status}'` : "";
           return `No ${scope}${status} found for workflow '${workflowId}'. Use goop_write_wave to create one.`;
         }
 
-        const progressRows = ctx.db.getWaveProgress(workflowId, args.wave_number);
+        const progressRows = hasBatch
+          ? ctx.db.getWaveProgress(workflowId, undefined, args.wave_numbers)
+          : ctx.db.getWaveProgress(workflowId, args.wave_number);
         const progressByWaveNumber = new Map(
           progressRows.map((row) => [row.wave_number, row] as const),
         );

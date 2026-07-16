@@ -50,8 +50,9 @@ Before testing:
 7. `goop_reference({ name: "core-protocol" })` — boot and commit rules.
 8. `goop_reference({ name: "response-format" })` — response envelope.
 9. `goop_reference({ name: "tdd" })` — red-green-refactor guidance.
-10. `Read("AGENTS.md")` — project-specific conventions from the repo root.
-11. Batch independent tool calls into a single message — see `references/core-protocol.md` Tool-Call Batching.
+10. `goop_reference({ name: "tool-reference" })` — full argument surface of every tool; prefer batch/plural args over repeated single calls where available.
+11. `Read("AGENTS.md")` — project-specific conventions from the repo root.
+12. Batch independent tool calls into a single message — see `references/core-protocol.md` Tool-Call Batching.
 
 Resolve `<workflowId>` from `goop_state`. If any required step fails, return `BLOCKED`.
 

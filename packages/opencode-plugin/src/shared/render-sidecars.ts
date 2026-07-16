@@ -38,15 +38,7 @@ function readRenderableDocument(
   workflowId: string,
   docType: DocType,
 ): string | null {
-  const sections = ctx.db.getSections(workflowId, docType);
-  if (sections.length > 0) {
-    const assembled = ctx.db.assembleDocument(workflowId, docType);
-    return assembled.length > 0 ? assembled : null;
-  }
-
-  const document = ctx.db.getDocument(workflowId, docType);
-  if (!document || document.content.length === 0) return null;
-  return document.content;
+  return ctx.db.resolveDocumentContent(workflowId, docType);
 }
 
 function safeWriteFile(filePath: string, content: string): void {

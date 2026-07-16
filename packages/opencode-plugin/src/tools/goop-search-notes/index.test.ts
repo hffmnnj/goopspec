@@ -12,11 +12,17 @@ import { createGoopSearchNotesTool } from "./index.js";
 // Seed data helper
 // ---------------------------------------------------------------------------
 
+const LONG_BODY =
+  "WAL mode improves concurrent read performance in SQLite databases. " +
+  "By writing changes to a separate write-ahead log file instead of the main database file, " +
+  "readers can continue to access the original pages while writers append to the log. " +
+  "Once the log reaches a checkpoint threshold, SQLite transfers the changes back into the database file.";
+
 function seedNotes(ctx: PluginContext): void {
   ctx.db.saveNote({
     id: "fn_20260618_sqlite01",
     title: "SQLite WAL mode benefits",
-    body: "WAL mode improves concurrent read performance in SQLite databases.",
+    body: LONG_BODY,
     tags: JSON.stringify(["sqlite", "performance"]),
     source_agent: "goop-researcher",
     importance: 8,
@@ -123,6 +129,78 @@ describe("goop_search_notes tool", () => {
 
     // Should return results without error
     expect(result).toContain("Field Notes");
+  });
+
+  // -----------------------------------------------------------------------
+  // Full body and body-range args
+  // -----------------------------------------------------------------------
+
+  it("returns 200-character snippet by default for long bodies", async () => {
+    const tool = createGoopSearchNotesTool(ctx);
+    const result = await tool.execute({ query: "SQLite" }, toolCtx);
+
+    expect(result).toContain("fn_20260618_sqlite01");
+    expect(result).toContain("WAL mode improves concurrent read performance");
+    expect(result).toContain("...");
+    expect(result).not.toContain("checkpoint threshold");
+  });
+
+  it("returns complete body when full is true", async () => {
+    const tool = createGoopSearchNotesTool(ctx);
+    const result = await tool.execute({ query: "SQLite", full: true }, toolCtx);
+
+    expect(result).toContain("fn_20260618_sqlite01");
+    expect(result).toContain(LONG_BODY);
+    expect(result).not.toContain("...\n---");
+  });
+
+  it("slices body with body_offset and body_limit", async () => {
+    const tool = createGoopSearchNotesTool(ctx);
+    const result = await tool.execute({ query: "SQLite", body_offset: 4, body_limit: 30 }, toolCtx);
+
+    expect(result).toContain("### fn_20260618_sqlite01");
+    expect(result).toContain("mode improves concurrent read ");
+    expect(result).not.toContain("WAL mode improves");
+  });
+
+  it("returns empty body slice when body_offset exceeds body length", async () => {
+    const tool = createGoopSearchNotesTool(ctx);
+    const result = await tool.execute(
+      { query: "SQLite", full: true, body_offset: LONG_BODY.length + 10 },
+      toolCtx,
+    );
+
+    expect(result).toContain("### fn_20260618_sqlite01");
+    expect(result).toMatch(/### fn_20260618_sqlite01[\s\S]*?---/);
+  });
+
+  // -----------------------------------------------------------------------
+  // Direct note_id fetch
+  // -----------------------------------------------------------------------
+
+  it("fetches a note by note_id and returns its full body bypassing ranking", async () => {
+    const tool = createGoopSearchNotesTool(ctx);
+    const result = await tool.execute({ note_id: "fn_20260618_sqlite01" }, toolCtx);
+
+    expect(result).toContain("### fn_20260618_sqlite01");
+    expect(result).toContain(LONG_BODY);
+    expect(result).not.toContain("2 results");
+  });
+
+  it("returns a clear not-found message for an unknown note_id", async () => {
+    const tool = createGoopSearchNotesTool(ctx);
+    const result = await tool.execute({ note_id: "fn_20260618_missing9" }, toolCtx);
+
+    expect(result).toContain("No Field Note found with ID 'fn_20260618_missing9'.");
+  });
+
+  it("note_id takes precedence over query when both are provided", async () => {
+    const tool = createGoopSearchNotesTool(ctx);
+    const result = await tool.execute({ note_id: "fn_20260618_bun0001", query: "SQLite" }, toolCtx);
+
+    expect(result).toContain("### fn_20260618_bun0001");
+    expect(result).toContain("Bun test supports describe/it/expect with built-in mocking.");
+    expect(result).not.toContain("fn_20260618_sqlite01");
   });
 
   // -----------------------------------------------------------------------

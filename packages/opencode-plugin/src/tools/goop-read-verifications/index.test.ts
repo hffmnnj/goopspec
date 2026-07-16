@@ -83,4 +83,50 @@ describe("goop_read_verifications tool", () => {
 
     expect(result).toBe("No verifications found for workflow 'default'.");
   });
+
+  // -----------------------------------------------------------------------
+  // Batch mode
+  // -----------------------------------------------------------------------
+
+  it("reads verifications across multiple wave_ids when batch arg is provided", async () => {
+    ctx.db.insertVerification("default", {
+      wave_id: 2,
+      check_name: "typecheck",
+      status: "pass",
+    });
+    ctx.db.insertVerification("default", {
+      wave_id: 3,
+      check_name: "test",
+      status: "fail",
+    });
+    ctx.db.insertVerification("default", {
+      wave_id: 5,
+      check_name: "lint",
+      status: "pass",
+    });
+
+    const readTool = createGoopReadVerificationsTool(ctx);
+    const result = await readTool.execute({ wave_ids: [2, 5] }, toolCtx);
+
+    expect(result).toContain("typecheck: pass");
+    expect(result).toContain("Wave 2");
+    expect(result).toContain("lint: pass");
+    expect(result).toContain("Wave 5");
+    expect(result).not.toContain("test: fail");
+    expect(result).not.toContain("Wave 3");
+  });
+
+  it("falls back to all verifications when wave_ids is empty", async () => {
+    ctx.db.insertVerification("default", {
+      wave_id: 2,
+      check_name: "typecheck",
+      status: "pass",
+    });
+
+    const readTool = createGoopReadVerificationsTool(ctx);
+    const result = await readTool.execute({ wave_ids: [] }, toolCtx);
+
+    expect(result).toContain("typecheck: pass");
+    expect(result).toContain("Wave 2");
+  });
 });
