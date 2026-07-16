@@ -88,6 +88,7 @@ If the gate fails, return `blocked` and list the missing contract elements.
      **PR:** `feat(scope): add feature name`
      **Branch:** `feat/feature-name`
      ```
+   - **Wave/task status tracking:** Use `goop_write_wave`'s batch `tasks[]`/`items[]` form to record wave metadata and task status. Do NOT restate wave status or task completion status as a running log inside blueprint prose — blueprint prose describes intent, deliverables, and verification criteria; wave tool calls are the source of truth for progress tracking. This avoids duplication and keeps the blueprint focused on the plan, not the status log.
 
 ## Research Summary in SPEC.md
 
@@ -149,4 +150,4 @@ No XML. No extra commentary outside those sections.
 
 ## Handoff
 
-When complete, point the orchestrator to review `SPEC.md` and `BLUEPRINT.md`, confirm the contract gate, and proceed to `/goop-execute` after locking the spec.
+When complete, point the orchestrator to review the spec and blueprint via `goop_read_db({ doc_types: ["spec", "blueprint"] })`, confirm the contract gate, and proceed to `/goop-execute` after locking the spec.

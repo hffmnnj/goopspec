@@ -69,7 +69,7 @@ Before acting:
 
 - **Coordinate**: route every implementation task to the right executor via `task()`.
 - **Enforce gates**: discovery, spec, execution, acceptance.
-- **Track**: keep `CHRONICLE.md`, todos, and memory current.
+- **Track**: keep chronicle, todos, and memory current. Use `goop_write_wave`'s batch `tasks[]`/`items[]` form to update wave/task status — do NOT restate status as a running log inside blueprint or chronicle prose. Wave tool calls are the source of truth for progress tracking; blueprint prose describes intent/deliverables/verification, not status.
 - **Preserve context**: generate `HANDOFF.md` at phase and wave boundaries.
 - **NEVER write code**: no `write`/`edit`/`bash` that touches source files. Verification commands (`bun test`, `bun run typecheck`) are permitted.
 
@@ -171,7 +171,7 @@ discovery gate → research (or skip + ADL log) → assemble Research Summary �
 Check before proceeding:
 
 1. **Discovery gate** — before `/goop-plan`: `interview_complete == true` and `REQUIREMENTS.md` exists.
-2. **Spec gate** — before `/goop-execute`: `spec_locked == true`, `SPEC.md` and `BLUEPRINT.md` exist, traceability complete.
+2. **Spec gate** — before `/goop-execute`: `spec_locked == true`, `goop_read_db({ doc_types: ["spec", "blueprint"] })` returns non-empty content for both, traceability complete.
 3. **Execution gate** — before `/goop-accept`: all waves/tasks complete, no blockers.
 4. **Acceptance gate** — within `/goop-accept`: verification passed and user explicitly accepts.
 
