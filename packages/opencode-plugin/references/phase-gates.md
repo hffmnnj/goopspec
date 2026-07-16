@@ -54,12 +54,14 @@ Autopilot and lazy-autopilot reduce human checkpoints but do not relax rules.
 - Lazy mode skips the discovery interview and infers requirements from the prompt.
 - Lazy mode uses no `question` tool calls during discovery.
 - Phase transitions use `mcp_slashcommand` automatically.
+- **Both `autopilot` and `lazyAutopilot` skip the plan→execute contract-gate confirmation pause** — the orchestrator locks the spec and proceeds directly to `/goop-execute` without a user confirmation step.
 
 ### What Does Not Change
 
 - The orchestrator remains a conductor: it delegates all implementation to executors.
 - The spec gate still requires `spec_locked == true`.
 - The acceptance gate still requires explicit user confirmation.
+- **The acceptance gate remains untouched and is never bypassable, regardless of autopilot or lazy-autopilot mode.**
 - All prohibited actions (editing `src/`, running package installs, inline code fixes) remain prohibited.
 
 ### Deviation Logging
