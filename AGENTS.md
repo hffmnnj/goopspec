@@ -51,6 +51,47 @@ references/                # 13 consolidated reference documents (incl. field-no
 templates/                 # File templates
 ```
 
+## OpenCode V1/V2 Dual Plugin Support
+
+The plugin ships as a single default export that satisfies both the legacy V1 plugin contract (async function returning `Hooks`/`tool` map) and the V2 plugin contract (`Plugin.define({ id, setup })`). Detection is structural and zero-config: the host reads whichever shape it expects from the same export object.
+
+### Dual-Shape Export
+
+`src/index.ts` exports a single default via `Object.assign(asyncFunction, v2Plugin)`:
+
+```typescript
+const goopspec: Plugin = async (input) => { /* V1 setup */ };
+const v2Plugin = V2Plugin.define({ id: "goopspec", async setup(ctx) { /* V2 setup */ } });
+export default Object.assign(goopspec, v2Plugin);
+```
+
+The V1 loader calls the function directly; the V2 loader reads `.id` and `.setup` from the same object. No config change, no runtime heuristic, no env var.
+
+### Where V1 Logic Lives
+
+- **`src/core/sdk-compat.ts`** — Single import seam for the `@opencode-ai/plugin` SDK (V1 types, values).
+- **`src/core/context.ts`** — Builds the shared `PluginContext` from V1 `PluginInput`.
+- **`src/tools/`** — All 30 tool factories in `src/tools/index.ts` (`createTools()`).
+- **`src/hooks/`** — All 10 hook factories in `DEFAULT_HOOK_FACTORIES`, assembled by `createHooks()`.
+- **`src/core/types.ts`** — `PluginContext`, `SdkEssentials`, `ToolContext`, etc.
+
+These are the single source of truth. V2 adapters import and reuse them — they never fork or duplicate.
+
+### Where V2 Adapter Logic Lives
+
+- **`src/core/v2-compat.ts`** — Single import seam for `@opencode-ai/plugin/v2/promise` (V2 types, `V2Plugin.define`). Contains augmented types (`V2RuntimeContext`, `V2ToolCapability`, `V2SessionCapability`, `V2EventCapability`) for documented V2 runtime capabilities that the published promise declarations don't yet expose. Guards with runtime capability checks so an older host degrades without crashing.
+- **`src/core/context-v2.ts`** — Maps V2's `ctx` (which lacks `client`, `directory`, `worktree`, `$`) to GoopSpec's `PluginContext`. `directory` falls back to `process.cwd()`. The Bun shell (`$`) throws if called. Subsystems (`db`, `stateManager`, `memory`, etc.) are SDK-agnostic and reused via `createPluginSubsystems()`.
+- **`src/core/tools-v2.ts`** — Converts V1 Zod `ToolDefinition.args` to JSON Schema via `z.toJSONSchema()`, then registers every tool from `createTools()` with the V2 runtime through `ctx.tool.transform()`. Zero tool-execution logic lives here — the V1 `definition.execute` function is called as-is.
+- **`src/core/hooks-v2.ts`** — Registers V1 hook behavior with V2 runtime hooks (`ctx.session.hook("request", ...)` for system transforms, `ctx.tool.hook("execute.before/after", ...)` for tool lifecycle). V2 does not expose equivalents for config, chat-message, command, permission, event, or compaction hooks, so those remain V1-only.
+
+### The Shared-Logic Rule
+
+**Any new tool or hook must be added only to the V1 source of truth** (`src/tools/index.ts` or `DEFAULT_HOOK_FACTORIES`). It becomes available under both V1 and V2 automatically — no V2 adapter file needs to be touched for ordinary additions. V2 adapters iterate over `createTools()` and `DEFAULT_HOOK_FACTORIES` programmatically.
+
+### V2 SDK Type Gap
+
+The published `@opencode-ai/plugin/v2/promise` declarations do not yet include the `session`, `tool`, and `event` capabilities that the OpenCode documentation describes as runtime-attached. GoopSpec declares its own augmented `V2RuntimeContext` type (in `v2-compat.ts`) with optional `session?`, `tool?`, and `event?` fields, and every adapter guards the capability with a `typeof` check before invoking it. This ensures the plugin degrades gracefully on hosts that don't provide the capability yet.
+
 ## Packages
 
 | Package | Purpose |
