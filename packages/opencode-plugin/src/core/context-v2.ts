@@ -15,8 +15,8 @@ import type { V2RuntimeContext } from "./v2-compat.js";
  * The V2 host has no equivalent for V1's client or shell runner. They are
  * intentionally unavailable stubs rather than speculative implementations.
  */
-export async function createPluginContextV2(_v2ctx: V2RuntimeContext): Promise<PluginContext> {
-  const directory = process.cwd();
+export async function createPluginContextV2(v2ctx: V2RuntimeContext): Promise<PluginContext> {
+  const directory = extractDirectory(v2ctx);
   const sdk: SdkEssentials = {
     client: {} as SdkEssentials["client"],
     directory,
@@ -33,4 +33,16 @@ function createUnavailableShell(): SdkEssentials["$"] {
   return (async () => {
     throw new Error("The V2 plugin context does not expose the V1 shell runner");
   }) as unknown as SdkEssentials["$"];
+}
+
+function extractDirectory(v2ctx: V2RuntimeContext): string {
+  if (
+    typeof v2ctx.options === "object" &&
+    v2ctx.options != null &&
+    "directory" in v2ctx.options &&
+    typeof (v2ctx.options as { directory?: unknown }).directory === "string"
+  ) {
+    return (v2ctx.options as { directory: string }).directory;
+  }
+  return process.cwd();
 }

@@ -141,4 +141,60 @@ describe("plugin entrypoint", () => {
     expect(typeof statusResult).toBe("string");
     expect(statusResult).toContain("GoopSpec");
   });
+
+  it("V2 setup registers exactly 30 tools and goop_status matches V1 output", async () => {
+    interface V2ToolLike {
+      name: string;
+      execute: (input: unknown, context: unknown) => Promise<unknown>;
+    }
+
+    const v2Tools: Record<string, V2ToolLike> = {};
+    const v2Ctx = {
+      options: {},
+      tool: {
+        transform: async (callback: (draft: { add: (tool: V2ToolLike) => void }) => void) => {
+          const draft = {
+            add(tool: V2ToolLike) {
+              v2Tools[tool.name] = tool;
+            },
+          };
+          callback(draft);
+        },
+      },
+    } as unknown as Parameters<typeof plugin.setup>[0];
+
+    await plugin.setup(v2Ctx);
+
+    expect(Object.keys(v2Tools)).toHaveLength(30);
+    for (const key of EXPECTED_TOOL_KEYS) {
+      expect(v2Tools).toHaveProperty(key);
+    }
+
+    const v1Input = createMockPluginInput(testDir);
+    const v1Result = await plugin(v1Input);
+    const v1Status = v1Result.tool?.goop_status;
+    expect(v1Status).toBeDefined();
+    const v1ToolCtx = createMockToolContext({ directory: testDir, worktree: testDir });
+    const v1StatusOutput = await v1Status?.execute({ verbose: false }, v1ToolCtx);
+
+    const v2StatusOutput = await v2Tools.goop_status.execute(
+      { verbose: false },
+      {
+        sessionID: "test-session",
+        assistantMessageID: "test-message",
+      },
+    );
+
+    const v2Text = (v2StatusOutput as { content: { text: string }[] }).content[0]?.text;
+    expect(typeof v2Text).toBe("string");
+    expect(v2Text).toContain("GoopSpec");
+    expect(v2Text).toContain("**Project:** goopspec");
+    expect(v2Text).toContain("**Workflow:** opencode-v2-plugin-support");
+
+    const v1Text = v1StatusOutput as string;
+    expect(typeof v1Text).toBe("string");
+    expect(v1Text).toContain("GoopSpec");
+    expect(v1Text).toContain("**Project:**");
+    expect(v1Text).toContain("**Workflow:**");
+  });
 });
