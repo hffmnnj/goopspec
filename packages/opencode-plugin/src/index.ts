@@ -8,19 +8,21 @@
 import { createPluginContext } from "./core/context.js";
 import type { Plugin } from "./core/sdk-compat.js";
 import { DEFAULT_HOOK_FACTORIES, createHooks } from "./hooks/index.js";
+import { syncGlobalConfigSidecar } from "./shared/global-config-sidecar.js";
 import { logError } from "./shared/logger.js";
 import { createTools } from "./tools/index.js";
 
 const goopspec: Plugin = async (input) => {
-  try {
-    const ctx = await createPluginContext(input);
-    const hooks = createHooks(ctx, [...DEFAULT_HOOK_FACTORIES]);
-    const tools = createTools(ctx);
-    return { ...hooks, tool: { ...(hooks.tool ?? {}), ...tools } };
-  } catch (error) {
-    logError("Plugin initialization failed", error);
-    return {};
-  }
+	try {
+		const ctx = await createPluginContext(input);
+		await syncGlobalConfigSidecar(ctx.sdk.directory);
+		const hooks = createHooks(ctx, [...DEFAULT_HOOK_FACTORIES]);
+		const tools = createTools(ctx);
+		return { ...hooks, tool: { ...(hooks.tool ?? {}), ...tools } };
+	} catch (error) {
+		logError("Plugin initialization failed", error);
+		return {};
+	}
 };
 
 export const server = goopspec;
