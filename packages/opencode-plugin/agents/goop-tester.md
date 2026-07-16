@@ -11,7 +11,10 @@ tools:
   - glob
   - grep
   - bash
+  - goop_read_db
   - goop_reference
+  - goop_search_notes
+  - goop_state
   - memory_search
   - todowrite
 ---

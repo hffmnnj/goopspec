@@ -35,6 +35,16 @@ describe("parseFrontmatter", () => {
     expect(meta.tools).toEqual(["read", "write"]);
   });
 
+  it("parses a nested permission question value", () => {
+    const meta = parseFrontmatter("permission:\n  question: allow");
+    expect(meta.permission).toEqual({ question: "allow" });
+  });
+
+  it("parses a nested permission task wildcard value", () => {
+    const meta = parseFrontmatter('permission:\n  task:\n    "*": allow');
+    expect(meta.permission).toEqual({ task: { "*": "allow" } });
+  });
+
   it("strips surrounding quotes", () => {
     const meta = parseFrontmatter('description: "quoted value"');
     expect(meta.description).toBe("quoted value");
@@ -57,6 +67,55 @@ describe("parseAgentMarkdown", () => {
     expect(result?.config.mode).toBe("primary");
     expect(result?.config.tools).toEqual({ read: true, glob: true, task: true });
     expect(result?.config.prompt).toContain("You are a sample agent.");
+  });
+
+  it("populates permission from a nested permission block", () => {
+    const result = parseAgentMarkdown(`---
+name: permission-sample
+permission:
+  question: allow
+  task:
+    "*": allow
+---
+body`);
+
+    expect(result?.config.permission as Record<string, unknown> | undefined).toEqual({
+      question: "allow",
+      task: { "*": "allow" },
+    });
+  });
+
+  it("keeps tools-only agents backward compatible", () => {
+    const result = parseAgentMarkdown(SAMPLE);
+    expect(result?.config).toEqual({
+      description: "A sample agent",
+      model: "anthropic/claude-opus-4-6",
+      temperature: 0.2,
+      mode: "primary",
+      tools: { read: true, glob: true, task: true },
+      prompt: "# Sample\n\nYou are a sample agent.",
+    });
+    expect(result?.config.permission).toBeUndefined();
+  });
+
+  it("skips malformed permission sub-blocks without throwing", () => {
+    const result = parseAgentMarkdown(`---
+name: malformed-permission
+description: Still loads
+permission:
+  question: allow
+  task:
+    - not-a-map
+model: openai/gpt-5.5
+---
+body`);
+
+    expect(result).not.toBeNull();
+    expect(result?.config.description).toBe("Still loads");
+    expect(result?.config.model).toBe("openai/gpt-5.5");
+    expect(result?.config.permission as Record<string, unknown> | undefined).toEqual({
+      question: "allow",
+    });
   });
 
   it("returns null when there is no frontmatter", () => {

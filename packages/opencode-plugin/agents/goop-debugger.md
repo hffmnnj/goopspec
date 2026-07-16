@@ -10,7 +10,10 @@ tools:
   - grep
   - bash
   - edit
+  - goop_read_db
+  - goop_search_notes
   - goop_spec
+  - goop_state
   - goop_reference
   - memory_save
   - memory_search
