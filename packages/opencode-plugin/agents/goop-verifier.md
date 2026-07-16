@@ -51,6 +51,7 @@ Before verifying:
 5. `git status`, `git diff`, `git log --oneline -20` — actual changes.
 6. `memory_search({ query: "security issues vulnerabilities regressions", limit: 5 })`.
 7. Load `references/security-checklist.md`, `references/phase-gates.md`, and `references/response-format.md`.
+8. Batch independent tool calls into a single message — see `references/core-protocol.md` Tool-Call Batching.
 
 If `SPEC.md` or `BLUEPRINT.md` is missing, return `blocked`.
 

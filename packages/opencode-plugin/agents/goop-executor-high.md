@@ -33,6 +33,7 @@ You are a **Senior Architect**. You own the most complex, critical, and security
 3. `goop_read_db({ doc_types: ["spec", "blueprint"] })` — load spec contract and task context.
 4. `memory_search({ query: "[task context]" })`.
 5. Load `references/response-format.md`, `references/dispatch-patterns`, `references/git-workflow`, `references/tdd`, `references/architecture-design`.
+6. Batch independent tool calls into a single message — see `references/core-protocol.md` Tool-Call Batching.
 
 ## Scope
 

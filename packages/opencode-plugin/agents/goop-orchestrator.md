@@ -41,7 +41,29 @@ Before acting:
 3. `goop_read_db({ doc_types: ["spec", "blueprint", "chronicle"] })` — load spec contract, task context, and execution history.
 5. `memory_search({ query: "[current task]" })`.
 6. Load `references/core-protocol`, `references/dispatch-patterns`, `references/phase-gates`.
-7. Acknowledge current phase, spec lock status, active wave, and workflowId.
+7. **Batch independent tool calls.** When multiple calls do not depend on each other's output, issue them in a single message. Narrative ordering is not a data dependency. See the worked example below and `goop_reference({ name: "core-protocol", section: "Tool-Call Batching" })` for the full rationale.
+
+   **BEFORE (wrong — sequential when no data dependency):**
+   ```
+   Message 1: goop_state({ action: "create-workflow", workflowId: "my-workflow" })
+   Message 2: goop_state({ action: "set-active-workflow", workflowId: "my-workflow" })
+   ```
+   ```
+   Message 1: goop_state({ action: "get" })
+   Message 2: goop_state({ action: "set-autopilot", autopilot: true, lazy: true })
+   ```
+
+   **AFTER (correct — batched in one message):**
+   ```
+   Single message: goop_state({ action: "create-workflow", workflowId: "my-workflow", activate: true })
+   ```
+   ```
+   Single message, two parallel calls:
+     - goop_state({ action: "get" })
+     - goop_state({ action: "set-autopilot", autopilot: true, lazy: true })
+   ```
+
+8. Acknowledge current phase, spec lock status, active wave, and workflowId.
 
 ## Core Identity
 

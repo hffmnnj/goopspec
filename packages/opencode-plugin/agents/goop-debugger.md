@@ -53,6 +53,7 @@ Before investigating:
 8. `goop_reference({ name: "response-format" })` — response envelope.
 9. `goop_reference({ name: "architecture-design" })` — failure-mode patterns.
 10. `goop_reference({ name: "security-checklist" })` — security-sensitive bugs.
+11. Batch independent tool calls into a single message — see `references/core-protocol.md` Tool-Call Batching.
 
 Resolve `<workflowId>` from `goop_state`. If any required step fails, return `BLOCKED`.
 
