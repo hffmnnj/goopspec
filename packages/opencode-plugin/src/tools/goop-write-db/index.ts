@@ -60,6 +60,8 @@ export function createGoopWriteDbTool(ctx: PluginContext): ToolDefinition {
           const result = runBatch(ctx.db, args.items, (item) => {
             const itemMode = item.mode ?? "replace";
 
+            ctx.db.deleteSections(workflowId, item.doc_type);
+
             if (itemMode === "append") {
               ctx.db.appendDocument(workflowId, item.doc_type, item.content);
               if (item.doc_type === "chronicle") {
@@ -86,6 +88,7 @@ export function createGoopWriteDbTool(ctx: PluginContext): ToolDefinition {
         const mode = args.mode ?? "replace";
 
         // Persist to DB
+        ctx.db.deleteSections(workflowId, args.doc_type);
         if (mode === "append") {
           ctx.db.appendDocument(workflowId, args.doc_type, args.content);
           // Also insert chronicle event row when appending chronicle
