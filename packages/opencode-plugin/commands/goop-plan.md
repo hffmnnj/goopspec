@@ -94,7 +94,7 @@ Present a contract gate via the `question` tool:
 
 ## Autopilot
 
-If `workflow.autopilot == true`, skip the contract gate confirmation, lock the spec, then immediately call:
+If `workflow.autopilot == true` or `workflow.lazyAutopilot == true`, skip the contract gate confirmation, lock the spec, then immediately call:
 
 ```
 mcp_slashcommand({ command: "/goop-execute" })

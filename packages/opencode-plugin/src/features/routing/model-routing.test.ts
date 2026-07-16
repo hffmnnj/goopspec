@@ -98,8 +98,8 @@ describe("resolveModelForRole", () => {
     expect(resolveModelForRole("orchestrator", testDir)).toBe(DEFAULT_MODEL_MAP.orchestrator);
   });
 
-  it("covers all 13 agent roles", () => {
-    expect(AGENT_ROLES.length).toBe(13);
+  it("covers all 14 agent roles", () => {
+    expect(AGENT_ROLES.length).toBe(14);
     for (const role of AGENT_ROLES) {
       const model = resolveModelForRole(role);
       expect(typeof model).toBe("string");
@@ -158,8 +158,8 @@ describe("resolveModelForTier", () => {
     }
   });
 
-  it("covers all 5 executor tiers", () => {
-    expect(EXECUTOR_TIERS.length).toBe(5);
+  it("covers all 6 executor tiers", () => {
+    expect(EXECUTOR_TIERS.length).toBe(6);
     for (const tier of EXECUTOR_TIERS) {
       const model = resolveModelForTier(tier);
       expect(typeof model).toBe("string");
@@ -231,9 +231,9 @@ describe("buildModelPreferenceMap", () => {
     }
   });
 
-  it("returns preferences for all 13 roles", () => {
+  it("returns preferences for all 14 roles", () => {
     const map = buildModelPreferenceMap();
-    expect(Object.keys(map).length).toBe(13);
+    expect(Object.keys(map).length).toBe(14);
     for (const role of AGENT_ROLES) {
       expect(map[role]).toBeDefined();
       expect(map[role].preferred).toBe(DEFAULT_MODEL_MAP[role]);
