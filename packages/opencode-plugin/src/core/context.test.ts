@@ -112,7 +112,7 @@ describe("createPluginContext()", () => {
     const tools = createTools(ctx);
 
     const toolNames = Object.keys(tools);
-    expect(toolNames).toHaveLength(29);
+    expect(toolNames).toHaveLength(30);
     expect(toolNames).toContain("goop_status");
     expect(toolNames).toContain("goop_state");
     expect(toolNames).toContain("goop_read_db");
