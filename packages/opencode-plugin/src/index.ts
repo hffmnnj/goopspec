@@ -7,6 +7,7 @@
 
 import { createPluginContext } from "./core/context.js";
 import type { Plugin } from "./core/sdk-compat.js";
+import { V2Plugin, type V2PluginContext } from "./core/v2-compat.js";
 import { DEFAULT_HOOK_FACTORIES, createHooks } from "./hooks/index.js";
 import { syncGlobalConfigSidecar } from "./shared/global-config-sidecar.js";
 import { logError } from "./shared/logger.js";
@@ -25,5 +26,17 @@ const goopspec: Plugin = async (input) => {
   }
 };
 
+const v2Plugin = V2Plugin.define({
+  id: "goopspec",
+  async setup(ctx: V2PluginContext): Promise<void> {
+    try {
+      // V2 context adaptation and registrations are added in later stages.
+      void ctx.options;
+    } catch (error) {
+      logError("V2 plugin initialization failed", error);
+    }
+  },
+});
+
 export const server = goopspec;
-export default goopspec;
+export default Object.assign(goopspec, v2Plugin);
