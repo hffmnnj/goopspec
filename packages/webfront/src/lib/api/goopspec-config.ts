@@ -60,15 +60,54 @@ const CONFIG_PATHS = {
 	project: "goopspec.json",
 } as const;
 
+/**
+ * The GoopSpec plugin prefix on agent IDs registered with OpenCode.
+ * e.g. "goop-orchestrator" → role key "orchestrator"
+ */
+const AGENT_PREFIX = "goop-";
+
 async function tryReadJson(
 	client: OpenCodeClient,
 	path: string,
 ): Promise<Record<string, unknown> | null> {
 	try {
 		const text = await client.readFile(path);
-		return JSON.parse(text) as Record<string, unknown>;
+		if (!text || Array.isArray(text)) return null;
+		return JSON.parse(text as string) as Record<string, unknown>;
 	} catch {
 		return null;
+	}
+}
+
+/**
+ * Load global GoopSpec config from `GET /agent`. The GoopSpec plugin
+ * registers agents as "goop-{role}" with their configured model resolved
+ * from ~/.config/opencode/goopspec.json. We strip the prefix and combine
+ * providerID/modelID to reconstruct the canonical agentModels map.
+ */
+async function loadGlobalGoopspecConfig(
+	client: OpenCodeClient,
+): Promise<GoopSpecConfig> {
+	try {
+		const agents = await client.listAgents();
+		const agentModels: Record<string, string> = {};
+		for (const agent of agents) {
+			if (!agent.id.startsWith(AGENT_PREFIX)) continue;
+			const role = agent.id.slice(AGENT_PREFIX.length);
+			// The raw agent response spreads all fields; providerID + modelID
+			// are present on the underlying object even if not in the Agent type.
+			const raw = agent as Record<string, unknown>;
+			const modelInfo = raw.model as Record<string, string> | string | undefined;
+			if (typeof modelInfo === "string" && modelInfo) {
+				agentModels[role] = modelInfo;
+			} else if (modelInfo && typeof modelInfo === "object") {
+				const { providerID, modelID } = modelInfo;
+				if (providerID && modelID) agentModels[role] = `${providerID}/${modelID}`;
+			}
+		}
+		return Object.keys(agentModels).length > 0 ? { agentModels } : {};
+	} catch {
+		return {};
 	}
 }
 
@@ -149,34 +188,49 @@ function normalizeProjectScoped(
 // ---- Public API -----------------------------------------------------------
 
 /**
- * Load and merge GoopSpec config from readable sources (internal + project).
- * Global (~/.config/opencode/goopspec.json) is NOT readable from the browser.
+ * Load and merge GoopSpec config from readable sources (global + internal +
+ * project). Merge order is global (lowest) → internal → project (highest).
  * Returns merged config and per-field source tracking.
  */
 export async function loadMergedGoopspecConfig(
 	client: OpenCodeClient,
 ): Promise<MergedGoopSpecConfig> {
-	const internalRaw = await tryReadJson(client, CONFIG_PATHS.internal);
-	const projectRaw = await tryReadJson(client, CONFIG_PATHS.project);
+	const [global, internalRaw, projectRaw] = await Promise.all([
+		loadGlobalGoopspecConfig(client),
+		tryReadJson(client, CONFIG_PATHS.internal),
+		tryReadJson(client, CONFIG_PATHS.project),
+	]);
 
 	const internal = internalRaw ? normalizeRaw(internalRaw) : {};
 	const project = projectRaw ? normalizeRaw(projectRaw) : {};
 
+	const globalModels = global.agentModels;
 	const internalModels = internal.agentModels;
 	const projectModels = project.agentModels;
+	const globalBudgets = global.agentThinkingBudgets;
 	const internalBudgets = internal.agentThinkingBudgets;
 	const projectBudgets = project.agentThinkingBudgets;
+
 	const mergedModels =
-		internalModels || projectModels
-			? { ...(internalModels ?? {}), ...(projectModels ?? {}) }
+		globalModels || internalModels || projectModels
+			? {
+					...(globalModels ?? {}),
+					...(internalModels ?? {}),
+					...(projectModels ?? {}),
+				}
 			: undefined;
 	const mergedBudgets =
-		internalBudgets || projectBudgets
-			? { ...(internalBudgets ?? {}), ...(projectBudgets ?? {}) }
+		globalBudgets || internalBudgets || projectBudgets
+			? {
+					...(globalBudgets ?? {}),
+					...(internalBudgets ?? {}),
+					...(projectBudgets ?? {}),
+				}
 			: undefined;
 
-	// Merge: internal is base, project overrides (mirrors plugin loadMergedConfig priority)
+	// Merge: global is base, internal overrides, project wins (mirrors plugin loadMergedConfig priority)
 	const raw: GoopSpecConfig = {
+		...global,
 		...internal,
 		...project,
 		agentModels: mergedModels,
@@ -198,12 +252,17 @@ export async function loadMergedGoopspecConfig(
 			sources[field] = "project";
 		} else if (internal[field] !== undefined) {
 			sources[field] = "internal";
+		} else if (global[field] !== undefined) {
+			sources[field] = "global";
 		}
 		// else: 'built-in' (no explicit assignment — callers show "built-in" when source is undefined)
 	}
 
-	// Per-role agentModels source: project override wins over internal.
+	// Per-role agentModels source: project wins, then internal, then global.
 	const agentModelSources: Record<string, ConfigSource> = {};
+	for (const role of Object.keys(globalModels ?? {})) {
+		agentModelSources[role] = "global";
+	}
 	for (const role of Object.keys(internalModels ?? {})) {
 		agentModelSources[role] = "internal";
 	}
@@ -310,7 +369,7 @@ export async function loadProjectGoopspecConfig(
 	const defaultAgentSource: ConfigSource = projectBlock.defaultAgent
 		? "project"
 		: base.raw.defaultAgent
-			? base.sources.defaultAgent ?? "internal"
+			? base.sources.defaultAgent ?? "global"
 			: "built-in";
 
 	return {

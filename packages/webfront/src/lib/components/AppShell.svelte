@@ -1,7 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { goto } from '$app/navigation';
-  import { page } from '$app/state';
   import { HugeiconsIcon } from '@hugeicons/svelte';
   import {
     SidebarLeft01Icon,
@@ -10,7 +9,6 @@
     Message01Icon,
     File01Icon,
     InboxIcon,
-    SlidersHorizontalIcon,
   } from '@hugeicons/core-free-icons';
 
   import {
@@ -43,7 +41,7 @@
   import { useKeyboard } from '$lib/keyboard/actions.svelte.js';
   import { registerDefaultShortcuts } from '$lib/keyboard/shortcuts.js';
   import { initToastBindings } from '$lib/stores/toast-bindings.svelte.js';
-  import { projectRoute, projectSettingsRoute } from '$lib/routing/navigation.js';
+  import { projectRoute } from '$lib/routing/navigation.js';
   import type { Project } from '$lib/api/types.js';
 
   interface AppShellProps {
@@ -107,22 +105,6 @@
   const phoneView = $derived(layoutStore.mobileView);
 
   const rootPath = $derived(workspace.currentPath ?? '.');
-
-  // Project Settings entry: resolves to the active project's /settings route and
-  // highlights when the current route is anywhere under that settings tree.
-  const activeProject = $derived(projects.activeProject);
-  const settingsHref = $derived(
-    activeProject ? projectSettingsRoute(activeProject) : undefined
-  );
-  const settingsActive = $derived(
-    settingsHref !== undefined &&
-      (page.url.pathname === settingsHref ||
-        page.url.pathname.startsWith(`${settingsHref}/`))
-  );
-
-  function openProjectSettings(): void {
-    if (settingsHref) void goto(settingsHref);
-  }
 
   onMount(() => {
     registerDefaultShortcuts();
@@ -281,7 +263,6 @@
     >
       <div class="chat-topbar">
         <span class="topbar-spacer"></span>
-        {@render projectSettingsButton()}
         <SettingsButton />
         <button
           type="button"
@@ -399,8 +380,6 @@
       {/if}
 
       <span class="topbar-spacer"></span>
-
-      {@render projectSettingsButton()}
 
       <SettingsButton />
 
@@ -555,22 +534,6 @@
 <div class="install-prompt-host" aria-live="polite">
   <InstallPrompt />
 </div>
-
-{#snippet projectSettingsButton()}
-  {#if settingsHref}
-    <button
-      type="button"
-      class="chrome-btn"
-      class:chrome-btn--active={settingsActive}
-      aria-label="Project settings"
-      aria-current={settingsActive ? 'page' : undefined}
-      title="Project settings"
-      onclick={openProjectSettings}
-    >
-      <HugeiconsIcon icon={SlidersHorizontalIcon} size={18} strokeWidth={1.5} color="currentColor" />
-    </button>
-  {/if}
-{/snippet}
 
 {#snippet mainContent()}
   {#if main}
@@ -770,13 +733,6 @@
   .chrome-btn:focus-visible {
     outline: 2px solid var(--focus-ring);
     outline-offset: 2px;
-  }
-
-  .chrome-btn--active,
-  .chrome-btn--active:hover {
-    color: var(--accent-text);
-    background-color: var(--accent-soft);
-    border-color: transparent;
   }
 
   /* ---- Drawer chrome ---- */

@@ -8,6 +8,7 @@
   import {
     loadProjectGoopspecConfig,
     replaceProjectAgentModels,
+    type ConfigSource,
     type MergedProjectConfig
   } from '$lib/api/goopspec-config.js';
 
@@ -133,17 +134,45 @@
   );
 
   /**
-   * The global fallback for a role — what "Default" resolves to when no project
-   * override is set. Project-sourced model values are intentionally skipped so
-   * the label always reflects the global setting, not the current override.
+   * The model a role inherits when it has no project override — i.e. the value
+   * coming from global/internal config, or the built-in default. Project-sourced
+   * values are intentionally skipped so this always reflects what the role would
+   * fall back to once its override is removed.
    */
-  function globalDefault(role: string): string {
+  function inheritedModel(role: string): string {
     const cfg = projectConfig;
-    const globalModel =
+    const inherited =
       cfg && cfg.agentModelSources[role] !== 'project'
         ? cfg.raw.agentModels?.[role]
         : undefined;
-    return globalModel ?? cfg?.raw.defaultModel ?? DEFAULT_MODEL_MAP[role] ?? 'unknown';
+    return inherited ?? cfg?.raw.defaultModel ?? DEFAULT_MODEL_MAP[role] ?? 'unknown';
+  }
+
+  /**
+   * The source the role inherits from when it has no project override. This is
+   * "global" or "internal" when some readable config supplies the value, and
+   * "built-in" when nothing is configured anywhere. Project sources are never
+   * returned here — the override state is tracked separately by the draft.
+   */
+  function inheritedSource(role: string): ConfigSource {
+    const source = projectConfig?.agentModelSources[role];
+    if (source && source !== 'project') return source;
+    return 'built-in';
+  }
+
+  /**
+   * Human label for the inherited source, used in the badge and the dropdown's
+   * reset option so the user can see exactly where the fallback comes from.
+   */
+  function inheritedSourceLabel(role: string): string {
+    switch (inheritedSource(role)) {
+      case 'global':
+        return 'global';
+      case 'internal':
+        return 'internal';
+      default:
+        return 'built-in';
+    }
   }
 
   /** The current draft override for a role (empty string = use Default). */
@@ -259,15 +288,20 @@
         <div class="rows" role="list">
           {#each group.roles as role (role)}
             {@const override = draftValue(role)}
-            <div class="row" role="listitem">
+            <div class="row" role="listitem" class:row--overridden={!!override}>
               <div class="row__id">
                 <span class="role-name">{role}</span>
                 {#if override}
-                  <span class="badge badge--override">override</span>
-                {:else}
-                  <span class="effective" title={globalDefault(role)}>
-                    Default · {globalDefault(role)}
+                  <span class="badge badge--override">project override</span>
+                  <span class="effective" title={`Inherits ${inheritedModel(role)} from ${inheritedSourceLabel(role)}`}>
+                    was {inheritedSourceLabel(role)} · {inheritedModel(role)}
                   </span>
+                {:else if inheritedSource(role) === 'built-in'}
+                  <span class="badge badge--builtin">built-in</span>
+                  <span class="effective" title={inheritedModel(role)}>{inheritedModel(role)}</span>
+                {:else}
+                  <span class="badge badge--inherited">{inheritedSourceLabel(role)}</span>
+                  <span class="effective" title={inheritedModel(role)}>{inheritedModel(role)}</span>
                 {/if}
               </div>
 
@@ -280,7 +314,7 @@
                   disabled={saving}
                   onchange={(e) => handleChange(role, e)}
                 >
-                  <option value="">Default (use global setting)</option>
+                  <option value="">Use {inheritedSourceLabel(role)} default ({inheritedModel(role)})</option>
                   {#if override && !knownModelValues.has(override)}
                     <option value={override}>{override} (custom)</option>
                   {/if}
@@ -308,10 +342,10 @@
           </span>
         {:else if overrideCount > 0}
           <span class="override-count">
-            {overrideCount} role{overrideCount === 1 ? '' : 's'} overridden
+            {overrideCount} project override{overrideCount === 1 ? '' : 's'}
           </span>
         {:else}
-          <span class="override-count override-count--muted">All roles use global defaults</span>
+          <span class="override-count override-count--muted">All roles inherit global defaults</span>
         {/if}
       </div>
 
@@ -467,6 +501,10 @@
     background-color: var(--bg-elevated);
   }
 
+  .row--overridden {
+    box-shadow: inset 2px 0 0 0 var(--accent);
+  }
+
   .row__id {
     display: flex;
     align-items: center;
@@ -507,6 +545,18 @@
     color: var(--accent-text);
     background-color: var(--accent-soft);
     border-color: color-mix(in srgb, var(--accent-text) 28%, transparent);
+  }
+
+  .badge--inherited {
+    color: var(--text-muted);
+    background-color: var(--bg-surface);
+    border-color: var(--border);
+  }
+
+  .badge--builtin {
+    color: var(--text-muted);
+    background-color: transparent;
+    border-color: var(--border);
   }
 
   /* ---- Model picker ---- */

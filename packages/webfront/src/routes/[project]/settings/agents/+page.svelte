@@ -4,7 +4,7 @@
   import { Loading03Icon, Alert02Icon } from '@hugeicons/core-free-icons';
   import { createClient } from '$lib/api/client.js';
   import { fetchProviders } from '$lib/api/providers.js';
-  import type { Agent, Provider } from '$lib/api/types.js';
+  import type { Provider } from '$lib/api/types.js';
   import {
     loadProjectGoopspecConfig,
     saveProjectGoopspecConfig,
@@ -60,21 +60,14 @@
 
   // ---- Reactive state ------------------------------------------------------
   let config = $state<MergedProjectConfig | null>(null);
-  let agents = $state<Agent[]>([]);
   let providers = $state<Provider[]>([]);
   let configLoading = $state(true);
-  let agentsLoading = $state(true);
   let providersLoading = $state(true);
   let configError = $state<string | null>(null);
-  let agentsError = $state<string | null>(null);
   let providersError = $state<string | null>(null);
   let saveError = $state<string | null>(null);
-  /** Role (or 'default-agent') currently mid-save, so its control shows busy. */
+  /** Role currently mid-save, so its control shows busy. */
   let savingKey = $state<string | null>(null);
-
-  function isSelectableAgent(agent: Agent): boolean {
-    return agent.mode !== 'subagent' && agent.hidden !== true;
-  }
 
   onMount(() => {
     void (async () => {
@@ -89,17 +82,6 @@
 
     void (async () => {
       try {
-        const loaded = await client.listAgents();
-        agents = (Array.isArray(loaded) ? loaded : []).filter(isSelectableAgent);
-      } catch (err) {
-        agentsError = err instanceof Error ? err.message : 'Failed to load agents';
-      } finally {
-        agentsLoading = false;
-      }
-    })();
-
-    void (async () => {
-      try {
         providers = await fetchProviders(client);
       } catch (err) {
         providersError = err instanceof Error ? err.message : 'Failed to load providers';
@@ -108,40 +90,6 @@
       }
     })();
   });
-
-  // ---- Default agent (Section 1) -------------------------------------------
-
-  /** Effective default agent for this project (project override > global). */
-  const defaultAgentId = $derived(config?.defaultAgent ?? '');
-
-  const defaultAgentSource = $derived<ConfigSource>(
-    config?.defaultAgentSource ?? 'built-in'
-  );
-
-  async function setDefaultAgent(value: string): Promise<void> {
-    if (value === '' || value === defaultAgentId) return;
-    savingKey = 'default-agent';
-    saveError = null;
-    const previous = config;
-    try {
-      // Optimistic update — revert on failure.
-      if (config) {
-        config = { ...config, defaultAgent: value, defaultAgentSource: 'project' };
-      }
-      await saveProjectGoopspecConfig(client, projectId, { defaultAgent: value });
-    } catch (err) {
-      saveError = err instanceof Error ? err.message : 'Save failed';
-      config = previous;
-    } finally {
-      savingKey = null;
-    }
-  }
-
-  function handleDefaultAgentChange(event: Event): void {
-    void setDefaultAgent((event.currentTarget as HTMLSelectElement).value);
-  }
-
-  // ---- Per-role model assignments (Section 2) ------------------------------
 
   /** Flat list of every provider/model pair for the picker options. */
   const modelOptions = $derived(
@@ -216,7 +164,7 @@
   <header class="section-header">
     <h2 id="project-agents-heading" class="section-title">Project Agents</h2>
     <p class="section-subtitle">
-      Default agent and model routing for this project. Overrides apply only here.
+      Per-role model routing for this project. Overrides apply only here.
     </p>
   </header>
 
@@ -240,49 +188,7 @@
       </div>
     {/if}
 
-    <!-- Section 1 — Default agent -->
-    <section class="tier" aria-labelledby="default-agent-heading">
-      <h3 id="default-agent-heading" class="tier-title">Default agent</h3>
-
-      {#if agentsError}
-        <div class="provider-note" role="status">
-          <HugeiconsIcon icon={Alert02Icon} size={14} color="currentColor" strokeWidth={1.5} />
-          <span>Could not load agents ({agentsError}).</span>
-        </div>
-      {/if}
-
-      <div class="rows" role="list">
-        <div class="row" role="listitem" class:row--busy={savingKey === 'default-agent'}>
-          <div class="row__id">
-            <span class="role-name">default</span>
-            <span class="effective" title={defaultAgentId || 'inherit global default'}>
-              {defaultAgentId || 'inherit global default'}
-            </span>
-            {@render badge(defaultAgentSource)}
-          </div>
-
-          <div class="row__control">
-            <label class="sr-only" for="default-agent-select">Default agent for project</label>
-            <select
-              id="default-agent-select"
-              class="model-select"
-              value={defaultAgentId}
-              disabled={savingKey === 'default-agent' || agentsLoading}
-              onchange={handleDefaultAgentChange}
-            >
-              <option value="">
-                {agentsLoading ? 'Loading agents…' : 'Inherit global default'}
-              </option>
-              {#each agents as item (item.id)}
-                <option value={item.id}>{item.name ?? item.id}</option>
-              {/each}
-            </select>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <!-- Section 2 — Per-role model assignments -->
+    <!-- Per-role model assignments -->
     {#if providersError}
       <div class="provider-note" role="status">
         <HugeiconsIcon icon={Alert02Icon} size={14} color="currentColor" strokeWidth={1.5} />

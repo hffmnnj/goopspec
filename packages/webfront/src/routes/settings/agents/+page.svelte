@@ -128,6 +128,25 @@
     return config?.raw.agentModels?.[role] ?? '';
   }
 
+  /**
+   * Whether any readable config (global/internal/project) supplies a model for
+   * this role. When true, the select binds to that real value and the empty
+   * option is a "reset to built-in" action rather than the default selection.
+   */
+  function hasConfiguredModel(role: string): boolean {
+    return modelSource(role) !== undefined;
+  }
+
+  /**
+   * Label for the empty option. When a real config value exists the empty
+   * option clears the override back to the built-in default; otherwise it is
+   * the inherited default (nothing configured anywhere).
+   */
+  function inheritOptionLabel(role: string): string {
+    if (providersLoading) return 'Loading models…';
+    return hasConfiguredModel(role) ? 'Reset to built-in default' : 'Inherit default';
+  }
+
   /** The active thinking budget for a role, defaulting to 0 (None). */
   function budgetValue(role: string): number {
     return config?.raw.agentThinkingBudgets?.[role] ?? 0;
@@ -249,9 +268,7 @@
                   disabled={savingRole === role || providersLoading}
                   onchange={(e) => handleModelChange(role, e)}
                 >
-                  <option value="">
-                    {providersLoading ? 'Loading models…' : 'Inherit default'}
-                  </option>
+                  <option value="">{inheritOptionLabel(role)}</option>
                   {#if overrideValue(role) && !knownModelValues.has(overrideValue(role))}
                     <option value={overrideValue(role)}>{overrideValue(role)} (custom)</option>
                   {/if}
@@ -292,8 +309,11 @@
     {/each}
 
     <p class="global-note">
-      Overrides save to the project <code>goopspec.json</code> namespace. Roles without an
-      override inherit the default model.
+      Each row shows the effective model and its source. Values resolve through
+      <code>~/.config (global)</code> → <code>.goopspec/config.json</code> →
+      <code>goopspec.json</code>, with later layers winning. Saving here writes to the project
+      <code>goopspec.json</code> namespace; choosing <em>Reset to built-in default</em> clears the
+      saved value.
     </p>
   {/if}
 </section>

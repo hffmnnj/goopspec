@@ -30,6 +30,10 @@
     colorIndexFor?: (id: string) => number;
     /** Navigate to a specific session within a project (from the hover popover). */
     onSelectSession?: (project: Project, sessionId: string) => void;
+    /** Open a project's settings page (from the hover popover). */
+    onOpenSettings?: (project: Project) => void;
+    /** Start a new session in a project (from the hover popover). */
+    onNewSession?: (project: Project) => void;
     /**
      * Orientation. `vertical` (default) for the desktop sidebar rail;
      * `horizontal` for the phone chip row above the session list.
@@ -44,6 +48,8 @@
     onClose,
     colorIndexFor,
     onSelectSession,
+    onOpenSettings,
+    onNewSession,
     orientation = 'vertical',
   }: ProjectRailProps = $props();
 
@@ -128,6 +134,14 @@
               onselectsession={(sessionId) => {
                 clearHover();
                 onSelectSession?.(project, sessionId);
+              }}
+              onopensettings={() => {
+                clearHover();
+                onOpenSettings?.(project);
+              }}
+              onnewsession={() => {
+                clearHover();
+                onNewSession?.(project);
               }}
             />
           {/if}

@@ -65,3 +65,31 @@ export class ProjectSessionCache {
     this.inflight.delete(worktree);
   }
 }
+
+/** Whether a session is the one currently open (active). */
+export function isActiveSession(
+  session: Pick<Session, 'id'>,
+  activeId: string | null | undefined
+): boolean {
+  return activeId != null && session.id === activeId;
+}
+
+/**
+ * A short, one-line, muted hint shown under a session's title in the popover.
+ * The `Session` shape carries no summary field, so we derive a useful hint from
+ * the data we do have: a sub-session marker plus a compact message count.
+ * Returns an empty string when there's nothing meaningful to show.
+ */
+export function sessionHint(
+  session: Pick<Session, 'parentID' | 'messageCount'>
+): string {
+  const parts: string[] = [];
+  if (session.parentID) parts.push('Sub-session');
+
+  const count = session.messageCount;
+  if (typeof count === 'number' && count > 0) {
+    parts.push(`${count} ${count === 1 ? 'message' : 'messages'}`);
+  }
+
+  return parts.join(' · ');
+}
