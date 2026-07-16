@@ -1,12 +1,12 @@
 # Enforcement System
 
-Hook-based enforcement that turns GoopSpec from suggestions into an enforced workflow.
+Hook-based enforcement that turns GoopSpec rules into runtime constraints.
 
 ## Components
 
 ### Phase Context Builder
 
-Generates phase-specific `MUST DO` / `MUST NOT DO` rules for injection into system prompts.
+Generates phase-specific `MUST DO` / `MUST NOT DO` rules for system prompts.
 
 Key functions:
 
@@ -17,14 +17,14 @@ Key functions:
 
 ### Document Scaffolder
 
-Creates phase directory structure with templated documents.
+Creates phase directory structure and required documents.
 
 Key functions:
 
 - `scaffoldPhaseDocuments(ctx, phaseName, phase)`
 - `checkPhaseDocuments(ctx, phaseName, phase)`
 
-Required documents by phase (checked via `goop_read_db({ doc_type: "..." })` returning content, not a 'not found' message):
+Required documents (checked via `goop_read_db({ doc_type: "..." })` returning content):
 
 | Type | Required In |
 |------|-------------|
@@ -81,7 +81,7 @@ Processes `/goop-*` slash commands, triggers state transitions, scaffolds phase 
 MUST DO:
 
 - Ask clarifying questions.
-- Create spec document via `goop_write_db({ doc_type: "spec", content: "..." })` with must-haves, nice-to-haves, out of scope.
+- Create spec via `goop_write_db({ doc_type: "spec", content: "..." })` with must-haves, nice-to-haves, out of scope.
 - Get user confirmation before proceeding.
 
 MUST NOT DO:
@@ -95,7 +95,7 @@ MUST NOT DO:
 MUST DO:
 
 - Read spec via `goop_read_db({ doc_type: "spec" })`.
-- Persist findings as Field Notes via `goop_save_note`. Search prior research via `goop_search_notes`.
+- Persist findings as Field Notes via `goop_save_note`; search prior research via `goop_search_notes`.
 - Document trade-offs and recommendations.
 
 MUST NOT DO:
@@ -107,7 +107,7 @@ MUST NOT DO:
 
 MUST DO:
 
-- Create blueprint document via `goop_write_db({ doc_type: "blueprint", content: "..." })` with wave-based plan.
+- Create blueprint via `goop_write_db({ doc_type: "blueprint", content: "..." })` with wave-based plan.
 - Map all must-haves to tasks.
 - Get user confirmation to lock specification.
 
@@ -145,7 +145,7 @@ MUST NOT DO:
 
 ## Context Injection
 
-Project-level knowledge flows automatically to every agent via `PROJECT_KNOWLEDGE_BASE.md`.
+Project-level knowledge flows automatically via `PROJECT_KNOWLEDGE_BASE.md`.
 
 ### What to Include
 
@@ -164,7 +164,7 @@ Project-level knowledge flows automatically to every agent via `PROJECT_KNOWLEDG
 
 ### Injection Points
 
-- Every subagent reads `PROJECT_KNOWLEDGE_BASE.md` before starting work.
+- Every subagent reads `PROJECT_KNOWLEDGE_BASE.md` before work.
 - Orchestrator prompts include relevant context sections.
 - `memory_search` augments injected knowledge with task-specific memories.
 
@@ -180,14 +180,14 @@ Delegate to `goop-executor-{tier}`. The orchestrator is blocked from writing imp
 
 ### Phase transition rejected
 
-Ensure required documents exist in DB before transitioning (check via `goop_read_db({ doc_type: "..." })` returning content):
+Ensure required documents exist in DB:
 
-- `execute` requires `spec` document in DB.
-- `accept` requires `spec`, `blueprint`, and `chronicle` documents in DB.
+- `execute` requires `spec` document.
+- `accept` requires `spec`, `blueprint`, and `chronicle` documents.
 
 ### Commands not triggering state changes
 
-Verify the command is processed by checking ADL entries via `goop_adl({ action: "read" })`.
+Verify command processing via ADL entries: `goop_adl({ action: "read" })`.
 
 ---
 
