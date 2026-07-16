@@ -56,7 +56,12 @@ describe("goop_record_verification tool", () => {
   it("appends a verification_record event", async () => {
     const verificationTool = createGoopRecordVerificationTool(ctx);
     await verificationTool.execute(
-      { check_name: "lint", status: "skip", wave_id: 4, detail: "not configured" },
+      {
+        check_name: "lint",
+        status: "skip",
+        wave_id: 4,
+        detail: "not configured",
+      },
       toolCtx,
     );
 
@@ -69,5 +74,66 @@ describe("goop_record_verification tool", () => {
     expect(payload.check_name).toBe("lint");
     expect(payload.status).toBe("skip");
     expect(payload.timestamp).toBeGreaterThan(0);
+  });
+
+  // -----------------------------------------------------------------------
+  // Batch items[]
+  // -----------------------------------------------------------------------
+
+  it("records multiple verifications in a single items batch", async () => {
+    const verificationTool = createGoopRecordVerificationTool(ctx);
+
+    const result = await verificationTool.execute(
+      {
+        items: [
+          {
+            check_name: "typecheck",
+            status: "pass",
+            wave_id: 2,
+            detail: "clean",
+          },
+          {
+            check_name: "test",
+            status: "fail",
+            wave_id: 2,
+            detail: "1 failed",
+          },
+          { check_name: "lint", status: "skip" },
+        ],
+      },
+      toolCtx,
+    );
+
+    expect(result).toContain("Batch record-verification: 3/3 succeeded");
+    expect(result).toContain("[0] OK: Recorded typecheck=pass");
+    expect(result).toContain("[1] OK: Recorded test=fail");
+    expect(result).toContain("[2] OK: Recorded lint=skip");
+
+    const verifications = ctx.db.getVerifications("default", 2);
+    expect(verifications.length).toBe(2);
+    expect(verifications.map((v) => v.check_name).sort()).toEqual(["test", "typecheck"]);
+
+    const allVerifications = ctx.db.getVerifications("default");
+    expect(allVerifications.some((v) => v.check_name === "lint" && v.wave_id === null)).toBe(true);
+  });
+
+  it("fails the whole batch when db transaction throws", async () => {
+    const verificationTool = createGoopRecordVerificationTool(ctx);
+
+    // Force the third item to fail by causing the DB to throw mid-batch via an oversized detail string.
+    const oversizedDetail = "x".repeat(1_000_000_000);
+    const result = await verificationTool.execute(
+      {
+        items: [
+          { check_name: "typecheck", status: "pass", wave_id: 2 },
+          { check_name: "test", status: "fail", wave_id: 2 },
+          { check_name: "lint", status: "skip", detail: oversizedDetail },
+        ],
+      },
+      toolCtx,
+    );
+
+    expect(result).toContain("Batch record-verification: 0/3 succeeded, 3 failed");
+    expect(ctx.db.getVerifications("default").length).toBe(0);
   });
 });
