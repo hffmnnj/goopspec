@@ -31,7 +31,7 @@ export interface PhaseRules {
 
 const DELEGATION_NOTE = [
   "DELEGATE all code work to executor subagents using the task() tool.",
-  'Use subagent_type: "goop-executor-{tier}" (low/medium/high/frontend-low/frontend-high).',
+  'Use subagent_type: "goop-executor-{tier}" (low/medium/high/frontend-low/frontend-medium/frontend-high).',
   "Never write implementation code directly as the orchestrator.",
 ].join("\n");
 
