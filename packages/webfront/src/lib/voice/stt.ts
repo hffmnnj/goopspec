@@ -8,9 +8,11 @@
  */
 
 export type SttStatus = 'idle' | 'loading' | 'ready' | 'transcribing' | 'error';
+export type SttErrorStage = 'model-load' | 'transcription';
+export type SttError = Error & { stage?: SttErrorStage };
 
-export type SttProgressCallback = (status: string, progress?: number) => void;
-export type SttErrorCallback = (message: string) => void;
+export type SttProgressCallback = (status: string, progress?: number, message?: string) => void;
+export type SttErrorCallback = (message: string, stage?: SttErrorStage) => void;
 
 /** Public surface returned by {@link createSttService}. */
 export interface SttService {
@@ -27,14 +29,14 @@ export interface SttService {
 }
 
 type WorkerOutbound =
-  | { type: 'progress'; status: string; progress?: number }
+  | { type: 'progress'; id?: number; status: string; message?: string; progress?: number }
   | { type: 'ready'; device: 'webgpu' | 'wasm' }
   | { type: 'transcript'; id: number; text: string }
-  | { type: 'error'; id?: number; message: string };
+  | { type: 'error'; id?: number; message: string; stage?: SttErrorStage };
 
 interface Pending {
   resolve: (text: string) => void;
-  reject: (error: Error) => void;
+  reject: (error: SttError) => void;
 }
 
 function isBrowser(): boolean {
@@ -53,16 +55,22 @@ export function createSttService(): SttService {
     currentStatus = next;
   }
 
-  function emitProgress(status: string, progress?: number): void {
-    for (const cb of progressCallbacks) cb(status, progress);
+  function emitProgress(status: string, progress?: number, message?: string): void {
+    for (const cb of progressCallbacks) cb(status, progress, message);
   }
 
-  function emitError(message: string): void {
-    for (const cb of errorCallbacks) cb(message);
+  function emitError(message: string, stage?: SttErrorStage): void {
+    for (const cb of errorCallbacks) cb(message, stage);
   }
 
-  function rejectAll(message: string): void {
-    const error = new Error(message);
+  function createSttError(message: string, stage?: SttErrorStage): SttError {
+    const error: SttError = new Error(message);
+    error.stage = stage;
+    return error;
+  }
+
+  function rejectAll(message: string, stage?: SttErrorStage): void {
+    const error = createSttError(message, stage);
     for (const entry of pending.values()) entry.reject(error);
     pending.clear();
   }
@@ -72,7 +80,7 @@ export function createSttService(): SttService {
     switch (data.type) {
       case 'progress':
         if (currentStatus !== 'transcribing') setStatus('loading');
-        emitProgress(data.status, data.progress);
+        emitProgress(data.status, data.progress, data.message);
         break;
       case 'ready':
         setStatus('ready');
@@ -87,14 +95,16 @@ export function createSttService(): SttService {
       }
       case 'error': {
         setStatus('error');
+        console.error('[STT Worker] Error:', data.message, 'stage:', data.stage);
+        const error = createSttError(data.message, data.stage);
         if (typeof data.id === 'number') {
           const entry = pending.get(data.id);
           pending.delete(data.id);
-          entry?.reject(new Error(data.message));
+          entry?.reject(error);
         } else {
-          rejectAll(data.message);
+          rejectAll(data.message, data.stage);
         }
-        emitError(data.message);
+        emitError(data.message, data.stage);
         break;
       }
     }

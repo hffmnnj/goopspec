@@ -6,15 +6,20 @@
   import { fetchProviders } from '$lib/api/providers.js';
   import type { Provider } from '$lib/api/types.js';
   import {
-    loadMergedGoopspecConfig,
-    saveGoopspecConfig,
-    type MergedGoopSpecConfig,
+    loadProjectGoopspecConfig,
+    saveProjectGoopspecConfig,
+    type MergedProjectConfig,
     type ConfigSource
   } from '$lib/api/goopspec-config.js';
 
+  let { data } = $props();
+
   const client = createClient();
 
-  // ---- Role taxonomy (mirrors plugin AGENT_ROLES + tier grouping) ----------
+  /** Project identity for scoping config reads/writes (from the layout load). */
+  const projectId = $derived(data.projectParam);
+
+  // ---- Role taxonomy (mirrors the global /settings/agents page) ------------
   type TierGroup = { id: string; title: string; roles: string[] };
 
   const TIER_GROUPS: TierGroup[] = [
@@ -53,32 +58,21 @@
     writer: 'anthropic/claude-sonnet-4-6'
   };
 
-  // ---- Thinking-budget presets (MH4) ---------------------------------------
-  type BudgetPreset = { label: string; value: number };
-  const BUDGET_PRESETS: BudgetPreset[] = [
-    { label: 'None', value: 0 },
-    { label: 'Low', value: 1024 },
-    { label: 'Medium', value: 4096 },
-    { label: 'High', value: 16384 }
-  ];
-
   // ---- Reactive state ------------------------------------------------------
-  let config = $state<MergedGoopSpecConfig | null>(null);
+  let config = $state<MergedProjectConfig | null>(null);
   let providers = $state<Provider[]>([]);
   let configLoading = $state(true);
   let providersLoading = $state(true);
   let configError = $state<string | null>(null);
   let providersError = $state<string | null>(null);
   let saveError = $state<string | null>(null);
-  /** Role currently mid-save, so its controls show a busy state. */
-  let savingRole = $state<string | null>(null);
+  /** Role currently mid-save, so its control shows busy. */
+  let savingKey = $state<string | null>(null);
 
-  onMount(async () => {
-    // Load config and providers independently so one failure does not block the
-    // other — the model list is optional (free-text fallback) while config is core.
+  onMount(() => {
     void (async () => {
       try {
-        config = await loadMergedGoopspecConfig(client);
+        config = await loadProjectGoopspecConfig(client, projectId);
       } catch (err) {
         configError = err instanceof Error ? err.message : 'Failed to load config';
       } finally {
@@ -113,7 +107,7 @@
     new Set(modelOptions.flatMap((g) => g.models.map((m) => m.value)))
   );
 
-  /** Effective model: override > defaultModel > built-in default map > unknown. */
+  /** Effective model: project/global override > defaultModel > built-in map. */
   function effectiveModel(role: string): string {
     return (
       config?.raw.agentModels?.[role] ??
@@ -123,33 +117,9 @@
     );
   }
 
-  /** The explicit per-role override, if any (empty string = inherit/no override). */
+  /** The explicit per-role override, if any (empty = inherit). */
   function overrideValue(role: string): string {
     return config?.raw.agentModels?.[role] ?? '';
-  }
-
-  /**
-   * Whether any readable config (global/internal/project) supplies a model for
-   * this role. When true, the select binds to that real value and the empty
-   * option is a "reset to built-in" action rather than the default selection.
-   */
-  function hasConfiguredModel(role: string): boolean {
-    return modelSource(role) !== undefined;
-  }
-
-  /**
-   * Label for the empty option. When a real config value exists the empty
-   * option clears the override back to the built-in default; otherwise it is
-   * the inherited default (nothing configured anywhere).
-   */
-  function inheritOptionLabel(role: string): string {
-    if (providersLoading) return 'Loading models…';
-    return hasConfiguredModel(role) ? 'Reset to built-in default' : 'Inherit default';
-  }
-
-  /** The active thinking budget for a role, defaulting to 0 (None). */
-  function budgetValue(role: string): number {
-    return config?.raw.agentThinkingBudgets?.[role] ?? 0;
   }
 
   /** Winning source for a role's model (project > internal > built-in). */
@@ -158,10 +128,10 @@
   }
 
   async function setModel(role: string, value: string): Promise<void> {
-    savingRole = role;
+    savingKey = role;
     saveError = null;
+    const previous = config;
     try {
-      await saveGoopspecConfig(client, { agentModels: { [role]: value } });
       if (config) {
         config = {
           ...config,
@@ -172,10 +142,14 @@
           agentModelSources: { ...config.agentModelSources, [role]: 'project' }
         };
       }
+      await saveProjectGoopspecConfig(client, projectId, {
+        agentModels: { [role]: value }
+      });
     } catch (err) {
       saveError = err instanceof Error ? err.message : 'Save failed';
+      config = previous;
     } finally {
-      savingRole = null;
+      savingKey = null;
     }
   }
 
@@ -184,37 +158,14 @@
     if (value === '' || value === overrideValue(role)) return;
     void setModel(role, value);
   }
-
-  async function setBudget(role: string, value: number): Promise<void> {
-    if (budgetValue(role) === value) return;
-    savingRole = role;
-    saveError = null;
-    try {
-      await saveGoopspecConfig(client, { agentThinkingBudgets: { [role]: value } });
-      if (config) {
-        config = {
-          ...config,
-          raw: {
-            ...config.raw,
-            agentThinkingBudgets: {
-              ...(config.raw.agentThinkingBudgets ?? {}),
-              [role]: value
-            }
-          }
-        };
-      }
-    } catch (err) {
-      saveError = err instanceof Error ? err.message : 'Save failed';
-    } finally {
-      savingRole = null;
-    }
-  }
 </script>
 
-<section class="settings-section" aria-labelledby="agents-heading">
+<section class="settings-section" aria-labelledby="project-agents-heading">
   <header class="section-header">
-    <h2 id="agents-heading" class="section-title">Agents</h2>
-    <p class="section-subtitle">Model routing and thinking budgets per role.</p>
+    <h2 id="project-agents-heading" class="section-title">Project Agents</h2>
+    <p class="section-subtitle">
+      Per-role model routing for this project. Overrides apply only here.
+    </p>
   </header>
 
   {#if configLoading}
@@ -237,6 +188,7 @@
       </div>
     {/if}
 
+    <!-- Per-role model assignments -->
     {#if providersError}
       <div class="provider-note" role="status">
         <HugeiconsIcon icon={Alert02Icon} size={14} color="currentColor" strokeWidth={1.5} />
@@ -250,7 +202,7 @@
 
         <div class="rows" role="list">
           {#each group.roles as role (role)}
-            <div class="row" role="listitem" class:row--busy={savingRole === role}>
+            <div class="row" role="listitem" class:row--busy={savingKey === role}>
               <div class="row__id">
                 <span class="role-name">{role}</span>
                 <span class="effective" title={effectiveModel(role)}>
@@ -265,10 +217,12 @@
                   id={`model-${role}`}
                   class="model-select"
                   value={overrideValue(role)}
-                  disabled={savingRole === role || providersLoading}
+                  disabled={savingKey === role || providersLoading}
                   onchange={(e) => handleModelChange(role, e)}
                 >
-                  <option value="">{inheritOptionLabel(role)}</option>
+                  <option value="">
+                    {providersLoading ? 'Loading models…' : 'Inherit default'}
+                  </option>
                   {#if overrideValue(role) && !knownModelValues.has(overrideValue(role))}
                     <option value={overrideValue(role)}>{overrideValue(role)} (custom)</option>
                   {/if}
@@ -281,27 +235,6 @@
                   {/each}
                 </select>
               </div>
-
-              <div
-                class="row__budget"
-                role="radiogroup"
-                aria-label={`Thinking budget for ${role}`}
-              >
-                {#each BUDGET_PRESETS as preset (preset.value)}
-                  <button
-                    type="button"
-                    role="radio"
-                    aria-checked={budgetValue(role) === preset.value}
-                    class="budget-chip"
-                    class:active={budgetValue(role) === preset.value}
-                    disabled={savingRole === role}
-                    title={`${preset.label} (${preset.value} tokens)`}
-                    onclick={() => setBudget(role, preset.value)}
-                  >
-                    {preset.label}
-                  </button>
-                {/each}
-              </div>
             </div>
           {/each}
         </div>
@@ -309,18 +242,15 @@
     {/each}
 
     <p class="global-note">
-      Each row shows the effective model and its source. Values resolve through
-      <code>~/.config (global)</code> → <code>.goopspec/config.json</code> →
-      <code>goopspec.json</code>, with later layers winning. Saving here writes to the project
-      <code>goopspec.json</code> namespace; choosing <em>Reset to built-in default</em> clears the
-      saved value.
+      Project overrides save to the <code>projects</code> namespace in
+      <code>goopspec.json</code>. Roles without an override inherit the global default.
     </p>
   {/if}
 </section>
 
 {#snippet badge(source: ConfigSource | undefined)}
   {#if source === 'project'}
-    <span class="source-badge source-badge--project">goopspec.json</span>
+    <span class="source-badge source-badge--project">project</span>
   {:else if source === 'internal'}
     <span class="source-badge source-badge--internal">.goopspec/config.json</span>
   {:else if source === 'global'}
@@ -430,7 +360,7 @@
 
   .row {
     display: grid;
-    grid-template-columns: minmax(14rem, 1.4fr) minmax(12rem, 1fr) auto;
+    grid-template-columns: minmax(14rem, 1.4fr) minmax(12rem, 1fr);
     align-items: center;
     gap: 1rem;
     padding: 0.75rem 1rem;
@@ -542,51 +472,6 @@
     cursor: not-allowed;
   }
 
-  /* ---- Budget presets ---- */
-  .row__budget {
-    display: inline-flex;
-    gap: 0.25rem;
-    padding: 0.1875rem;
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    background-color: var(--bg-elevated);
-    justify-self: end;
-  }
-
-  .budget-chip {
-    padding: 0.3125rem 0.625rem;
-    font: inherit;
-    font-size: 0.75rem;
-    font-weight: 500;
-    color: var(--text-secondary);
-    background: transparent;
-    border: none;
-    border-radius: var(--radius-sm);
-    cursor: pointer;
-    transition:
-      color var(--transition-fast),
-      background-color var(--transition-fast);
-  }
-
-  .budget-chip:hover:not(:disabled) {
-    color: var(--text-primary);
-  }
-
-  .budget-chip.active {
-    color: var(--accent-foreground);
-    background-color: var(--accent);
-  }
-
-  .budget-chip:disabled {
-    cursor: not-allowed;
-    opacity: 0.6;
-  }
-
-  .budget-chip:focus-visible {
-    outline: 2px solid var(--focus-ring);
-    outline-offset: 2px;
-  }
-
   .global-note {
     margin: 0;
     font-size: 0.75rem;
@@ -628,17 +513,11 @@
       grid-template-columns: 1fr;
       gap: 0.625rem;
     }
-
-    .row__budget {
-      justify-self: start;
-      flex-wrap: wrap;
-    }
   }
 
   @media (prefers-reduced-motion: reduce) {
     .row,
-    .model-select,
-    .budget-chip {
+    .model-select {
       transition: none;
     }
 

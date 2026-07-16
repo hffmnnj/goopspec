@@ -12,6 +12,7 @@ import type { PluginContext } from "../core/types.js";
 import { createGoopAdlTool } from "./goop-adl/index.js";
 import { createGoopAppendChronicleTool } from "./goop-append-chronicle/index.js";
 import { createGoopCheckpointTool } from "./goop-checkpoint/index.js";
+import { createGoopGetGlobalConfigTool } from "./goop-get-global-config/index.js";
 import { createGoopReadDbTool } from "./goop-read-db/index.js";
 import { createGoopReferenceTool } from "./goop-reference/index.js";
 import { createGoopSaveNoteTool } from "./goop-save-note/index.js";
@@ -48,6 +49,7 @@ export {
   createGoopBlockerTool,
   createGoopCheckpointTool,
   createGoopDashboardTool,
+  createGoopGetGlobalConfigTool,
   createGoopInferIntentTool,
   createGoopQueryDecisionsTool,
   createGoopReadDbTool,
@@ -82,6 +84,7 @@ export function createTools(ctx: PluginContext): Record<string, ToolDefinition> 
     goop_adl: createGoopAdlTool(ctx),
     goop_checkpoint: createGoopCheckpointTool(ctx),
     goop_setup: createGoopSetupTool(ctx),
+    goop_get_global_config: createGoopGetGlobalConfigTool(ctx),
     goop_reference: createGoopReferenceTool(ctx),
     goop_read_db: createGoopReadDbTool(ctx),
     goop_write_db: createGoopWriteDbTool(ctx),

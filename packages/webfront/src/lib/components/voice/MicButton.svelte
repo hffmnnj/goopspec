@@ -1,7 +1,7 @@
 <script lang="ts">
   import { HugeiconsIcon } from '@hugeicons/svelte';
   import { Mic01Icon, Loading03Icon, AlertCircleIcon } from '@hugeicons/core-free-icons';
-  import { createSttService, type SttService } from '$lib/voice/stt.js';
+  import { createSttService, type SttError, type SttService } from '$lib/voice/stt.js';
   import { voice, type VoiceError } from '$lib/stores/voice.svelte.js';
 
   interface MicButtonProps {
@@ -32,8 +32,25 @@
   );
 
   function ensureStt(): SttService {
-    if (!stt) stt = createSttService();
+    if (!stt) {
+      stt = createSttService();
+      stt.onProgress((status, _progress, message) => {
+        const progressText = (message ?? status).toLowerCase();
+        if (
+          voice.status === 'transcribing' &&
+          (progressText.includes('download') ||
+            progressText.includes('initializ') ||
+            progressText.includes('loading'))
+        ) {
+          voice.setStatus('loading');
+        }
+      });
+    }
     return stt;
+  }
+
+  function getSttErrorStage(error: unknown): SttError['stage'] {
+    return error instanceof Error ? (error as SttError).stage : undefined;
   }
 
   async function handleSpeechEnd(audio: Float32Array): Promise<void> {
@@ -46,13 +63,28 @@
         onTranscript(clean);
       }
       voice.setStatus(vad?.listening ? 'recording' : 'idle');
-    } catch {
+    } catch (err) {
+      console.error('[Voice] transcription failed:', err);
       // A model-load/transcription failure shouldn't kill an active session;
-      // surface the error only when the VAD is no longer listening.
+      // surface the error only when the VAD is no longer listening. Distinguish
+      // an STT model download/load failure from a runtime transcription error.
+      const stage = getSttErrorStage(err);
+      const message = err instanceof Error ? err.message.toLowerCase() : '';
       if (vad?.listening) {
         voice.setStatus('recording');
+      } else if (stage === 'model-load') {
+        voice.setError('stt-load-failed');
+      } else if (stage === 'transcription') {
+        voice.setError('transcription-failed');
+      } else if (
+        message.includes('load') ||
+        message.includes('model') ||
+        message.includes('download') ||
+        message.includes('pipeline')
+      ) {
+        voice.setError('stt-load-failed');
       } else {
-        voice.setError('model-load-failed');
+        voice.setError('transcription-failed');
       }
     }
   }
@@ -60,7 +92,9 @@
   function classifyStartError(error: unknown): NonNullable<VoiceError> {
     const name = error instanceof Error ? error.name : '';
     if (name === 'NotAllowedError' || name === 'SecurityError') return 'permission-denied';
-    return 'model-load-failed';
+    // Everything else on the start path is a VAD-level failure: dynamic import,
+    // ONNX/WASM/ORT asset load, or `MicVAD.new`/`vad.start()`.
+    return 'vad-load-failed';
   }
 
   async function startRecording(): Promise<void> {
@@ -87,6 +121,7 @@
       await vad.start();
       voice.setStatus('recording');
     } catch (error) {
+      console.error('[Voice] VAD start failed:', error);
       await teardown();
       voice.setError(classifyStartError(error));
     }

@@ -43,6 +43,15 @@ function mockReadFile(
 	});
 }
 
+function firstConfigPatch(
+	updateConfig: ReturnType<typeof mock>,
+): { goopspec: GoopSpecConfig } {
+	const calls = updateConfig.mock.calls as unknown as Array<[{ goopspec: GoopSpecConfig }]>;
+	const patch = calls[0]?.[0];
+	if (!patch) throw new Error("updateConfig was not called with a config patch");
+	return patch;
+}
+
 describe("normalizeRaw", () => {
 	it("extracts known scalar fields with correct types", () => {
 		const cfg = normalizeRaw({
@@ -137,6 +146,51 @@ describe("loadMergedGoopspecConfig", () => {
 		});
 	});
 
+	it("loads global config as the base layer", async () => {
+		const client = createMockClient();
+		mockReadFile(client, {
+			".goopspec/global-config.json": JSON.stringify({
+				defaultModel: "global/model",
+				memoryEnabled: true,
+			}),
+		});
+
+		const result = await loadMergedGoopspecConfig(client);
+
+		expect(result.raw.defaultModel).toBe("global/model");
+		expect(result.raw.memoryEnabled).toBe(true);
+		expect(result.sources.defaultModel).toBe("global");
+		expect(result.sources.memoryEnabled).toBe("global");
+	});
+
+	it("overrides global config with internal and project layers", async () => {
+		const client = createMockClient();
+		mockReadFile(client, {
+			".goopspec/global-config.json": JSON.stringify({
+				defaultModel: "global/model",
+				memoryEnabled: true,
+			}),
+			".goopspec/config.json": JSON.stringify({
+				defaultModel: "internal/model",
+				adlEnabled: true,
+			}),
+			"goopspec.json": JSON.stringify({
+				enforcement: "strict",
+			}),
+		});
+
+		const result = await loadMergedGoopspecConfig(client);
+
+		expect(result.raw.defaultModel).toBe("internal/model");
+		expect(result.raw.memoryEnabled).toBe(true);
+		expect(result.raw.adlEnabled).toBe(true);
+		expect(result.raw.enforcement).toBe("strict");
+		expect(result.sources.defaultModel).toBe("internal");
+		expect(result.sources.memoryEnabled).toBe("global");
+		expect(result.sources.adlEnabled).toBe("internal");
+		expect(result.sources.enforcement).toBe("project");
+	});
+
 	it("returns empty config and undefined sources when files are missing", async () => {
 		const client = createMockClient();
 		mockReadFile(client, {});
@@ -148,9 +202,15 @@ describe("loadMergedGoopspecConfig", () => {
 		expect(result.agentModelSources).toEqual({});
 	});
 
-	it("tracks per-role agentModels source with project winning over internal", async () => {
+	it("tracks per-role agentModels source with project winning over internal and global", async () => {
 		const client = createMockClient();
 		mockReadFile(client, {
+			".goopspec/global-config.json": JSON.stringify({
+				agentModels: {
+					orchestrator: "global/orch",
+					researcher: "global/researcher",
+				},
+			}),
 			".goopspec/config.json": JSON.stringify({
 				agentModels: {
 					orchestrator: "internal/orch",
@@ -167,8 +227,15 @@ describe("loadMergedGoopspecConfig", () => {
 
 		const result = await loadMergedGoopspecConfig(client);
 
+		expect(result.raw.agentModels).toEqual({
+			orchestrator: "internal/orch",
+			researcher: "global/researcher",
+			planner: "project/planner",
+			verifier: "project/verifier",
+		});
 		expect(result.agentModelSources).toEqual({
 			orchestrator: "internal",
+			researcher: "global",
 			planner: "project",
 			verifier: "project",
 		});
@@ -191,7 +258,7 @@ describe("saveGoopspecConfig", () => {
 		await saveGoopspecConfig(client, { enforcement: "strict" });
 
 		expect(updateConfig).toHaveBeenCalled();
-		const patch = updateConfig.mock.calls[0][0] as { goopspec: GoopSpecConfig };
+		const patch = firstConfigPatch(updateConfig);
 		expect(patch.goopspec).toEqual({
 			memoryEnabled: true,
 			defaultModel: "existing/model",
@@ -218,7 +285,7 @@ describe("saveGoopspecConfig", () => {
 			agentThinkingBudgets: { executorLow: 2048 },
 		});
 
-		const patch = updateConfig.mock.calls[0][0] as { goopspec: GoopSpecConfig };
+		const patch = firstConfigPatch(updateConfig);
 		expect(patch.goopspec.agentModels).toEqual({
 			orchestrator: "existing/orch",
 			executorLow: "new/low",
