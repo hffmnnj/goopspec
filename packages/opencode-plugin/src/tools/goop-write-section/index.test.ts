@@ -125,6 +125,25 @@ describe("goop_write_section tool", () => {
     expect(ctx.db.assembleDocument("default", "spec")).toBe("# Keep");
   });
 
+  it("deletes the last remaining section without crashing sidecar rendering", async () => {
+    ctx.db.upsertSection("default", "spec", "only", "# Only", 0);
+    const tool = createGoopWriteSectionTool(ctx);
+    const readDocument = createGoopReadDbTool(ctx);
+
+    const result = await tool.execute(
+      { action: "delete", doc_type: "spec", section_key: "only" },
+      toolCtx,
+    );
+
+    expect(result).toBe("Deleted section 'only' for spec in workflow 'default'.");
+    expect(ctx.db.getSections("default", "spec")).toEqual([]);
+    expect(ctx.db.resolveDocumentContent("default", "spec")).toBeNull();
+    expect(ctx.db.searchSections("Only")).toEqual([]);
+    expect(await readDocument.execute({ doc_type: "spec" }, toolCtx)).toContain(
+      "No spec document found",
+    );
+  });
+
   // -----------------------------------------------------------------------
   // Sidecar rendering
   // -----------------------------------------------------------------------
