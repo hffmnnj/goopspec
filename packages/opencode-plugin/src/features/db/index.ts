@@ -286,7 +286,22 @@ export class GoopSpecDB {
     );
   }
 
-  getWaves(workflowId: string): WaveRow[] {
+  getWaves(workflowId: string, waveNumbers?: number[]): WaveRow[] {
+    if (waveNumbers !== undefined && waveNumbers.length > 0) {
+      const placeholders = waveNumbers.map((_, i) => `$waveNumber${i}`).join(", ");
+      const params: NamedBindings = { $workflowId: workflowId };
+      for (const [i, num] of waveNumbers.entries()) {
+        params[`$waveNumber${i}`] = num;
+      }
+      return this.db
+        .query<WaveRow, NamedBindings>(
+          `SELECT * FROM waves
+           WHERE workflow_id = $workflowId AND wave_number IN (${placeholders})
+           ORDER BY wave_number ASC`,
+        )
+        .all(params);
+    }
+
     return this.db
       .query<WaveRow, NamedBindings>(
         "SELECT * FROM waves WHERE workflow_id = $workflowId ORDER BY wave_number ASC",
@@ -294,15 +309,31 @@ export class GoopSpecDB {
       .all({ $workflowId: workflowId });
   }
 
-  getWaveProgress(workflowId: string, waveNumber?: number): WaveProgressRow[] {
-    if (waveNumber !== undefined) {
+  getWaveProgress(
+    workflowId: string,
+    waveNumber?: number,
+    waveNumbers?: number[],
+  ): WaveProgressRow[] {
+    const requested =
+      waveNumbers !== undefined && waveNumbers.length > 0
+        ? waveNumbers
+        : waveNumber !== undefined
+          ? [waveNumber]
+          : [];
+
+    if (requested.length > 0) {
+      const placeholders = requested.map((_, i) => `$waveNumber${i}`).join(", ");
+      const params: NamedBindings = { $workflowId: workflowId };
+      for (const [i, num] of requested.entries()) {
+        params[`$waveNumber${i}`] = num;
+      }
       return this.db
         .query<WaveProgressRow, NamedBindings>(
           `SELECT * FROM v_wave_progress
-           WHERE workflow_id = $workflowId AND wave_number = $waveNumber
+           WHERE workflow_id = $workflowId AND wave_number IN (${placeholders})
            ORDER BY wave_number ASC`,
         )
-        .all({ $workflowId: workflowId, $waveNumber: waveNumber });
+        .all(params);
     }
 
     return this.db
@@ -493,7 +524,9 @@ export class GoopSpecDB {
   getDecisions(opts?: {
     workflowId?: string;
     rule?: number;
+    rules?: number[];
     type?: string;
+    types?: string[];
     limit?: number;
   }): DecisionRow[] {
     const clauses: string[] = [];
@@ -502,13 +535,33 @@ export class GoopSpecDB {
       clauses.push("workflow_id = $workflowId");
       params.$workflowId = opts.workflowId;
     }
-    if (opts?.rule !== undefined) {
-      clauses.push("rule = $rule");
-      params.$rule = opts.rule;
+
+    const rules =
+      opts?.rules !== undefined && opts.rules.length > 0
+        ? opts.rules
+        : opts?.rule !== undefined
+          ? [opts.rule]
+          : [];
+    if (rules.length > 0) {
+      const rulePlaceholders = rules.map((_, i) => `$rule${i}`).join(", ");
+      clauses.push(`rule IN (${rulePlaceholders})`);
+      for (const [i, r] of rules.entries()) {
+        params[`$rule${i}`] = r;
+      }
     }
-    if (opts?.type !== undefined) {
-      clauses.push("type = $type");
-      params.$type = opts.type;
+
+    const types =
+      opts?.types !== undefined && opts.types.length > 0
+        ? opts.types
+        : opts?.type !== undefined
+          ? [opts.type]
+          : [];
+    if (types.length > 0) {
+      const typePlaceholders = types.map((_, i) => `$type${i}`).join(", ");
+      clauses.push(`type IN (${typePlaceholders})`);
+      for (const [i, t] of types.entries()) {
+        params[`$type${i}`] = t;
+      }
     }
 
     const whereClause = clauses.length > 0 ? `WHERE ${clauses.join(" AND ")}` : "";
@@ -539,15 +592,23 @@ export class GoopSpecDB {
     return result?.id ?? -1;
   }
 
-  getVerifications(workflowId: string, waveId?: number): VerificationRow[] {
-    if (waveId !== undefined) {
+  getVerifications(workflowId: string, waveId?: number, waveIds?: number[]): VerificationRow[] {
+    const requested =
+      waveIds !== undefined && waveIds.length > 0 ? waveIds : waveId !== undefined ? [waveId] : [];
+
+    if (requested.length > 0) {
+      const placeholders = requested.map((_, i) => `$waveId${i}`).join(", ");
+      const params: NamedBindings = { $workflowId: workflowId };
+      for (const [i, id] of requested.entries()) {
+        params[`$waveId${i}`] = id;
+      }
       return this.db
         .query<VerificationRow, NamedBindings>(
           `SELECT * FROM verifications
-           WHERE workflow_id = $workflowId AND wave_id = $waveId
+           WHERE workflow_id = $workflowId AND wave_id IN (${placeholders})
            ORDER BY created_at DESC, id DESC`,
         )
-        .all({ $workflowId: workflowId, $waveId: waveId });
+        .all(params);
     }
 
     return this.db
@@ -671,8 +732,11 @@ export class GoopSpecDB {
     query: string,
     opts?: {
       workflowId?: string;
+      workflowIds?: string[];
       docType?: DocType;
+      docTypes?: DocType[];
       sectionKey?: string;
+      sectionKeys?: string[];
       since?: number;
       until?: number;
       limit?: number;
@@ -897,8 +961,11 @@ export class GoopSpecDB {
     opts:
       | {
           workflowId?: string;
+          workflowIds?: string[];
           docType?: DocType;
+          docTypes?: DocType[];
           sectionKey?: string;
+          sectionKeys?: string[];
           since?: number;
           until?: number;
         }
@@ -959,8 +1026,11 @@ export class GoopSpecDB {
     opts:
       | {
           workflowId?: string;
+          workflowIds?: string[];
           docType?: DocType;
+          docTypes?: DocType[];
           sectionKey?: string;
+          sectionKeys?: string[];
           since?: number;
           until?: number;
         }
@@ -1048,8 +1118,11 @@ export class GoopSpecDB {
     opts:
       | {
           workflowId?: string;
+          workflowIds?: string[];
           docType?: DocType;
+          docTypes?: DocType[];
           sectionKey?: string;
+          sectionKeys?: string[];
           since?: number;
           until?: number;
         }
@@ -1060,19 +1133,52 @@ export class GoopSpecDB {
     const clauses: string[] = [];
     const params: NamedBindings = {};
 
-    if (opts?.workflowId !== undefined) {
-      clauses.push(`${alias}.workflow_id = $workflowId`);
-      params.$workflowId = opts.workflowId;
+    const workflowIds =
+      opts?.workflowIds !== undefined && opts.workflowIds.length > 0
+        ? opts.workflowIds
+        : opts?.workflowId !== undefined
+          ? [opts.workflowId]
+          : [];
+    if (workflowIds.length > 0) {
+      const placeholders = workflowIds
+        .map((_, i) => `${alias}.workflow_id = $workflowId${i}`)
+        .join(" OR ");
+      clauses.push(`(${placeholders})`);
+      for (const [i, id] of workflowIds.entries()) {
+        params[`$workflowId${i}`] = id;
+      }
     }
 
-    if (opts?.docType !== undefined) {
-      clauses.push(`${alias}.doc_type = $docType`);
-      params.$docType = opts.docType;
+    const docTypes =
+      opts?.docTypes !== undefined && opts.docTypes.length > 0
+        ? opts.docTypes
+        : opts?.docType !== undefined
+          ? [opts.docType]
+          : [];
+    if (docTypes.length > 0) {
+      const placeholders = docTypes.map((_, i) => `${alias}.doc_type = $docType${i}`).join(" OR ");
+      clauses.push(`(${placeholders})`);
+      for (const [i, t] of docTypes.entries()) {
+        params[`$docType${i}`] = t;
+      }
     }
 
-    if (includeSectionKey && opts?.sectionKey !== undefined) {
-      clauses.push(`${alias}.section_key = $sectionKey`);
-      params.$sectionKey = opts.sectionKey;
+    if (includeSectionKey) {
+      const sectionKeys =
+        opts?.sectionKeys !== undefined && opts.sectionKeys.length > 0
+          ? opts.sectionKeys
+          : opts?.sectionKey !== undefined
+            ? [opts.sectionKey]
+            : [];
+      if (sectionKeys.length > 0) {
+        const placeholders = sectionKeys
+          .map((_, i) => `${alias}.section_key = $sectionKey${i}`)
+          .join(" OR ");
+        clauses.push(`(${placeholders})`);
+        for (const [i, k] of sectionKeys.entries()) {
+          params[`$sectionKey${i}`] = k;
+        }
+      }
     }
 
     if (opts?.since !== undefined) {
