@@ -54,8 +54,9 @@ Before writing:
 8. `goop_reference({ name: "core-protocol" })` — planning file rules and commit format.
 9. `goop_reference({ name: "response-format" })` — response envelope.
 10. `goop_reference({ name: "git-workflow" })` — commit conventions for docs.
-11. `Read("AGENTS.md")` — project-specific build/test conventions from the repo root.
-12. Batch independent tool calls into a single message — see `references/core-protocol.md` Tool-Call Batching.
+11. `goop_reference({ name: "tool-reference" })` — full argument surface of every tool; prefer batch/plural args over repeated single calls where available.
+12. `Read("AGENTS.md")` — project-specific build/test conventions from the repo root.
+13. Batch independent tool calls into a single message — see `references/core-protocol.md` Tool-Call Batching.
 
 Resolve `<workflowId>` from `goop_state`. If any required step fails, return `BLOCKED`.
 

@@ -44,6 +44,7 @@ The orchestrator delegates to 13 specialized agents:
 - `goop-executor-medium` — business logic.
 - `goop-executor-high` — complex and architectural work.
 - `goop-executor-frontend-low` — UI mechanical tasks.
+- `goop-executor-frontend-medium` — UI moderate component work.
 - `goop-executor-frontend-high` — design-sensitive UI work.
 - `goop-researcher` — domain and technology research.
 - `goop-explorer` — codebase mapping.

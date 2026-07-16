@@ -70,10 +70,17 @@ export type WorkflowDepth = (typeof WORKFLOW_DEPTHS)[number];
 /**
  * Executor agent tiers for task delegation.
  *
- * - low / medium / high:                General-purpose tiers
- * - frontend-low / frontend-high:       Frontend-specific tiers
+ * - low / medium / high:                       General-purpose tiers
+ * - frontend-low / frontend-medium / frontend-high: Frontend-specific tiers
  */
-export const EXECUTOR_TIERS = ["low", "medium", "high", "frontend-low", "frontend-high"] as const;
+export const EXECUTOR_TIERS = [
+  "low",
+  "medium",
+  "high",
+  "frontend-low",
+  "frontend-medium",
+  "frontend-high",
+] as const;
 
 export type ExecutorTier = (typeof EXECUTOR_TIERS)[number];
 
@@ -117,6 +124,7 @@ export const AGENT_ROLES = [
   "executor-medium",
   "executor-high",
   "executor-frontend-low",
+  "executor-frontend-medium",
   "executor-frontend-high",
   "planner",
   "verifier",

@@ -226,6 +226,19 @@ export class GoopSpecDB {
     }
   }
 
+  /**
+   * Resolve a document's rendered content. Structured sections take precedence
+   * when present; an empty resolved value is treated as absent content.
+   */
+  resolveDocumentContent(workflowId: string, docType: DocType): string | null {
+    const sections = this.getSections(workflowId, docType);
+    const content =
+      sections.length > 0
+        ? this.assembleDocument(workflowId, docType)
+        : (this.getDocument(workflowId, docType)?.content ?? null);
+    return content !== null && content.length > 0 ? content : null;
+  }
+
   // -----------------------------------------------------------------------
   // Waves
   // -----------------------------------------------------------------------
@@ -475,6 +488,24 @@ export class GoopSpecDB {
          ORDER BY position ASC, id ASC`,
       )
       .all({ $workflowId: workflowId, $docType: docType });
+  }
+
+  deleteSection(workflowId: string, docType: DocType, sectionKey: string): boolean {
+    const result = this.db
+      .query<DocSectionRow, NamedBindings>(
+        `DELETE FROM doc_sections
+         WHERE workflow_id = $workflowId AND doc_type = $docType AND section_key = $sectionKey`,
+      )
+      .run({ $workflowId: workflowId, $docType: docType, $sectionKey: sectionKey });
+    return result.changes > 0;
+  }
+
+  deleteSections(workflowId: string, docType: DocType): void {
+    this.db
+      .query<DocSectionRow, NamedBindings>(
+        "DELETE FROM doc_sections WHERE workflow_id = $workflowId AND doc_type = $docType",
+      )
+      .run({ $workflowId: workflowId, $docType: docType });
   }
 
   assembleDocument(workflowId: string, docType: DocType): string {
