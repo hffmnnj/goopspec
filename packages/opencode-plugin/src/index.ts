@@ -5,9 +5,12 @@
  * and returns the merged Hooks object to the OpenCode loader.
  */
 
+import { createPluginContextV2 } from "./core/context-v2.js";
 import { createPluginContext } from "./core/context.js";
+import { registerHooksV2 } from "./core/hooks-v2.js";
 import type { Plugin } from "./core/sdk-compat.js";
-import { V2Plugin, type V2PluginContext } from "./core/v2-compat.js";
+import { registerToolsV2 } from "./core/tools-v2.js";
+import { V2Plugin, type V2RuntimeContext } from "./core/v2-compat.js";
 import { DEFAULT_HOOK_FACTORIES, createHooks } from "./hooks/index.js";
 import { syncGlobalConfigSidecar } from "./shared/global-config-sidecar.js";
 import { logError } from "./shared/logger.js";
@@ -28,10 +31,12 @@ const goopspec: Plugin = async (input) => {
 
 const v2Plugin = V2Plugin.define({
   id: "goopspec",
-  async setup(ctx: V2PluginContext): Promise<void> {
+  async setup(ctx: V2RuntimeContext): Promise<void> {
     try {
-      // V2 context adaptation and registrations are added in later stages.
-      void ctx.options;
+      const pluginCtx = await createPluginContextV2(ctx);
+      await syncGlobalConfigSidecar(pluginCtx.sdk.directory);
+      await registerToolsV2(ctx, pluginCtx);
+      await registerHooksV2(ctx, pluginCtx);
     } catch (error) {
       logError("V2 plugin initialization failed", error);
     }
