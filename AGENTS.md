@@ -45,7 +45,7 @@ packages/opencode-plugin/src/
 ├── test-utils.ts          # Shared test utilities
 └── index.ts               # Plugin entry point
 
-agents/                    # 13 agent markdown definitions
+agents/                    # 14 agent markdown definitions
 commands/                  # 9 slash command definitions
 references/                # 13 consolidated reference documents (incl. field-notes-protocol)
 templates/                 # File templates

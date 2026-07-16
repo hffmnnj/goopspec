@@ -10,12 +10,55 @@
 import { tool } from "../../core/sdk-compat.js";
 import type { ToolContext, ToolDefinition } from "../../core/sdk-compat.js";
 import type { PluginContext } from "../../core/types.js";
+import { formatBatchResult, runBatch } from "../../features/db/batch.js";
 
 const VERIFICATION_CHECK_NAMES = ["typecheck", "test", "lint", "custom"] as const;
 type VerificationCheckName = (typeof VERIFICATION_CHECK_NAMES)[number];
 
 const VERIFICATION_TOOL_STATUSES = ["pass", "fail", "skip"] as const;
 type VerificationToolStatus = (typeof VERIFICATION_TOOL_STATUSES)[number];
+
+interface VerificationPayload {
+  check_name: VerificationCheckName;
+  status: VerificationToolStatus;
+  wave_id?: number;
+  detail?: string;
+  workflow_id?: string;
+}
+
+// ---------------------------------------------------------------------------
+// Per-item processing
+// ---------------------------------------------------------------------------
+
+function processVerificationItem(
+  ctx: PluginContext,
+  defaultWorkflowId: string,
+  item: VerificationPayload,
+): string {
+  const workflowId = item.workflow_id ?? defaultWorkflowId;
+
+  const verificationId = ctx.db.insertVerification(workflowId, {
+    wave_id: item.wave_id,
+    check_name: item.check_name,
+    status: item.status,
+    detail: item.detail,
+  });
+
+  ctx.db.appendEvent(workflowId, "verification_record", {
+    verification_id: verificationId,
+    wave_id: item.wave_id ?? null,
+    check_name: item.check_name,
+    status: item.status,
+    detail: item.detail ?? null,
+    timestamp: Date.now(),
+  });
+
+  const waveLabel = item.wave_id === undefined ? "workflow" : `wave ${item.wave_id}`;
+  return (
+    `Recorded ${item.check_name}=${item.status} verification for ${waveLabel} ` +
+    `in workflow '${workflowId}'.`
+  );
+}
 
 // ---------------------------------------------------------------------------
 // Tool factory
@@ -30,48 +73,57 @@ export function createGoopRecordVerificationTool(ctx: PluginContext): ToolDefini
       "- status: Check status (pass, fail, skip)\n" +
       "- wave_id: Optional wave ID to associate with the check\n" +
       "- detail: Optional check details\n" +
-      "- workflow_id: Optional workflow ID (defaults to active workflow)",
+      "- workflow_id: Optional workflow ID (defaults to active workflow)\n" +
+      "- items: Optional batch of verification payloads (check_name, status, wave_id, detail, workflow_id)",
     args: {
-      check_name: tool.schema.enum(VERIFICATION_CHECK_NAMES),
-      status: tool.schema.enum(VERIFICATION_TOOL_STATUSES),
+      check_name: tool.schema.enum(VERIFICATION_CHECK_NAMES).optional(),
+      status: tool.schema.enum(VERIFICATION_TOOL_STATUSES).optional(),
       wave_id: tool.schema.number().optional(),
       detail: tool.schema.string().optional(),
       workflow_id: tool.schema.string().optional(),
+      items: tool.schema
+        .array(
+          tool.schema.object({
+            check_name: tool.schema.enum(VERIFICATION_CHECK_NAMES),
+            status: tool.schema.enum(VERIFICATION_TOOL_STATUSES),
+            wave_id: tool.schema.number().optional(),
+            detail: tool.schema.string().optional(),
+            workflow_id: tool.schema.string().optional(),
+          }),
+        )
+        .optional(),
     },
     async execute(
       args: {
-        check_name: VerificationCheckName;
-        status: VerificationToolStatus;
+        check_name?: VerificationCheckName;
+        status?: VerificationToolStatus;
         wave_id?: number;
         detail?: string;
         workflow_id?: string;
+        items?: VerificationPayload[];
       },
       _context: ToolContext,
     ): Promise<string> {
       try {
         const workflowId = args.workflow_id ?? ctx.stateManager.getState().activeWorkflowId;
 
-        const verificationId = ctx.db.insertVerification(workflowId, {
-          wave_id: args.wave_id,
+        if (args.items !== undefined) {
+          const result = runBatch(ctx.db, args.items, (item) =>
+            processVerificationItem(ctx, workflowId, item),
+          );
+          return formatBatchResult(result, "record-verification");
+        }
+
+        if (args.check_name === undefined || args.status === undefined) {
+          return "Error: 'check_name' and 'status' are required when no items batch is provided.";
+        }
+
+        return processVerificationItem(ctx, workflowId, {
           check_name: args.check_name,
           status: args.status,
+          wave_id: args.wave_id,
           detail: args.detail,
         });
-
-        ctx.db.appendEvent(workflowId, "verification_record", {
-          verification_id: verificationId,
-          wave_id: args.wave_id ?? null,
-          check_name: args.check_name,
-          status: args.status,
-          detail: args.detail ?? null,
-          timestamp: Date.now(),
-        });
-
-        const waveLabel = args.wave_id === undefined ? "workflow" : `wave ${args.wave_id}`;
-        return (
-          `Recorded ${args.check_name}=${args.status} verification for ${waveLabel} ` +
-          `in workflow '${workflowId}'.`
-        );
       } catch (error: unknown) {
         const msg = error instanceof Error ? error.message : String(error);
         return `Error in goop_record_verification: ${msg}`;

@@ -24,23 +24,45 @@ export function createGoopReadSectionTool(ctx: PluginContext): ToolDefinition {
       "Section reads are separate from full-document goop_read_db reads.\n\n" +
       "Args:\n" +
       "- doc_type: Document type (spec, blueprint, chronicle, adl, handoff, requirements, research)\n" +
-      "- section_key: Optional section key; omit to list all sections for the document\n" +
-      "- workflow_id: Optional workflow ID (defaults to active workflow)",
+      "- section_key: Optional single section key\n" +
+      "- section_keys: Optional array of section keys for batch loading\n" +
+      "- workflow_id: Optional workflow ID (defaults to active workflow)\n\n" +
+      "Provide either section_key (single) or section_keys (batch). " +
+      "Batch mode returns each section under a ## heading separated by ---; " +
+      "omitting both keys lists all sections.",
     args: {
       doc_type: tool.schema.enum(DOC_TYPES),
       section_key: tool.schema.string().optional(),
+      section_keys: tool.schema.array(tool.schema.string()).optional(),
       workflow_id: tool.schema.string().optional(),
     },
     async execute(
       args: {
         doc_type: DocType;
         section_key?: string;
+        section_keys?: string[];
         workflow_id?: string;
       },
       _context: ToolContext,
     ): Promise<string> {
       try {
         const workflowId = args.workflow_id ?? ctx.stateManager.getState().activeWorkflowId;
+        const hasBatch = args.section_keys !== undefined && args.section_keys.length > 0;
+
+        if (hasBatch) {
+          const requestedKeys = args.section_keys ?? [];
+          const sections = requestedKeys
+            .map((key) => ctx.db.getSection(workflowId, args.doc_type, key))
+            .filter((section): section is NonNullable<typeof section> => section !== null);
+
+          if (sections.length === 0) {
+            return `No matching sections found for ${args.doc_type} in workflow '${workflowId}'. Use goop_write_section to create them.`;
+          }
+
+          return sections
+            .map((section) => `## ${section.section_key}\n\n${section.content}`)
+            .join("\n\n---\n\n");
+        }
 
         if (args.section_key !== undefined && args.section_key !== "") {
           const section = ctx.db.getSection(workflowId, args.doc_type, args.section_key);

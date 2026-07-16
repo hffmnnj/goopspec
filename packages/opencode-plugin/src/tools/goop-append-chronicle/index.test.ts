@@ -140,4 +140,45 @@ describe("goop_append_chronicle tool", () => {
     expect(content).toContain("Sidecar test entry.");
     expect(content).toMatch(/^### /);
   });
+
+  // -----------------------------------------------------------------------
+  // 7. Batch entries[]
+  // -----------------------------------------------------------------------
+
+  it("appends multiple chronicle entries in a single entries batch", async () => {
+    const tool = createGoopAppendChronicleTool(ctx);
+
+    const result = await tool.execute(
+      { entries: ["First batch entry.", "Second batch entry."] },
+      toolCtx,
+    );
+
+    expect(result).toContain("Batch append-chronicle: 2/2 succeeded");
+    expect(result).toContain("[0] OK: appended (18 chars)");
+    expect(result).toContain("[1] OK: appended (19 chars)");
+
+    const doc = ctx.db.getDocument("default", "chronicle");
+    expect(doc?.content).toContain("First batch entry.");
+    expect(doc?.content).toContain("Second batch entry.");
+
+    const events = ctx.db.getChronicleEvents("default");
+    expect(events.map((e) => e.entry).sort()).toEqual([
+      "First batch entry.",
+      "Second batch entry.",
+    ]);
+  });
+
+  it("fails the whole batch when a chronicle entry is too large", async () => {
+    const tool = createGoopAppendChronicleTool(ctx);
+
+    const hugeEntry = "x".repeat(1_000_000_000);
+    const result = await tool.execute(
+      { entries: ["First batch entry.", hugeEntry, "Third batch entry."] },
+      toolCtx,
+    );
+
+    expect(result).toContain("Batch append-chronicle: 0/3 succeeded, 3 failed");
+    expect(ctx.db.getChronicleEvents("default").length).toBe(0);
+    expect(ctx.db.getDocument("default", "chronicle")).toBeNull();
+  });
 });
