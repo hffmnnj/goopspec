@@ -41,7 +41,7 @@ Before acting:
 2. `goop_search_notes({ query: "[workflow topic]", limit: 5 })` — retrieve relevant Field Notes.
 3. `goop_read_db({ doc_types: ["spec", "blueprint", "chronicle"] })` — load spec contract, task context, and execution history.
 5. `memory_search({ query: "[current task]" })`.
-6. Load `references/core-protocol`, `references/dispatch-patterns`, `references/phase-gates`.
+6. Load `references/core-protocol`, `references/dispatch-patterns`, `references/phase-gates`, `references/tool-reference`.
 7. **Batch independent tool calls.** When multiple calls do not depend on each other's output, issue them in a single message. Narrative ordering is not a data dependency. See the worked example below and `goop_reference({ name: "core-protocol", section: "Tool-Call Batching" })` for the full rationale.
 
    **BEFORE (wrong — sequential when no data dependency):**

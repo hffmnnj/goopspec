@@ -128,8 +128,9 @@ Before doing work, every subagent must:
 3. `goop_read_db({ doc_type: "blueprint" })` — load task context
 4. `goop_search_notes({ query: "[task context]" })` — check Field Notes for prior research. If a snippet from this step indicates relevance but insufficient detail, use `note_id` (when the ID is already known from the snippet) or `full: true` (when re-issuing the query) to retrieve the complete body — see `field-notes-protocol.md` (Enhanced Retrieval) for full guidance.
 5. `memory_search({ query: "[task context]" })`
-6. `Read(".goopspec/PROJECT_KNOWLEDGE_BASE.md")` if present
-7. Acknowledge current phase, spec lock status, and active task.
+6. `goop_reference({ name: "tool-reference" })` — load the full argument surface of every tool; prefer batch/plural args over repeated single calls where available.
+7. `Read(".goopspec/PROJECT_KNOWLEDGE_BASE.md")` if present
+8. Acknowledge current phase, spec lock status, and active task.
 
 If any required bootstrap step fails, return `BLOCKED`.
 
