@@ -159,8 +159,7 @@ export function createGoopStateTool(ctx: PluginContext): ToolDefinition {
       "- 'reset': Reset active workflow to idle\n" +
       "- 'list-workflows': List all workflows\n" +
       "- 'set-active-workflow': Switch active workflow (requires `workflowId`)\n" +
-      "- 'create-workflow': Create new workflow (requires `workflowId`, optional `activate`)
-  Pass `activate: true` to also switch to the new workflow in the same call.",
+      "- 'create-workflow': Create new workflow (requires `workflowId`, optional `activate`). Pass `activate: true` to also switch to the new workflow in the same call.",
     args: {
       action: tool.schema.enum(STATE_ACTIONS),
       phase: tool.schema.string().optional(),
