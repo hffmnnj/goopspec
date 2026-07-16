@@ -19,6 +19,7 @@ tools:
   - goop_read_db
   - goop_search_notes
   - goop_write_db
+  - goop_write_wave
   - memory_save
   - memory_search
   - slashcommand

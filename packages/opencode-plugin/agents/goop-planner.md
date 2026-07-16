@@ -15,6 +15,7 @@ tools:
   - goop_adl
   - goop_reference
   - goop_write_db
+  - goop_write_wave
   - memory_save
   - memory_search
   - todowrite
