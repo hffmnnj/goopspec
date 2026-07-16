@@ -60,11 +60,7 @@ To merge a stack: merge Wave 1 first, then Wave 2 (now re-targeted to main), and
 
 ## Single-Branch Parallelism Rule
 
-Parallel agents may only run simultaneously on the same branch.
-
-Never dispatch agents to different branches at the same time.
-
-Multiple branches = multiple sources of truth = merge conflicts and context loss.
+Parallel agents may only run simultaneously on the same branch. Never dispatch agents to different branches at the same time. Multiple branches = multiple sources of truth = merge conflicts and context loss.
 
 ## Commit Timing
 
@@ -74,7 +70,7 @@ Commit after EACH task completes — not at wave end.
 - A wave with 3 tasks produces ≥3 commits.
 - Verify after each commit: `git log --oneline -5`.
 
-For the exact commit-message style, see `git-workflow.md`.
+For exact commit-message style, see `git-workflow.md`.
 
 ## Before You Open a PR
 
@@ -120,7 +116,7 @@ gh pr checks
 
 ```markdown
 ## Summary
-[WHAT: one paragraph explaining what changed. WHY: one sentence on motivation.]
+[WHAT: one paragraph. WHY: one sentence.]
 
 ## Changes
 - [Specific change with context]
@@ -315,9 +311,9 @@ Before pushing a wave branch and opening a PR:
 - **Reviewing your own PR and immediately merging** — always get at least one other set of eyes.
 - **Force-pushing to a PR branch after review has started** — rewrites history reviewers already read; use a new commit instead.
 - **Marking comments resolved without addressing them** — let the reviewer decide when their concern is satisfied.
-- **Bundling unrelated changes** — each PR should have one reason to exist; if you can't write a one-line summary, split it.
-- **Cross-branch parallel dispatch** — never run parallel agents on different branches simultaneously; creates divergent sources of truth and merge conflicts.
-- **Wrong base** — never create Wave N+1 from `main`; always stack it on Wave N's branch, or the PR stack breaks.
+- **Bundling unrelated changes** — each PR should have one reason to exist.
+- **Cross-branch parallel dispatch** — never run parallel agents on different branches simultaneously.
+- **Wrong base** — never create Wave N+1 from `main`; always stack it on Wave N's branch.
 
 ---
 

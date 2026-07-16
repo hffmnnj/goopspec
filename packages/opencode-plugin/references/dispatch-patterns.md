@@ -21,7 +21,7 @@ The orchestrator coordinates and delegates. It never implements.
 | "Quickly fix" anything inline | No exceptions |
 | Paste implementation logic into a message | Still writing code |
 
-**Narrow exception — Quick mode self-edit only:** The orchestrator may make trivial self-edits without delegating when ALL five conditions in `commands/goop-quick.md` (Self-Edit Authority) are met: single file, `.goopspec/` or config-root scope only, under 5 lines, no logic implications, and only inside `/goop-quick` mode. Outside those five conditions, every entry in this table remains fully in force — the orchestrator never writes/edit source code, never creates TS/JS files, never "quickly fixes" anything inline, and never implements.
+**Narrow exception — Quick mode self-edit only:** The orchestrator may make trivial self-edits without delegating when ALL five conditions in `commands/goop-quick.md` (Self-Edit Authority) are met: single file, `.goopspec/` or config-root scope only, under 5 lines, no logic implications, and only inside `/goop-quick` mode. Outside those five conditions, every prohibition in this table remains fully in force — the orchestrator never writes/edits source code, never creates TS/JS files, never "quickly fixes" anything inline, and never implements.
 
 ### Permitted Orchestrator Actions
 
@@ -44,7 +44,7 @@ Every `task()` prompt must include:
 | Verification | How to prove completion |
 | Expected output | Deliverables and commit expectations |
 
-Always include workflow isolation context when delegating: active `workflowId` and the correct `.goopspec/<workflowId>/` doc prefix.
+Always include workflow isolation context: active `workflowId` and correct `.goopspec/<workflowId>/` doc prefix.
 
 ### Context Handoff
 
@@ -122,7 +122,7 @@ Use for research, large test suites, or documentation generation that should not
 
 ### Tool-Call Batching
 
-The same parallel-vs-sequential principle applies at the tool-call level, not just the task level. For maximum efficiency, whenever you need to perform multiple independent tool operations, invoke all relevant tools simultaneously in a single message rather than sequentially.
+The same parallel-vs-sequential principle applies at the tool-call level. For maximum efficiency, whenever you need multiple independent tool operations, invoke all relevant tools simultaneously in a single message rather than sequentially.
 
 **Narrative or sequential ordering in a plan is NOT the same as a data dependency.** If tool call B does not consume tool call A's output, batch them together in the same message — even if B logically follows A in your plan. Only call tools sequentially when a later call genuinely needs an earlier call's result.
 
