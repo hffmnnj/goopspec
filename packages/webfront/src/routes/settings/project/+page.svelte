@@ -194,15 +194,6 @@
     <div class="subgroup">
       <h3 class="subgroup-title">Effective configuration</h3>
       <div class="fields">
-        <!-- Project name (read-only) --------------------------------------- -->
-        <div class="field field--row">
-          <div class="field-meta">
-            <span class="field-label">Project name</span>
-            {@render badge(sourceOf('projectName'))}
-          </div>
-          <span class="readonly-value">{config.raw.projectName ?? '—'}</span>
-        </div>
-
         <!-- Default model -------------------------------------------------- -->
         <div class="field">
           <div class="field-meta">
@@ -532,12 +523,6 @@
     margin: 0;
     font-size: 0.75rem;
     color: var(--text-muted);
-  }
-
-  .readonly-value {
-    font-size: 0.8125rem;
-    color: var(--text-secondary);
-    font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace);
   }
 
   /* ---- Source badges ---- */
