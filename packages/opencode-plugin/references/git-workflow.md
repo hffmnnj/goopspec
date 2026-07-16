@@ -6,7 +6,7 @@ Professional, atomic, universally understandable commits.
 
 ### Universal Commit Messages
 
-Commit messages must be understandable by anyone. Never reference:
+Never reference:
 
 - GoopSpec phases, waves, or task IDs.
 - Internal planning documents (`SPEC.md`, `BLUEPRINT.md`, etc.).
@@ -20,7 +20,7 @@ Write commits as if no one knows GoopSpec exists.
 - One logical change per commit.
 - At least one commit per completed task.
 - Announce commits in task reports; no silent commits.
-- Split into multiple focused commits when a task contains unrelated changes.
+- Split unrelated changes into multiple focused commits.
 
 ## Commit Message Format
 
@@ -86,7 +86,7 @@ Changes:
 
 Use a single commit when changes serve one purpose, are tightly coupled, and are small.
 
-Use multiple commits when changes include unrelated fixes/features, tests added separately, or config changes separate from code.
+Use multiple commits for unrelated fixes/features, tests added separately, or config changes separate from code.
 
 Order multiple commits from independent to dependent.
 
@@ -102,8 +102,7 @@ Order multiple commits from independent to dependent.
 - [ ] All tests pass.
 - [ ] No TypeScript/linting errors.
 - [ ] No debug statements left behind.
-- [ ] Commit message is specific.
-- [ ] Message explains why, not just what.
+- [ ] Commit message is specific and explains why, not just what.
 - [ ] No internal references.
 - [ ] A stranger could understand the change.
 - [ ] One logical change per commit.
@@ -112,9 +111,7 @@ Order multiple commits from independent to dependent.
 
 ## Code Review
 
-Review focus areas: correctness, design, performance, security, maintainability.
-
-Comment types:
+Focus areas: correctness, design, performance, security, maintainability.
 
 | Type | Action Required |
 |------|-----------------|

@@ -1,6 +1,6 @@
 # Architecture and Failure Modes
 
-Plugin architecture overview plus reusable failure-mode patterns for architecture review.
+Plugin architecture overview plus reusable failure-mode patterns.
 
 ## Plugin Architecture
 
@@ -13,10 +13,10 @@ Plugin architecture overview plus reusable failure-mode patterns for architectur
 
 ### Design Principles
 
-- **Separation of concerns**: each module has a single, well-defined responsibility.
+- **Separation of concerns**: each module has a single responsibility.
 - **Dependency inversion**: depend on abstractions, not concretions.
 - **Open/closed**: open for extension, closed for modification.
-- **Single source of truth**: each piece of data has one authoritative owner.
+- **Single source of truth**: each data element has one authoritative owner.
 
 ### Workflow Phases
 
@@ -53,7 +53,7 @@ idle → plan → research → specify → execute → accept → archive
 |---------|-----|
 | **Repository** | Abstract data access behind a collection-like interface |
 | **Service layer** | Coordinate application operations and transactions |
-| **Factory** | Encapsulate object creation logic (e.g., validation-contract gate) |
+| **Factory** | Encapsulate creation logic (e.g., validation-contract gate) |
 | **Observer** | React to state changes without tight coupling |
 | **Strategy** | Swap algorithms without changing callers |
 
@@ -94,7 +94,7 @@ src/
 
 ### Integration Patterns
 
-- **Memory-first**: `memory_search` → work → `memory_save`/`memory_decision`.
+- **Memory-first**: `memory_search` → work → `memory_save` / `memory_decision`.
 - **State-aware**: `goop_status` → read state → check phase allows action.
 - **Delegation lifecycle**: orchestrator builds rich prompt → `task()` → subagent executes → structured response → orchestrator updates state.
 
@@ -125,9 +125,9 @@ When documenting patterns:
 
 Apply systematic debugging for complex failures:
 
-1. **Observe** — gather symptoms, error messages, and recent changes.
+1. **Observe** — gather symptoms, error messages, recent changes.
 2. **Hypothesize** — form a testable, falsifiable theory.
-3. **Predict** — define outcomes that would confirm or refute the theory.
+3. **Predict** — define outcomes that confirm or refute the theory.
 4. **Experiment** — change one variable at a time and measure.
 5. **Analyze** — interpret the result and iterate or fix.
 
@@ -142,53 +142,16 @@ Useful tactics:
 
 Reusable patterns for architecture and system design analysis.
 
-### 1. Cascading Failures
-
-A failure in one component propagates to dependents.
-
-Mitigations: circuit breakers, bulkhead isolation, timeout budgets, graceful degradation.
-
-### 2. Thundering Herd
-
-Many clients retry simultaneously after a failure, overwhelming recovery.
-
-Mitigations: jittered exponential backoff, cache stampede protection, rate limiting, gradual admission.
-
-### 3. Split Brain
-
-Distributed components disagree on system state.
-
-Mitigations: quorum consensus, leader election with fencing tokens, CRDTs, explicit conflict resolution.
-
-### 4. Data Corruption Propagation
-
-Bad data enters and spreads before detection.
-
-Mitigations: schema validation at write boundaries, immutable event logs, checksums, anomaly detection.
-
-### 5. Resource Exhaustion
-
-System runs out of memory, connections, disk, or file descriptors.
-
-Mitigations: resource limits, health checks, automatic restart, load shedding.
-
-### 6. Poison Message
-
-A single malformed message blocks a queue or pipeline.
-
-Mitigations: dead-letter queues, per-message timeout, schema validation, DLQ monitoring.
-
-### 7. Clock and Ordering Assumptions
-
-System assumes ordered events or synchronized clocks.
-
-Mitigations: logical/vector clocks, sequence numbers, idempotency keys, explicit happens-before relationships.
-
-### 8. Configuration Drift
-
-Production config diverges from tested config.
-
-Mitigations: infrastructure as code, drift detection, immutable deployments, config validation on startup.
+| # | Failure Mode | Description | Mitigations |
+|---|--------------|-------------|-------------|
+| 1 | Cascading Failures | A failure in one component propagates to dependents. | Circuit breakers, bulkhead isolation, timeout budgets, graceful degradation. |
+| 2 | Thundering Herd | Many clients retry simultaneously after a failure. | Jittered exponential backoff, cache stampede protection, rate limiting, gradual admission. |
+| 3 | Split Brain | Distributed components disagree on system state. | Quorum consensus, leader election with fencing tokens, CRDTs, explicit conflict resolution. |
+| 4 | Data Corruption Propagation | Bad data enters and spreads before detection. | Schema validation at write boundaries, immutable event logs, checksums, anomaly detection. |
+| 5 | Resource Exhaustion | System runs out of memory, connections, disk, or file descriptors. | Resource limits, health checks, automatic restart, load shedding. |
+| 6 | Poison Message | A single malformed message blocks a queue or pipeline. | Dead-letter queues, per-message timeout, schema validation, DLQ monitoring. |
+| 7 | Clock and Ordering Assumptions | System assumes ordered events or synchronized clocks. | Logical/vector clocks, sequence numbers, idempotency keys, explicit happens-before relationships. |
+| 8 | Configuration Drift | Production config diverges from tested config. | Infrastructure as code, drift detection, immutable deployments, config validation on startup. |
 
 ## Risk Assessment
 
@@ -217,8 +180,6 @@ Mitigations: infrastructure as code, drift detection, immutable deployments, con
 4. Low likelihood + low impact — document and accept.
 
 ## Edge-Case Scanning Checklist
-
-Use when reviewing any proposed architecture:
 
 - [ ] Empty/null inputs
 - [ ] 100x expected load

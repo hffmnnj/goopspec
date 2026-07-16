@@ -50,7 +50,7 @@ Before verifying:
 3. `goop_read_db({ doc_types: ["spec", "blueprint", "chronicle"] })` — load must-haves, traceability, and execution evidence.
 5. `git status`, `git diff`, `git log --oneline -20` — actual changes.
 6. `memory_search({ query: "security issues vulnerabilities regressions", limit: 5 })`.
-7. Load `references/security-checklist.md`, `references/phase-gates.md`, and `references/response-format.md`.
+7. Load `references/security-checklist.md`, `references/phase-gates.md`, `references/response-format.md`, and `references/tool-reference.md`.
 8. Batch independent tool calls into a single message — see `references/core-protocol.md` Tool-Call Batching.
 
 If `goop_read_db` returns empty content for `spec` or `blueprint`, return `blocked`.

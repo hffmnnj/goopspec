@@ -5,7 +5,7 @@ Red → green → refactor cycles for behavior-first implementation.
 ## Core Cycle
 
 1. **Red**: write a failing test that describes expected behavior.
-2. **Green**: add minimal code to make the test pass.
+2. **Green**: add minimal code to make it pass.
 3. **Refactor**: improve design while keeping tests green.
 
 ## GoopSpec Usage
@@ -16,23 +16,11 @@ Red → green → refactor cycles for behavior-first implementation.
 
 ## Execution Pattern
 
-### Red
-
-- Add a focused failing test.
-- Run the target test to confirm failure.
-- Commit: `test(phase-plan): add failing test for X`.
-
-### Green
-
-- Implement the minimum behavior.
-- Re-run target tests until passing.
-- Commit: `feat(phase-plan): implement X`.
-
-### Refactor
-
-- Clean up names, structure, duplication.
-- Re-run tests to confirm no regressions.
-- Commit: `refactor(phase-plan): clean up X`.
+| Phase | Action | Commit |
+|-------|--------|--------|
+| Red | Add a focused failing test; run it to confirm failure | `test(phase-plan): add failing test for X` |
+| Green | Implement the minimum behavior; re-run until passing | `feat(phase-plan): implement X` |
+| Refactor | Clean up names, structure, duplication; re-run tests | `refactor(phase-plan): clean up X` |
 
 ## Test Levels
 
@@ -78,16 +66,12 @@ jest.advanceTimersByTime(1000);
 
 ## Test Organization
 
-Co-locate tests with implementation (`*.test.ts` next to `*.ts`). Group integration and E2E tests by domain.
-
-## Fixtures
-
-Keep reusable test data in a `fixtures/` directory near the tests that use it.
+Co-locate tests with implementation (`*.test.ts` next to `*.ts`). Group integration and E2E tests by domain. Keep reusable fixtures near the tests that use them.
 
 ## Best Practices
 
 - Use descriptive test names.
-- Follow Arrange / Act / Assert structure.
+- Follow Arrange / Act / Assert.
 - Keep tests independent.
 - Mock external dependencies for speed.
 - Run the narrowest relevant test first, then the full suite.
@@ -100,9 +84,9 @@ Keep reusable test data in a `fixtures/` directory near the tests that use it.
 
 ## Snapshot and Performance Tests
 
-Use snapshot tests sparingly for stable output (e.g., rendered markup, generated configs). Update snapshots only after intentional changes.
+Use snapshot tests sparingly for stable output; update only after intentional changes.
 
-Performance tests should assert budgets, not micro-optimizations:
+Performance tests assert budgets, not micro-optimizations:
 
 ```typescript
 it("completes within 100ms", async () => {
