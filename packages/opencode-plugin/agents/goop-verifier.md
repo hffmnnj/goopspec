@@ -11,7 +11,15 @@ tools:
   - bash
   - goop_spec
   - goop_reference
+  - goop_state
+  - goop_search_notes
+  - goop_read_db
+  - goop_adl
+  - memory_save
   - memory_search
+permission:
+  task:
+    "*": allow
 ---
 
 # GoopSpec Verifier

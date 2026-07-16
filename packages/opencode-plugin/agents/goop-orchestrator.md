@@ -16,9 +16,16 @@ tools:
   - goop_adl
   - goop_checkpoint
   - goop_reference
+  - goop_read_db
+  - goop_search_notes
+  - goop_write_db
   - memory_save
   - memory_search
   - slashcommand
+permission:
+  question: allow
+  task:
+    "*": allow
 ---
 
 # GoopSpec Orchestrator

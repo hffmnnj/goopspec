@@ -8,10 +8,13 @@ tools:
   - read
   - glob
   - grep
+  - goop_read_db
+  - goop_search_notes
   - goop_spec
   - goop_state
   - goop_adl
   - goop_reference
+  - goop_write_db
   - memory_save
   - memory_search
   - todowrite

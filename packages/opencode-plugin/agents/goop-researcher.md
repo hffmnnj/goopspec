@@ -10,9 +10,15 @@ tools:
   - grep
   - webfetch
   - goop_reference
+  - goop_read_db
+  - goop_search_notes
+  - goop_save_note
+  - goop_state
   - memory_save
   - memory_search
   - todowrite
+permission:
+  question: allow
 ---
 
 # GoopSpec Researcher

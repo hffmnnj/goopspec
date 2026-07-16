@@ -11,9 +11,14 @@ tools:
   - glob
   - grep
   - goop_reference
+  - goop_state
+  - goop_read_db
+  - goop_search_notes
   - memory_save
   - memory_search
   - todowrite
+permission:
+  question: allow
 ---
 
 # GoopSpec Writer

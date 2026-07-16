@@ -14,7 +14,9 @@ tools:
   - goop_spec
   - goop_state
   - goop_adl
+  - goop_read_db
   - goop_reference
+  - goop_search_notes
   - memory_save
   - memory_search
   - todowrite
