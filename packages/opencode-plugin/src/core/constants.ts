@@ -73,7 +73,14 @@ export type WorkflowDepth = (typeof WORKFLOW_DEPTHS)[number];
  * - low / medium / high:                       General-purpose tiers
  * - frontend-low / frontend-medium / frontend-high: Frontend-specific tiers
  */
-export const EXECUTOR_TIERS = ["low", "medium", "high", "frontend-low", "frontend-medium", "frontend-high"] as const;
+export const EXECUTOR_TIERS = [
+  "low",
+  "medium",
+  "high",
+  "frontend-low",
+  "frontend-medium",
+  "frontend-high",
+] as const;
 
 export type ExecutorTier = (typeof EXECUTOR_TIERS)[number];
 
