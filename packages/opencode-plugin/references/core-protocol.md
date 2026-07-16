@@ -126,7 +126,7 @@ Before doing work, every subagent must:
 1. `goop_state({ action: "get" })`
 2. `goop_read_db({ doc_type: "spec" })` — load spec contract
 3. `goop_read_db({ doc_type: "blueprint" })` — load task context
-4. `goop_search_notes({ query: "[task context]" })` — check Field Notes for prior research
+4. `goop_search_notes({ query: "[task context]" })` — check Field Notes for prior research. If a snippet from this step indicates relevance but insufficient detail, use `note_id` (when the ID is already known from the snippet) or `full: true` (when re-issuing the query) to retrieve the complete body — see `field-notes-protocol.md` (Enhanced Retrieval) for full guidance.
 5. `memory_search({ query: "[task context]" })`
 6. `Read(".goopspec/PROJECT_KNOWLEDGE_BASE.md")` if present
 7. Acknowledge current phase, spec lock status, and active task.

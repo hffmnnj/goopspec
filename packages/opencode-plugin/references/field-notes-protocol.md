@@ -28,7 +28,7 @@ Always record the returned ID when you save a note. You can retrieve it later wi
 | Tool | Purpose |
 |------|---------|
 | `goop_save_note(title, body, tags, source_agent, importance, workflow_id?, project_id?)` | Save a new Field Note |
-| `goop_search_notes(query, tags?, project_id?, workflow_id?, limit?)` | Search notes with FTS + tag matching |
+| `goop_search_notes(query, tags?, project_id?, workflow_id?, limit?, full?, body_offset?, body_limit?, note_id?)` | Search notes with FTS + tag matching; supports full-body retrieval and direct fetch-by-ID |
 
 These tools replace direct reads and writes to `RESEARCH.md`.
 
@@ -107,6 +107,87 @@ goop_search_notes("state migration", { project_id: "goopspec", workflow_id: "goo
 ```
 
 Narrows results to a specific project or workflow context.
+
+## Enhanced Retrieval: `full`, `body_offset`, `body_limit`, `note_id`
+
+`goop_search_notes` supports four optional arguments that give you fine-grained control over how much of a note body is returned. The default behavior (all four absent) returns a 200-character snippet — this is the norm for most searches and keeps token usage low.
+
+### `note_id: string` — Direct fetch by ID (preferred when ID is known)
+
+When you already have a note's `fn_...` ID from a prior search result, pass it as `note_id` to retrieve the **complete body** of that single note in one call. This bypasses FTS ranking and query parsing entirely — it is the cheapest, most direct path to a full note body.
+
+```
+goop_search_notes({ note_id: "fn_20260716_0v28qlej" })
+```
+
+When `note_id` is provided, `query` is optional and ignored if both are supplied. The returned note always includes its full body (equivalent to `full: true` for that one note).
+
+### `full: boolean` — Full body on re-query
+
+When re-issuing a search query and a snippet from the initial result indicates relevance but insufficient detail, add `full: true` to return the complete body for every matching note.
+
+```
+goop_search_notes({ query: "WAL mode", full: true })
+```
+
+### `body_offset: number` and `body_limit: number` — Character-range slicing
+
+Slice a note body by character range. `body_offset` (default 0) is the starting character position; `body_limit` (default 0, meaning unbounded within the body) is the maximum characters to return. These are only applied when at least one of `full`, `body_offset`, or `body_limit` is set.
+
+```
+goop_search_notes({ query: "WAL mode", body_offset: 0, body_limit: 200 })
+```
+
+### Guidance
+
+| Situation | Recommended Approach |
+|-----------|---------------------|
+| ID already known from a prior snippet result | `note_id: "fn_..."` — direct, cheapest, always returns full body |
+| Snippet indicates relevance but you need the full text | Re-issue with `full: true` |
+| You only need a specific portion of a long note | `body_offset` + `body_limit` |
+| Routine search, snippet is enough | Default (no extra args) — keeps token usage low |
+
+**Keep default snippet mode as the norm.** These are opt-in enhancements, not the default behavior. Only use `full`, `note_id`, or body-range args when a snippet is genuinely insufficient.
+
+### Live-Trace Example: Before and After
+
+**BEFORE (anti-pattern — 6 sequential calls, still can't get full body):**
+
+An agent searches for a note about SQLite WAL mode. Each call returns a truncated snippet, so the agent keeps narrowing the query and adding `limit: 1`, hoping for a different truncation — but the 200-char limit is structural, not query-dependent.
+
+```
+Call 1: goop_search_notes({ query: "SQLite WAL mode" })
+         → snippet truncated at 200 chars, no full body
+
+Call 2: goop_search_notes({ query: "SQLite WAL mode performance" })
+         → same snippet, still truncated
+
+Call 3: goop_search_notes({ query: "SQLite WAL mode", limit: 1 })
+         → one result, still truncated
+
+Call 4: goop_search_notes({ query: "WAL mode benefits SQLite", limit: 1 })
+         → one result, still truncated
+
+Call 5: goop_search_notes({ query: "SQLite WAL mode benefits", limit: 1 })
+         → one result, still truncated
+
+Call 6: goop_search_notes({ query: "fn_20260618_sqlite01", limit: 1 })
+         → one result, still truncated (query is FTS, not ID lookup)
+```
+
+**Result:** 6 tool calls, zero full bodies retrieved. The agent wasted tokens and turns because no direct-fetch path existed.
+
+**AFTER (correct — 2 calls, full body retrieved):**
+
+```
+Call 1: goop_search_notes({ query: "SQLite WAL mode" })
+         → returns snippet with note_id: "fn_20260618_sqlite01"
+
+Call 2: goop_search_notes({ note_id: "fn_20260618_sqlite01" })
+         → returns the complete note body immediately
+```
+
+**Result:** 2 tool calls. The agent notes the `fn_...` ID from the first search's snippet, then makes one follow-up call with `note_id` to get the complete body. No repeated narrowing queries, no wasted turns.
 
 ## Importance Scale
 
