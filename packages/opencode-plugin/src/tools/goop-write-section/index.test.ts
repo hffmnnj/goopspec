@@ -8,6 +8,8 @@ import {
   createMockToolContext,
   setupTestEnvironment,
 } from "../../test-utils.js";
+import { createGoopReadDbTool } from "../goop-read-db/index.js";
+import { createGoopWriteDbTool } from "../goop-write-db/index.js";
 import { createGoopWriteSectionTool } from "./index.js";
 
 describe("goop_write_section tool", () => {
@@ -64,6 +66,63 @@ describe("goop_write_section tool", () => {
 
     const section = ctx.db.getSection("default", "blueprint", "second");
     expect(section?.position).toBe(20);
+  });
+
+  it("migrates monolithic content before the first section write", async () => {
+    const writeDocument = createGoopWriteDbTool(ctx);
+    const writeSection = createGoopWriteSectionTool(ctx);
+    const readDocument = createGoopReadDbTool(ctx);
+
+    await writeDocument.execute({ doc_type: "spec", content: "# Existing Document" }, toolCtx);
+    await writeSection.execute(
+      { doc_type: "spec", section_key: "new-section", content: "# New Section" },
+      toolCtx,
+    );
+
+    expect(ctx.db.getSections("default", "spec").map((section) => section.section_key)).toEqual([
+      "_migrated-legacy-content",
+      "new-section",
+    ]);
+    expect(ctx.db.assembleDocument("default", "spec")).toBe("# Existing Document\n\n# New Section");
+    expect(await readDocument.execute({ doc_type: "spec" }, toolCtx)).toBe(
+      "# Existing Document\n\n# New Section",
+    );
+  });
+
+  it("does not duplicate migrated content on later section writes", async () => {
+    ctx.db.upsertDocument("default", "spec", "# Existing Document");
+    const tool = createGoopWriteSectionTool(ctx);
+
+    await tool.execute({ doc_type: "spec", section_key: "first", content: "# First" }, toolCtx);
+    await tool.execute({ doc_type: "spec", section_key: "second", content: "# Second" }, toolCtx);
+
+    const sections = ctx.db.getSections("default", "spec");
+    expect(
+      sections.filter((section) => section.section_key === "_migrated-legacy-content"),
+    ).toHaveLength(1);
+    expect(sections.map((section) => section.section_key)).toEqual([
+      "_migrated-legacy-content",
+      "first",
+      "second",
+    ]);
+  });
+
+  it("deletes only the requested section", async () => {
+    ctx.db.upsertSection("default", "spec", "keep", "# Keep", 0);
+    ctx.db.upsertSection("default", "spec", "remove", "# Remove", 1);
+    const tool = createGoopWriteSectionTool(ctx);
+
+    const result = await tool.execute(
+      { action: "delete", doc_type: "spec", section_key: "remove" },
+      toolCtx,
+    );
+
+    expect(result).toContain("Deleted section 'remove'");
+    expect(ctx.db.getSection("default", "spec", "remove")).toBeNull();
+    expect(ctx.db.getSections("default", "spec").map((section) => section.section_key)).toEqual([
+      "keep",
+    ]);
+    expect(ctx.db.assembleDocument("default", "spec")).toBe("# Keep");
   });
 
   // -----------------------------------------------------------------------
@@ -201,6 +260,29 @@ describe("goop_write_section tool", () => {
         toolCtx,
       );
       expect(result).toContain("3/3 succeeded");
+    });
+
+    it("migrates legacy content once per document type in a batch", async () => {
+      ctx.db.upsertDocument("default", "spec", "# Existing Document");
+      const tool = createGoopWriteSectionTool(ctx);
+
+      const result = await tool.execute(
+        {
+          doc_type: "spec",
+          items: [
+            { doc_type: "spec", section_key: "first", content: "# First" },
+            { doc_type: "spec", section_key: "second", content: "# Second" },
+          ],
+        },
+        toolCtx,
+      );
+
+      expect(result).toContain("2/2 succeeded");
+      expect(
+        ctx.db
+          .getSections("default", "spec")
+          .filter((section) => section.section_key === "_migrated-legacy-content"),
+      ).toHaveLength(1);
     });
 
     it("backward-compat: single-section path works when items absent", async () => {
