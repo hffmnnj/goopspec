@@ -117,6 +117,45 @@ Wave branches are sequential — Wave N must be fully merged before Wave N+1 is 
 
 Use for research, large test suites, or documentation generation that should not block the main flow.
 
+### Tool-Call Batching
+
+The same parallel-vs-sequential principle applies at the tool-call level, not just the task level. For maximum efficiency, whenever you need to perform multiple independent tool operations, invoke all relevant tools simultaneously in a single message rather than sequentially.
+
+**Narrative or sequential ordering in a plan is NOT the same as a data dependency.** If tool call B does not consume tool call A's output, batch them together in the same message — even if B logically follows A in your plan. Only call tools sequentially when a later call genuinely needs an earlier call's result.
+
+#### Worked Example
+
+**BEFORE (wrong — two separate messages/turns):**
+
+```
+Message 1: goop_state({ action: "create-workflow", workflowId: "my-workflow" })
+Message 2: goop_state({ action: "set-active-workflow", workflowId: "my-workflow" })
+```
+
+and
+
+```
+Message 1: goop_state({ action: "get" })
+Message 2: goop_state({ action: "set-autopilot", autopilot: true, lazy: true })
+```
+
+(In both cases, the second call's inputs did not depend on the first call's output — they should have been batched.)
+
+**AFTER (correct):**
+
+```
+Single message: goop_state({ action: "create-workflow", workflowId: "my-workflow", activate: true })
+```
+
+(Note: once the `activate` flag lands, this becomes a single call instead of two — the best fix is often to eliminate the second call entirely via a tool-design improvement, not just batch it.)
+
+```
+Single message, two parallel tool calls:
+  - goop_state({ action: "get" })
+  - goop_search_notes({ query: "..." })
+(called together in the same turn since neither depends on the other's output)
+```
+
 ## Research Dispatch
 
 Research resolves unknowns before or during planning/execution. Deliverables:
