@@ -14,7 +14,7 @@
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { basename, join } from "node:path";
 
-import { AGENT_ROLES, GOOPSPEC_DIR } from "../../core/constants.js";
+import { AGENT_ROLES, DEFAULT_THINKING_LEVELS, GOOPSPEC_DIR } from "../../core/constants.js";
 import type { AgentRole } from "../../core/constants.js";
 import type { StateManager } from "../../core/types.js";
 import { log, logError } from "../../shared/logger.js";
@@ -53,6 +53,9 @@ export const DEFAULT_MODEL_MAP: Record<AgentRole, string> = {
 // Types
 // ---------------------------------------------------------------------------
 
+export const THINKING_LEVELS = ["none", "low", "medium", "high", "xhigh"] as const;
+export type ThinkingLevel = (typeof THINKING_LEVELS)[number];
+
 /** Persisted project-level config stored in `.goopspec/config.json`. */
 export interface GoopConfig {
   projectName?: string;
@@ -60,6 +63,7 @@ export interface GoopConfig {
   enforcement?: EnforcementMode;
   adlEnabled?: boolean;
   agentModels?: Partial<Record<string, string>>;
+  agentThinkingLevels?: Partial<Record<string, ThinkingLevel>>;
   agentThinkingBudgets?: Partial<Record<string, number>>;
   memoryEnabled?: boolean;
   gitignoreGoopspec?: boolean;
@@ -362,6 +366,42 @@ export function normalizeConfig(raw: Record<string, unknown>): GoopConfig {
   if (typeof raw.memoryEnabled === "boolean") config.memoryEnabled = raw.memoryEnabled;
   if (typeof raw.gitignoreGoopspec === "boolean") config.gitignoreGoopspec = raw.gitignoreGoopspec;
 
+  // New format: agentThinkingBudgets (bare role → numeric budget, legacy compatibility)
+  if (raw.agentThinkingBudgets && typeof raw.agentThinkingBudgets === "object") {
+    config.agentThinkingBudgets = {};
+    for (const [role, budget] of Object.entries(
+      raw.agentThinkingBudgets as Record<string, unknown>,
+    )) {
+      if (typeof budget === "number" && !Number.isNaN(budget)) {
+        config.agentThinkingBudgets[role] = budget;
+      } else {
+        logError(`normalizeConfig: agentThinkingBudgets["${role}"] must be a number — skipping.`);
+      }
+    }
+  }
+
+  // New format: agentThinkingLevels (bare role → canonical thinking level)
+  if (raw.agentThinkingLevels && typeof raw.agentThinkingLevels === "object") {
+    config.agentThinkingLevels = {};
+    for (const [role, label] of Object.entries(
+      raw.agentThinkingLevels as Record<string, unknown>,
+    )) {
+      if (typeof label !== "string") {
+        logError(`normalizeConfig: agentThinkingLevels["${role}"] must be a string — skipping.`);
+        continue;
+      }
+
+      const normalized = label.trim().toLowerCase();
+      if ((THINKING_LEVELS as readonly string[]).includes(normalized)) {
+        config.agentThinkingLevels[role] = normalized as ThinkingLevel;
+      } else {
+        logError(
+          `normalizeConfig: unknown thinking level "${label}" for role "${role}" — skipping. Valid levels: ${THINKING_LEVELS.join(", ")}.`,
+        );
+      }
+    }
+  }
+
   // New format: agentModels (bare role → model string)
   if (raw.agentModels && typeof raw.agentModels === "object") {
     config.agentModels = {};
@@ -452,6 +492,10 @@ export function loadMergedConfig(projectDir: string): GoopConfig {
           normalized.agentModels !== undefined
             ? { ...(merged.agentModels ?? {}), ...normalized.agentModels }
             : merged.agentModels,
+        agentThinkingLevels:
+          normalized.agentThinkingLevels !== undefined
+            ? { ...(merged.agentThinkingLevels ?? {}), ...normalized.agentThinkingLevels }
+            : merged.agentThinkingLevels,
         agentThinkingBudgets:
           normalized.agentThinkingBudgets !== undefined
             ? { ...(merged.agentThinkingBudgets ?? {}), ...normalized.agentThinkingBudgets }
@@ -485,6 +529,29 @@ export function getEffectiveModelMap(projectDir: string): Record<string, string>
   if (config?.agentModels) {
     for (const [role, model] of Object.entries(config.agentModels)) {
       if (model) base[role] = model;
+    }
+  }
+
+  return base;
+}
+
+/**
+ * Return the effective thinking-level map: built-in role defaults merged with
+ * user overrides from all config sources. Values are plain canonical labels.
+ */
+export function getEffectiveThinkingLevels(projectDir: string): Record<AgentRole, ThinkingLevel> {
+  const config = loadMergedConfig(projectDir);
+  const base: Record<AgentRole, ThinkingLevel> = { ...DEFAULT_THINKING_LEVELS };
+
+  if (config?.agentThinkingLevels) {
+    for (const [role, level] of Object.entries(config.agentThinkingLevels)) {
+      if (
+        level &&
+        (AGENT_ROLES as readonly string[]).includes(role) &&
+        (THINKING_LEVELS as readonly string[]).includes(level)
+      ) {
+        base[role as AgentRole] = level;
+      }
     }
   }
 

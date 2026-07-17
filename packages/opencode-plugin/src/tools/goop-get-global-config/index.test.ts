@@ -65,7 +65,10 @@ describe("goop_get_global_config tool", () => {
     await mkdir(dirname(configPath), { recursive: true });
     await writeFile(
       configPath,
-      JSON.stringify({ defaultModel: "anthropic/claude-sonnet-4-6", memoryEnabled: true }),
+      JSON.stringify({
+        defaultModel: "anthropic/claude-sonnet-4-6",
+        memoryEnabled: true,
+      }),
       "utf-8",
     );
 
@@ -73,7 +76,10 @@ describe("goop_get_global_config tool", () => {
 
     expect(result).toEqual({
       success: true,
-      config: { defaultModel: "anthropic/claude-sonnet-4-6", memoryEnabled: true },
+      config: {
+        defaultModel: "anthropic/claude-sonnet-4-6",
+        memoryEnabled: true,
+      },
       path: configPath,
     });
   });

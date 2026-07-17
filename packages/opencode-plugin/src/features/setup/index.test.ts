@@ -2,15 +2,18 @@ import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
+import { AGENT_ROLES, DEFAULT_THINKING_LEVELS } from "../../core/constants.js";
 import type { StateManager } from "../../core/types.js";
 import { createMockStateManager, setupTestEnvironment } from "../../test-utils.js";
 import { CURRENT_SCHEMA_VERSION } from "../db/migrations.js";
 import {
   DEFAULT_MODEL_MAP,
+  THINKING_LEVELS,
   detect,
   ensureGitignoreEntry,
   formatModelInfo,
   getEffectiveModelMap,
+  getEffectiveThinkingLevels,
   getStatus,
   init,
   loadMergedConfig,
@@ -316,6 +319,224 @@ describe("setup feature", () => {
   });
 
   // =========================================================================
+  // thinking levels (MH5)
+  // =========================================================================
+
+  describe("thinking levels", () => {
+    const origGlobalPath = process.env.GOOPSPEC_GLOBAL_CONFIG_PATH;
+
+    beforeEach(() => {
+      process.env.GOOPSPEC_GLOBAL_CONFIG_PATH = join(testDir, "nonexistent-global.json");
+    });
+
+    afterEach(() => {
+      if (origGlobalPath === undefined) {
+        Reflect.deleteProperty(process.env, "GOOPSPEC_GLOBAL_CONFIG_PATH");
+      } else {
+        process.env.GOOPSPEC_GLOBAL_CONFIG_PATH = origGlobalPath;
+      }
+    });
+
+    it("DEFAULT_THINKING_LEVELS derives from AGENT_ROLES", () => {
+      for (const role of AGENT_ROLES) {
+        expect(DEFAULT_THINKING_LEVELS[role]).toSatisfy(
+          (level: string | undefined) =>
+            level != null && THINKING_LEVELS.includes(level as (typeof THINKING_LEVELS)[number]),
+        );
+      }
+    });
+
+    it("explorer and researcher default to medium; every other role defaults to high", () => {
+      for (const role of AGENT_ROLES) {
+        const expected = role === "explorer" || role === "researcher" ? "medium" : "high";
+        expect(DEFAULT_THINKING_LEVELS[role]).toBe(expected);
+      }
+    });
+
+    it("getEffectiveThinkingLevels returns built-in defaults with no config", () => {
+      const emptyDir = join(testDir, "no-thinking-config");
+      mkdirSync(emptyDir, { recursive: true });
+      const levels = getEffectiveThinkingLevels(emptyDir);
+      expect(levels.orchestrator).toBe("high");
+      expect(levels.explorer).toBe("medium");
+      expect(levels.researcher).toBe("medium");
+      expect(levels["executor-high"]).toBe("high");
+    });
+
+    it("getEffectiveThinkingLevels applies per-role config overrides", () => {
+      writeConfig(testDir, {
+        agentThinkingLevels: { orchestrator: "low", researcher: "xhigh", explorer: "high" },
+      });
+      const levels = getEffectiveThinkingLevels(testDir);
+      expect(levels.orchestrator).toBe("low");
+      expect(levels.researcher).toBe("xhigh");
+      expect(levels.explorer).toBe("high");
+      expect(levels["executor-medium"]).toBe("high");
+    });
+
+    it("getEffectiveThinkingLevels ignores unknown roles in config", () => {
+      writeConfig(testDir, {
+        agentThinkingLevels: { orchestrator: "low", "future-role": "xhigh" },
+      });
+      const levels = getEffectiveThinkingLevels(testDir);
+      expect(levels.orchestrator).toBe("low");
+      expect((levels as Record<string, unknown>)["future-role"]).toBeUndefined();
+    });
+
+    it("getEffectiveThinkingLevels ignores invalid levels in merged config", () => {
+      const freshDir = join(testDir, "invalid-thinking-levels");
+      mkdirSync(join(freshDir, ".goopspec"), { recursive: true });
+      process.env.GOOPSPEC_GLOBAL_CONFIG_PATH = join(freshDir, "nonexistent-global.json");
+
+      // Bypass normalization to simulate a corrupted config file
+      writeFileSync(
+        join(freshDir, "goopspec.json"),
+        JSON.stringify({ agentThinkingLevels: { orchestrator: "extreme" } }),
+      );
+      const levels = getEffectiveThinkingLevels(freshDir);
+      expect(levels.orchestrator).toBe("high");
+    });
+
+    it("getEffectiveThinkingLevels applies all four precedence tiers: project > internal > global > default", () => {
+      const freshDir = join(testDir, "thinking-levels-precedence");
+      mkdirSync(join(freshDir, ".goopspec"), { recursive: true });
+      const globalPath = join(freshDir, "global-goopspec.json");
+      process.env.GOOPSPEC_GLOBAL_CONFIG_PATH = globalPath;
+
+      writeFileSync(
+        globalPath,
+        JSON.stringify({
+          agentThinkingLevels: { orchestrator: "low", researcher: "low" },
+        }),
+      );
+      writeFileSync(
+        join(freshDir, ".goopspec", "config.json"),
+        JSON.stringify({
+          agentThinkingLevels: { orchestrator: "medium", explorer: "medium" },
+        }),
+      );
+      writeFileSync(
+        join(freshDir, "goopspec.json"),
+        JSON.stringify({
+          agentThinkingLevels: { orchestrator: "high" },
+        }),
+      );
+
+      const levels = getEffectiveThinkingLevels(freshDir);
+      expect(levels.orchestrator).toBe("high"); // project wins
+      expect(levels.researcher).toBe("low"); // global, no override
+      expect(levels.explorer).toBe("medium"); // internal, no override
+      expect(levels["executor-high"]).toBe("high"); // built-in default
+    });
+
+    it("new thinking level wins over legacy numeric budget for the same role", () => {
+      const freshDir = join(testDir, "thinking-level-wins-budget");
+      mkdirSync(join(freshDir, ".goopspec"), { recursive: true });
+      process.env.GOOPSPEC_GLOBAL_CONFIG_PATH = join(freshDir, "nonexistent-global.json");
+
+      writeFileSync(
+        join(freshDir, "goopspec.json"),
+        JSON.stringify({
+          agentThinkingLevels: { orchestrator: "low" },
+          orchestrator: { model: "anthropic/claude-opus-4-6", thinkingBudget: 32000 },
+        }),
+      );
+
+      const merged = loadMergedConfig(freshDir);
+      expect(merged.agentThinkingBudgets?.orchestrator).toBe(32000);
+
+      const levels = getEffectiveThinkingLevels(freshDir);
+      expect(levels.orchestrator).toBe("low");
+    });
+
+    it("legacy numeric budget is preserved when no new level is present for a role", () => {
+      const freshDir = join(testDir, "legacy-budget-only");
+      mkdirSync(join(freshDir, ".goopspec"), { recursive: true });
+      process.env.GOOPSPEC_GLOBAL_CONFIG_PATH = join(freshDir, "nonexistent-global.json");
+
+      writeFileSync(
+        join(freshDir, "goopspec.json"),
+        JSON.stringify({
+          orchestrator: { model: "anthropic/claude-opus-4-6", thinkingBudget: 16000 },
+        }),
+      );
+
+      const merged = loadMergedConfig(freshDir);
+      expect(merged.agentThinkingBudgets?.orchestrator).toBe(16000);
+      expect(merged.agentThinkingLevels?.orchestrator).toBeUndefined();
+
+      const levels = getEffectiveThinkingLevels(freshDir);
+      expect(levels.orchestrator).toBe("high");
+    });
+
+    it("new label wins over legacy agentThinkingBudgets numeric for the same role", () => {
+      const freshDir = join(testDir, "agent-thinking-levels-wins-budgets");
+      mkdirSync(join(freshDir, ".goopspec"), { recursive: true });
+      process.env.GOOPSPEC_GLOBAL_CONFIG_PATH = join(freshDir, "nonexistent-global.json");
+
+      writeFileSync(
+        join(freshDir, "goopspec.json"),
+        JSON.stringify({
+          agentThinkingLevels: { orchestrator: "low" },
+          agentThinkingBudgets: { orchestrator: 64000 },
+        }),
+      );
+
+      const merged = loadMergedConfig(freshDir);
+      expect(merged.agentThinkingLevels?.orchestrator).toBe("low");
+      expect(merged.agentThinkingBudgets?.orchestrator).toBe(64000);
+
+      const levels = getEffectiveThinkingLevels(freshDir);
+      expect(levels.orchestrator).toBe("low");
+    });
+
+    it("new label wins when legacy budget is provided via orchestrator.thinkingBudget", () => {
+      const freshDir = join(testDir, "agent-thinking-levels-wins-orch-budget");
+      mkdirSync(join(freshDir, ".goopspec"), { recursive: true });
+      process.env.GOOPSPEC_GLOBAL_CONFIG_PATH = join(freshDir, "nonexistent-global.json");
+
+      writeFileSync(
+        join(freshDir, "goopspec.json"),
+        JSON.stringify({
+          agentThinkingLevels: { orchestrator: "xhigh" },
+          orchestrator: { model: "anthropic/claude-opus-4-6", thinkingBudget: 128000 },
+        }),
+      );
+
+      const merged = loadMergedConfig(freshDir);
+      expect(merged.agentThinkingBudgets?.orchestrator).toBe(128000);
+
+      const levels = getEffectiveThinkingLevels(freshDir);
+      expect(levels.orchestrator).toBe("xhigh");
+    });
+
+    it("preserves default and logs a diagnostic for unsupported levels in merged config", () => {
+      const freshDir = join(testDir, "invalid-merged-thinking-level");
+      mkdirSync(join(freshDir, ".goopspec"), { recursive: true });
+      process.env.GOOPSPEC_GLOBAL_CONFIG_PATH = join(freshDir, "nonexistent-global.json");
+
+      // Direct file write to bypass normalizeConfig validation, simulating a corrupt config
+      writeFileSync(
+        join(freshDir, "goopspec.json"),
+        JSON.stringify({ agentThinkingLevels: { orchestrator: "extreme" } }),
+      );
+
+      const errors: string[] = [];
+      const origError = console.error;
+      console.error = (...args: unknown[]) => {
+        errors.push(args.map(String).join(" "));
+      };
+      try {
+        const levels = getEffectiveThinkingLevels(freshDir);
+        expect(levels.orchestrator).toBe("high");
+        expect(errors.some((e) => e.includes('unknown thinking level "extreme"'))).toBe(true);
+      } finally {
+        console.error = origError;
+      }
+    });
+  });
+
+  // =========================================================================
   // verify
   // =========================================================================
 
@@ -608,6 +829,71 @@ describe("setup feature", () => {
       });
       expect(result.agentThinkingBudgets).toBeUndefined();
     });
+
+    it("normalizes agentThinkingLevels to canonical lowercase values", () => {
+      const result = normalizeConfig({
+        agentThinkingLevels: {
+          orchestrator: "High",
+          "executor-low": "LoW",
+          researcher: "MEDIUM",
+          debugger: "none",
+          tester: "xHigh",
+        },
+      });
+      expect(result.agentThinkingLevels?.orchestrator).toBe("high");
+      expect(result.agentThinkingLevels?.["executor-low"]).toBe("low");
+      expect(result.agentThinkingLevels?.researcher).toBe("medium");
+      expect(result.agentThinkingLevels?.debugger).toBe("none");
+      expect(result.agentThinkingLevels?.tester).toBe("xhigh");
+    });
+
+    it("rejects unknown agentThinkingLevels with a diagnostic", () => {
+      const errors: string[] = [];
+      const origError = console.error;
+      console.error = (...args: unknown[]) => {
+        errors.push(args.map(String).join(" "));
+      };
+      try {
+        const result = normalizeConfig({
+          agentThinkingLevels: {
+            orchestrator: "high",
+            explorer: "extreme",
+            planner: "ultra",
+          },
+        });
+        expect(result.agentThinkingLevels?.orchestrator).toBe("high");
+        expect(result.agentThinkingLevels?.explorer).toBeUndefined();
+        expect(result.agentThinkingLevels?.planner).toBeUndefined();
+        expect(errors.some((e) => e.includes('unknown thinking level "extreme"'))).toBe(true);
+        expect(errors.some((e) => e.includes('unknown thinking level "ultra"'))).toBe(true);
+      } finally {
+        console.error = origError;
+      }
+    });
+
+    it("skips non-string agentThinkingLevels values", () => {
+      const result = normalizeConfig({
+        agentThinkingLevels: {
+          orchestrator: "high",
+          explorer: 42 as unknown as string,
+          planner: { level: "low" } as unknown as string,
+        },
+      });
+      expect(result.agentThinkingLevels?.orchestrator).toBe("high");
+      expect(result.agentThinkingLevels?.explorer).toBeUndefined();
+      expect(result.agentThinkingLevels?.planner).toBeUndefined();
+    });
+
+    it("trims whitespace around agentThinkingLevels values", () => {
+      const result = normalizeConfig({
+        agentThinkingLevels: {
+          orchestrator: "  High  ",
+          "executor-low": " low\t",
+        },
+      });
+      expect(result.agentThinkingLevels?.orchestrator).toBe("high");
+      expect(result.agentThinkingLevels?.["executor-low"]).toBe("low");
+    });
   });
 
   // =========================================================================
@@ -821,6 +1107,70 @@ describe("setup feature", () => {
       const result = loadMergedConfig(freshDir);
       // Project root (highest priority) should win
       expect(result.agentThinkingBudgets?.orchestrator).toBe(32000);
+    });
+
+    it("deep-merges agentThinkingLevels across sources — higher priority wins per role", () => {
+      const freshDir = join(testDir, "merge-thinking-levels");
+      mkdirSync(join(freshDir, ".goopspec"), { recursive: true });
+      const globalPath = join(freshDir, "global-goopspec.json");
+      process.env.GOOPSPEC_GLOBAL_CONFIG_PATH = globalPath;
+
+      writeFileSync(
+        globalPath,
+        JSON.stringify({
+          agentThinkingLevels: { orchestrator: "low", "executor-low": "low" },
+        }),
+      );
+      writeFileSync(
+        join(freshDir, "goopspec.json"),
+        JSON.stringify({ agentThinkingLevels: { orchestrator: "high" } }),
+      );
+
+      const result = loadMergedConfig(freshDir);
+      expect(result.agentThinkingLevels?.orchestrator).toBe("high");
+      expect(result.agentThinkingLevels?.["executor-low"]).toBe("low");
+      expect(result.agentThinkingLevels?.orchestrator).toSatisfy(
+        (level: string | undefined) =>
+          level != null && THINKING_LEVELS.includes(level as (typeof THINKING_LEVELS)[number]),
+      );
+      expect(result.agentThinkingLevels?.["executor-low"]).toSatisfy(
+        (level: string | undefined) =>
+          level != null && THINKING_LEVELS.includes(level as (typeof THINKING_LEVELS)[number]),
+      );
+    });
+
+    it("normalizes agentThinkingLevels from mixed-case project config", () => {
+      const freshDir = join(testDir, "thinking-levels-mixed-case");
+      mkdirSync(join(freshDir, ".goopspec"), { recursive: true });
+      process.env.GOOPSPEC_GLOBAL_CONFIG_PATH = join(freshDir, "nonexistent-global.json");
+
+      writeFileSync(
+        join(freshDir, "goopspec.json"),
+        JSON.stringify({
+          agentThinkingLevels: {
+            orchestrator: "XHIGH",
+            researcher: "Medium",
+            explorer: "  low  ",
+            planner: "unknown-level",
+          },
+        }),
+      );
+
+      const errors: string[] = [];
+      const origError = console.error;
+      console.error = (...args: unknown[]) => {
+        errors.push(args.map(String).join(" "));
+      };
+      try {
+        const result = loadMergedConfig(freshDir);
+        expect(result.agentThinkingLevels?.orchestrator).toBe("xhigh");
+        expect(result.agentThinkingLevels?.researcher).toBe("medium");
+        expect(result.agentThinkingLevels?.explorer).toBe("low");
+        expect(result.agentThinkingLevels?.planner).toBeUndefined();
+        expect(errors.some((e) => e.includes('unknown thinking level "unknown-level"'))).toBe(true);
+      } finally {
+        console.error = origError;
+      }
     });
   });
 });

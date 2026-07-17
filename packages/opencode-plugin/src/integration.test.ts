@@ -95,7 +95,7 @@ describe("GoopSpec 5-phase integration", () => {
       expect(ctx.sessionManager).toBeDefined();
     });
 
-    it("createTools produces exactly 28 tools from a real context", async () => {
+    it("createTools produces exactly 30 tools from a real context", async () => {
       const input = createMockPluginInput(testDir);
       const ctx = await createPluginContext(input);
       const tools = createTools(ctx);
@@ -111,6 +111,7 @@ describe("GoopSpec 5-phase integration", () => {
         "goop_adl",
         "goop_checkpoint",
         "goop_setup",
+        "goop_get_global_config",
         "goop_reference",
         "goop_read_db",
         "goop_write_db",

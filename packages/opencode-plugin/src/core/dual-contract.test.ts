@@ -7,6 +7,8 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
+import { writeFileSync } from "node:fs";
+import { join } from "node:path";
 
 import plugin from "../index.js";
 import {
@@ -16,8 +18,27 @@ import {
   setupTestEnvironment,
 } from "../test-utils.js";
 import { createTools } from "../tools/index.js";
+import { resolveCapabilities } from "./../features/thinking/capability.js";
+import { resolveThinkingValue } from "./../features/thinking/resolve.js";
+import { registerHooksV2 } from "./hooks-v2.js";
 import { registerToolsV2 } from "./tools-v2.js";
-import type { V2RuntimeContext, V2ToolDefinition, V2ToolDraft } from "./v2-compat.js";
+import type {
+  V2AgentDraft,
+  V2AgentInfo,
+  V2CatalogDraft,
+  V2CatalogProviderRecord,
+  V2RuntimeContext,
+  V2ToolDefinition,
+  V2ToolDraft,
+} from "./v2-compat.js";
+
+const V1_PROVIDER = "anthropic";
+const V1_MODEL = "claude-opus-4-6";
+const V2_PROVIDER = "openai";
+const V2_MODEL = "gpt-test";
+const ROLE = "executor-medium";
+const LEVEL = "medium";
+const DEFAULT_LEVEL = "high";
 
 interface V2ToolLike {
   name: string;
@@ -36,17 +57,24 @@ function createV1MockPluginInput(directory: string) {
   } as unknown as Parameters<typeof plugin>[0];
 }
 
-function createV2MockRuntime(
-  testDir: string,
-  registrations: { tools: Record<string, V2ToolLike>; systemHook?: unknown },
-): V2RuntimeContext {
+interface V2Registrations {
+  tools: Record<string, V2ToolLike>;
+  systemHook?: unknown;
+  agentTransform?: (draft: V2AgentDraft) => void | Promise<void>;
+  catalogTransform?: (draft: V2CatalogDraft) => void | Promise<void>;
+  agentReloaded?: boolean;
+  catalogReloaded?: boolean;
+}
+
+function createV2MockRuntime(testDir: string, registrations: V2Registrations): V2RuntimeContext {
+  const captured = registrations;
   return {
     options: { directory: testDir },
     tool: {
       transform: async (callback: (draft: V2ToolDraft) => void | Promise<void>) => {
         const draft: V2ToolDraft = {
           add(definition: V2ToolDefinition) {
-            registrations.tools[definition.name] = definition as unknown as V2ToolLike;
+            captured.tools[definition.name] = definition as unknown as V2ToolLike;
           },
         };
         await callback(draft);
@@ -61,10 +89,78 @@ function createV2MockRuntime(
       synthetic: async () => ({}),
       interrupt: async () => ({}),
       hook: async (_event: "request", callback: unknown) => {
-        registrations.systemHook = callback;
+        captured.systemHook = callback;
+      },
+    },
+    agent: {
+      transform: async (callback: (draft: V2AgentDraft) => void | Promise<void>) => {
+        captured.agentTransform = callback;
+      },
+      reload: async () => {
+        captured.agentReloaded = true;
+      },
+    },
+    catalog: {
+      transform: async (callback: (draft: V2CatalogDraft) => void | Promise<void>) => {
+        captured.catalogTransform = callback;
+      },
+      reload: async () => {
+        captured.catalogReloaded = true;
       },
     },
   } as unknown as V2RuntimeContext;
+}
+
+function createV2ProviderRecord(): V2CatalogProviderRecord {
+  return {
+    provider: { id: V2_PROVIDER },
+    models: new Map([
+      [
+        V2_MODEL,
+        {
+          variants: [
+            {
+              id: LEVEL,
+              headers: { "x-reasoning": LEVEL },
+              body: { reasoning_effort: LEVEL },
+            },
+            {
+              id: DEFAULT_LEVEL,
+              headers: { "x-reasoning": DEFAULT_LEVEL },
+              body: { reasoning_effort: DEFAULT_LEVEL },
+            },
+          ],
+        },
+      ],
+    ]),
+  };
+}
+
+function createV1ProviderCatalog(providerID: string, modelID: string) {
+  return {
+    providers: [
+      {
+        id: providerID,
+        models: {
+          [modelID]: {
+            capabilities: { reasoning: true },
+            options: { reasoningEffort: ["low", LEVEL, DEFAULT_LEVEL] },
+          },
+        },
+      },
+    ],
+  };
+}
+
+function withProviderCatalog<T>(
+  ctx: ReturnType<typeof createMockPluginContext>,
+  catalog: unknown,
+  run: () => Promise<T>,
+): Promise<T> {
+  (ctx.sdk.client as unknown as { config: { providers: () => Promise<unknown> } }).config = {
+    providers: async () => ({ data: catalog }),
+  };
+  return run();
 }
 
 describe("dual-contract parity", () => {
@@ -246,5 +342,264 @@ describe("dual-contract parity", () => {
     // would imply a forked implementation path.
     expect(registrations.systemHook).toBeDefined();
     expect(v1Events.has("experimental.chat.system.transform")).toBe(true);
+  });
+
+  it("uses the same shared thinking resolver for V1 and V2", async () => {
+    const v2Capabilities = resolveCapabilities(createV2ProviderRecord().models.get(V2_MODEL));
+    const v1Catalog = createV1ProviderCatalog(V1_PROVIDER, V1_MODEL);
+    const v1Capabilities = resolveCapabilities(v1Catalog.providers[0]?.models[V1_MODEL]);
+
+    const v2Resolution = resolveThinkingValue(LEVEL, v2Capabilities);
+    const v1Resolution = resolveThinkingValue(LEVEL, v1Capabilities);
+
+    expect(v2Resolution.source).toBe("v2");
+    expect(v1Resolution.source).toBe("v1");
+    expect(v2Resolution.apply).not.toBeNull();
+    expect(v1Resolution.apply).not.toBeNull();
+    expect(v2Resolution.warning).toBeUndefined();
+    expect(v1Resolution.warning).toBeUndefined();
+  });
+
+  it("produces equivalent applied values for the same thinking config and compatible model", async () => {
+    const env = setupTestEnvironment("dual-thinking-parity");
+    const globalConfigPath = process.env.GOOPSPEC_GLOBAL_CONFIG_PATH;
+    try {
+      process.env.GOOPSPEC_GLOBAL_CONFIG_PATH = join(env.testDir, "no-global-config.json");
+      writeFileSync(
+        join(env.testDir, "goopspec.json"),
+        JSON.stringify({ agentThinkingLevels: { [ROLE]: LEVEL } }),
+        "utf-8",
+      );
+
+      const ctx = createMockPluginContext({ testDir: env.testDir, db: env.db });
+      contexts.push(ctx);
+
+      // V1 path
+      const { createAgentRegistrationHook } = await import("../hooks/agent-registration.js");
+      const v1Hooks = createAgentRegistrationHook(ctx);
+      const v1Output = {
+        temperature: 0,
+        topP: 0,
+        topK: 0,
+        maxOutputTokens: undefined,
+        options: {},
+      };
+      await withProviderCatalog(ctx, createV1ProviderCatalog(V1_PROVIDER, V1_MODEL), async () => {
+        await v1Hooks["chat.params"]?.(
+          {
+            sessionID: "session",
+            agent: `goop-${ROLE}`,
+            model: { providerID: V1_PROVIDER, id: V1_MODEL } as never,
+            provider: {} as never,
+            message: {} as never,
+          },
+          v1Output,
+        );
+      });
+
+      // V2 path
+      const registrations: V2Registrations = { tools: {} };
+      await registerHooksV2(createV2MockRuntime(env.testDir, registrations), ctx);
+      expect(registrations.catalogTransform).toBeDefined();
+      expect(registrations.agentTransform).toBeDefined();
+
+      const agent: V2AgentInfo = {
+        id: `goop-${ROLE}`,
+        model: { providerID: V2_PROVIDER, id: V2_MODEL },
+        request: { headers: {}, body: {} },
+      };
+      const catalog: V2CatalogDraft = {
+        provider: {
+          list: () => [createV2ProviderRecord()],
+        },
+      };
+      await registrations.catalogTransform?.(catalog);
+      await registrations.agentTransform?.({
+        list: () => [agent],
+        update: (_id, update) => update(agent),
+      });
+
+      expect(agent.request.body).toEqual({ reasoning_effort: LEVEL });
+      expect(agent.request.headers).toEqual({ "x-reasoning": LEVEL });
+      expect(agent.model?.variant).toBe(LEVEL);
+      expect(v1Output.options).toEqual({ reasoningEffort: LEVEL });
+    } finally {
+      if (globalConfigPath === undefined) {
+        Reflect.deleteProperty(process.env, "GOOPSPEC_GLOBAL_CONFIG_PATH");
+      } else {
+        process.env.GOOPSPEC_GLOBAL_CONFIG_PATH = globalConfigPath;
+      }
+      env.cleanup();
+    }
+  });
+
+  it("preserves provider default and warns for unsupported thinking levels on both contracts", async () => {
+    const env = setupTestEnvironment("dual-thinking-unsupported");
+    const errors: string[] = [];
+    const originalError = console.error;
+    const globalConfigPath = process.env.GOOPSPEC_GLOBAL_CONFIG_PATH;
+    try {
+      process.env.GOOPSPEC_GLOBAL_CONFIG_PATH = join(env.testDir, "no-global-config.json");
+      console.error = (...args: unknown[]) => errors.push(args.map(String).join(" "));
+      writeFileSync(
+        join(env.testDir, "goopspec.json"),
+        JSON.stringify({ agentThinkingLevels: { [ROLE]: "xhigh" } }),
+        "utf-8",
+      );
+
+      const ctx = createMockPluginContext({ testDir: env.testDir, db: env.db });
+      contexts.push(ctx);
+
+      // V1 path with a model that does not advertise xhigh
+      const { createAgentRegistrationHook } = await import("../hooks/agent-registration.js");
+      const v1Hooks = createAgentRegistrationHook(ctx);
+      const v1Output = {
+        temperature: 0,
+        topP: 0,
+        topK: 0,
+        maxOutputTokens: undefined,
+        options: {},
+      };
+      const v1Catalog = createV1ProviderCatalog(V1_PROVIDER, V1_MODEL);
+      await withProviderCatalog(ctx, v1Catalog, async () => {
+        await v1Hooks["chat.params"]?.(
+          {
+            sessionID: "session",
+            agent: `goop-${ROLE}`,
+            model: { providerID: V1_PROVIDER, id: V1_MODEL } as never,
+            provider: {} as never,
+            message: {} as never,
+          },
+          v1Output,
+        );
+      });
+
+      // V2 path with a catalog that does not advertise xhigh
+      const registrations: V2Registrations = { tools: {} };
+      await registerHooksV2(createV2MockRuntime(env.testDir, registrations), ctx);
+
+      const agent: V2AgentInfo = {
+        id: `goop-${ROLE}`,
+        model: { providerID: V2_PROVIDER, id: V2_MODEL },
+        request: { headers: {}, body: {} },
+      };
+      const catalog: V2CatalogDraft = {
+        provider: {
+          list: () => [createV2ProviderRecord()],
+        },
+      };
+      await registrations.catalogTransform?.(catalog);
+      await registrations.agentTransform?.({
+        list: () => [agent],
+        update: (_id, update) => update(agent),
+      });
+
+      expect(v1Output.options).toEqual({});
+      expect(agent.request.body).toEqual({});
+      expect(agent.request.headers).toEqual({});
+      expect(agent.model?.variant).toBeUndefined();
+      expect(errors.some((entry) => entry.includes("preserving the provider default"))).toBe(true);
+    } finally {
+      console.error = originalError;
+      if (globalConfigPath === undefined) {
+        Reflect.deleteProperty(process.env, "GOOPSPEC_GLOBAL_CONFIG_PATH");
+      } else {
+        process.env.GOOPSPEC_GLOBAL_CONFIG_PATH = globalConfigPath;
+      }
+      env.cleanup();
+    }
+  });
+
+  it("V2 gracefully skips thinking-level transform when agent capability is absent", async () => {
+    const env = setupTestEnvironment("dual-v2-no-agent");
+    try {
+      const ctx = createMockPluginContext({ testDir: env.testDir, db: env.db });
+      contexts.push(ctx);
+      const runtime: V2RuntimeContext = {
+        options: { directory: env.testDir },
+        tool: { transform: async () => {}, hook: async () => {} },
+        session: { hook: async () => {} },
+      } as unknown as V2RuntimeContext;
+
+      await expect(registerHooksV2(runtime, ctx)).resolves.toEqual({
+        reloadThinkingLevels: expect.any(Function),
+        dispose: expect.any(Function),
+      });
+    } finally {
+      env.cleanup();
+    }
+  });
+
+  it("V2 gracefully skips thinking-level transform when catalog capability is absent", async () => {
+    const env = setupTestEnvironment("dual-v2-no-catalog");
+    try {
+      const ctx = createMockPluginContext({ testDir: env.testDir, db: env.db });
+      contexts.push(ctx);
+
+      const runtime: V2RuntimeContext = {
+        options: { directory: env.testDir },
+        tool: { transform: async () => {}, hook: async () => {} },
+        session: { hook: async () => {} },
+        agent: {
+          transform: async () => {},
+          reload: async () => {},
+        },
+      } as unknown as V2RuntimeContext;
+
+      await expect(registerHooksV2(runtime, ctx)).resolves.toEqual({
+        reloadThinkingLevels: expect.any(Function),
+        dispose: expect.any(Function),
+      });
+    } finally {
+      env.cleanup();
+    }
+  });
+
+  it("V2 reload callbacks are not triggered when the runtime lacks both capabilities", async () => {
+    const env = setupTestEnvironment("dual-v2-no-capabilities");
+    try {
+      const ctx = createMockPluginContext({ testDir: env.testDir, db: env.db });
+      contexts.push(ctx);
+      const registrations: V2Registrations = { tools: {} };
+      const runtime: V2RuntimeContext = {
+        options: { directory: env.testDir },
+        tool: { transform: async () => {}, hook: async () => {} },
+        session: { hook: async () => {} },
+      } as unknown as V2RuntimeContext;
+
+      await registerHooksV2(runtime, ctx);
+
+      expect(registrations.agentTransform).toBeUndefined();
+      expect(registrations.catalogTransform).toBeUndefined();
+      expect(registrations.agentReloaded).toBeUndefined();
+      expect(registrations.catalogReloaded).toBeUndefined();
+    } finally {
+      env.cleanup();
+    }
+  });
+
+  it("V2 reload callbacks are not triggered when only agent capability is present", async () => {
+    const env = setupTestEnvironment("dual-v2-only-agent");
+    try {
+      const ctx = createMockPluginContext({ testDir: env.testDir, db: env.db });
+      contexts.push(ctx);
+      const registrations: V2Registrations = { tools: {} };
+      const runtime: V2RuntimeContext = {
+        options: { directory: env.testDir },
+        tool: { transform: async () => {}, hook: async () => {} },
+        session: { hook: async () => {} },
+        agent: {
+          transform: async () => {},
+          reload: async () => {},
+        },
+      } as unknown as V2RuntimeContext;
+
+      await registerHooksV2(runtime, ctx);
+
+      expect(registrations.agentTransform).toBeUndefined();
+      expect(registrations.catalogTransform).toBeUndefined();
+    } finally {
+      env.cleanup();
+    }
   });
 });
