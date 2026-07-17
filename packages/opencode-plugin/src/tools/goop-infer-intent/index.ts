@@ -8,17 +8,31 @@
  * @module tools/goop-infer-intent
  */
 
+import { WORKFLOW_PHASES } from "../../core/constants.js";
+import type { WorkflowPhase } from "../../core/constants.js";
 import { tool } from "../../core/sdk-compat.js";
 import type { ToolContext, ToolDefinition } from "../../core/sdk-compat.js";
 import type { ADLEntry, PluginContext } from "../../core/types.js";
+import { isValidTransition } from "../../features/state-manager/schema.js";
 
-const INTENT_COMMANDS = ["discuss", "plan", "execute", "accept", "quick", "chat"] as const;
+const INTENT_COMMANDS = [
+  "discuss",
+  "plan",
+  "execute",
+  "accept",
+  "quick",
+  "create-workflow",
+  "transition",
+  "chat",
+] as const;
 export type IntentCommand = (typeof INTENT_COMMANDS)[number];
 
 interface IntentArgs {
   transcript: string;
   workflowPhase?: string;
   hasActiveWorkflow?: boolean;
+  autoApply?: boolean;
+  confidenceThreshold?: number;
 }
 
 export interface IntentClassification {
@@ -33,6 +47,13 @@ interface IntentResult extends IntentClassification {
   commandString: string;
 }
 
+interface MutationResult {
+  applied: boolean;
+  action: "create-workflow" | "transition";
+  result?: string;
+  error?: string;
+}
+
 interface CompletionRequest {
   system: string;
   messages: Array<{ role: "user"; content: string }>;
@@ -42,7 +63,7 @@ interface CompletionRequest {
 
 type CompletionMethod = (request: CompletionRequest) => Promise<unknown>;
 
-const SYSTEM_PROMPT = `You are a GoopSpec command intent classifier. Your ONLY job is to classify a voice transcript into one of 6 GoopSpec workflow commands and return a JSON object.
+const SYSTEM_PROMPT = `You are a GoopSpec command intent classifier. Your ONLY job is to classify a voice transcript into one of 8 GoopSpec workflow commands and return a JSON object.
 
 Commands:
 - "discuss": Starting new work, describing a feature, asking for a new feature, saying "I want to X", "let's plan", "let me tell you about", "new workflow for..."
@@ -50,13 +71,15 @@ Commands:
 - "execute": Running, building, implementing. "go ahead", "implement it", "build it", "start coding", "execute the plan"
 - "accept": Approving work, accepting results. "looks good", "accept it", "ship it", "approve", "that's great", "done"
 - "quick": Small, quick changes. "quick fix", "just change X", "small update", "tweak..."
+- "create-workflow": Create and activate a new workflow. Extract a single kebab-case workflow ID in slots.workflowId.
+- "transition": Change the active workflow phase. Extract exactly one phase (idle, discuss, plan, execute, accept) in slots.targetPhase.
 - "chat": General questions, clarifications, or anything that doesn't clearly map to a workflow command.
 
 Return ONLY valid JSON, no explanation, no markdown:
 {
-  "command": "discuss" | "plan" | "execute" | "accept" | "quick" | "chat",
+  "command": "discuss" | "plan" | "execute" | "accept" | "quick" | "create-workflow" | "transition" | "chat",
   "confidence": 0.0 to 1.0,
-  "slots": { "feature": "...", "target": "..." },  // extracted key info from transcript
+  "slots": { "feature": "...", "target": "...", "workflowId": "...", "targetPhase": "..." },  // extracted key info from transcript
   "reasoning": "one sentence explaining the classification"
 }
 
@@ -69,6 +92,8 @@ const COMMAND_MAP: Record<IntentCommand, string> = {
   execute: "/goop-execute",
   accept: "/goop-accept",
   quick: "/goop-quick",
+  "create-workflow": "",
+  transition: "",
   chat: "",
 };
 
@@ -225,6 +250,23 @@ export function classifyByKeywords(transcript: string): IntentClassification {
     patterns: RegExp[];
   }> = [
     {
+      cmd: "create-workflow",
+      confidence: 0.95,
+      patterns: [
+        /\bcreate (?:a )?(?:new )?workflow(?: (?:named|called))?\s+([a-z0-9]+(?:-[a-z0-9]+)*)\b/,
+        /\bstart (?:a )?(?:new )?workflow(?: (?:named|called))?\s+([a-z0-9]+(?:-[a-z0-9]+)*)\b/,
+      ],
+    },
+    {
+      cmd: "transition",
+      confidence: 0.95,
+      patterns: [
+        /\btransition (?:the (?:workflow )?phase )?to\s+(idle|discuss|plan|execute|accept)\b/,
+        /\bmove (?:the (?:workflow )?phase )?to\s+(idle|discuss|plan|execute|accept)\b/,
+        /\bset (?:the )?(?:workflow )?phase to\s+(idle|discuss|plan|execute|accept)\b/,
+      ],
+    },
+    {
       cmd: "discuss",
       confidence: 0.8,
       patterns: [
@@ -288,8 +330,17 @@ export function classifyByKeywords(transcript: string): IntentClassification {
   ];
 
   for (const { cmd, confidence, patterns: pats } of patterns) {
-    if (pats.some((pattern) => pattern.test(t))) {
-      return { command: cmd, confidence, slots: {}, reasoning: `Keyword match for ${cmd}` };
+    for (const pattern of pats) {
+      const match = pattern.exec(t);
+      if (match) {
+        const slots: Record<string, string> =
+          cmd === "create-workflow"
+            ? { workflowId: match[1] }
+            : cmd === "transition"
+              ? { targetPhase: match[1] }
+              : {};
+        return { command: cmd, confidence, slots, reasoning: `Keyword match for ${cmd}` };
+      }
     }
   }
 
@@ -332,21 +383,21 @@ function escapeHtmlCommentJson(value: string): string {
   return value.replace(/--/g, "\\u002d\\u002d").replace(/>/g, "\\u003e");
 }
 
-function formatResult(args: IntentArgs, result: IntentResult): string {
+function formatResult(args: IntentArgs, result: IntentResult, mutation?: MutationResult): string {
   const displayCommand =
     result.commandString.length > 0 ? `\`${result.commandString}\` (${result.command})` : "chat";
   const autoRunText = result.autoRun
     ? `✅ Running \`${result.commandString}\` automatically...`
     : "Not running automatically. Ask a clarification or run the command manually.";
-  const json = escapeHtmlCommentJson(
-    JSON.stringify({
-      command: result.command,
-      confidence: result.confidence,
-      slots: result.slots,
-      autoRun: result.autoRun,
-      commandString: result.commandString,
-    }),
-  );
+  const jsonPayload: Record<string, unknown> = {
+    command: result.command,
+    confidence: result.confidence,
+    slots: result.slots,
+    autoRun: result.autoRun,
+    commandString: result.commandString,
+  };
+  if (mutation !== undefined) jsonPayload.mutation = mutation;
+  const json = escapeHtmlCommentJson(JSON.stringify(jsonPayload));
 
   return [
     "## Intent Classification",
@@ -365,6 +416,114 @@ function formatResult(args: IntentArgs, result: IntentResult): string {
     json,
     "-->",
   ].join("\n");
+}
+
+function isWorkflowPhase(value: string): value is WorkflowPhase {
+  return (WORKFLOW_PHASES as readonly string[]).includes(value);
+}
+
+function failedMutation(action: MutationResult["action"], error: string): MutationResult {
+  return { applied: false, action, error };
+}
+
+function autoApplyMutation(
+  ctx: PluginContext,
+  args: IntentArgs,
+  result: IntentResult,
+): MutationResult {
+  if (result.command !== "create-workflow" && result.command !== "transition") {
+    return failedMutation(
+      "transition",
+      `Command "${result.command}" is not an auto-applicable action.`,
+    );
+  }
+
+  const threshold = args.confidenceThreshold ?? 0.9;
+  if (!Number.isFinite(threshold) || threshold < 0 || threshold > 1) {
+    return failedMutation(
+      result.command,
+      "confidenceThreshold must be a finite number between 0 and 1.",
+    );
+  }
+  if (result.confidence <= 0.85) {
+    return failedMutation(result.command, "Confidence must be greater than 0.85 for auto-apply.");
+  }
+  if (result.confidence < threshold) {
+    return failedMutation(
+      result.command,
+      `Confidence ${result.confidence.toFixed(2)} is below threshold ${threshold.toFixed(2)}.`,
+    );
+  }
+
+  try {
+    if (result.command === "create-workflow") {
+      const workflowId = result.slots.workflowId;
+      if (!workflowId || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(workflowId)) {
+        return failedMutation(
+          "create-workflow",
+          "A single kebab-case workflowId slot is required.",
+        );
+      }
+      if (ctx.stateManager.getWorkflow(workflowId)) {
+        return failedMutation("create-workflow", `Workflow "${workflowId}" already exists.`);
+      }
+      ctx.stateManager.createWorkflow(workflowId);
+      ctx.stateManager.setActiveWorkflow(workflowId);
+      return {
+        applied: true,
+        action: "create-workflow",
+        result: `Workflow "${workflowId}" created and activated.`,
+      };
+    }
+
+    const targetPhase = result.slots.targetPhase;
+    if (!targetPhase || !isWorkflowPhase(targetPhase)) {
+      return failedMutation("transition", "A single valid targetPhase slot is required.");
+    }
+    const workflow = ctx.stateManager.getActiveWorkflow();
+    const workflowId = ctx.stateManager.getActiveWorkflowId();
+    if (!isValidTransition(workflow.phase, targetPhase)) {
+      return failedMutation(
+        "transition",
+        `Transition from "${workflow.phase}" to "${targetPhase}" is not valid.`,
+      );
+    }
+    if (targetPhase === "plan") {
+      if (!workflow.interviewComplete) {
+        return failedMutation(
+          "transition",
+          "Cannot transition to plan before the interview is complete.",
+        );
+      }
+      if (!ctx.db.resolveDocumentContent(workflowId, "requirements")?.trim()) {
+        return failedMutation(
+          "transition",
+          "Cannot transition to plan before a requirements document exists.",
+        );
+      }
+    }
+    if (targetPhase === "execute" && !workflow.specLocked) {
+      return failedMutation(
+        "transition",
+        "Cannot transition to execute before the specification is locked.",
+      );
+    }
+    if (targetPhase === "accept") {
+      return failedMutation(
+        "transition",
+        "Cannot auto-apply transition to accept because execution-gate evidence requires an explicit audit.",
+      );
+    }
+    ctx.stateManager.transitionPhase(targetPhase);
+    return {
+      applied: true,
+      action: "transition",
+      result: `Phase transitioned to "${targetPhase}".`,
+    };
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
+    return failedMutation(result.command, `State mutation failed: ${message}`);
+  }
 }
 
 function appendAdl(
@@ -425,12 +584,26 @@ export function createGoopInferIntentTool(ctx: PluginContext): ToolDefinition {
       transcript: tool.schema.string(),
       workflowPhase: tool.schema.string().optional(),
       hasActiveWorkflow: tool.schema.boolean().optional(),
+      autoApply: tool.schema.boolean().optional(),
+      confidenceThreshold: tool.schema.number().optional(),
     },
     async execute(args: IntentArgs, _context: ToolContext): Promise<string> {
       try {
         const transcript = args.transcript.trim();
         const { classification, method } = await classifyTranscript(ctx, transcript);
         const result = buildIntentResult({ ...args, transcript }, classification);
+        const hasMutationOptions =
+          args.autoApply !== undefined || args.confidenceThreshold !== undefined;
+        const mutation = args.autoApply === true ? autoApplyMutation(ctx, args, result) : undefined;
+
+        if (mutation?.applied) {
+          appendAdl(
+            ctx,
+            "observation",
+            `goop_infer_intent auto-applied ${mutation.action}: ${mutation.result}`,
+            "Applied explicitly requested, confidence-gated non-destructive workflow mutation.",
+          );
+        }
 
         if (method === "sdk") {
           appendAdl(
@@ -441,7 +614,13 @@ export function createGoopInferIntentTool(ctx: PluginContext): ToolDefinition {
           );
         }
 
-        return formatResult({ ...args, transcript }, result);
+        return formatResult(
+          { ...args, transcript },
+          result,
+          hasMutationOptions
+            ? (mutation ?? failedMutation("transition", "autoApply is disabled."))
+            : undefined,
+        );
       } catch {
         const result = buildIntentResult(args, FAILED_CLASSIFICATION);
         return formatResult(args, result);
