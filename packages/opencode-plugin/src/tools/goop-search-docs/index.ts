@@ -56,33 +56,32 @@ export function createGoopSearchDocsTool(ctx: PluginContext): ToolDefinition {
   return tool({
     description:
       "Search workflow documents and sections across all workflows. " +
-      "Supports filtering by workflow, doc type, section key, and created_at range. " +
-      "Plural filters (workflow_ids, doc_types, section_keys) match any value in the list (OR).",
+      "Plural filters (workflow_ids, doc_types, section_keys) use OR matching.",
     args: {
       query: tool.schema.string().describe("Search query"),
-      workflow_id: tool.schema.string().optional().describe("Filter to a workflow ID (optional)"),
+      workflow_id: tool.schema.string().optional().describe("Filter by workflow ID"),
       workflow_ids: tool.schema
         .array(tool.schema.string())
         .optional()
-        .describe("Filter to any of these workflow IDs (optional)"),
-      doc_type: tool.schema.string().optional().describe("Filter to a document type (optional)"),
+        .describe("Filter by any of these workflow IDs"),
+      doc_type: tool.schema.string().optional().describe("Filter by document type"),
       doc_types: tool.schema
         .array(tool.schema.string())
         .optional()
-        .describe("Filter to any of these document types (optional)"),
-      section_key: tool.schema.string().optional().describe("Filter to a section key (optional)"),
+        .describe("Filter by any of these document types"),
+      section_key: tool.schema.string().optional().describe("Filter by section key"),
       section_keys: tool.schema
         .array(tool.schema.string())
         .optional()
-        .describe("Filter to any of these section keys (optional)"),
+        .describe("Filter by any of these section keys"),
       since: tool.schema
         .number()
         .optional()
-        .describe("Filter to results created at or after this unix second"),
+        .describe("Results created at or after this unix second"),
       until: tool.schema
         .number()
         .optional()
-        .describe("Filter to results created at or before this unix second"),
+        .describe("Results created at or before this unix second"),
       limit: tool.schema.number().optional().describe("Max results (default 20)"),
     },
     async execute(

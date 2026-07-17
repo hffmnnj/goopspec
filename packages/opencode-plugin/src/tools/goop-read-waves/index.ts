@@ -57,13 +57,7 @@ function formatWave(ctx: PluginContext, wave: WaveRow, progress?: WaveProgressRo
 
 export function createGoopReadWavesTool(ctx: PluginContext): ToolDefinition {
   return tool({
-    description:
-      "Read workflow waves with task lists and completion ratios from GoopSpecDB.\n\n" +
-      "Args:\n" +
-      "- wave_number: Optional wave number; omit to read all waves\n" +
-      "- wave_numbers: Optional array of wave numbers for batch loading\n" +
-      "- status: Optional wave status filter\n" +
-      "- workflow_id: Optional workflow ID (defaults to active workflow)",
+    description: "Read workflow waves with task lists and completion ratios from GoopSpecDB.",
     args: {
       wave_number: tool.schema.number().optional(),
       wave_numbers: tool.schema.array(tool.schema.number()).optional(),

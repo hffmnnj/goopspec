@@ -70,12 +70,7 @@ function formatVerifications(workflowId: string, rows: VerificationRow[]): strin
 
 export function createGoopReadVerificationsTool(ctx: PluginContext): ToolDefinition {
   return tool({
-    description:
-      "Read workflow verification check results from GoopSpecDB.\n\n" +
-      "Args:\n" +
-      "- wave_id: Optional wave ID to filter by\n" +
-      "- wave_ids: Optional array of wave IDs for batch filtering (union)\n" +
-      "- workflow_id: Optional workflow ID (defaults to active workflow)",
+    description: "Read workflow verification check results from GoopSpecDB.",
     args: {
       wave_id: tool.schema.number().optional(),
       wave_ids: tool.schema.array(tool.schema.number()).optional(),

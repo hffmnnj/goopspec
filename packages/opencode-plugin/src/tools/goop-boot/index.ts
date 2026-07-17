@@ -65,8 +65,7 @@ function formatReference(resource: ResolvedResource, section?: string): string {
 
 export function createGoopBootTool(ctx: PluginContext): ToolDefinition {
   return tool({
-    description:
-      "Load workflow state, documents, optional Field Notes, memory, and references in one call.",
+    description: "Load workflow state, documents, Field Notes, memory, and references in one call.",
     args: {
       workflow_id: tool.schema.string().optional(),
       doc_types: tool.schema.array(tool.schema.string()).optional(),

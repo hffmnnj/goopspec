@@ -172,8 +172,7 @@ function formatWaves(
 
 export function createGoopAcceptanceAuditTool(ctx: PluginContext): ToolDefinition {
   return tool({
-    description:
-      "One-call acceptance gate audit combining blockers, verifications, and waves for a workflow.",
+    description: "One-call acceptance gate audit combining blockers, verifications, and waves.",
     args: {
       workflow_id: tool.schema.string().optional(),
       wave_ids: tool.schema.array(tool.schema.number()).optional(),

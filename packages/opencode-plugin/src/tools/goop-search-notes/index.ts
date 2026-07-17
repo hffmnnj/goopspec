@@ -67,56 +67,30 @@ export function createGoopSearchNotesTool(ctx: PluginContext): ToolDefinition {
     description:
       "Search Field Notes with hybrid FTS5 + tag matching. " +
       "Supports scoping by project, workflow, and tags. " +
-      "Optional body control: `full: true` returns the entire note body; " +
-      "`body_offset` (default 0) and `body_limit` (default 0 / unbounded) slice a body range. " +
-      "`note_id: 'fn_...'` bypasses ranking and fetches that exact note, always returning its full body; " +
-      "when `note_id` is provided `query` may be omitted. " +
-      "Examples: {query:'sqlite'}, {query:'sqlite',full:true}, {query:'sqlite',body_offset:0,body_limit:500}, " +
-      "{note_id:'fn_20260716_abc123'}, {note_id:'...',query:'ignored'}.",
+      "Optional body control via `full`, `body_offset`, and `body_limit`. " +
+      "Use `note_id` to fetch a specific note by ID (bypasses ranking, returns full body).",
     args: {
       query: tool.schema
         .string()
         .optional()
-        .describe(
-          "Search query (can be empty string if tags provided; optional when note_id is provided)",
-        ),
-      tags: tool.schema
-        .array(tool.schema.string())
-        .optional()
-        .describe("Filter by tags (optional)"),
-      project_id: tool.schema
-        .string()
-        .optional()
-        .describe("Scope to project (optional; omit for global search)"),
-      workflow_id: tool.schema.string().optional().describe("Scope to workflow (optional)"),
-      limit: tool.schema
-        .number()
-        .optional()
-        .describe("Max number of search results to return (default 10, max 50)."),
+        .describe("Search query (optional when note_id provided)"),
+      tags: tool.schema.array(tool.schema.string()).optional().describe("Filter by tags"),
+      project_id: tool.schema.string().optional().describe("Scope to project (omit for global)"),
+      workflow_id: tool.schema.string().optional().describe("Scope to workflow"),
+      limit: tool.schema.number().optional().describe("Max results (default 10, max 50)"),
       full: tool.schema
         .boolean()
         .optional()
-        .describe(
-          "Return the complete note body instead of the 200-character snippet (default false).",
-        ),
-      body_offset: tool.schema
-        .number()
-        .optional()
-        .describe(
-          "Character offset into the note body where the returned slice starts (default 0). Only applied when `full`, `body_offset`, or `body_limit` is set.",
-        ),
+        .describe("Return full body instead of 200-char snippet"),
+      body_offset: tool.schema.number().optional().describe("Character offset into note body"),
       body_limit: tool.schema
         .number()
         .optional()
-        .describe(
-          "Maximum characters of the note body to return starting at `body_offset` (default 0, meaning unbounded within the body). Only applied when `full`, `body_offset`, or `body_limit` is set.",
-        ),
+        .describe("Max chars from body_offset (0 = unbounded)"),
       note_id: tool.schema
         .string()
         .optional()
-        .describe(
-          "Direct fetch: bypass search/ranking and return the single note with this exact `fn_...` ID, always with its full body. Takes precedence over `query` if both are provided.",
-        ),
+        .describe("Fetch exact note by fn_... ID (bypasses search)"),
     },
     async execute(
       args: {

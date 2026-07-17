@@ -201,10 +201,8 @@ export function createGoopSetupTool(ctx: PluginContext): ToolDefinition {
   return tool({
     description:
       "GoopSpec configuration and setup. " +
-      "Actions: detect (inspect project), init (create .goopspec structure), " +
-      "models (configure per-role model routing), verify (health check), " +
-      "status (show config), reset (reset to defaults). " +
-      "Also accepts plan/apply as aliases for init.",
+      "Actions: detect, init, models, verify, status, reset. " +
+      "plan/apply are aliases for init.",
     args: {
       action: tool.schema.enum([
         "detect",

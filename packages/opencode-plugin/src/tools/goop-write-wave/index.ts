@@ -125,8 +125,6 @@ export function createGoopWriteWaveTool(ctx: PluginContext): ToolDefinition {
   return tool({
     description:
       "Write or update wave metadata and optional inline wave tasks in GoopSpecDB. " +
-      "Use task_update to change one task status without rewriting the wave. " +
-      "Use items for batch wave writes or task_updates for bulk task status updates. " +
       "Optionally record verifications and traceability rows in the same call.",
     args: {
       wave_number: tool.schema.number(),
@@ -189,7 +187,7 @@ export function createGoopWriteWaveTool(ctx: PluginContext): ToolDefinition {
             wave_id: tool.schema
               .number()
               .optional()
-              .describe("Internal wave row id (not the human-facing wave_number)"),
+              .describe("Internal wave row id (not wave_number)"),
           }),
         )
         .optional(),

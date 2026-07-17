@@ -28,14 +28,7 @@ export function createGoopWriteTraceabilityTool(ctx: PluginContext): ToolDefinit
   return tool({
     description:
       "Write or update a requirement-to-wave/task traceability row in GoopSpecDB. " +
-      "Use items for batch writes.\n\n" +
-      "Args:\n" +
-      "- requirement_key: Requirement identifier (for example MH14)\n" +
-      "- wave_number: Optional wave number\n" +
-      "- task_index: Optional task index within the wave\n" +
-      "- status: Optional traceability status\n" +
-      "- workflow_id: Optional workflow ID (defaults to active workflow)\n" +
-      "- items: Optional batch traceability rows",
+      "Use items for batch writes.",
     args: {
       requirement_key: tool.schema.string(),
       wave_number: tool.schema.number().optional(),

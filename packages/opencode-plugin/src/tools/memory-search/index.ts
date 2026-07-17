@@ -52,14 +52,10 @@ function formatResult(result: MemorySearchResult, index: number): string {
 export function createMemorySearchTool(ctx: PluginContext): ToolDefinition {
   return tool({
     description:
-      "Search persistent memory for relevant context using keyword and semantic matching " +
-      "with optional filters. Returns formatted results with title, type, score, and snippet.",
+      "Search persistent memory using keyword and semantic matching with optional filters.",
     args: {
-      query: tool.schema.string().describe("Natural language search query"),
-      limit: tool.schema
-        .number()
-        .optional()
-        .describe("Max results to return (default: 5, max: 20)"),
+      query: tool.schema.string().describe("Search query"),
+      limit: tool.schema.number().optional().describe("Max results (default 5, max 20)"),
       types: tool.schema
         .array(tool.schema.enum(MEMORY_TYPES))
         .optional()
@@ -68,7 +64,7 @@ export function createMemorySearchTool(ctx: PluginContext): ToolDefinition {
         .array(tool.schema.string())
         .optional()
         .describe("Filter by concept tags"),
-      minImportance: tool.schema.number().optional().describe("Minimum importance level (1-10)"),
+      minImportance: tool.schema.number().optional().describe("Minimum importance (1-10)"),
     },
     async execute(
       args: {

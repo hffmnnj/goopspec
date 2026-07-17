@@ -87,23 +87,19 @@ const USER_MEMORY_TYPES = MEMORY_TYPES.filter(
 export function createMemorySaveTool(ctx: PluginContext): ToolDefinition {
   return tool({
     description:
-      "Save structured information to persistent memory for retrieval across sessions. " +
-      "Supports observation, decision, note, and todo types. " +
-      "For decisions, include reasoning and alternatives to record the full context.",
+      "Save structured information to persistent memory. " +
+      "Supports observation, decision, note, and todo types.",
     args: {
-      title: tool.schema.string().describe("Brief title summarizing the memory (max 100 chars)"),
-      content: tool.schema.string().describe("Detailed content of the memory"),
+      title: tool.schema.string().describe("Memory title (max 100 chars)"),
+      content: tool.schema.string().describe("Memory content"),
       type: tool.schema
         .enum(USER_MEMORY_TYPES)
         .optional()
-        .describe(
-          "Type of memory: observation (default), decision, note, or todo. " +
-            "Use 'decision' with reasoning/alternatives for architectural choices.",
-        ),
+        .describe("Type: observation (default), decision, note, or todo"),
       concepts: tool.schema
         .array(tool.schema.string())
         .optional()
-        .describe("Tags/concepts for categorization and search"),
+        .describe("Tags for categorization and search"),
       facts: tool.schema
         .array(tool.schema.string())
         .optional()
@@ -111,23 +107,17 @@ export function createMemorySaveTool(ctx: PluginContext): ToolDefinition {
       importance: tool.schema
         .number()
         .optional()
-        .describe(
-          "Importance level 1-10 (default varies by type: decision=7, note=4, other=5). " +
-            "Values between 0-1 are scaled to 1-10.",
-        ),
+        .describe("Importance 1-10 (default varies by type)"),
       sourceFiles: tool.schema
         .array(tool.schema.string())
         .optional()
         .describe("Related file paths"),
       // Decision-specific fields (only meaningful when type=decision)
-      reasoning: tool.schema
-        .string()
-        .optional()
-        .describe("Why this decision was made (folded into content when type=decision)"),
+      reasoning: tool.schema.string().optional().describe("Why this decision was made"),
       alternatives: tool.schema
         .array(tool.schema.string())
         .optional()
-        .describe("Alternatives considered (folded into content/facts when type=decision)"),
+        .describe("Alternatives considered"),
     },
     async execute(
       args: {

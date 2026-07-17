@@ -122,12 +122,12 @@ function listAvailableCommands(commandsDir: string): string[] {
 export function createSlashcommandTool(ctx: PluginContext): ToolDefinition {
   const availableList = KEPT_COMMANDS.map((c) => `/${c}`).join(", ");
   return tool({
-    description: `Execute a GoopSpec slash command. Resolves the command name to its markdown instructions from the commands/ directory and returns the content. Available commands: ${availableList}`,
+    description: `Execute a GoopSpec slash command. Available commands: ${availableList}`,
     args: {
       command: tool.schema
         .string()
         .describe(
-          'Command name to execute, e.g. "/goop-plan" or "goop-plan". Leading slash and goop- prefix are both optional.',
+          'Command name (e.g. "/goop-plan" or "goop-plan"). Leading slash and goop- prefix are optional.',
         ),
     },
     async execute(args: { command: string }, _context: ToolContext): Promise<string> {

@@ -66,15 +66,7 @@ function processVerificationItem(
 
 export function createGoopRecordVerificationTool(ctx: PluginContext): ToolDefinition {
   return tool({
-    description:
-      "Record a workflow verification check result in GoopSpecDB.\n\n" +
-      "Args:\n" +
-      "- check_name: Verification check name (typecheck, test, lint, custom)\n" +
-      "- status: Check status (pass, fail, skip)\n" +
-      "- wave_id: Optional wave ID to associate with the check\n" +
-      "- detail: Optional check details\n" +
-      "- workflow_id: Optional workflow ID (defaults to active workflow)\n" +
-      "- items: Optional batch of verification payloads (check_name, status, wave_id, detail, workflow_id)",
+    description: "Record a workflow verification check result in GoopSpecDB.",
     args: {
       check_name: tool.schema.enum(VERIFICATION_CHECK_NAMES).optional(),
       status: tool.schema.enum(VERIFICATION_TOOL_STATUSES).optional(),
