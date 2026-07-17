@@ -57,13 +57,13 @@ const v2Plugin = V2Plugin.define({
       await syncGlobalConfigSidecar(pluginCtx.sdk.directory);
       await registerToolsV2(ctx, pluginCtx);
       const hooks = await registerHooksV2(ctx, pluginCtx);
-      const watcher = createConfigWatcher({
-        path: getProjectGoopspecJsonPath(pluginCtx.sdk.directory),
-        debounceMs: CONFIG_WATCHER_DEBOUNCE_MS,
-        onReload: () => hooks.reloadThinkingLevels(),
-      });
 
       if (ctx.teardown && typeof ctx.teardown.register === "function") {
+        const watcher = createConfigWatcher({
+          path: getProjectGoopspecJsonPath(pluginCtx.sdk.directory),
+          debounceMs: CONFIG_WATCHER_DEBOUNCE_MS,
+          onReload: () => hooks.reloadThinkingLevels(),
+        });
         try {
           await ctx.teardown.register(async () => {
             watcher.dispose();
@@ -75,9 +75,7 @@ const v2Plugin = V2Plugin.define({
           throw error;
         }
       } else {
-        logError(
-          "V2 config watcher teardown registration skipped: runtime capability is unavailable",
-        );
+        logError("V2 config watcher skipped: runtime teardown capability is unavailable");
       }
     } catch (error) {
       logError("V2 plugin initialization failed", error);

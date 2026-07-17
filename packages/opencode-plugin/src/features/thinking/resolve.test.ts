@@ -77,4 +77,72 @@ describe("resolveThinkingValue", () => {
       source: "preserve-default",
     });
   });
+
+  it("never silently downgrades an unsupported label to a nearby supported level", () => {
+    const capabilities = resolveCapabilities({
+      variants: [
+        { id: "low", headers: {}, body: { reasoning: { effort: "low" } } },
+        { id: "medium", headers: {}, body: { reasoning: { effort: "medium" } } },
+        { id: "high", headers: {}, body: { reasoning: { effort: "high" } } },
+      ],
+    });
+
+    const resolution = resolveThinkingValue("xhigh", capabilities);
+    expect(resolution.apply).toBeNull();
+    expect(resolution.source).toBe("preserve-default");
+    expect(resolution.warning).toBe(
+      'Thinking level "xhigh" is not supported by the resolved model; preserving the provider default.',
+    );
+  });
+
+  it("returns apply: null and a warning for unsupported labels on V1 provider data", () => {
+    const capabilities = resolveCapabilities({
+      capabilities: { reasoning: true },
+      options: { reasoning: { effort: ["low", "medium", "high"] } },
+    });
+
+    const resolution = resolveThinkingValue("xhigh", capabilities);
+    expect(resolution.apply).toBeNull();
+    expect(resolution.source).toBe("preserve-default");
+    expect(resolution.warning).toContain("xhigh");
+    expect(resolution.warning).toContain("not supported");
+  });
+
+  it("treats none as a real unsupported variant rather than budget 0", () => {
+    const capabilities = resolveCapabilities({
+      variants: [
+        { id: "low", headers: {}, body: { reasoning: { effort: "low" } } },
+        { id: "high", headers: {}, body: { reasoning: { effort: "high" } } },
+      ],
+    });
+
+    const resolution = resolveThinkingValue("none", capabilities);
+    expect(resolution.apply).toBeNull();
+    expect(resolution.source).toBe("preserve-default");
+    expect(resolution.warning).toContain('Thinking level "none" is not supported');
+  });
+
+  it("does not throw when capability raw data is missing", () => {
+    expect(() =>
+      resolveThinkingValue("high", {
+        supported: ["high"],
+        raw: undefined,
+      }),
+    ).not.toThrow();
+
+    const resolution = resolveThinkingValue("high", {
+      supported: ["high"],
+      raw: undefined,
+    });
+    expect(resolution.apply).toBeNull();
+    expect(resolution.source).toBe("preserve-default");
+  });
+
+  it("does not throw when the supported set is empty", () => {
+    expect(() => resolveThinkingValue("high", { supported: [], raw: undefined })).not.toThrow();
+
+    const resolution = resolveThinkingValue("high", { supported: [], raw: undefined });
+    expect(resolution.apply).toBeNull();
+    expect(resolution.source).toBe("preserve-default");
+  });
 });
