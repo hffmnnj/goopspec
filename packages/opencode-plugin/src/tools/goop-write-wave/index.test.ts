@@ -210,3 +210,144 @@ describe("goop_write_wave batch mode", () => {
     expect(result).toContain("wave 1");
   });
 });
+
+describe("goop_write_wave combinator mode", () => {
+  let ctx: PluginContext;
+  let toolCtx: ToolContext;
+  let cleanup: () => void;
+
+  beforeEach(() => {
+    const env = setupTestEnvironment("goop-write-wave-combinator");
+    cleanup = env.cleanup;
+    ctx = createMockPluginContext({ testDir: env.testDir, db: env.db });
+    toolCtx = createMockToolContext();
+  });
+
+  afterEach(() => cleanup());
+
+  it("records verifications in the same call as a wave write", async () => {
+    const tool = createGoopWriteWaveTool(ctx);
+    const result = await tool.execute(
+      {
+        wave_number: 2,
+        title: "Combinator wave",
+        status: "in_progress",
+        verifications: [
+          { check_name: "typecheck", status: "pass", detail: "no errors" },
+          { check_name: "test", status: "pass", wave_id: 2 },
+        ],
+      },
+      toolCtx,
+    );
+
+    expect(result).toContain("Written wave 2");
+    expect(result).toContain("Verifications:");
+    expect(result).toContain("typecheck=pass");
+    expect(result).toContain("test=pass");
+
+    const rows = ctx.db.getVerifications("default", 2);
+    expect(rows.length).toBe(2);
+    expect(rows.map((r) => r.check_name).sort()).toEqual(["test", "typecheck"]);
+
+    const events = ctx.db.getEvents("default", "verification_record");
+    expect(events.length).toBe(2);
+  });
+
+  it("writes traceability rows in the same call as a wave write", async () => {
+    const tool = createGoopWriteWaveTool(ctx);
+    const result = await tool.execute(
+      {
+        wave_number: 2,
+        title: "Combinator wave",
+        traceability: [
+          { requirement_key: "MH2", task_index: 1, status: "covered" },
+          { requirement_key: "MH11", wave_number: 2, status: "covered" },
+        ],
+      },
+      toolCtx,
+    );
+
+    expect(result).toContain("Written wave 2");
+    expect(result).toContain("Traceability:");
+    expect(result).toContain("MH2");
+    expect(result).toContain("MH11");
+
+    const rows = ctx.db.getTraceability("default");
+    expect(rows.length).toBe(2);
+    expect(rows.map((r) => r.requirement_key).sort()).toEqual(["MH11", "MH2"]);
+
+    const events = ctx.db.getEvents("default", "traceability_write");
+    expect(events.length).toBe(2);
+  });
+
+  it("combined call updates wave, tasks, verifications, and traceability", async () => {
+    const tool = createGoopWriteWaveTool(ctx);
+    const result = await tool.execute(
+      {
+        wave_number: 3,
+        title: "Combined wave",
+        status: "completed",
+        tasks: [{ task_index: 1, description: "Combined task", status: "done" }],
+        verifications: [{ check_name: "lint", status: "pass" }],
+        traceability: [{ requirement_key: "MH2", task_index: 1, status: "covered" }],
+      },
+      toolCtx,
+    );
+
+    expect(result).toContain("Written wave 3");
+    expect(result).toContain("Verifications:");
+    expect(result).toContain("Traceability:");
+
+    const wave = ctx.db.getWave("default", 3);
+    expect(wave).not.toBeNull();
+    expect(wave?.status).toBe("completed");
+
+    const tasks = ctx.db.getWaveTasks(wave?.id ?? -1);
+    expect(tasks.length).toBe(1);
+    expect(tasks[0].status).toBe("done");
+
+    const verifications = ctx.db.getVerifications("default", 3);
+    expect(verifications.length).toBe(1);
+    expect(verifications[0].check_name).toBe("lint");
+
+    const traceability = ctx.db.getTraceability("default");
+    expect(traceability.some((r) => r.requirement_key === "MH2" && r.wave_number === 3)).toBe(true);
+  });
+
+  it("rejects verifications/traceability in items[] batch mode", async () => {
+    const tool = createGoopWriteWaveTool(ctx);
+    const result = await tool.execute(
+      {
+        wave_number: 1,
+        items: [{ wave_number: 1, title: "Batch wave" }],
+        verifications: [{ check_name: "test", status: "pass" }],
+      },
+      toolCtx,
+    );
+
+    expect(result).toContain("not supported in items[] batch mode");
+  });
+
+  it("rejects verifications/traceability alongside task_updates", async () => {
+    const tool = createGoopWriteWaveTool(ctx);
+    await tool.execute(
+      {
+        wave_number: 1,
+        title: "Wave One",
+        tasks: [{ task_index: 1, description: "Task 1", status: "pending" }],
+      },
+      toolCtx,
+    );
+
+    const result = await tool.execute(
+      {
+        wave_number: 1,
+        task_updates: [{ task_index: 1, status: "completed" }],
+        traceability: [{ requirement_key: "MH2" }],
+      },
+      toolCtx,
+    );
+
+    expect(result).toContain("not supported alongside task_updates");
+  });
+});
