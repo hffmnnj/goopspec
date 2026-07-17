@@ -11,10 +11,13 @@
 
 import { join } from "node:path";
 
+import { AGENT_ROLES } from "../core/constants.js";
 import type { Config } from "../core/sdk-compat.js";
 import type { PluginContext } from "../core/types.js";
 import { loadAgentConfigs, loadCommandConfigs } from "../features/agents/index.js";
-import { loadMergedConfig } from "../features/setup/index.js";
+import { getEffectiveThinkingLevels, loadMergedConfig } from "../features/setup/index.js";
+import { resolveCapabilities } from "../features/thinking/capability.js";
+import { resolveThinkingValue } from "../features/thinking/resolve.js";
 import { log, logError } from "../shared/logger.js";
 import { getPackageRoot } from "../shared/paths.js";
 import type { HookFactory, Hooks } from "./types.js";
@@ -44,9 +47,13 @@ export function createAgentRegistrationHook(ctx: PluginContext): Partial<Hooks> 
         }
         // else: keep the markdown frontmatter default
 
-        // Apply thinkingBudget override from config
+        // Legacy budgets remain available only until a thinking level can be
+        // applied. `chat.params` is the V1 surface that affects future turns.
         const budgetOverride = mergedConfig.agentThinkingBudgets?.[role];
-        if (budgetOverride !== undefined) {
+        if (
+          budgetOverride !== undefined &&
+          mergedConfig.agentThinkingLevels?.[role] === undefined
+        ) {
           (agentConfig as Record<string, unknown>).thinkingBudget = budgetOverride;
         }
       }
@@ -85,7 +92,84 @@ export function createAgentRegistrationHook(ctx: PluginContext): Partial<Hooks> 
         });
       }
     },
+    // V1 config registration is startup-only. Agent-menu metadata cannot be
+    // re-registered live, so menu changes require a restart. This hook reads
+    // uncached config on every future request, allowing option changes live.
+    "chat.params": async (input, output): Promise<void> => {
+      const role = getGoopRole(input.agent);
+      if (!role) return;
+
+      const level = getEffectiveThinkingLevels(ctx.sdk.directory)[role];
+      const capabilities = await getV1Capabilities(ctx, input.model);
+      const resolution = resolveThinkingValue(level, capabilities);
+
+      if (resolution.apply === null) {
+        logError(
+          `GoopSpec ${input.agent}: ${resolution.warning ?? "preserving the provider default."}`,
+        );
+        return;
+      }
+
+      if (typeof resolution.apply !== "string") return;
+
+      const option = getVerifiedV1RequestOption(capabilities, resolution.apply);
+      if (!option) {
+        logError(
+          `GoopSpec ${input.agent}: thinking level "${level}" has no unambiguous V1 request option; preserving the provider default.`,
+        );
+        return;
+      }
+
+      output.options[option.key] = option.value;
+
+      // A verified thinking label always wins over a legacy numeric budget.
+      // No budget is copied into chat.params because the provider option above
+      // is the only V1 setting verified against the live catalog.
+    },
   };
+}
+
+function getGoopRole(
+  agent: string,
+): keyof ReturnType<typeof getEffectiveThinkingLevels> | undefined {
+  if (!agent.startsWith("goop-")) return undefined;
+  const role = agent.slice("goop-".length);
+  return (AGENT_ROLES as readonly string[]).includes(role)
+    ? (role as keyof ReturnType<typeof getEffectiveThinkingLevels>)
+    : undefined;
+}
+
+async function getV1Capabilities(ctx: PluginContext, model: { providerID: string; id: string }) {
+  try {
+    const response = await ctx.sdk.client.config.providers({
+      query: { directory: ctx.sdk.directory },
+    });
+    const provider = response.data?.providers.find((entry) => entry.id === model.providerID);
+    return resolveCapabilities(provider?.models[model.id]);
+  } catch {
+    return resolveCapabilities(undefined);
+  }
+}
+
+function getVerifiedV1RequestOption(
+  capabilities: ReturnType<typeof resolveCapabilities>,
+  value: string,
+): { key: string; value: string } | undefined {
+  if (capabilities.raw?.source !== "v1") return undefined;
+
+  const keys = Object.entries(capabilities.raw.options).flatMap(([key, optionValue]) =>
+    optionSupportsValue(optionValue, value) ? [key] : [],
+  );
+  return keys.length === 1 ? { key: keys[0], value } : undefined;
+}
+
+function optionSupportsValue(option: unknown, value: string): boolean {
+  return (
+    option === value ||
+    (Array.isArray(option) &&
+      option.every((entry) => typeof entry === "string") &&
+      option.includes(value))
+  );
 }
 
 export const agentRegistrationFactory: HookFactory = createAgentRegistrationHook;

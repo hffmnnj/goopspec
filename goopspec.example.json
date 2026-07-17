@@ -5,6 +5,25 @@
   "_enforcement_comment": "assist = gentle guidance, warn = highlight issues, strict = enforce gates and constraints.",
   "adlEnabled": true,
   "defaultModel": "anthropic/claude-sonnet-4-6",
+
+  "_thinking_comment": [
+    "Per-role thinking levels: none | low | medium | high | xhigh.",
+    "Built-in defaults: explorer/researcher → medium, all other roles → high.",
+    "Resolved against the live model catalog — unsupported levels preserve the",
+    "provider default with a warning (never silent downgrade).",
+    "Precedence: project goopspec.json > .goopspec/config.json > global config > built-in default.",
+    "Legacy agentThinkingBudgets/orchestrator.thinkingBudget still apply when no",
+    "new label is set for a role; new label wins on collision."
+  ],
+  "agentThinkingLevels": {
+    "explorer": "medium",
+    "researcher": "medium",
+    "executor-low": "low",
+    "executor-high": "xhigh",
+    "orchestrator": "high",
+    "planner": "high"
+  },
+
   "agents": {
     "goop-explorer": {
       "model": "google/gemini-2.5-flash",
