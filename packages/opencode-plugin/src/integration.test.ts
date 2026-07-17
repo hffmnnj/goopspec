@@ -95,13 +95,13 @@ describe("GoopSpec 5-phase integration", () => {
       expect(ctx.sessionManager).toBeDefined();
     });
 
-    it("createTools produces exactly 30 tools from a real context", async () => {
+    it("createTools produces exactly 31 tools from a real context", async () => {
       const input = createMockPluginInput(testDir);
       const ctx = await createPluginContext(input);
       const tools = createTools(ctx);
 
       const toolNames = Object.keys(tools);
-      expect(toolNames).toHaveLength(30);
+      expect(toolNames).toHaveLength(31);
 
       // Verify all expected tool names are present
       const expectedTools = [
@@ -118,6 +118,7 @@ describe("GoopSpec 5-phase integration", () => {
         "goop_save_note",
         "goop_search_notes",
         "goop_append_chronicle",
+        "goop_boot",
         "goop_write_section",
         "goop_read_section",
         "goop_write_wave",
@@ -155,7 +156,7 @@ describe("GoopSpec 5-phase integration", () => {
       const tools = createTools(ctx);
       const hooks = createHooks(ctx);
 
-      expect(Object.keys(tools)).toHaveLength(30);
+      expect(Object.keys(tools)).toHaveLength(31);
       expect(typeof hooks).toBe("object");
     });
   });

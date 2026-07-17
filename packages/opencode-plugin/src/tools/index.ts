@@ -11,6 +11,7 @@ import type { ToolDefinition } from "../core/sdk-compat.js";
 import type { PluginContext } from "../core/types.js";
 import { createGoopAdlTool } from "./goop-adl/index.js";
 import { createGoopAppendChronicleTool } from "./goop-append-chronicle/index.js";
+import { createGoopBootTool } from "./goop-boot/index.js";
 import { createGoopCheckpointTool } from "./goop-checkpoint/index.js";
 import { createGoopGetGlobalConfigTool } from "./goop-get-global-config/index.js";
 import { createGoopReadDbTool } from "./goop-read-db/index.js";
@@ -46,6 +47,7 @@ import { createSlashcommandTool } from "./slashcommand/index.js";
 export {
   createGoopAdlTool,
   createGoopAppendChronicleTool,
+  createGoopBootTool,
   createGoopBlockerTool,
   createGoopCheckpointTool,
   createGoopDashboardTool,
@@ -89,6 +91,7 @@ export function createTools(ctx: PluginContext): Record<string, ToolDefinition> 
     goop_read_db: createGoopReadDbTool(ctx),
     goop_write_db: createGoopWriteDbTool(ctx),
     goop_append_chronicle: createGoopAppendChronicleTool(ctx),
+    goop_boot: createGoopBootTool(ctx),
     goop_save_note: createGoopSaveNoteTool(ctx),
     goop_search_notes: createGoopSearchNotesTool(ctx),
 

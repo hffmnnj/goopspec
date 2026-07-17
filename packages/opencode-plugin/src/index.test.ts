@@ -132,12 +132,12 @@ describe("plugin entrypoint", () => {
     }
   });
 
-  it("V1 path registers exactly 30 tools with the canonical key set", async () => {
+  it("V1 path registers exactly 31 tools with the canonical key set", async () => {
     const input = createMockPluginInput(testDir);
     const result = await plugin(input);
     const toolKeys = Object.keys(result.tool ?? {});
 
-    expect(toolKeys).toHaveLength(30);
+    expect(toolKeys).toHaveLength(31);
     for (const key of EXPECTED_TOOL_KEYS) {
       expect(toolKeys).toContain(key);
     }
@@ -170,7 +170,7 @@ describe("plugin entrypoint", () => {
     expect(statusResult).toContain("GoopSpec");
   });
 
-  it("V2 setup registers exactly 30 tools and goop_status matches V1 output", async () => {
+  it("V2 setup registers exactly 31 tools and goop_status matches V1 output", async () => {
     interface V2ToolLike {
       name: string;
       execute: (input: unknown, context: unknown) => Promise<unknown>;
@@ -193,7 +193,7 @@ describe("plugin entrypoint", () => {
 
     await plugin.setup(v2Ctx);
 
-    expect(Object.keys(v2Tools)).toHaveLength(30);
+    expect(Object.keys(v2Tools)).toHaveLength(31);
     for (const key of EXPECTED_TOOL_KEYS) {
       expect(v2Tools).toHaveProperty(key);
     }
