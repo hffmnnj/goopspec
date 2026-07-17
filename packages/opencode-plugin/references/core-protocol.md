@@ -122,6 +122,8 @@ Single message, two parallel tool calls:
 
 ## Agent Boot Sequence
 
+**Recommended path:** [`goop_boot`](tool-reference.md) (documented in `tool-reference.md`) combines steps 2–6 below — doc reads, Field Note search, memory search, and reference load — into a single call. New agent work should prefer `goop_boot` for efficiency. The granular step-by-step sequence remains valid and is useful when an agent needs fine control over which pieces to fetch.
+
 Before doing work, every subagent must:
 
 1. `goop_state({ action: "get" })`
