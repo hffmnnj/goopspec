@@ -8,6 +8,7 @@ tools:
   - read
   - glob
   - grep
+  - goop_boot
   - goop_read_db
   - goop_reference
   - goop_save_note

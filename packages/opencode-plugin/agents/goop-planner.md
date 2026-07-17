@@ -9,6 +9,7 @@ tools:
   - glob
   - grep
   - goop_read_db
+  - goop_boot
   - goop_search_notes
   - goop_spec
   - goop_state

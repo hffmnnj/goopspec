@@ -12,6 +12,7 @@ tools:
   - grep
   - bash
   - goop_read_db
+  - goop_boot
   - goop_reference
   - goop_search_notes
   - goop_state

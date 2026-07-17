@@ -13,6 +13,7 @@ tools:
   - goop_reference
   - goop_state
   - goop_read_db
+  - goop_boot
   - goop_search_notes
   - memory_save
   - memory_search
