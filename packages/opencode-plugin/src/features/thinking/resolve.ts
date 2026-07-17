@@ -35,16 +35,17 @@ function createPreserveDefaultResolution(label: ThinkingLevel): ThinkingResoluti
  * Resolves a canonical label only when the live capability data explicitly
  * supports it. This deliberately never substitutes a nearby level.
  */
-export function resolveThinkingValue(label: ThinkingLevel, capabilities: CapabilityResult): ThinkingResolution {
+export function resolveThinkingValue(
+  label: ThinkingLevel,
+  capabilities: CapabilityResult,
+): ThinkingResolution {
   try {
     const candidate = findCandidate(label, capabilities.supported);
     if (!candidate || !capabilities.raw) return createPreserveDefaultResolution(label);
 
     if (capabilities.raw.source === "v2") {
       const variant = capabilities.raw.variants.find((entry) => entry.id === candidate);
-      return variant
-        ? { apply: variant, source: "v2" }
-        : createPreserveDefaultResolution(label);
+      return variant ? { apply: variant, source: "v2" } : createPreserveDefaultResolution(label);
     }
 
     return { apply: candidate, source: "v1" };

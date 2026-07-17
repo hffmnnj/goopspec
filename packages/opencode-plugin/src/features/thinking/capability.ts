@@ -38,7 +38,12 @@ function getV2Variants(source: Record<string, unknown>): ThinkingVariant[] {
     if (!isRecord(candidate)) return [];
 
     const { id, headers, body } = candidate;
-    if (typeof id !== "string" || id.trim().length === 0 || !isStringRecord(headers) || !isRecord(body)) {
+    if (
+      typeof id !== "string" ||
+      id.trim().length === 0 ||
+      !isStringRecord(headers) ||
+      !isRecord(body)
+    ) {
       return [];
     }
 
@@ -65,7 +70,11 @@ function collectOptionValues(value: unknown, values: Set<string>, depth = 0): vo
 }
 
 function getV1Capabilities(source: Record<string, unknown>): CapabilityResult {
-  if (!isRecord(source.capabilities) || source.capabilities.reasoning !== true || !isRecord(source.options)) {
+  if (
+    !isRecord(source.capabilities) ||
+    source.capabilities.reasoning !== true ||
+    !isRecord(source.options)
+  ) {
     return EMPTY_CAPABILITIES;
   }
 

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
 
 import { resolveCapabilities } from "./capability.js";
-import { resolveThinkingValue, THINKING_LABEL_CANDIDATES } from "./resolve.js";
+import { THINKING_LABEL_CANDIDATES, resolveThinkingValue } from "./resolve.js";
 
 describe("resolveThinkingValue", () => {
   it("returns the exact V2 variant with its request body and headers", () => {
@@ -52,7 +52,8 @@ describe("resolveThinkingValue", () => {
 
     expect(resolveThinkingValue("xhigh", capabilities)).toEqual({
       apply: null,
-      warning: 'Thinking level "xhigh" is not supported by the resolved model; preserving the provider default.',
+      warning:
+        'Thinking level "xhigh" is not supported by the resolved model; preserving the provider default.',
       source: "preserve-default",
     });
   });
@@ -71,7 +72,8 @@ describe("resolveThinkingValue", () => {
   it("preserves the provider default for empty or malformed capability data", () => {
     expect(resolveThinkingValue("low", resolveCapabilities(undefined))).toEqual({
       apply: null,
-      warning: 'Thinking level "low" is not supported by the resolved model; preserving the provider default.',
+      warning:
+        'Thinking level "low" is not supported by the resolved model; preserving the provider default.',
       source: "preserve-default",
     });
   });
