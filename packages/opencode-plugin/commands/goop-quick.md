@@ -38,7 +38,19 @@ If it does not qualify, switch to `/goop-discuss`.
 5. Verify the fix.
 6. Ask the user to confirm completion.
 
+## Self-Edit Authority
+
+In `/goop-quick` mode only, the orchestrator may make trivial edits itself without delegating to a subagent — but **only** when ALL five conditions hold:
+
+1. **Single file only** — not 2–3 files (stricter than Quick mode's general qualify criteria).
+2. **File lives in `.goopspec/` or the project-config root** (e.g. `.goopspec/config.json`) — never `src/`, `lib/`, `app/`, `packages/*/src/`, `agents/`, `commands/`, `skills/`.
+3. **Under 5 lines changed** (added + removed combined).
+4. **No logic/behavior implications** — a typo fix, a config value bump, a comment, markdown formatting only.
+5. **Already inside `/goop-quick` mode** — this is not a substitute for delegation during standard `/goop-execute`.
+
+If any condition is not met, the orchestrator must delegate to the appropriate executor tier (step 3 below) — no exceptions.
+
 ## Anti-patterns
 
-- Use quick mode for ambiguous or multi-wave work.
+- Do NOT use quick mode for ambiguous, architectural, or multi-wave work.
 - Skip verification or the ADL log.

@@ -331,6 +331,30 @@ const EXECUTOR_FRONTEND_LOW: RoutingCategory = {
   ],
 };
 
+const EXECUTOR_FRONTEND_MEDIUM: RoutingCategory = {
+  label: "executor-frontend-medium",
+  agent: "executor-frontend-medium",
+  tier: "frontend-medium",
+  signals: [
+    "wire component",
+    "moderate ui refactor",
+    "connect component to state",
+    "standard component work",
+    "build component",
+    "component logic",
+    "form component",
+    "list component",
+    "hook up component",
+    "integrate component",
+    "ui refactor",
+    "component tests",
+    "prop drilling",
+    "lift state",
+    "shared ui helper",
+  ],
+  antiSignals: ["design system", "complex form", "animation", "ux architecture"],
+};
+
 const EXECUTOR_FRONTEND_HIGH: RoutingCategory = {
   label: "executor-frontend-high",
   agent: "executor-frontend-high",
@@ -383,6 +407,7 @@ export const ROUTING_CATEGORIES: readonly RoutingCategory[] = [
   PLANNER,
   // Frontend executors (before general executors)
   EXECUTOR_FRONTEND_HIGH,
+  EXECUTOR_FRONTEND_MEDIUM,
   EXECUTOR_FRONTEND_LOW,
   // General executors (low → medium → high, high is the fallback)
   EXECUTOR_LOW,

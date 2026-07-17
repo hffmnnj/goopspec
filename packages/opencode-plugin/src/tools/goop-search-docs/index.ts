@@ -56,12 +56,25 @@ export function createGoopSearchDocsTool(ctx: PluginContext): ToolDefinition {
   return tool({
     description:
       "Search workflow documents and sections across all workflows. " +
-      "Supports filtering by workflow, doc type, section key, and created_at range.",
+      "Supports filtering by workflow, doc type, section key, and created_at range. " +
+      "Plural filters (workflow_ids, doc_types, section_keys) match any value in the list (OR).",
     args: {
       query: tool.schema.string().describe("Search query"),
       workflow_id: tool.schema.string().optional().describe("Filter to a workflow ID (optional)"),
+      workflow_ids: tool.schema
+        .array(tool.schema.string())
+        .optional()
+        .describe("Filter to any of these workflow IDs (optional)"),
       doc_type: tool.schema.string().optional().describe("Filter to a document type (optional)"),
+      doc_types: tool.schema
+        .array(tool.schema.string())
+        .optional()
+        .describe("Filter to any of these document types (optional)"),
       section_key: tool.schema.string().optional().describe("Filter to a section key (optional)"),
+      section_keys: tool.schema
+        .array(tool.schema.string())
+        .optional()
+        .describe("Filter to any of these section keys (optional)"),
       since: tool.schema
         .number()
         .optional()
@@ -76,8 +89,11 @@ export function createGoopSearchDocsTool(ctx: PluginContext): ToolDefinition {
       args: {
         query: string;
         workflow_id?: string;
+        workflow_ids?: string[];
         doc_type?: string;
+        doc_types?: string[];
         section_key?: string;
+        section_keys?: string[];
         since?: number;
         until?: number;
         limit?: number;
@@ -87,14 +103,34 @@ export function createGoopSearchDocsTool(ctx: PluginContext): ToolDefinition {
       try {
         const limit = Math.min(Math.max(args.limit ?? 20, 1), 50);
 
-        if (args.doc_type !== undefined && !DOC_TYPES.includes(args.doc_type as DocType)) {
-          return `Unknown doc_type: ${args.doc_type}. Valid types: ${DOC_TYPES.join(", ")}`;
+        const requestedDocTypes =
+          args.doc_types !== undefined && args.doc_types.length > 0
+            ? args.doc_types
+            : args.doc_type !== undefined
+              ? [args.doc_type]
+              : [];
+        const invalid = requestedDocTypes.filter((t) => !DOC_TYPES.includes(t as DocType));
+        if (invalid.length > 0) {
+          return `Unknown doc_type(s): ${invalid.join(", ")}. Valid types: ${DOC_TYPES.join(", ")}`;
         }
 
+        const requestedWorkflowIds =
+          args.workflow_ids !== undefined && args.workflow_ids.length > 0
+            ? args.workflow_ids
+            : args.workflow_id !== undefined
+              ? [args.workflow_id]
+              : [];
+        const requestedSectionKeys =
+          args.section_keys !== undefined && args.section_keys.length > 0
+            ? args.section_keys
+            : args.section_key !== undefined
+              ? [args.section_key]
+              : [];
+
         const results = ctx.db.searchDocuments(args.query, {
-          workflowId: args.workflow_id,
-          docType: args.doc_type as DocType | undefined,
-          sectionKey: args.section_key,
+          workflowIds: requestedWorkflowIds,
+          docTypes: requestedDocTypes as DocType[],
+          sectionKeys: requestedSectionKeys,
           since: args.since,
           until: args.until,
           limit,

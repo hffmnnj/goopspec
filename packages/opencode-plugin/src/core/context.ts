@@ -9,7 +9,7 @@
 import { mkdirSync } from "node:fs";
 
 import type { PluginInput } from "./sdk-compat.js";
-import type { PluginContext, SessionInfo } from "./types.js";
+import type { PluginContext, SdkEssentials, SessionInfo } from "./types.js";
 
 import { GoopSpecDB } from "../features/db/index.js";
 import { SqliteMemoryManager } from "../features/memory/index.js";
@@ -36,13 +36,23 @@ export async function createPluginContext(input: PluginInput): Promise<PluginCon
 
   log("Creating plugin context", { directory, worktree });
 
-  const sdk = {
+  const sdk: SdkEssentials = {
     client: input.client,
     directory,
     worktree,
     $: input.$,
   };
 
+  return { sdk, ...(await createPluginSubsystems(directory)) };
+}
+
+/**
+ * Build the SDK-independent portion of PluginContext shared by V1 and V2.
+ * Keeping this construction centralized prevents the adapter paths drifting.
+ */
+export async function createPluginSubsystems(
+  directory: string,
+): Promise<Omit<PluginContext, "sdk">> {
   // -- GoopSpec database ----------------------------------------------------
   const goopspecDir = getGoopspecDir(directory);
   try {
@@ -89,7 +99,6 @@ export async function createPluginContext(input: PluginInput): Promise<PluginCon
   };
 
   return {
-    sdk,
     db,
     stateManager,
     memory,
