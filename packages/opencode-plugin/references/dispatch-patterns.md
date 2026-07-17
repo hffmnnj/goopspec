@@ -179,7 +179,7 @@ Users can override models in `goopspec.json` under `models`.
 
 ## Verification Dispatch
 
-Use `goop-verifier` at acceptance gates and after high-risk changes. A verification report should check:
+Use `goop-verifier` at acceptance gates and after high-risk changes. At the accept gate, prefer [`goop_acceptance_audit`](tool-reference.md) — it replaces the 3-call blocker+verification+wave-read sequence with a single read-only call returning combined `{blockers, verifications, waves}`. A verification report should check:
 
 | Area | What to Confirm |
 |------|-----------------|
@@ -204,6 +204,8 @@ Use `goop-explorer` when entering an unfamiliar codebase. The agent should produ
 1. Log failure to state.
 2. Save checkpoint.
 3. Attempt recovery: retry with fresh context, fall back to a different agent, or escalate to the user.
+
+When logging a failure alongside an ADL entry, consider [`goop_append_chronicle`](tool-reference.md) with `alsoLogAdl` — it appends the chronicle entry and logs the ADL entry in one call. Granular tools remain available for separate logging.
 
 ### On Timeout
 
