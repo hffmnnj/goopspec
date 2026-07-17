@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 
+import { GoopSpecDB } from "../../features/db/index.js";
 import type { PluginContext, ToolContext } from "../../test-utils.js";
 import {
   createMockPluginContext,
@@ -245,9 +246,11 @@ describe("goop_write_wave combinator mode", () => {
     expect(result).toContain("typecheck=pass");
     expect(result).toContain("test=pass");
 
-    const rows = ctx.db.getVerifications("default", 2);
-    expect(rows.length).toBe(2);
-    expect(rows.map((r) => r.check_name).sort()).toEqual(["test", "typecheck"]);
+    const wave = ctx.db.getWave("default", 2);
+    const rows = ctx.db.getVerifications("default", wave?.id ?? -1);
+    expect(rows.length).toBe(1);
+    expect(rows[0].check_name).toBe("typecheck");
+    expect(rows[0].wave_id).toBe(wave?.id);
 
     const events = ctx.db.getEvents("default", "verification_record");
     expect(events.length).toBe(2);
@@ -306,12 +309,65 @@ describe("goop_write_wave combinator mode", () => {
     expect(tasks.length).toBe(1);
     expect(tasks[0].status).toBe("done");
 
-    const verifications = ctx.db.getVerifications("default", 3);
+    const verifications = ctx.db.getVerifications("default", wave?.id ?? -1);
     expect(verifications.length).toBe(1);
     expect(verifications[0].check_name).toBe("lint");
+    expect(verifications[0].wave_id).toBe(wave?.id);
 
     const traceability = ctx.db.getTraceability("default");
     expect(traceability.some((r) => r.requirement_key === "MH2" && r.wave_number === 3)).toBe(true);
+  });
+
+  it("resolves verification wave_id to the wave's internal DB id, not the wave_number", async () => {
+    const realDb = new GoopSpecDB(":memory:");
+    const mockCtx = createMockPluginContext({ db: realDb });
+    const mockTool = createGoopWriteWaveTool(mockCtx);
+
+    // Seed multiple waves so the AUTOINCREMENT internal id for wave_number 1 is > 1.
+    realDb.upsertWorkflow("default", {});
+    for (let i = 0; i < 5; i++) {
+      realDb.upsertWave("default", {
+        wave_number: i + 100,
+        title: "Placeholder wave",
+        status: "pending",
+      });
+    }
+    realDb.upsertWave("default", {
+      wave_number: 1,
+      title: "Preseed wave",
+      status: "pending",
+    });
+    const wave = realDb.getWave("default", 1);
+    expect(wave).not.toBeNull();
+    const internalWaveId = wave?.id ?? -1;
+    expect(internalWaveId).toBeGreaterThan(1);
+
+    const result = await mockTool.execute(
+      {
+        wave_number: 1,
+        title: "Regression wave",
+        verifications: [
+          { check_name: "test", status: "pass", detail: "post-fix regression check" },
+          { check_name: "typecheck", status: "pass", wave_id: internalWaveId },
+        ],
+      },
+      toolCtx,
+    );
+
+    expect(result).toContain("Written wave 1");
+    expect(result).toContain("Verifications:");
+
+    const rows = realDb.getVerifications("default", internalWaveId);
+    expect(rows.length).toBe(2);
+    expect(rows.map((r) => r.check_name).sort()).toEqual(["test", "typecheck"]);
+    expect(rows.every((r) => r.wave_id === internalWaveId)).toBe(true);
+
+    // Sanity check: querying by the human-facing wave_number (1) finds nothing because the
+    // internal id is different.
+    const wrongRows = realDb.getVerifications("default", 1);
+    expect(wrongRows.length).toBe(0);
+
+    realDb.close();
   });
 
   it("rejects verifications/traceability in items[] batch mode", async () => {

@@ -49,6 +49,7 @@ interface VerificationPayload {
   check_name: VerificationCheckName;
   status: VerificationStatus;
   detail?: string;
+  /** Internal row id of the target wave (not the human-facing wave_number). */
   wave_id?: number;
 }
 
@@ -67,9 +68,9 @@ function recordVerification(
   ctx: PluginContext,
   workflowId: string,
   item: VerificationPayload,
-  defaultWaveNumber: number,
+  defaultWaveId: number,
 ): string {
-  const waveId = item.wave_id ?? defaultWaveNumber;
+  const waveId = item.wave_id ?? defaultWaveId;
 
   const verificationId = ctx.db.insertVerification(workflowId, {
     wave_id: waveId,
@@ -185,7 +186,10 @@ export function createGoopWriteWaveTool(ctx: PluginContext): ToolDefinition {
             check_name: tool.schema.enum(VERIFICATION_CHECK_NAMES),
             status: tool.schema.enum(VERIFICATION_STATUSES),
             detail: tool.schema.string().optional(),
-            wave_id: tool.schema.number().optional(),
+            wave_id: tool.schema
+              .number()
+              .optional()
+              .describe("Internal wave row id (not the human-facing wave_number)"),
           }),
         )
         .optional(),
@@ -298,12 +302,15 @@ export function createGoopWriteWaveTool(ctx: PluginContext): ToolDefinition {
         }
 
         let mainResult = "";
+        let defaultWaveId = -1;
 
         if (args.task_update !== undefined) {
           const wave = ctx.db.getWave(workflowId, args.wave_number);
           if (wave === null) {
             return `No wave ${args.wave_number} found for workflow '${workflowId}'. Use goop_write_wave to create it.`;
           }
+
+          defaultWaveId = wave.id;
 
           ctx.db.setWaveTaskStatus(wave.id, args.task_update.task_index, args.task_update.status);
           ctx.db.appendEvent(workflowId, "wave_write", {
@@ -330,6 +337,8 @@ export function createGoopWriteWaveTool(ctx: PluginContext): ToolDefinition {
             return `Error in goop_write_wave: wave ${args.wave_number} was not found after write`;
           }
 
+          defaultWaveId = wave.id;
+
           for (const task of args.tasks ?? []) {
             ctx.db.upsertWaveTask({
               wave_id: wave.id,
@@ -353,9 +362,9 @@ export function createGoopWriteWaveTool(ctx: PluginContext): ToolDefinition {
         }
 
         const verificationResults: string[] = [];
-        if (args.verifications !== undefined) {
+        if (args.verifications !== undefined && defaultWaveId !== -1) {
           for (const item of args.verifications) {
-            verificationResults.push(recordVerification(ctx, workflowId, item, args.wave_number));
+            verificationResults.push(recordVerification(ctx, workflowId, item, defaultWaveId));
           }
         }
 
