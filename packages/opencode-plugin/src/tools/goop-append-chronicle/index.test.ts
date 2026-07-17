@@ -181,4 +181,167 @@ describe("goop_append_chronicle tool", () => {
     expect(ctx.db.getChronicleEvents("default").length).toBe(0);
     expect(ctx.db.getDocument("default", "chronicle")).toBeNull();
   });
+
+  // -----------------------------------------------------------------------
+  // 8. Combined chronicle + ADL + memory (MH4)
+  // -----------------------------------------------------------------------
+
+  it("old-shape call with only entry is unchanged", async () => {
+    const tool = createGoopAppendChronicleTool(ctx);
+    const entry = "Old-shape entry.";
+    const result = await tool.execute({ entry }, toolCtx);
+
+    expect(result).toBe(`[OK] Chronicle entry appended (${entry.length} chars)`);
+    expect(ctx.db.getChronicleEvents("default").length).toBe(1);
+  });
+
+  it("alsoLogAdl logs an ADL entry and dual-writes to decisions", async () => {
+    const tool = createGoopAppendChronicleTool(ctx);
+    const result = await tool.execute(
+      {
+        entry: "Chronicle with ADL.",
+        alsoLogAdl: {
+          type: "decision",
+          rule: 4,
+          description: "Decided to combine tools.",
+          entry_action: "Extend goop_append_chronicle",
+          files: ["src/tools/goop-append-chronicle/index.ts"],
+        },
+      },
+      toolCtx,
+    );
+
+    expect(result).toContain("[OK] Chronicle entry appended");
+    expect(result).toContain("[OK] ADL entry logged.");
+
+    const adl = ctx.stateManager.getADL();
+    expect(adl).toContain("Decided to combine tools.");
+    expect(adl).toContain("Extend goop_append_chronicle");
+
+    const decisions = ctx.db.getDecisions({ workflowId: "default", type: "decision" });
+    expect(decisions.length).toBe(1);
+    expect(decisions[0].description).toBe("Decided to combine tools.");
+    expect(decisions[0].rule).toBe(4);
+  });
+
+  it("alsoSaveMemory saves a memory entry", async () => {
+    const tool = createGoopAppendChronicleTool(ctx);
+    const result = await tool.execute(
+      {
+        entry: "Chronicle with memory.",
+        alsoSaveMemory: {
+          title: "Combinator insight",
+          content: "One call can append chronicle and save memory.",
+          type: "observation",
+          importance: 7,
+          concepts: ["combinator", "chronicle"],
+        },
+      },
+      toolCtx,
+    );
+
+    expect(result).toContain("[OK] Chronicle entry appended");
+    expect(result).toContain("[OK] Memory saved.");
+
+    const memories = await ctx.memory.search({ query: "combinator" });
+    expect(memories.length).toBe(1);
+    expect(memories[0].memory.title).toBe("Combinator insight");
+    expect(memories[0].memory.importance).toBe(7);
+    expect(memories[0].memory.concepts).toEqual(["combinator", "chronicle"]);
+  });
+
+  it("combined call appends chronicle, logs ADL, and saves memory", async () => {
+    const tool = createGoopAppendChronicleTool(ctx);
+    const result = await tool.execute(
+      {
+        entry: "Combined event log.",
+        alsoLogAdl: {
+          type: "observation",
+          description: "All three stores written.",
+          entry_action: "Use goop_append_chronicle combinator",
+        },
+        alsoSaveMemory: {
+          title: "Three-store combinator",
+          content: "Chronicle, ADL, and memory written in one call.",
+          type: "note",
+          importance: 6,
+        },
+      },
+      toolCtx,
+    );
+
+    expect(result).toContain("[OK] Chronicle entry appended");
+    expect(result).toContain("[OK] ADL entry logged.");
+    expect(result).toContain("[OK] Memory saved.");
+
+    const doc = ctx.db.getDocument("default", "chronicle");
+    expect(doc?.content).toContain("Combined event log.");
+
+    expect(ctx.stateManager.getADL()).toContain("All three stores written.");
+
+    const memories = await ctx.memory.search({ query: "Three-store" });
+    expect(memories.length).toBe(1);
+    expect(memories[0].memory.type).toBe("note");
+  });
+
+  it("rejects auxiliary payloads with entries batch", async () => {
+    const tool = createGoopAppendChronicleTool(ctx);
+    const result = await tool.execute(
+      {
+        entries: ["Batch entry."],
+        alsoSaveMemory: { title: "Not allowed", content: "x" },
+      },
+      toolCtx,
+    );
+
+    expect(result).toContain("Error");
+    expect(result).toContain("cannot be used with entries batch");
+  });
+
+  it("reports partial failure when a sub-write throws", async () => {
+    const brokenCtx = createMockPluginContext({ testDir, db: ctx.db });
+    brokenCtx.memory.save = async () => {
+      throw new Error("Memory store offline");
+    };
+
+    const tool = createGoopAppendChronicleTool(brokenCtx);
+    const result = await tool.execute(
+      {
+        entry: "Chronicle succeeded; memory failed.",
+        alsoSaveMemory: {
+          title: "Doomed memory",
+          content: "This save will fail.",
+        },
+      },
+      toolCtx,
+    );
+
+    expect(result).toContain("[OK] Chronicle entry appended");
+    expect(result).toContain("[FAIL] Memory: Memory store offline");
+    expect(ctx.db.getChronicleEvents("default").length).toBe(1);
+    expect(ctx.db.getDocument("default", "chronicle")).not.toBeNull();
+  });
+
+  it("reports ADL failure when appendADL throws", async () => {
+    const brokenCtx = createMockPluginContext({ testDir, db: ctx.db });
+    brokenCtx.stateManager.appendADL = () => {
+      throw new Error("ADL disk full");
+    };
+
+    const tool = createGoopAppendChronicleTool(brokenCtx);
+    const result = await tool.execute(
+      {
+        entry: "Chronicle succeeded; ADL failed.",
+        alsoLogAdl: {
+          type: "observation",
+          description: "ADL will fail.",
+          entry_action: "Test partial failure",
+        },
+      },
+      toolCtx,
+    );
+
+    expect(result).toContain("[OK] Chronicle entry appended");
+    expect(result).toContain("[FAIL] ADL: ADL disk full");
+  });
 });
