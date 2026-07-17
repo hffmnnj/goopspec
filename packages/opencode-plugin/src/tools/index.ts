@@ -1,5 +1,5 @@
 /**
- * Tool Registry — wires all 29 GoopSpec tools for plugin registration.
+ * Tool Registry — wires all 32 GoopSpec tools for plugin registration.
  *
  * `createTools` returns a map of canonical MCP tool names → ToolDefinition.
  * Individual factory re-exports allow direct import when only one tool is needed.
@@ -9,6 +9,7 @@
 
 import type { ToolDefinition } from "../core/sdk-compat.js";
 import type { PluginContext } from "../core/types.js";
+import { createGoopAcceptanceAuditTool } from "./goop-acceptance-audit/index.js";
 import { createGoopAdlTool } from "./goop-adl/index.js";
 import { createGoopAppendChronicleTool } from "./goop-append-chronicle/index.js";
 import { createGoopBootTool } from "./goop-boot/index.js";
@@ -45,6 +46,7 @@ import { createMemorySearchTool } from "./memory-search/index.js";
 import { createSlashcommandTool } from "./slashcommand/index.js";
 
 export {
+  createGoopAcceptanceAuditTool,
   createGoopAdlTool,
   createGoopAppendChronicleTool,
   createGoopBootTool,
@@ -90,6 +92,7 @@ export function createTools(ctx: PluginContext): Record<string, ToolDefinition> 
     goop_reference: createGoopReferenceTool(ctx),
     goop_read_db: createGoopReadDbTool(ctx),
     goop_write_db: createGoopWriteDbTool(ctx),
+    goop_acceptance_audit: createGoopAcceptanceAuditTool(ctx),
     goop_append_chronicle: createGoopAppendChronicleTool(ctx),
     goop_boot: createGoopBootTool(ctx),
     goop_save_note: createGoopSaveNoteTool(ctx),

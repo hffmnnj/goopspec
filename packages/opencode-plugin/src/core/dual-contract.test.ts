@@ -193,7 +193,7 @@ describe("dual-contract parity", () => {
     const result = await plugin(input);
 
     expect(result.tool).toBeDefined();
-    expect(Object.keys(result.tool ?? {})).toHaveLength(31);
+    expect(Object.keys(result.tool ?? {})).toHaveLength(32);
 
     const directTools = Object.keys(createTools(createMockPluginContext({ testDir }))).sort();
     expect(Object.keys(result.tool ?? {}).sort()).toEqual(directTools);
@@ -209,7 +209,7 @@ describe("dual-contract parity", () => {
     const v2Tools = Object.keys(registrations.tools).sort();
 
     expect(v2Tools).toEqual(v1Tools);
-    expect(v2Tools).toHaveLength(31);
+    expect(v2Tools).toHaveLength(32);
   });
 
   it("goop_status produces identical text through V1 and V2", async () => {

@@ -137,7 +137,7 @@ describe("plugin entrypoint", () => {
     const result = await plugin(input);
     const toolKeys = Object.keys(result.tool ?? {});
 
-    expect(toolKeys).toHaveLength(31);
+    expect(toolKeys).toHaveLength(32);
     for (const key of EXPECTED_TOOL_KEYS) {
       expect(toolKeys).toContain(key);
     }
@@ -193,7 +193,7 @@ describe("plugin entrypoint", () => {
 
     await plugin.setup(v2Ctx);
 
-    expect(Object.keys(v2Tools)).toHaveLength(31);
+    expect(Object.keys(v2Tools)).toHaveLength(32);
     for (const key of EXPECTED_TOOL_KEYS) {
       expect(v2Tools).toHaveProperty(key);
     }
