@@ -204,6 +204,11 @@ export interface V2CatalogCapability {
   reload(): Promise<void>;
 }
 
+/** Optional host lifecycle surface for plugin-owned resources. */
+export interface V2TeardownCapability {
+  register(dispose: () => void | Promise<void>): undefined | Promise<unknown>;
+}
+
 /**
  * Runtime V2 context as documented by OpenCode.
  *
@@ -217,6 +222,7 @@ export type V2RuntimeContext = V2PluginContext & {
   readonly event?: V2EventCapability;
   readonly agent?: V2AgentCapability;
   readonly catalog?: V2CatalogCapability;
+  readonly teardown?: V2TeardownCapability;
 };
 
 // ---------------------------------------------------------------------------

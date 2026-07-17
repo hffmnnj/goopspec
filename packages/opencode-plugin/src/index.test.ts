@@ -278,4 +278,53 @@ describe("plugin entrypoint", () => {
     expect(v2System[0]).toContain("<goopspec_state>");
     expect(v2System[0]).toContain("workflow: default");
   });
+
+  it("V2 reloads agents and catalog after config edits and disposes its watcher on teardown", async () => {
+    let agentReloads = 0;
+    let catalogReloads = 0;
+    let teardown: (() => void | Promise<void>) | undefined;
+    const v2Ctx = {
+      options: { directory: testDir },
+      tool: { transform: async () => {}, hook: async () => {} },
+      agent: {
+        transform: async () => ({ dispose: async () => {} }),
+        reload: async () => {
+          agentReloads++;
+        },
+      },
+      catalog: {
+        transform: async () => ({ dispose: async () => {} }),
+        reload: async () => {
+          catalogReloads++;
+        },
+      },
+      teardown: {
+        register: (callback: () => void | Promise<void>) => {
+          teardown = callback;
+        },
+      },
+    } as unknown as Parameters<typeof plugin.setup>[0];
+
+    await plugin.setup(v2Ctx);
+    writeFileSync(
+      join(testDir, "goopspec.json"),
+      JSON.stringify({ agentThinkingLevels: { orchestrator: "high" } }),
+      "utf-8",
+    );
+    await Bun.sleep(200);
+
+    expect(catalogReloads).toBe(1);
+    expect(agentReloads).toBe(1);
+    expect(teardown).toBeDefined();
+    await teardown?.();
+
+    writeFileSync(
+      join(testDir, "goopspec.json"),
+      JSON.stringify({ agentThinkingLevels: { orchestrator: "medium" } }),
+      "utf-8",
+    );
+    await Bun.sleep(200);
+    expect(catalogReloads).toBe(1);
+    expect(agentReloads).toBe(1);
+  });
 });

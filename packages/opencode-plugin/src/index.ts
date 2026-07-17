@@ -56,7 +56,29 @@ const v2Plugin = V2Plugin.define({
       const pluginCtx = await createPluginContextV2(ctx);
       await syncGlobalConfigSidecar(pluginCtx.sdk.directory);
       await registerToolsV2(ctx, pluginCtx);
-      await registerHooksV2(ctx, pluginCtx);
+      const hooks = await registerHooksV2(ctx, pluginCtx);
+      const watcher = createConfigWatcher({
+        path: getProjectGoopspecJsonPath(pluginCtx.sdk.directory),
+        debounceMs: CONFIG_WATCHER_DEBOUNCE_MS,
+        onReload: () => hooks.reloadThinkingLevels(),
+      });
+
+      if (ctx.teardown && typeof ctx.teardown.register === "function") {
+        try {
+          await ctx.teardown.register(async () => {
+            watcher.dispose();
+            await hooks.dispose();
+          });
+        } catch (error) {
+          watcher.dispose();
+          await hooks.dispose();
+          throw error;
+        }
+      } else {
+        logError(
+          "V2 config watcher teardown registration skipped: runtime capability is unavailable",
+        );
+      }
     } catch (error) {
       logError("V2 plugin initialization failed", error);
     }

@@ -26,6 +26,8 @@ interface Registrations {
   after?: (event: V2ToolExecuteAfterEvent) => void | Promise<void>;
   agentTransform?: (draft: V2AgentDraft) => void | Promise<void>;
   catalogTransform?: (draft: V2CatalogDraft) => void | Promise<void>;
+  agentReloads: number;
+  catalogReloads: number;
 }
 
 function createRuntimeContext(registrations: Registrations): V2RuntimeContext {
@@ -67,13 +69,17 @@ function createRuntimeContext(registrations: Registrations): V2RuntimeContext {
       transform: async (callback: (draft: V2AgentDraft) => void | Promise<void>) => {
         registrations.agentTransform = callback;
       },
-      reload: async () => {},
+      reload: async () => {
+        registrations.agentReloads++;
+      },
     },
     catalog: {
       transform: async (callback: (draft: V2CatalogDraft) => void | Promise<void>) => {
         registrations.catalogTransform = callback;
       },
-      reload: async () => {},
+      reload: async () => {
+        registrations.catalogReloads++;
+      },
     },
   } as unknown as V2RuntimeContext;
 }
@@ -89,7 +95,7 @@ describe("registerHooksV2()", () => {
   it("registers the system transform and reuses its canonical V1 handler", async () => {
     const ctx = createMockPluginContext();
     contexts.push(ctx);
-    const registrations: Registrations = {};
+    const registrations: Registrations = { agentReloads: 0, catalogReloads: 0 };
     const v1System: string[] = [];
     const v2System: string[] = [];
 
@@ -108,7 +114,7 @@ describe("registerHooksV2()", () => {
   it("registers lifecycle hooks and adapts their V1 mutations", async () => {
     const ctx = createMockPluginContext();
     contexts.push(ctx);
-    const registrations: Registrations = {};
+    const registrations: Registrations = { agentReloads: 0, catalogReloads: 0 };
     const v1Hooks = createHooks(ctx, [...DEFAULT_HOOK_FACTORIES]);
 
     await registerHooksV2(createRuntimeContext(registrations), ctx);
@@ -151,7 +157,30 @@ describe("registerHooksV2()", () => {
     const ctx = createMockPluginContext();
     contexts.push(ctx);
 
-    await expect(registerHooksV2({} as V2RuntimeContext, ctx)).resolves.toBeUndefined();
+    await expect(registerHooksV2({} as V2RuntimeContext, ctx)).resolves.toEqual({
+      reloadThinkingLevels: expect.any(Function),
+      dispose: expect.any(Function),
+    });
+  });
+
+  it("reloads the guarded agent and catalog capabilities", async () => {
+    const ctx = createMockPluginContext();
+    contexts.push(ctx);
+    const registrations: Registrations = { agentReloads: 0, catalogReloads: 0 };
+
+    const hooks = await registerHooksV2(createRuntimeContext(registrations), ctx);
+    await hooks.reloadThinkingLevels();
+
+    expect(registrations.catalogReloads).toBe(1);
+    expect(registrations.agentReloads).toBe(1);
+  });
+
+  it("degrades without throwing when reloading absent capabilities", async () => {
+    const ctx = createMockPluginContext();
+    contexts.push(ctx);
+
+    const hooks = await registerHooksV2({} as V2RuntimeContext, ctx);
+    await expect(hooks.reloadThinkingLevels()).resolves.toBeUndefined();
   });
 
   it("applies the selected catalog variant body and headers to GoopSpec agents", async () => {
@@ -161,7 +190,7 @@ describe("registerHooksV2()", () => {
       join(ctx.sdk.directory, "goopspec.json"),
       JSON.stringify({ agentThinkingLevels: { "executor-high": "medium" } }),
     );
-    const registrations: Registrations = {};
+    const registrations: Registrations = { agentReloads: 0, catalogReloads: 0 };
 
     await registerHooksV2(createRuntimeContext(registrations), ctx);
     const agent: V2AgentInfo = {
