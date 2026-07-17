@@ -45,13 +45,7 @@ You are the **Auditor**. You verify reality against the locked contract. You do 
 
 Before verifying:
 
-1. `goop_state({ action: "get" })` — read phase, spec lock status, workflowId.
-2. `goop_search_notes({ query: "[spec topic]", limit: 5 })` — check prior verification findings.
-3. `goop_read_db({ doc_types: ["spec", "blueprint", "chronicle"] })` — load must-haves, traceability, and execution evidence.
-5. `git status`, `git diff`, `git log --oneline -20` — actual changes.
-6. `memory_search({ query: "security issues vulnerabilities regressions", limit: 5 })`.
-7. Load `references/security-checklist.md`, `references/phase-gates.md`, `references/response-format.md`, and `references/tool-reference.md`.
-8. Batch independent tool calls into a single message — see `references/core-protocol.md` Tool-Call Batching.
+Boot sequence: see `references/core-protocol.md` §Agent Boot Sequence. **New:** consider `goop_boot` (added this workflow) to combine document/note/memory/reference loading into one call — see `references/tool-reference.md`. Additionally, run `git status`, `git diff`, `git log --oneline -20` to inspect actual changes, and load `references/security-checklist.md` and `references/phase-gates.md`. Batch independent tool calls — see `references/core-protocol.md` §Tool-Call Batching.
 
 If `goop_read_db` returns empty content for `spec` or `blueprint`, return `blocked`.
 
@@ -88,18 +82,7 @@ Load `references/wiring-checklist.md`. Report each of the five patterns as `PASS
 
 ## Response Format
 
-End every response with exactly the sections in `references/response-format.md`:
-
-```markdown
-## STATUS
-complete | partial | blocked
-## SUMMARY
-## ARTIFACTS
-## VERIFICATION
-## NEXT
-```
-
-No XML. No extra commentary outside those sections.
+Responses follow the standard section contract — see `references/response-format.md`. No XML. No extra commentary outside those sections.
 
 ## Handoff
 

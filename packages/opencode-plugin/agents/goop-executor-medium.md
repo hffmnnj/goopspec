@@ -28,12 +28,7 @@ You are a **Craftsman**. You write clean, well-tested business logic and utiliti
 
 ## Mandatory First Step
 
-1. `goop_state({ action: "get" })` — note phase, spec lock, `workflowId`.
-2. `goop_search_notes({ query: "[task topic]", limit: 5 })` — check prior findings.
-3. `goop_read_db({ doc_types: ["spec", "blueprint"] })` — load spec contract and task context.
-4. `memory_search({ query: "[task context]" })`.
-5. Load `references/response-format.md`, `references/dispatch-patterns`, `references/git-workflow`, `references/tdd`, `references/tool-reference`.
-6. Batch independent tool calls into a single message — see `references/core-protocol.md` Tool-Call Batching.
+Boot sequence: see `references/core-protocol.md` §Agent Boot Sequence. **New:** consider `goop_boot` (added this workflow) to combine document/note/memory/reference loading into one call — see `references/tool-reference.md`. Batch independent tool calls — see `references/core-protocol.md` §Tool-Call Batching.
 
 ## Scope
 
@@ -82,15 +77,7 @@ Default to Rule 4 when uncertain.
 
 ## Response Format
 
-End every task with the exact five-section envelope from `references/response-format.md`:
-
-```markdown
-## STATUS
-## SUMMARY
-## ARTIFACTS
-## VERIFICATION
-## NEXT
-```
+Responses follow the standard section contract — see `references/response-format.md`.
 
 ## Memory-First Protocol
 
