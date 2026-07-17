@@ -11,10 +11,14 @@ import { registerHooksV2 } from "./core/hooks-v2.js";
 import type { Plugin } from "./core/sdk-compat.js";
 import { registerToolsV2 } from "./core/tools-v2.js";
 import { V2Plugin, type V2RuntimeContext } from "./core/v2-compat.js";
+import { createConfigWatcher } from "./features/setup/config-watcher.js";
 import { DEFAULT_HOOK_FACTORIES, createHooks } from "./hooks/index.js";
 import { syncGlobalConfigSidecar } from "./shared/global-config-sidecar.js";
 import { logError } from "./shared/logger.js";
+import { getProjectGoopspecJsonPath } from "./shared/paths.js";
 import { createTools } from "./tools/index.js";
+
+const CONFIG_WATCHER_DEBOUNCE_MS = 100;
 
 const goopspec: Plugin = async (input) => {
   try {
@@ -22,7 +26,23 @@ const goopspec: Plugin = async (input) => {
     await syncGlobalConfigSidecar(ctx.sdk.directory);
     const hooks = createHooks(ctx, [...DEFAULT_HOOK_FACTORIES]);
     const tools = createTools(ctx);
-    return { ...hooks, tool: { ...(hooks.tool ?? {}), ...tools } };
+    const watcher = createConfigWatcher({
+      path: getProjectGoopspecJsonPath(ctx.sdk.directory),
+      debounceMs: CONFIG_WATCHER_DEBOUNCE_MS,
+      // loadMergedConfig has no retained merged-config cache. The reload validates
+      // the edit; V1 chat.params resolves current config on every future turn.
+      onReload: () => {
+        logError(
+          "GoopSpec project config reloaded: future turns use updated options; restart OpenCode to refresh the agent menu.",
+        );
+      },
+    });
+
+    return {
+      ...hooks,
+      dispose: async () => watcher.dispose(),
+      tool: { ...(hooks.tool ?? {}), ...tools },
+    };
   } catch (error) {
     logError("Plugin initialization failed", error);
     return {};

@@ -7,6 +7,9 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
+import { writeFileSync } from "node:fs";
+import { join } from "node:path";
+
 import type { PluginInput } from "./core/sdk-compat.js";
 
 import plugin, { server } from "./index.js";
@@ -102,6 +105,31 @@ describe("plugin entrypoint", () => {
     expect(typeof result).toBe("object");
     expect(result.tool).toBeDefined();
     expect(typeof result.tool).toBe("object");
+    expect(typeof result.dispose).toBe("function");
+    await result.dispose?.();
+  });
+
+  it("warns that V1 agent-menu changes require restart after a config reload", async () => {
+    const errors: string[] = [];
+    const originalError = console.error;
+    try {
+      console.error = (...args: unknown[]) => errors.push(args.map(String).join(" "));
+      const result = await plugin(createMockPluginInput(testDir));
+
+      writeFileSync(
+        join(testDir, "goopspec.json"),
+        JSON.stringify({ agentThinkingLevels: { orchestrator: "high" } }),
+        "utf-8",
+      );
+      await Bun.sleep(200);
+
+      expect(
+        errors.some((message) => message.includes("restart OpenCode to refresh the agent menu")),
+      ).toBe(true);
+      await result.dispose?.();
+    } finally {
+      console.error = originalError;
+    }
   });
 
   it("V1 path registers exactly 30 tools with the canonical key set", async () => {

@@ -275,6 +275,79 @@ describe("createAgentRegistrationHook", () => {
     }
   });
 
+  it("reads the current config for each future turn after a project edit", async () => {
+    const { testDir, cleanup } = setupTestEnvironment("agent-reg-thinking-reload");
+    const originalGlobalPath = process.env.GOOPSPEC_GLOBAL_CONFIG_PATH;
+    try {
+      process.env.GOOPSPEC_GLOBAL_CONFIG_PATH = join(testDir, "no-global-config.json");
+      const configPath = join(testDir, "goopspec.json");
+      writeFileSync(
+        configPath,
+        JSON.stringify({ agentThinkingLevels: { orchestrator: "low" } }),
+        "utf-8",
+      );
+      const ctx = createMockPluginContext({ testDir });
+      const hooks = createAgentRegistrationHook(ctx);
+
+      await withProviderCatalog(
+        ctx,
+        {
+          providers: [
+            {
+              id: "anthropic",
+              models: {
+                "claude-opus-4-6": {
+                  capabilities: { reasoning: true },
+                  options: { reasoningEffort: ["low", "high"] },
+                },
+              },
+            },
+          ],
+        },
+        async () => {
+          const input = {
+            sessionID: "session",
+            agent: "goop-orchestrator",
+            model: { providerID: "anthropic", id: "claude-opus-4-6" } as never,
+            provider: {} as never,
+            message: {} as never,
+          };
+          const initialOutput = {
+            temperature: 0,
+            topP: 0,
+            topK: 0,
+            maxOutputTokens: undefined,
+            options: {},
+          };
+          await hooks["chat.params"]?.(input, initialOutput);
+          expect(initialOutput.options).toEqual({ reasoningEffort: "low" });
+
+          writeFileSync(
+            configPath,
+            JSON.stringify({ agentThinkingLevels: { orchestrator: "high" } }),
+            "utf-8",
+          );
+          const reloadedOutput = {
+            temperature: 0,
+            topP: 0,
+            topK: 0,
+            maxOutputTokens: undefined,
+            options: {},
+          };
+          await hooks["chat.params"]?.(input, reloadedOutput);
+          expect(reloadedOutput.options).toEqual({ reasoningEffort: "high" });
+        },
+      );
+    } finally {
+      if (originalGlobalPath === undefined) {
+        Reflect.deleteProperty(process.env, "GOOPSPEC_GLOBAL_CONFIG_PATH");
+      } else {
+        process.env.GOOPSPEC_GLOBAL_CONFIG_PATH = originalGlobalPath;
+      }
+      cleanup();
+    }
+  });
+
   it("preserves the provider default and warns for unsupported V1 thinking levels", async () => {
     const { testDir, cleanup } = setupTestEnvironment("agent-reg-thinking-unsupported");
     const errors: string[] = [];
