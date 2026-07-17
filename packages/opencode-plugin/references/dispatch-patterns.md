@@ -21,6 +21,8 @@ The orchestrator coordinates and delegates. It never implements.
 | "Quickly fix" anything inline | No exceptions |
 | Paste implementation logic into a message | Still writing code |
 
+**Narrow exception — Quick mode self-edit only:** The orchestrator may make trivial self-edits without delegating when ALL five conditions in `commands/goop-quick.md` (Self-Edit Authority) are met: single file, `.goopspec/` or config-root scope only, under 5 lines, no logic implications, and only inside `/goop-quick` mode. Outside those five conditions, every prohibition in this table remains fully in force — the orchestrator never writes/edits source code, never creates TS/JS files, never "quickly fixes" anything inline, and never implements.
+
 ### Permitted Orchestrator Actions
 
 - Read any file for context.
@@ -42,7 +44,7 @@ Every `task()` prompt must include:
 | Verification | How to prove completion |
 | Expected output | Deliverables and commit expectations |
 
-Always include workflow isolation context when delegating: active `workflowId` and the correct `.goopspec/<workflowId>/` doc prefix.
+Always include workflow isolation context: active `workflowId` and correct `.goopspec/<workflowId>/` doc prefix.
 
 ### Context Handoff
 
@@ -65,7 +67,7 @@ Do not pass full conversation history, verbose logs, unrelated files, or complet
 | Simple config/mechanical | `goop-executor-low` | — |
 | Business logic | `goop-executor-medium` | — |
 | Complex/architectural | `goop-executor-high` | — |
-| UI/UX implementation | `goop-executor-frontend` | — |
+| UI/UX implementation | `goop-executor-frontend-medium` | `goop-executor-frontend-low` / `goop-executor-frontend-high` |
 | Research | `goop-researcher` | `goop-explorer` |
 | Exploration | `goop-explorer` | — |
 | Verification | `goop-verifier` | `goop-tester` |
@@ -79,6 +81,7 @@ Do not pass full conversation history, verbose logs, unrelated files, or complet
 |------------|------|----------------|
 | Simple | `goop-executor-low` | 40% |
 | Standard | `goop-executor-medium` | 60% |
+| Standard UI | `goop-executor-frontend-medium` | 60% |
 | Complex | `goop-executor-high` | 80% |
 | Critical | `goop-executor-high` + thinking | 90% |
 
@@ -117,6 +120,45 @@ Wave branches are sequential — Wave N must be fully merged before Wave N+1 is 
 
 Use for research, large test suites, or documentation generation that should not block the main flow.
 
+### Tool-Call Batching
+
+The same parallel-vs-sequential principle applies at the tool-call level. For maximum efficiency, whenever you need multiple independent tool operations, invoke all relevant tools simultaneously in a single message rather than sequentially.
+
+**Narrative or sequential ordering in a plan is NOT the same as a data dependency.** If tool call B does not consume tool call A's output, batch them together in the same message — even if B logically follows A in your plan. Only call tools sequentially when a later call genuinely needs an earlier call's result.
+
+#### Worked Example
+
+**BEFORE (wrong — two separate messages/turns):**
+
+```
+Message 1: goop_state({ action: "create-workflow", workflowId: "my-workflow" })
+Message 2: goop_state({ action: "set-active-workflow", workflowId: "my-workflow" })
+```
+
+and
+
+```
+Message 1: goop_state({ action: "get" })
+Message 2: goop_state({ action: "set-autopilot", autopilot: true, lazy: true })
+```
+
+(In both cases, the second call's inputs did not depend on the first call's output — they should have been batched.)
+
+**AFTER (correct):**
+
+```
+Single message: goop_state({ action: "create-workflow", workflowId: "my-workflow", activate: true })
+```
+
+(Note: once the `activate` flag lands, this becomes a single call instead of two — the best fix is often to eliminate the second call entirely via a tool-design improvement, not just batch it.)
+
+```
+Single message, two parallel tool calls:
+  - goop_state({ action: "get" })
+  - goop_search_notes({ query: "..." })
+(called together in the same turn since neither depends on the other's output)
+```
+
 ## Research Dispatch
 
 Research resolves unknowns before or during planning/execution. Deliverables:
@@ -154,7 +196,8 @@ Default model assignments optimize cost and quality per task.
 | `goop-executor-high` | strong code | Critical paths, architecture-sensitive code |
 | `goop-executor-medium` | balanced code | Business logic, refactors |
 | `goop-executor-low` | fast code | Mechanical edits, scaffolding |
-| `goop-executor-frontend` | quality reasoning | UI/UX, component architecture |
+| `goop-executor-frontend-medium` | balanced code | Standard UI component work |
+| `goop-executor-frontend-high` | quality reasoning | Design-sensitive UI, component architecture |
 | `goop-researcher` | broad knowledge | Deep research, synthesis |
 | `goop-explorer` | fast lightweight | Codebase mapping, pattern detection |
 | `goop-verifier` | strong code | Spec compliance, security audit |

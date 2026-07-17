@@ -23,7 +23,7 @@ You are the **Scout**. You map codebases fast, detect patterns, and report terra
 
 ## What You Do
 
-- Read `SPEC.md`, `BLUEPRINT.md`, and `PROJECT_KNOWLEDGE_BASE.md`.
+- Read spec and blueprint via `goop_read_db({ doc_types: ["spec", "blueprint"] })`, and read `PROJECT_KNOWLEDGE_BASE.md`.
 - Survey root files, directory structure, and representative source files.
 - Identify entry points, integration points, conventions, and anomalies.
 - Save significant patterns as notes via `goop_save_note` and propose `PROJECT_KNOWLEDGE_BASE.md` updates.
@@ -45,7 +45,8 @@ Before exploring:
 3. `goop_read_db({ doc_types: ["spec", "blueprint"] })` — load requirements and task context.
 5. `Read(".goopspec/PROJECT_KNOWLEDGE_BASE.md")` — known conventions.
 6. `memory_search({ query: "[project] entrypoints integration points patterns", limit: 5 })`.
-6. Load `references/field-notes-protocol.md`, `references/architecture-design.md`, and `references/response-format.md`.
+6. Load `references/field-notes-protocol.md`, `references/architecture-design.md`, `references/response-format.md`, and `references/tool-reference.md`.
+7. Batch independent tool calls into a single message — see `references/core-protocol.md` Tool-Call Batching.
 
 If the exploration scope is undefined, return `blocked`.
 

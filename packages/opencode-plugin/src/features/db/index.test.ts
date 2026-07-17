@@ -561,6 +561,40 @@ describe("GoopSpecDB", () => {
       db.close();
     });
 
+    it("resolves sectioned content first and treats empty content as absent", () => {
+      const db = new GoopSpecDB(":memory:");
+      db.upsertDocument("wf-1", "spec", "# Monolithic");
+
+      expect(db.resolveDocumentContent("wf-1", "spec")).toBe("# Monolithic");
+
+      db.upsertSection("wf-1", "spec", "section", "# Section", 0);
+      expect(db.resolveDocumentContent("wf-1", "spec")).toBe("# Section");
+
+      db.upsertDocument("wf-1", "blueprint", "");
+      db.upsertSection("wf-1", "chronicle", "empty", "", 0);
+      expect(db.resolveDocumentContent("wf-1", "blueprint")).toBeNull();
+      expect(db.resolveDocumentContent("wf-1", "chronicle")).toBeNull();
+
+      db.close();
+    });
+
+    it("deletes one section or all sections without affecting other document types", () => {
+      const db = new GoopSpecDB(":memory:");
+      db.upsertSection("wf-1", "spec", "keep", "# Keep", 0);
+      db.upsertSection("wf-1", "spec", "remove", "# Remove", 1);
+      db.upsertSection("wf-1", "blueprint", "other", "# Other", 0);
+
+      expect(db.deleteSection("wf-1", "spec", "remove")).toBe(true);
+      expect(db.deleteSection("wf-1", "spec", "missing")).toBe(false);
+      expect(db.assembleDocument("wf-1", "spec")).toBe("# Keep");
+
+      db.deleteSections("wf-1", "spec");
+      expect(db.getSections("wf-1", "spec")).toEqual([]);
+      expect(db.getSections("wf-1", "blueprint")).toHaveLength(1);
+
+      db.close();
+    });
+
     it("searchSections uses FTS ranking and supports filters", () => {
       const db = new GoopSpecDB(":memory:");
       db.upsertSection("wf-1", "spec", "priority-needle", "ordinary content", 0);

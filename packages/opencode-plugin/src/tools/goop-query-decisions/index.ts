@@ -54,17 +54,28 @@ export function createGoopQueryDecisionsTool(ctx: PluginContext): ToolDefinition
   return tool({
     description:
       "Query structured decisions captured from the Automated Decision Log. " +
-      "Omit workflow_id to search across all workflows.",
+      "Omit workflow_id to search across all workflows.\n\n" +
+      "Args:\n" +
+      "- rule: Optional single rule number to filter by\n" +
+      "- rules: Optional array of rule numbers (union)\n" +
+      "- type: Optional single decision type to filter by\n" +
+      "- types: Optional array of decision types (union)\n" +
+      "- workflow_id: Optional workflow ID filter\n" +
+      "- limit: Optional max results (default 50)",
     args: {
       rule: tool.schema.number().optional(),
+      rules: tool.schema.array(tool.schema.number()).optional(),
       type: tool.schema.string().optional(),
+      types: tool.schema.array(tool.schema.string()).optional(),
       workflow_id: tool.schema.string().optional(),
       limit: tool.schema.number().optional(),
     },
     async execute(
       args: {
         rule?: number;
+        rules?: number[];
         type?: string;
+        types?: string[];
         workflow_id?: string;
         limit?: number;
       },
@@ -74,7 +85,9 @@ export function createGoopQueryDecisionsTool(ctx: PluginContext): ToolDefinition
         const decisions = ctx.db.getDecisions({
           workflowId: args.workflow_id,
           rule: args.rule,
+          rules: args.rules,
           type: args.type,
+          types: args.types,
           limit: args.limit,
         });
 

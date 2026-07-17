@@ -12,8 +12,6 @@ Agents build features in isolation. Tests pass locally, but the feature is unrea
 
 A new MCP tool is built but never added to the plugin's tool registry.
 
-Checks:
-
 - [ ] `src/tools/index.ts` imports the new tool factory.
 - [ ] `createTools()` return object includes the new tool.
 - [ ] `bun run build` succeeds with the new import.
@@ -23,8 +21,6 @@ Checks:
 
 A new handler, page, or slash command is unreachable because the dispatch table was not updated.
 
-Checks:
-
 - [ ] Command/handler file exists.
 - [ ] It is listed in command discovery or the router config.
 - [ ] The resolver can resolve the new name.
@@ -33,8 +29,6 @@ Checks:
 ### Pattern 3: New Agent/Skill Not Referenced in Orchestrator or AGENTS.md
 
 A new agent or skill has no dispatch path.
-
-Checks:
 
 - [ ] Agent/skill file exists with correct naming.
 - [ ] Orchestrator delegation table includes the new agent.
@@ -46,8 +40,6 @@ Checks:
 
 A configuration field exists but nothing reads or acts on it.
 
-Checks:
-
 - [ ] Field is defined in the type/schema.
 - [ ] At least one mutation path sets it.
 - [ ] At least one consumer reads it and changes behavior.
@@ -58,8 +50,6 @@ Checks:
 
 A module works internally but isn't re-exported from `src/index.ts`.
 
-Checks:
-
 - [ ] Public API is exported from `src/index.ts`.
 - [ ] `bun run build` includes it in `dist/`.
 - [ ] No "unused export" warnings.
@@ -67,7 +57,7 @@ Checks:
 
 ## Wiring Verification Summary
 
-Run through this checklist before marking a feature complete:
+Before marking a feature complete:
 
 - [ ] **Registry** — new tools, commands, or handlers registered in their index/router.
 - [ ] **Routing** — at least one dispatch path reaches the new code.
@@ -79,18 +69,7 @@ Run through this checklist before marking a feature complete:
 
 ## Handoff Protocol
 
-The Handoff Protocol ensures clean context transitions between sessions.
-
-### When to Generate a Handoff
-
-Mandatory at:
-
-- Phase completion.
-- Wave completion.
-- Checkpoint reached.
-- Context getting full.
-
-Optional at natural pauses or complex task boundaries.
+Mandatory handoffs at phase completion, wave completion, checkpoint reached, or when context is getting full. Optional at natural pauses.
 
 ### HANDOFF.md Structure
 
@@ -159,7 +138,7 @@ Optional at natural pauses or complex task boundaries.
 
 ### Subagent Responsibilities
 
-Return `suggest_new_session: true` in the response envelope when:
+Return `suggest_new_session: true` when:
 
 - A complex task is completed.
 - Significant context has accumulated.

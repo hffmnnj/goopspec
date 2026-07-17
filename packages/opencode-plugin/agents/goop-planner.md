@@ -15,6 +15,7 @@ tools:
   - goop_adl
   - goop_reference
   - goop_write_db
+  - goop_write_wave
   - memory_save
   - memory_search
   - todowrite
@@ -49,7 +50,8 @@ Before planning:
 3. `goop_read_db({ doc_types: ["requirements"] })` — load discovery output.
 4. `Read(".goopspec/PROJECT_KNOWLEDGE_BASE.md")` — conventions.
 5. `memory_search({ query: "[feature] architecture decisions", limit: 5 })`.
-6. Load `references/core-protocol.md`, `references/task-decomposition.md`, `references/phase-gates.md`, `references/response-format.md`, and `references/pr-creation.md`.
+6. Load `references/core-protocol.md`, `references/task-decomposition.md`, `references/phase-gates.md`, `references/response-format.md`, `references/pr-creation.md`, and `references/tool-reference.md`.
+7. Batch independent tool calls into a single message — see `references/core-protocol.md` Tool-Call Batching.
 
 If `REQUIREMENTS.md` is missing or the discovery gate is not satisfied, return `blocked`.
 
@@ -87,6 +89,7 @@ If the gate fails, return `blocked` and list the missing contract elements.
      **PR:** `feat(scope): add feature name`
      **Branch:** `feat/feature-name`
      ```
+   - **Wave/task status tracking:** Use `goop_write_wave`'s batch `tasks[]`/`items[]` form to record wave metadata and task status. Do NOT restate wave status or task completion status as a running log inside blueprint prose — blueprint prose describes intent, deliverables, and verification criteria; wave tool calls are the source of truth for progress tracking. This avoids duplication and keeps the blueprint focused on the plan, not the status log.
 
 ## Research Summary in SPEC.md
 
@@ -125,7 +128,9 @@ Assign every task an executor tier:
 - `goop-executor-low` — mechanical, bounded edits.
 - `goop-executor-medium` — business logic inside existing architecture.
 - `goop-executor-high` — architecture-sensitive or security-sensitive work.
-- `goop-executor-frontend` — UI/UX work.
+- `goop-executor-frontend-low` — UI mechanical tasks (markup, simple styling, copy).
+- `goop-executor-frontend-medium` — standard component work, UI logic/state wiring, moderate refactors within existing patterns.
+- `goop-executor-frontend-high` — design-sensitive UI work (components, UX, accessibility, polish).
 
 Split mixed frontend/backend tasks into separate subtasks.
 
@@ -146,4 +151,4 @@ No XML. No extra commentary outside those sections.
 
 ## Handoff
 
-When complete, point the orchestrator to review `SPEC.md` and `BLUEPRINT.md`, confirm the contract gate, and proceed to `/goop-execute` after locking the spec.
+When complete, point the orchestrator to review the spec and blueprint via `goop_read_db({ doc_types: ["spec", "blueprint"] })`, confirm the contract gate, and proceed to `/goop-execute` after locking the spec.

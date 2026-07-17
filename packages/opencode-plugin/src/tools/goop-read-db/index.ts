@@ -20,12 +20,7 @@ import type { DocType } from "../../features/db/types.js";
 
 export function createGoopReadDbTool(ctx: PluginContext): ToolDefinition {
   function readDocumentContent(workflowId: string, docType: DocType): string | null {
-    const docSections = ctx.db.getSections(workflowId, docType);
-    if (docSections.length > 0) {
-      return ctx.db.assembleDocument(workflowId, docType);
-    }
-
-    return ctx.db.getDocument(workflowId, docType)?.content ?? null;
+    return ctx.db.resolveDocumentContent(workflowId, docType);
   }
 
   return tool({

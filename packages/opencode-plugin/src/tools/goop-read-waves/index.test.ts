@@ -101,4 +101,32 @@ describe("goop_read_waves tool", () => {
     expect(result).toContain("- progress: 1/3 tasks complete");
     expect(result).toContain("- 1. [done] One");
   });
+
+  // -----------------------------------------------------------------------
+  // Batch mode
+  // -----------------------------------------------------------------------
+
+  it("reads multiple waves in one call using wave_numbers", async () => {
+    const writeTool = createGoopWriteWaveTool(ctx);
+    await writeTool.execute({ wave_number: 1, title: "First", status: "done" }, toolCtx);
+    await writeTool.execute({ wave_number: 2, title: "Second", status: "in_progress" }, toolCtx);
+    await writeTool.execute({ wave_number: 3, title: "Third", status: "pending" }, toolCtx);
+
+    const readTool = createGoopReadWavesTool(ctx);
+    const result = String(await readTool.execute({ wave_numbers: [1, 3] }, toolCtx));
+
+    expect(result).toContain("## Wave 1: First");
+    expect(result).toContain("## Wave 3: Third");
+    expect(result).not.toContain("## Wave 2: Second");
+  });
+
+  it("falls back to all waves when wave_numbers is empty", async () => {
+    const writeTool = createGoopWriteWaveTool(ctx);
+    await writeTool.execute({ wave_number: 1, title: "First", status: "done" }, toolCtx);
+
+    const readTool = createGoopReadWavesTool(ctx);
+    const result = String(await readTool.execute({ wave_numbers: [] }, toolCtx));
+
+    expect(result).toContain("## Wave 1: First");
+  });
 });
