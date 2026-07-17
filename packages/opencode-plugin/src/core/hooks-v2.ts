@@ -5,11 +5,17 @@
  * merged Hooks object once, then adapts the runtime events supplied by V2.
  */
 
+import { getEffectiveThinkingLevels } from "../features/setup/index.js";
+import { type CapabilityResult, resolveCapabilities } from "../features/thinking/capability.js";
+import { resolveThinkingValue } from "../features/thinking/resolve.js";
 import { DEFAULT_HOOK_FACTORIES, createHooks } from "../hooks/index.js";
 import type { Hooks } from "../hooks/types.js";
 import { log, logError } from "../shared/logger.js";
+import { AGENT_ROLES, type AgentRole } from "./constants.js";
 import type { PluginContext } from "./types.js";
 import type {
+  V2AgentDraft,
+  V2CatalogDraft,
   V2RuntimeContext,
   V2SessionRequestEvent,
   V2ToolExecuteAfterEvent,
@@ -35,6 +41,11 @@ type V1ToolAfterOutput = {
 
 interface PendingToolCall {
   readonly input: V1ToolInput;
+}
+
+export interface V2HooksRegistration {
+  reloadThinkingLevels(): Promise<void>;
+  dispose(): Promise<void>;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -113,6 +124,106 @@ function createToolCallQueue(): {
   };
 }
 
+function getGoopRole(agentID: string): AgentRole | undefined {
+  if (!agentID.startsWith("goop-")) return undefined;
+  const role = agentID.slice("goop-".length);
+  return (AGENT_ROLES as readonly string[]).includes(role) ? (role as AgentRole) : undefined;
+}
+
+function catalogKey(providerID: string, modelID: string): string {
+  return `${providerID}\u0000${modelID}`;
+}
+
+function captureCatalogCapabilities(
+  draft: V2CatalogDraft,
+  capabilitiesByModel: Map<string, CapabilityResult>,
+): void {
+  capabilitiesByModel.clear();
+  for (const record of draft.provider.list()) {
+    for (const [modelID, model] of record.models) {
+      capabilitiesByModel.set(catalogKey(record.provider.id, modelID), resolveCapabilities(model));
+    }
+  }
+}
+
+function applyThinkingLevelsToAgents(
+  draft: V2AgentDraft,
+  ctx: PluginContext,
+  capabilitiesByModel: ReadonlyMap<string, CapabilityResult>,
+): void {
+  const levels = getEffectiveThinkingLevels(ctx.sdk.directory);
+
+  for (const candidate of draft.list()) {
+    const role = getGoopRole(candidate.id);
+    const model = candidate.model;
+    if (!role || !model) continue;
+
+    const capabilities = capabilitiesByModel.get(catalogKey(model.providerID, model.id));
+    const resolution = resolveThinkingValue(
+      levels[role],
+      capabilities ?? resolveCapabilities(undefined),
+    );
+    if (resolution.apply === null) {
+      logError(
+        `GoopSpec ${candidate.id}: ${resolution.warning ?? "preserving the provider default."}`,
+      );
+      continue;
+    }
+
+    if (typeof resolution.apply === "string") continue;
+    const variant = resolution.apply;
+    draft.update(candidate.id, (agent) => {
+      agent.request.headers = { ...agent.request.headers, ...variant.headers };
+      agent.request.body = { ...agent.request.body, ...variant.body };
+      if (agent.model) agent.model.variant = variant.id;
+    });
+  }
+}
+
+async function registerThinkingLevelAgentTransform(
+  runtimeCtx: V2RuntimeContext,
+  ctx: PluginContext,
+): Promise<() => Promise<void>> {
+  const agentCapability = runtimeCtx.agent;
+  const catalogCapability = runtimeCtx.catalog;
+  if (
+    !agentCapability ||
+    typeof agentCapability.transform !== "function" ||
+    !catalogCapability ||
+    typeof catalogCapability.transform !== "function"
+  ) {
+    log("V2 thinking-level transform skipped: agent or catalog capability is unavailable");
+    return async () => {};
+  }
+
+  const capabilitiesByModel = new Map<string, CapabilityResult>();
+  try {
+    await catalogCapability.transform((draft) => {
+      captureCatalogCapabilities(draft, capabilitiesByModel);
+    });
+    await agentCapability.transform((draft) => {
+      applyThinkingLevelsToAgents(draft, ctx, capabilitiesByModel);
+    });
+  } catch (error) {
+    logError("V2 thinking-level agent transform registration failed", error);
+  }
+
+  return async (): Promise<void> => {
+    try {
+      await catalogCapability.transform((draft) => {
+        captureCatalogCapabilities(draft, capabilitiesByModel);
+      });
+      await agentCapability.transform((draft) => {
+        applyThinkingLevelsToAgents(draft, ctx, capabilitiesByModel);
+      });
+      if (typeof catalogCapability.reload === "function") await catalogCapability.reload();
+      if (typeof agentCapability.reload === "function") await agentCapability.reload();
+    } catch (error) {
+      logError("V2 thinking-level live reload failed", error);
+    }
+  };
+}
+
 /**
  * Register V1 GoopSpec hook behavior with documented V2 runtime hooks.
  *
@@ -124,10 +235,12 @@ function createToolCallQueue(): {
 export async function registerHooksV2(
   runtimeCtx: V2RuntimeContext,
   ctx: PluginContext,
-): Promise<void> {
+): Promise<V2HooksRegistration> {
   const hooks = createHooks(ctx, [...DEFAULT_HOOK_FACTORIES]);
   const sessionCapability = runtimeCtx.session;
   const toolCapability = runtimeCtx.tool;
+
+  const reloadThinkingLevels = await registerThinkingLevelAgentTransform(runtimeCtx, ctx);
 
   if (hooks["experimental.chat.system.transform"]) {
     if (!sessionCapability || typeof sessionCapability.hook !== "function") {
@@ -148,11 +261,13 @@ export async function registerHooksV2(
 
   const before = hooks["tool.execute.before"];
   const after = hooks["tool.execute.after"];
-  if (!before && !after) return;
+  if (!before && !after) {
+    return { reloadThinkingLevels, dispose: async () => {} };
+  }
 
   if (!toolCapability || typeof toolCapability.hook !== "function") {
     logError("V2 tool hook registration skipped: runtime tool capability is unavailable");
-    return;
+    return { reloadThinkingLevels, dispose: async () => {} };
   }
 
   const queue = createToolCallQueue();
@@ -185,4 +300,6 @@ export async function registerHooksV2(
       "experimental.session.compacting",
     ],
   });
+
+  return { reloadThinkingLevels, dispose: async () => {} };
 }

@@ -366,6 +366,20 @@ export function normalizeConfig(raw: Record<string, unknown>): GoopConfig {
   if (typeof raw.memoryEnabled === "boolean") config.memoryEnabled = raw.memoryEnabled;
   if (typeof raw.gitignoreGoopspec === "boolean") config.gitignoreGoopspec = raw.gitignoreGoopspec;
 
+  // New format: agentThinkingBudgets (bare role → numeric budget, legacy compatibility)
+  if (raw.agentThinkingBudgets && typeof raw.agentThinkingBudgets === "object") {
+    config.agentThinkingBudgets = {};
+    for (const [role, budget] of Object.entries(
+      raw.agentThinkingBudgets as Record<string, unknown>,
+    )) {
+      if (typeof budget === "number" && !Number.isNaN(budget)) {
+        config.agentThinkingBudgets[role] = budget;
+      } else {
+        logError(`normalizeConfig: agentThinkingBudgets["${role}"] must be a number — skipping.`);
+      }
+    }
+  }
+
   // New format: agentThinkingLevels (bare role → canonical thinking level)
   if (raw.agentThinkingLevels && typeof raw.agentThinkingLevels === "object") {
     config.agentThinkingLevels = {};
