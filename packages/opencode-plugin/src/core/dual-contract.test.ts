@@ -188,18 +188,18 @@ describe("dual-contract parity", () => {
     expect(typeof plugin.setup).toBe("function");
   });
 
-  it("V1 path returns the canonical 31-tool set", async () => {
+  it("V1 path returns the canonical 32-tool set", async () => {
     const input = createV1MockPluginInput(testDir);
     const result = await plugin(input);
 
     expect(result.tool).toBeDefined();
-    expect(Object.keys(result.tool ?? {})).toHaveLength(32);
+    expect(Object.keys(result.tool ?? {})).toHaveLength(33);
 
     const directTools = Object.keys(createTools(createMockPluginContext({ testDir }))).sort();
     expect(Object.keys(result.tool ?? {}).sort()).toEqual(directTools);
   });
 
-  it("V2 setup registers the same 31 tools as the V1 path", async () => {
+  it("V2 setup registers the same 32 tools as the V1 path", async () => {
     const registrations: { tools: Record<string, V2ToolLike>; systemHook?: unknown } = {
       tools: {},
     };
@@ -209,7 +209,7 @@ describe("dual-contract parity", () => {
     const v2Tools = Object.keys(registrations.tools).sort();
 
     expect(v2Tools).toEqual(v1Tools);
-    expect(v2Tools).toHaveLength(32);
+    expect(v2Tools).toHaveLength(33);
   });
 
   it("goop_status produces identical text through V1 and V2", async () => {

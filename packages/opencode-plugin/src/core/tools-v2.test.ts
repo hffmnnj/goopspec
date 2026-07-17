@@ -48,7 +48,7 @@ describe("registerToolsV2()", () => {
     expect(registrations.map((definition) => definition.name).sort()).toEqual(
       Object.keys(createTools(ctx)).sort(),
     );
-    expect(registrations).toHaveLength(32);
+    expect(registrations).toHaveLength(33);
   });
 
   it("converts goop_status arguments with Zod's native JSON Schema support", () => {

@@ -106,13 +106,13 @@ describe("createPluginContext()", () => {
     expect(Number.isNaN(Date.parse(ctx.session.startedAt))).toBe(false);
   });
 
-  it("produces a context that createTools accepts (31 tools)", async () => {
+  it("produces a context that createTools accepts (32 tools)", async () => {
     const input = createMockPluginInput(testDir);
     const ctx = await createPluginContext(input);
     const tools = createTools(ctx);
 
     const toolNames = Object.keys(tools);
-    expect(toolNames).toHaveLength(32);
+    expect(toolNames).toHaveLength(33);
     expect(toolNames).toContain("goop_status");
     expect(toolNames).toContain("goop_state");
     expect(toolNames).toContain("goop_get_global_config");
