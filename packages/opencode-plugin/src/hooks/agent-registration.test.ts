@@ -231,7 +231,8 @@ describe("createAgentRegistrationHook", () => {
 
       await hooks.config?.(config);
       expect(
-        (config.agent?.["goop-orchestrator"] as Record<string, unknown> | undefined)?.thinkingBudget,
+        (config.agent?.["goop-orchestrator"] as Record<string, unknown> | undefined)
+          ?.thinkingBudget,
       ).toBeUndefined();
 
       await withProviderCatalog(
