@@ -129,6 +129,14 @@ export const AGENT_ROLES = [
 
 export type AgentRole = (typeof AGENT_ROLES)[number];
 
+/** Roles that do wide-but-shallow exploration default to medium thinking. */
+const MEDIUM_THINKING_ROLES = new Set<AgentRole>(["explorer", "researcher"]);
+
+/** Default thinking level for each canonical agent role. */
+export const DEFAULT_THINKING_LEVELS: Record<AgentRole, "medium" | "high"> = Object.fromEntries(
+  AGENT_ROLES.map((role) => [role, MEDIUM_THINKING_ROLES.has(role) ? "medium" : "high"]),
+) as Record<AgentRole, "medium" | "high">;
+
 // ---------------------------------------------------------------------------
 // Token budgets
 // ---------------------------------------------------------------------------

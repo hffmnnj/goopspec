@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
+import { AGENT_ROLES, DEFAULT_THINKING_LEVELS } from "../../core/constants.js";
 import type { StateManager } from "../../core/types.js";
 import { createMockStateManager, setupTestEnvironment } from "../../test-utils.js";
 import { CURRENT_SCHEMA_VERSION } from "../db/migrations.js";
@@ -12,6 +13,7 @@ import {
   ensureGitignoreEntry,
   formatModelInfo,
   getEffectiveModelMap,
+  getEffectiveThinkingLevels,
   getStatus,
   init,
   loadMergedConfig,
@@ -312,6 +314,86 @@ describe("setup feature", () => {
       expect(output).toContain("orchestrator");
       expect(output).toContain("executor-low");
       expect(output).toContain("executor-high");
+    });
+  });
+
+  // =========================================================================
+  // thinking levels (MH5)
+  // =========================================================================
+
+  describe("thinking levels", () => {
+    const origGlobalPath = process.env.GOOPSPEC_GLOBAL_CONFIG_PATH;
+
+    beforeEach(() => {
+      process.env.GOOPSPEC_GLOBAL_CONFIG_PATH = join(testDir, "nonexistent-global.json");
+    });
+
+    afterEach(() => {
+      if (origGlobalPath === undefined) {
+        Reflect.deleteProperty(process.env, "GOOPSPEC_GLOBAL_CONFIG_PATH");
+      } else {
+        process.env.GOOPSPEC_GLOBAL_CONFIG_PATH = origGlobalPath;
+      }
+    });
+
+    it("DEFAULT_THINKING_LEVELS derives from AGENT_ROLES", () => {
+      for (const role of AGENT_ROLES) {
+        expect(DEFAULT_THINKING_LEVELS[role]).toSatisfy(
+          (level: string | undefined) =>
+            level != null && THINKING_LEVELS.includes(level as (typeof THINKING_LEVELS)[number]),
+        );
+      }
+    });
+
+    it("explorer and researcher default to medium; every other role defaults to high", () => {
+      for (const role of AGENT_ROLES) {
+        const expected = role === "explorer" || role === "researcher" ? "medium" : "high";
+        expect(DEFAULT_THINKING_LEVELS[role]).toBe(expected);
+      }
+    });
+
+    it("getEffectiveThinkingLevels returns built-in defaults with no config", () => {
+      const emptyDir = join(testDir, "no-thinking-config");
+      mkdirSync(emptyDir, { recursive: true });
+      const levels = getEffectiveThinkingLevels(emptyDir);
+      expect(levels.orchestrator).toBe("high");
+      expect(levels.explorer).toBe("medium");
+      expect(levels.researcher).toBe("medium");
+      expect(levels["executor-high"]).toBe("high");
+    });
+
+    it("getEffectiveThinkingLevels applies per-role config overrides", () => {
+      writeConfig(testDir, {
+        agentThinkingLevels: { orchestrator: "low", researcher: "xhigh", explorer: "high" },
+      });
+      const levels = getEffectiveThinkingLevels(testDir);
+      expect(levels.orchestrator).toBe("low");
+      expect(levels.researcher).toBe("xhigh");
+      expect(levels.explorer).toBe("high");
+      expect(levels["executor-medium"]).toBe("high");
+    });
+
+    it("getEffectiveThinkingLevels ignores unknown roles in config", () => {
+      writeConfig(testDir, {
+        agentThinkingLevels: { orchestrator: "low", "future-role": "xhigh" },
+      });
+      const levels = getEffectiveThinkingLevels(testDir);
+      expect(levels.orchestrator).toBe("low");
+      expect((levels as Record<string, unknown>)["future-role"]).toBeUndefined();
+    });
+
+    it("getEffectiveThinkingLevels ignores invalid levels in merged config", () => {
+      const freshDir = join(testDir, "invalid-thinking-levels");
+      mkdirSync(join(freshDir, ".goopspec"), { recursive: true });
+      process.env.GOOPSPEC_GLOBAL_CONFIG_PATH = join(freshDir, "nonexistent-global.json");
+
+      // Bypass normalization to simulate a corrupted config file
+      writeFileSync(
+        join(freshDir, "goopspec.json"),
+        JSON.stringify({ agentThinkingLevels: { orchestrator: "extreme" } }),
+      );
+      const levels = getEffectiveThinkingLevels(freshDir);
+      expect(levels.orchestrator).toBe("high");
     });
   });
 

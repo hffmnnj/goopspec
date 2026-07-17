@@ -14,7 +14,7 @@
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { basename, join } from "node:path";
 
-import { AGENT_ROLES, GOOPSPEC_DIR } from "../../core/constants.js";
+import { AGENT_ROLES, DEFAULT_THINKING_LEVELS, GOOPSPEC_DIR } from "../../core/constants.js";
 import type { AgentRole } from "../../core/constants.js";
 import type { StateManager } from "../../core/types.js";
 import { log, logError } from "../../shared/logger.js";
@@ -510,6 +510,29 @@ export function getEffectiveModelMap(projectDir: string): Record<string, string>
   if (config?.agentModels) {
     for (const [role, model] of Object.entries(config.agentModels)) {
       if (model) base[role] = model;
+    }
+  }
+
+  return base;
+}
+
+/**
+ * Return the effective thinking-level map: built-in role defaults merged with
+ * user overrides from all config sources. Values are plain canonical labels.
+ */
+export function getEffectiveThinkingLevels(projectDir: string): Record<AgentRole, ThinkingLevel> {
+  const config = loadMergedConfig(projectDir);
+  const base: Record<AgentRole, ThinkingLevel> = { ...DEFAULT_THINKING_LEVELS };
+
+  if (config?.agentThinkingLevels) {
+    for (const [role, level] of Object.entries(config.agentThinkingLevels)) {
+      if (
+        level &&
+        (AGENT_ROLES as readonly string[]).includes(role) &&
+        (THINKING_LEVELS as readonly string[]).includes(level)
+      ) {
+        base[role as AgentRole] = level;
+      }
     }
   }
 
