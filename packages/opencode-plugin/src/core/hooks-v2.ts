@@ -43,6 +43,11 @@ interface PendingToolCall {
   readonly input: V1ToolInput;
 }
 
+export interface V2HooksRegistration {
+  reloadThinkingLevels(): Promise<void>;
+  dispose(): Promise<void>;
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -178,7 +183,7 @@ function applyThinkingLevelsToAgents(
 async function registerThinkingLevelAgentTransform(
   runtimeCtx: V2RuntimeContext,
   ctx: PluginContext,
-): Promise<void> {
+): Promise<() => Promise<void>> {
   const agentCapability = runtimeCtx.agent;
   const catalogCapability = runtimeCtx.catalog;
   if (
@@ -188,7 +193,7 @@ async function registerThinkingLevelAgentTransform(
     typeof catalogCapability.transform !== "function"
   ) {
     log("V2 thinking-level transform skipped: agent or catalog capability is unavailable");
-    return;
+    return async () => {};
   }
 
   const capabilitiesByModel = new Map<string, CapabilityResult>();
@@ -202,6 +207,21 @@ async function registerThinkingLevelAgentTransform(
   } catch (error) {
     logError("V2 thinking-level agent transform registration failed", error);
   }
+
+  return async (): Promise<void> => {
+    try {
+      await catalogCapability.transform((draft) => {
+        captureCatalogCapabilities(draft, capabilitiesByModel);
+      });
+      await agentCapability.transform((draft) => {
+        applyThinkingLevelsToAgents(draft, ctx, capabilitiesByModel);
+      });
+      if (typeof catalogCapability.reload === "function") await catalogCapability.reload();
+      if (typeof agentCapability.reload === "function") await agentCapability.reload();
+    } catch (error) {
+      logError("V2 thinking-level live reload failed", error);
+    }
+  };
 }
 
 /**
@@ -215,12 +235,12 @@ async function registerThinkingLevelAgentTransform(
 export async function registerHooksV2(
   runtimeCtx: V2RuntimeContext,
   ctx: PluginContext,
-): Promise<void> {
+): Promise<V2HooksRegistration> {
   const hooks = createHooks(ctx, [...DEFAULT_HOOK_FACTORIES]);
   const sessionCapability = runtimeCtx.session;
   const toolCapability = runtimeCtx.tool;
 
-  await registerThinkingLevelAgentTransform(runtimeCtx, ctx);
+  const reloadThinkingLevels = await registerThinkingLevelAgentTransform(runtimeCtx, ctx);
 
   if (hooks["experimental.chat.system.transform"]) {
     if (!sessionCapability || typeof sessionCapability.hook !== "function") {
@@ -241,11 +261,13 @@ export async function registerHooksV2(
 
   const before = hooks["tool.execute.before"];
   const after = hooks["tool.execute.after"];
-  if (!before && !after) return;
+  if (!before && !after) {
+    return { reloadThinkingLevels, dispose: async () => {} };
+  }
 
   if (!toolCapability || typeof toolCapability.hook !== "function") {
     logError("V2 tool hook registration skipped: runtime tool capability is unavailable");
-    return;
+    return { reloadThinkingLevels, dispose: async () => {} };
   }
 
   const queue = createToolCallQueue();
@@ -278,4 +300,6 @@ export async function registerHooksV2(
       "experimental.session.compacting",
     ],
   });
+
+  return { reloadThinkingLevels, dispose: async () => {} };
 }

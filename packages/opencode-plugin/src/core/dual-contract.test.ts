@@ -521,7 +521,10 @@ describe("dual-contract parity", () => {
         session: { hook: async () => {} },
       } as unknown as V2RuntimeContext;
 
-      await expect(registerHooksV2(runtime, ctx)).resolves.toBeUndefined();
+      await expect(registerHooksV2(runtime, ctx)).resolves.toEqual({
+        reloadThinkingLevels: expect.any(Function),
+        dispose: expect.any(Function),
+      });
     } finally {
       env.cleanup();
     }
@@ -543,7 +546,10 @@ describe("dual-contract parity", () => {
         },
       } as unknown as V2RuntimeContext;
 
-      await expect(registerHooksV2(runtime, ctx)).resolves.toBeUndefined();
+      await expect(registerHooksV2(runtime, ctx)).resolves.toEqual({
+        reloadThinkingLevels: expect.any(Function),
+        dispose: expect.any(Function),
+      });
     } finally {
       env.cleanup();
     }

@@ -26,9 +26,16 @@ interface Registrations {
   after?: (event: V2ToolExecuteAfterEvent) => void | Promise<void>;
   agentTransform?: (draft: V2AgentDraft) => void | Promise<void>;
   catalogTransform?: (draft: V2CatalogDraft) => void | Promise<void>;
+  agentTransforms: number;
+  catalogTransforms: number;
+  agentReloads: number;
+  catalogReloads: number;
 }
 
-function createRuntimeContext(registrations: Registrations): V2RuntimeContext {
+function createRuntimeContext(
+  registrations: Registrations,
+  drafts: { agent?: V2AgentDraft; catalog?: V2CatalogDraft } = {},
+): V2RuntimeContext {
   return {
     session: {
       create: async () => ({}),
@@ -65,15 +72,23 @@ function createRuntimeContext(registrations: Registrations): V2RuntimeContext {
     },
     agent: {
       transform: async (callback: (draft: V2AgentDraft) => void | Promise<void>) => {
+        registrations.agentTransforms++;
         registrations.agentTransform = callback;
+        if (drafts.agent) await callback(drafts.agent);
       },
-      reload: async () => {},
+      reload: async () => {
+        registrations.agentReloads++;
+      },
     },
     catalog: {
       transform: async (callback: (draft: V2CatalogDraft) => void | Promise<void>) => {
+        registrations.catalogTransforms++;
         registrations.catalogTransform = callback;
+        if (drafts.catalog) await callback(drafts.catalog);
       },
-      reload: async () => {},
+      reload: async () => {
+        registrations.catalogReloads++;
+      },
     },
   } as unknown as V2RuntimeContext;
 }
@@ -89,7 +104,12 @@ describe("registerHooksV2()", () => {
   it("registers the system transform and reuses its canonical V1 handler", async () => {
     const ctx = createMockPluginContext();
     contexts.push(ctx);
-    const registrations: Registrations = {};
+    const registrations: Registrations = {
+      agentTransforms: 0,
+      catalogTransforms: 0,
+      agentReloads: 0,
+      catalogReloads: 0,
+    };
     const v1System: string[] = [];
     const v2System: string[] = [];
 
@@ -108,7 +128,12 @@ describe("registerHooksV2()", () => {
   it("registers lifecycle hooks and adapts their V1 mutations", async () => {
     const ctx = createMockPluginContext();
     contexts.push(ctx);
-    const registrations: Registrations = {};
+    const registrations: Registrations = {
+      agentTransforms: 0,
+      catalogTransforms: 0,
+      agentReloads: 0,
+      catalogReloads: 0,
+    };
     const v1Hooks = createHooks(ctx, [...DEFAULT_HOOK_FACTORIES]);
 
     await registerHooksV2(createRuntimeContext(registrations), ctx);
@@ -151,7 +176,82 @@ describe("registerHooksV2()", () => {
     const ctx = createMockPluginContext();
     contexts.push(ctx);
 
-    await expect(registerHooksV2({} as V2RuntimeContext, ctx)).resolves.toBeUndefined();
+    await expect(registerHooksV2({} as V2RuntimeContext, ctx)).resolves.toEqual({
+      reloadThinkingLevels: expect.any(Function),
+      dispose: expect.any(Function),
+    });
+  });
+
+  it("re-runs transforms with changed config before reloading capabilities", async () => {
+    const env = setupTestEnvironment("v2-thinking-live-reload");
+    const ctx = createMockPluginContext({ testDir: env.testDir, db: env.db });
+    contexts.push(ctx);
+    writeFileSync(
+      join(ctx.sdk.directory, "goopspec.json"),
+      JSON.stringify({ agentThinkingLevels: { "executor-high": "medium" } }),
+    );
+    const agent: V2AgentInfo = {
+      id: "goop-executor-high",
+      model: { providerID: "openai", id: "gpt-test" },
+      request: { headers: {}, body: {} },
+    };
+    const catalog: V2CatalogDraft = {
+      provider: {
+        list: () => [
+          {
+            provider: { id: "openai" },
+            models: new Map([
+              [
+                "gpt-test",
+                {
+                  variants: [
+                    { id: "medium", headers: {}, body: { reasoning_effort: "medium" } },
+                    { id: "high", headers: {}, body: { reasoning_effort: "high" } },
+                  ],
+                },
+              ],
+            ]),
+          },
+        ],
+      },
+    };
+    const agents: V2AgentDraft = {
+      list: () => [agent],
+      update: (_id, update) => update(agent),
+    };
+    const registrations: Registrations = {
+      agentTransforms: 0,
+      catalogTransforms: 0,
+      agentReloads: 0,
+      catalogReloads: 0,
+    };
+
+    const hooks = await registerHooksV2(
+      createRuntimeContext(registrations, { agent: agents, catalog }),
+      ctx,
+    );
+    expect(agent.model?.variant).toBe("medium");
+    writeFileSync(
+      join(ctx.sdk.directory, "goopspec.json"),
+      JSON.stringify({ agentThinkingLevels: { "executor-high": "high" } }),
+    );
+    await hooks.reloadThinkingLevels();
+
+    expect(registrations.catalogTransforms).toBe(2);
+    expect(registrations.agentTransforms).toBe(2);
+    expect(agent.model?.variant).toBe("high");
+    expect(agent.request.body.reasoning_effort).toBe("high");
+    expect(registrations.catalogReloads).toBe(1);
+    expect(registrations.agentReloads).toBe(1);
+    env.cleanup();
+  });
+
+  it("degrades without throwing when reloading absent capabilities", async () => {
+    const ctx = createMockPluginContext();
+    contexts.push(ctx);
+
+    const hooks = await registerHooksV2({} as V2RuntimeContext, ctx);
+    await expect(hooks.reloadThinkingLevels()).resolves.toBeUndefined();
   });
 
   it("applies the selected catalog variant body and headers to GoopSpec agents", async () => {
@@ -161,7 +261,12 @@ describe("registerHooksV2()", () => {
       join(ctx.sdk.directory, "goopspec.json"),
       JSON.stringify({ agentThinkingLevels: { "executor-high": "medium" } }),
     );
-    const registrations: Registrations = {};
+    const registrations: Registrations = {
+      agentTransforms: 0,
+      catalogTransforms: 0,
+      agentReloads: 0,
+      catalogReloads: 0,
+    };
 
     await registerHooksV2(createRuntimeContext(registrations), ctx);
     const agent: V2AgentInfo = {

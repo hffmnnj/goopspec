@@ -92,8 +92,9 @@ export function createAgentRegistrationHook(ctx: PluginContext): Partial<Hooks> 
         });
       }
     },
-    // V1 config registration is startup-only. This hook applies options to
-    // future requests; changing agent-menu metadata still requires a restart.
+    // V1 config registration is startup-only. Agent-menu metadata cannot be
+    // re-registered live, so menu changes require a restart. This hook reads
+    // uncached config on every future request, allowing option changes live.
     "chat.params": async (input, output): Promise<void> => {
       const role = getGoopRole(input.agent);
       if (!role) return;
