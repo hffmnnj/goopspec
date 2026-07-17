@@ -7,6 +7,17 @@ import type { SdkConfig } from "../core/sdk-compat.js";
 import { createMockPluginContext, setupTestEnvironment } from "../test-utils.js";
 import { createAgentRegistrationHook } from "./agent-registration.js";
 
+function withProviderCatalog<T>(
+  ctx: ReturnType<typeof createMockPluginContext>,
+  catalog: unknown,
+  run: () => Promise<T>,
+): Promise<T> {
+  (ctx.sdk.client as unknown as { config: { providers: () => Promise<unknown> } }).config = {
+    providers: async () => ({ data: catalog }),
+  };
+  return run();
+}
+
 describe("createAgentRegistrationHook", () => {
   it("exposes a config hook", () => {
     const { testDir, cleanup } = setupTestEnvironment("agent-reg");
@@ -199,6 +210,118 @@ describe("createAgentRegistrationHook", () => {
       } else {
         process.env.GOOPSPEC_GLOBAL_CONFIG_PATH = origGlobalPath;
       }
+      cleanup();
+    }
+  });
+
+  it("applies a verified V1 thinking option to future GoopSpec turns", async () => {
+    const { testDir, cleanup } = setupTestEnvironment("agent-reg-thinking-v1");
+    const originalGlobalPath = process.env.GOOPSPEC_GLOBAL_CONFIG_PATH;
+    try {
+      process.env.GOOPSPEC_GLOBAL_CONFIG_PATH = join(testDir, "no-global-config.json");
+      writeFileSync(
+        join(testDir, "goopspec.json"),
+        JSON.stringify({ agentThinkingLevels: { orchestrator: "high" } }),
+        "utf-8",
+      );
+      const ctx = createMockPluginContext({ testDir });
+      const hooks = createAgentRegistrationHook(ctx);
+      const config: SdkConfig = {};
+      const output = { temperature: 0, topP: 0, topK: 0, maxOutputTokens: undefined, options: {} };
+
+      await hooks.config?.(config);
+      expect(
+        (config.agent?.["goop-orchestrator"] as Record<string, unknown> | undefined)?.thinkingBudget,
+      ).toBeUndefined();
+
+      await withProviderCatalog(
+        ctx,
+        {
+          providers: [
+            {
+              id: "anthropic",
+              models: {
+                "claude-opus-4-6": {
+                  capabilities: { reasoning: true },
+                  options: { reasoningEffort: ["low", "high"] },
+                },
+              },
+            },
+          ],
+        },
+        async () => {
+          await hooks["chat.params"]?.(
+            {
+              sessionID: "session",
+              agent: "goop-orchestrator",
+              model: { providerID: "anthropic", id: "claude-opus-4-6" } as never,
+              provider: {} as never,
+              message: {} as never,
+            },
+            output,
+          );
+        },
+      );
+
+      expect(output.options).toEqual({ reasoningEffort: "high" });
+    } finally {
+      if (originalGlobalPath === undefined) {
+        Reflect.deleteProperty(process.env, "GOOPSPEC_GLOBAL_CONFIG_PATH");
+      } else {
+        process.env.GOOPSPEC_GLOBAL_CONFIG_PATH = originalGlobalPath;
+      }
+      cleanup();
+    }
+  });
+
+  it("preserves the provider default and warns for unsupported V1 thinking levels", async () => {
+    const { testDir, cleanup } = setupTestEnvironment("agent-reg-thinking-unsupported");
+    const errors: string[] = [];
+    const originalError = console.error;
+    try {
+      writeFileSync(
+        join(testDir, "goopspec.json"),
+        JSON.stringify({ agentThinkingLevels: { orchestrator: "xhigh" } }),
+        "utf-8",
+      );
+      console.error = (...args: unknown[]) => errors.push(args.map(String).join(" "));
+      const ctx = createMockPluginContext({ testDir });
+      const hooks = createAgentRegistrationHook(ctx);
+      const output = { temperature: 0, topP: 0, topK: 0, maxOutputTokens: undefined, options: {} };
+
+      await withProviderCatalog(
+        ctx,
+        {
+          providers: [
+            {
+              id: "anthropic",
+              models: {
+                "claude-opus-4-6": {
+                  capabilities: { reasoning: true },
+                  options: { reasoningEffort: ["high"] },
+                },
+              },
+            },
+          ],
+        },
+        async () => {
+          await hooks["chat.params"]?.(
+            {
+              sessionID: "session",
+              agent: "goop-orchestrator",
+              model: { providerID: "anthropic", id: "claude-opus-4-6" } as never,
+              provider: {} as never,
+              message: {} as never,
+            },
+            output,
+          );
+        },
+      );
+
+      expect(output.options).toEqual({});
+      expect(errors.some((entry) => entry.includes("preserving the provider default"))).toBe(true);
+    } finally {
+      console.error = originalError;
       cleanup();
     }
   });
