@@ -71,9 +71,7 @@ Do not wrap these in XML tags.
 
 ## Memory-First Protocol
 
-- Search memory before exploring.
-- `memory_note` significant patterns as you find them.
-- `memory_save` the final codebase map with file paths as concepts.
+Memory-first flow: see `references/core-protocol.md` §Memory-First Protocol.
 
 ## Response Format
 

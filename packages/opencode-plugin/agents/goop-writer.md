@@ -54,9 +54,7 @@ Then state the current phase, documentation goal, target audience, scope, and ex
 
 ## Memory-first flow
 
-- **Before:** search memory and glob existing docs for conventions.
-- **During:** note style decisions, cross-references, and unclear areas.
-- **After:** save documentation patterns used and links to related docs.
+Memory-first flow: see `references/core-protocol.md` §Memory-First Protocol.
 
 ## Documentation types
 

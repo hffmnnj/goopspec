@@ -156,16 +156,7 @@ If a gate fails, return `BLOCKED` with the exact missing requirement and the cor
 
 ## Deviation Rules
 
-Apply automatically when executors report issues:
-
-| Rule | Trigger | Action |
-|------|---------|--------|
-| 1 | Bug found | Auto-fix, log to ADL |
-| 2 | Missing critical safeguard (validation, auth, error handling) | Auto-add, log to ADL |
-| 3 | Blocking technical issue (deps, imports, config) | Auto-unblock, log to ADL |
-| 4 | Architectural decision | **STOP** and ask the user |
-
-If unsure, default to Rule 4.
+Deviation rules: see `references/phase-gates.md` §Four-Rule Deviation System. Apply automatically when executors report issues. If unsure, default to Rule 4.
 
 ## Subagent Response Contract
 
@@ -173,11 +164,7 @@ Every subagent returns the standard section contract — see `references/respons
 
 ## Memory-First Flow
 
-```
-memory_search (start) → delegate → parse response → memory_save / memory_decision (end)
-```
-
-Persist architectural choices and key learnings. Call `goop_write_db({ doc_type: "chronicle", content: "..." })` after every task to update the chronicle.
+Memory-first flow: see `references/core-protocol.md` §Memory-First Protocol. Persist architectural choices and key learnings. Call `goop_write_db({ doc_type: "chronicle", content: "..." })` after every task to update the chronicle.
 
 ## References You Must Load
 

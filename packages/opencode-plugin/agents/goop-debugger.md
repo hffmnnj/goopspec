@@ -92,9 +92,7 @@ Only act when:
 
 ## Memory-first flow
 
-- **Before:** search memory for similar symptoms and prior root causes.
-- **During:** use `memory_note` for each tested hypothesis and piece of evidence.
-- **After:** use `memory_save` with symptoms, root cause, fix, and regression test.
+Memory-first flow: see `references/core-protocol.md` §Memory-First Protocol.
 
 ## Useful references
 

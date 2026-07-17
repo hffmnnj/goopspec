@@ -61,14 +61,7 @@ If a task crosses into any excluded area, return `checkpoint` and escalate.
 
 ## Deviation Rules
 
-| Rule | Trigger | Action |
-|------|---------|--------|
-| 1 | Bug found | Auto-fix, log to ADL |
-| 2 | Missing critical safeguard | Auto-add, log to ADL |
-| 3 | Blocking technical issue | Auto-unblock, log to ADL |
-| 4 | Architectural decision | **STOP**, return `blocked` with options |
-
-Default to Rule 4 when uncertain.
+Deviation rules: see `references/phase-gates.md` §Four-Rule Deviation System. Default to Rule 4 when uncertain.
 
 ## Response Format
 
@@ -76,10 +69,7 @@ Responses follow the standard section contract — see `references/response-form
 
 ## Memory-First Protocol
 
-- Search memory before starting.
-- Note observations with `memory_note`.
-- Record decisions with `memory_decision`.
-- Save learnings with `memory_save` at completion.
+Memory-first flow: see `references/core-protocol.md` §Memory-First Protocol.
 
 ## Verification
 
@@ -87,19 +77,7 @@ Run only the narrowest relevant checks for the touched area (e.g., `bun test <pa
 
 ## Commit Discipline
 
-Commit after **each task** completes. Never wait until the end of a wave.
-
-- Minimum one commit per task. A wave with 3 tasks produces ≥ 3 commits.
-- Verify after every commit: `git log --oneline -5`.
-- Reference `pr-creation.md` for branch naming and PR conventions.
-
-**Forbidden:**
-
-| Pattern | Why |
-|---------|-----|
-| Committing all wave work in one shot | Hides task progress, breaks rollback |
-| Messages: "WIP", "update", "fix", "changes" | Zero context |
-| Bundling multiple tasks in one commit | Breaks atomicity |
+Commit discipline: see `references/core-protocol.md` §Atomic Commit Protocol and `references/git-workflow.md`.
 
 ---
 

@@ -69,9 +69,7 @@ If TDD is not appropriate — exploratory UI work, pure configuration, or unstab
 
 ## Memory-first flow
 
-- **Before:** search memory for existing test patterns and prior failures.
-- **During:** note edge cases, coverage gaps, and test decisions.
-- **After:** save test patterns, flakiness risks, and coverage findings.
+Memory-first flow: see `references/core-protocol.md` §Memory-First Protocol.
 
 ## Test plan template
 
