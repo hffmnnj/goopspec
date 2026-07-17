@@ -12,11 +12,11 @@ Use during verification; prioritize critical-path risks.
 
 - Validate all external input server-side.
 - Enforce type, length, and format constraints.
-- Prevent SQL/NoSQL/command/XSS injection vectors.
+- Prevent SQL/NoSQL/command/XSS injection.
 
 ## Data Protection
 
-- HTTPS/TLS and secure cookie settings.
+- HTTPS/TLS and secure cookies.
 - Encryption for sensitive data at rest.
 - No secrets in code, logs, or responses.
 

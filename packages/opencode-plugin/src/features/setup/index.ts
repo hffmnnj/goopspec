@@ -38,6 +38,7 @@ export const DEFAULT_MODEL_MAP: Record<AgentRole, string> = {
   "executor-medium": "anthropic/claude-sonnet-4-6",
   "executor-high": "anthropic/claude-opus-4-6",
   "executor-frontend-low": "anthropic/claude-sonnet-4-6",
+  "executor-frontend-medium": "anthropic/claude-sonnet-4-6",
   "executor-frontend-high": "anthropic/claude-opus-4-6",
   planner: "anthropic/claude-opus-4-6",
   verifier: "anthropic/claude-sonnet-4-6",
@@ -407,7 +408,11 @@ export function normalizeConfig(raw: Record<string, unknown>): GoopConfig {
 
         // Expand partial tier names to valid AGENT_ROLES
         const partialExpansions: Record<string, string[]> = {
-          "executor-frontend": ["executor-frontend-high", "executor-frontend-low"],
+          "executor-frontend": [
+            "executor-frontend-high",
+            "executor-frontend-medium",
+            "executor-frontend-low",
+          ],
           executor: ["executor-medium"],
         };
         const expanded = partialExpansions[role] ?? [role];

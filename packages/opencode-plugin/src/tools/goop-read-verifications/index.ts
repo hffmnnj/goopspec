@@ -74,21 +74,27 @@ export function createGoopReadVerificationsTool(ctx: PluginContext): ToolDefinit
       "Read workflow verification check results from GoopSpecDB.\n\n" +
       "Args:\n" +
       "- wave_id: Optional wave ID to filter by\n" +
+      "- wave_ids: Optional array of wave IDs for batch filtering (union)\n" +
       "- workflow_id: Optional workflow ID (defaults to active workflow)",
     args: {
       wave_id: tool.schema.number().optional(),
+      wave_ids: tool.schema.array(tool.schema.number()).optional(),
       workflow_id: tool.schema.string().optional(),
     },
     async execute(
       args: {
         wave_id?: number;
+        wave_ids?: number[];
         workflow_id?: string;
       },
       _context: ToolContext,
     ): Promise<string> {
       try {
         const workflowId = args.workflow_id ?? ctx.stateManager.getState().activeWorkflowId;
-        const verifications = ctx.db.getVerifications(workflowId, args.wave_id);
+        const hasBatch = args.wave_ids !== undefined && args.wave_ids.length > 0;
+        const verifications = hasBatch
+          ? ctx.db.getVerifications(workflowId, undefined, args.wave_ids)
+          : ctx.db.getVerifications(workflowId, args.wave_id);
         return formatVerifications(workflowId, verifications);
       } catch (error: unknown) {
         const msg = error instanceof Error ? error.message : String(error);

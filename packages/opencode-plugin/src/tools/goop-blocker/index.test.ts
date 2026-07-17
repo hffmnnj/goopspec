@@ -32,7 +32,12 @@ describe("goop_blocker tool", () => {
     const blockerTool = createGoopBlockerTool(ctx);
 
     const openResult = await blockerTool.execute(
-      { action: "open", description: "Waiting on migration review", severity: "high", wave_id: 3 },
+      {
+        action: "open",
+        description: "Waiting on migration review",
+        severity: "high",
+        wave_id: 3,
+      },
       toolCtx,
     );
 
@@ -50,7 +55,11 @@ describe("goop_blocker tool", () => {
     expect(openList).toContain("Waiting on migration review");
 
     const resolveResult = await blockerTool.execute(
-      { action: "resolve", id: openRows[0].id, resolution: "Reviewer approved migration" },
+      {
+        action: "resolve",
+        id: openRows[0].id,
+        resolution: "Reviewer approved migration",
+      },
       toolCtx,
     );
     expect(resolveResult).toContain(`Resolved blocker #${openRows[0].id}`);
@@ -70,7 +79,11 @@ describe("goop_blocker tool", () => {
     const blockerTool = createGoopBlockerTool(ctx);
 
     const openResult = await blockerTool.execute(
-      { action: "open", description: "Waiting on migration review", severity: "high" },
+      {
+        action: "open",
+        description: "Waiting on migration review",
+        severity: "high",
+      },
       toolCtx,
     );
 
@@ -84,7 +97,11 @@ describe("goop_blocker tool", () => {
   it("refreshes STATUS.md immediately after resolving a blocker", async () => {
     const blockerTool = createGoopBlockerTool(ctx);
     await blockerTool.execute(
-      { action: "open", description: "Waiting on migration review", severity: "high" },
+      {
+        action: "open",
+        description: "Waiting on migration review",
+        severity: "high",
+      },
       toolCtx,
     );
     const id = ctx.db.getBlockers("default", "open")[0].id;
@@ -115,5 +132,59 @@ describe("goop_blocker tool", () => {
     expect(ctx.db.getEvents("default", "blocker_open").length).toBe(1);
     expect(ctx.db.getEvents("default", "blocker_resolve").length).toBe(1);
     expect(ctx.db.getEvents("default", "blocker_list").length).toBe(1);
+  });
+
+  // -----------------------------------------------------------------------
+  // Batch items[]
+  // -----------------------------------------------------------------------
+
+  it("opens and resolves multiple blockers in a single items batch", async () => {
+    const blockerTool = createGoopBlockerTool(ctx);
+
+    const result = await blockerTool.execute(
+      {
+        items: [
+          {
+            action: "open",
+            description: "Batch blocker A",
+            severity: "low",
+            wave_id: 1,
+          },
+          { action: "open", description: "Batch blocker B", severity: "high" },
+          { action: "list", status: "open" },
+        ],
+      },
+      toolCtx,
+    );
+
+    expect(result).toContain("Batch blocker: 3/3 succeeded");
+    expect(result).toContain("[0] OK: Opened blocker #");
+    expect(result).toContain("[1] OK: Opened blocker #");
+    expect(result).toContain("[2] OK: # Blockers");
+
+    const openBlockers = ctx.db.getBlockers("default", "open");
+    expect(openBlockers.length).toBe(2);
+    expect(openBlockers.map((b) => b.description).sort()).toEqual([
+      "Batch blocker A",
+      "Batch blocker B",
+    ]);
+  });
+
+  it("fails the whole batch when one item is invalid", async () => {
+    const blockerTool = createGoopBlockerTool(ctx);
+
+    const result = await blockerTool.execute(
+      {
+        items: [
+          { action: "open", description: "First batch blocker" },
+          { action: "resolve", id: 9999, resolution: "Missing blocker" },
+        ],
+      },
+      toolCtx,
+    );
+
+    expect(result).toContain("Batch blocker: 0/2 succeeded, 2 failed");
+    expect(ctx.db.getBlockers("default").length).toBe(0);
+    expect(ctx.db.getEvents("default").length).toBe(0);
   });
 });

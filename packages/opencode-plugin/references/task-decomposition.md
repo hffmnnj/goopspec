@@ -4,7 +4,7 @@ Breaking work into waves and tasks for focused, parallel execution.
 
 ## Principles
 
-- **Vertical slices**: group by feature, not by technical layer. Each wave delivers a coherent piece of user-visible value.
+- **Vertical slices**: group by feature, not technical layer. Each wave delivers coherent user-visible value.
 - **Horizontal layers**: avoid. Do not create a "models" wave, an "API" wave, and a "UI" wave.
 - **Dependency order**: schedule foundational work before dependent features.
 - **Verifiable chunks**: every task must have a clear verification step.
@@ -28,22 +28,20 @@ Wave 3: Integration (depends on Wave 2)
 ## Sizing Guidance
 
 - 2-4 tasks per wave.
-- Each task should be completable in one focused agent session.
+- Each task should fit in one focused agent session.
 - Complex work → multiple focused waves rather than one overloaded wave.
 
-### Task Granularity
-
-| Size | Example |
-|------|---------|
+| Task Size | Example |
+|-----------|---------|
 | Too large | "Implement authentication system" |
 | Just right | "Create user model with password hashing" |
 | Too small | "Add email field to user model" |
 
-Tasks should take roughly 15–60 minutes. Front-load risky tasks and leave 20% buffer for surprises.
+Tasks should take roughly 15–60 minutes. Front-load risky tasks and leave ~20% buffer.
 
 ## Traceability
 
-Every must-have from `SPEC.md` must map to at least one task. Every task must map to a must-have or a clear enabler.
+Every must-have from `SPEC.md` must map to at least one task. Every task must map to a must-have or clear enabler.
 
 | Must-Have | Covered By |
 |-----------|------------|
@@ -54,7 +52,7 @@ Every must-have from `SPEC.md` must map to at least one task. Every task must ma
 
 | Type | Definition | Example |
 |------|------------|---------|
-| Hard | Task B literally cannot start until Task A completes | Create schema → Implement repository |
+| Hard | Task B cannot start until Task A completes | Create schema → Implement repository |
 | Soft | Task B is easier if A completes, but not required | Set up linting → Implement feature |
 | None | Tasks are completely independent | Implement auth → Implement logging |
 
@@ -62,9 +60,7 @@ Avoid circular dependencies and false dependency chains.
 
 ## Per-Wave Questioning
 
-After drafting a wave, validate assumptions before finalizing.
-
-Number of questions scales with workflow depth:
+Validate assumptions before finalizing each wave. Number of questions scales with depth:
 
 | Depth | Questions per wave |
 |-------|--------------------|
@@ -74,21 +70,18 @@ Number of questions scales with workflow depth:
 
 Each question should:
 
-- Reference specific files, modules, or technologies in the wave.
+- Reference specific files, modules, or technologies.
 - Target unknowns, assumptions, risk boundaries, or edge cases.
 - Offer concrete tradeoffs, not generic prompts.
 
-If answers expose unknowns, dispatch `goop-researcher` and/or `goop-explorer` before finalizing the wave.
+If answers expose unknowns, dispatch `goop-researcher` and/or `goop-explorer` before finalizing.
 
 ## Post-Wave Review Gate
 
 After all waves are drafted:
 
 1. Offer an "Approve All" shortcut.
-2. If the user chooses per-wave review, iterate each wave with options:
-   - Approve Wave
-   - Request More Research
-   - Clarify Scope
+2. If the user chooses per-wave review, iterate each wave with options: **Approve Wave**, **Request More Research**, **Clarify Scope**.
 3. Only finalize the blueprint when every wave is approved.
 
 ## Depth Tiers
@@ -101,12 +94,12 @@ After all waves are drafted:
 
 ## update-wave Calling Convention
 
-Critical: `goop_state({ action: "update-wave" })` must only be called after a wave's tasks are fully complete and verified.
+`goop_state({ action: "update-wave" })` must only be called after a wave's tasks are fully complete and verified.
 
 - `update-wave(N, total)` means "N waves are now complete."
 - When starting Wave N, call `update-wave(N-1, total)` to record the previous wave complete.
 - When Wave N finishes, call `update-wave(N, total)`.
-- Exception: Wave 1 has no previous wave; call `update-wave(1, total)` only after Wave 1 completes.
+- Wave 1 has no previous wave; call `update-wave(1, total)` only after Wave 1 completes.
 
 Calling `update-wave(total, total)` before the final wave runs triggers premature auto-progression to the accept phase.
 
@@ -115,7 +108,7 @@ Calling `update-wave(total, total)` before the final wave runs triggers prematur
 Tasks inside a wave may run in parallel when they have no file, resource, or state conflicts. After parallel execution:
 
 1. Verify no conflicts in modified files.
-2. Run the full test suite to catch integration issues.
+2. Run the full test suite.
 3. Resolve merge conflicts.
 4. Create a consolidated checkpoint.
 

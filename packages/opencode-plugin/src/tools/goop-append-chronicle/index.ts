@@ -11,7 +11,31 @@
 import { tool } from "../../core/sdk-compat.js";
 import type { ToolContext, ToolDefinition } from "../../core/sdk-compat.js";
 import type { PluginContext } from "../../core/types.js";
+import { formatBatchResult, runBatch } from "../../features/db/batch.js";
 import { renderSidecars } from "../../shared/render-sidecars.js";
+
+// ---------------------------------------------------------------------------
+// Per-entry processing
+// ---------------------------------------------------------------------------
+
+function appendChronicleEntry(ctx: PluginContext, workflowId: string, entry: string): string {
+  const timestamp = new Date().toISOString();
+  const formatted = `### ${timestamp}\n\n${entry}`;
+
+  // Insert chronicle event row
+  ctx.db.appendChronicleEvent(workflowId, entry);
+
+  // Append to chronicle document
+  ctx.db.appendDocument(workflowId, "chronicle", formatted);
+
+  // Log chronicle_append event
+  ctx.db.appendEvent(workflowId, "chronicle_append", {
+    timestamp: Date.now(),
+    entry_length: entry.length,
+  });
+
+  return `appended (${entry.length} chars)`;
+}
 
 // ---------------------------------------------------------------------------
 // Tool factory
@@ -24,35 +48,36 @@ export function createGoopAppendChronicleTool(ctx: PluginContext): ToolDefinitio
       "and appends to the chronicle document without reading the full document first.\n\n" +
       "Args:\n" +
       "- entry: The chronicle entry text\n" +
-      "- workflow_id: Optional workflow ID (defaults to active workflow)",
+      "- workflow_id: Optional workflow ID (defaults to active workflow)\n" +
+      "- entries: Optional batch of chronicle entry strings",
     args: {
-      entry: tool.schema.string(),
+      entry: tool.schema.string().optional(),
       workflow_id: tool.schema.string().optional(),
+      entries: tool.schema.array(tool.schema.string()).optional(),
     },
     async execute(
-      args: { entry: string; workflow_id?: string },
+      args: { entry?: string; workflow_id?: string; entries?: string[] },
       _context: ToolContext,
     ): Promise<string> {
       try {
         const workflowId = args.workflow_id ?? ctx.stateManager.getState().activeWorkflowId;
-        const timestamp = new Date().toISOString();
-        const formatted = `### ${timestamp}\n\n${args.entry}`;
 
-        // Insert chronicle event row
-        ctx.db.appendChronicleEvent(workflowId, args.entry);
+        if (args.entries !== undefined) {
+          const result = runBatch(ctx.db, args.entries, (entry) =>
+            appendChronicleEntry(ctx, workflowId, entry),
+          );
+          renderSidecars(ctx, workflowId);
+          return formatBatchResult(result, "append-chronicle");
+        }
 
-        // Append to chronicle document
-        ctx.db.appendDocument(workflowId, "chronicle", formatted);
+        if (args.entry === undefined) {
+          return "Error: 'entry' is required when no entries batch is provided.";
+        }
 
-        // Log chronicle_append event
-        ctx.db.appendEvent(workflowId, "chronicle_append", {
-          timestamp: Date.now(),
-          entry_length: args.entry.length,
-        });
-
+        const detail = appendChronicleEntry(ctx, workflowId, args.entry);
         renderSidecars(ctx, workflowId);
 
-        return `[OK] Chronicle entry appended (${args.entry.length} chars)`;
+        return `[OK] Chronicle entry ${detail}`;
       } catch (error: unknown) {
         const msg = error instanceof Error ? error.message : String(error);
         return `Error in goop_append_chronicle: ${msg}`;

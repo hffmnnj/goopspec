@@ -159,7 +159,7 @@ export function createGoopStateTool(ctx: PluginContext): ToolDefinition {
       "- 'reset': Reset active workflow to idle\n" +
       "- 'list-workflows': List all workflows\n" +
       "- 'set-active-workflow': Switch active workflow (requires `workflowId`)\n" +
-      "- 'create-workflow': Create new workflow (requires `workflowId`)",
+      "- 'create-workflow': Create new workflow (requires `workflowId`, optional `activate`). Pass `activate: true` to also switch to the new workflow in the same call.",
     args: {
       action: tool.schema.enum(STATE_ACTIONS),
       phase: tool.schema.string().optional(),
@@ -171,6 +171,7 @@ export function createGoopStateTool(ctx: PluginContext): ToolDefinition {
       totalWaves: tool.schema.number().optional(),
       workflowId: tool.schema.string().optional(),
       force: tool.schema.boolean().optional(),
+      activate: tool.schema.boolean().optional(),
     },
     async execute(
       args: {
@@ -184,6 +185,7 @@ export function createGoopStateTool(ctx: PluginContext): ToolDefinition {
         totalWaves?: number;
         workflowId?: string;
         force?: boolean;
+        activate?: boolean;
       },
       _context: ToolContext,
     ): Promise<string> {
@@ -214,6 +216,7 @@ function executeAction(
     totalWaves?: number;
     workflowId?: string;
     force?: boolean;
+    activate?: boolean;
   },
 ): string {
   const { action } = args;
@@ -350,8 +353,13 @@ function executeAction(
         return "**Error:** `workflowId` is required for create-workflow.";
       }
       sm.createWorkflow(args.workflowId);
+      if (args.activate) {
+        sm.setActiveWorkflow(args.workflowId);
+      }
       renderStatusAfterMutation(ctx);
-      return `Workflow **${args.workflowId}** created.`;
+      return args.activate
+        ? `Workflow **${args.workflowId}** created and activated.`
+        : `Workflow **${args.workflowId}** created.`;
     }
 
     default: {

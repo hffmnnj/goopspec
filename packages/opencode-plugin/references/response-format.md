@@ -1,10 +1,10 @@
 # Sub-Agent Response Format (MH17)
 
-Every GoopSpec sub-agent returns a single markdown-structured response to the orchestrator. The format is intentionally lean: five canonical sections, no XML, no nested metadata tables.
+Every GoopSpec sub-agent returns a single markdown-structured response to the orchestrator: five canonical sections, no XML, no nested metadata tables.
 
 ## Section Contract
 
-A response contains exactly these top-level sections, in this order:
+Response sections, in order:
 
 ```markdown
 ## STATUS
@@ -14,80 +14,72 @@ A response contains exactly these top-level sections, in this order:
 ## NEXT
 ```
 
-Each section is introduced by a top-level markdown header `## `. Do not add extra prose, banners, or decorative separators outside these sections. The body under each header must stay terse.
+Each is a top-level `## ` header. No extra prose, banners, or decorative separators outside these sections.
 
 ### `## STATUS`
 
-A single word/line, one of:
+One of:
 
 - `complete` — task finished and verified.
-- `partial` — progress made; the task needs continuation.
+- `partial` — progress made; needs continuation.
 - `blocked` — cannot continue without a decision or missing information.
 
 ### `## SUMMARY`
 
-One to three plain-language sentences describing what was accomplished (or why it is blocked). Include the agent role and the task outcome. Do not restate status or list every file detail here.
+One to three sentences describing what was accomplished (or why it is blocked). Include the agent role and outcome. Do not restate status or list every file.
 
 ### `## ARTIFACTS`
 
-A bullet list of files created or modified. Each bullet is a single line with the relative path and a one-line note, separated by an em-dash or a dash.
+One-line bullets for created or modified files:
 
 ```markdown
 - src/auth/service.ts — added JWT signing helpers
 - src/auth/service.test.ts — added signing tests
 ```
 
-If no files changed, write exactly:
-
-```markdown
-- none
-```
+If no files changed: `- none`.
 
 ### `## VERIFICATION`
 
-A single line stating what was checked and the result. Prefer exact commands.
+One line stating what was checked and the result. Prefer exact commands:
 
 ```markdown
 bun test packages/core/src/auth/ — 12 passed, 0 failed
 bun run typecheck — no errors
 ```
 
-If verification is not applicable (e.g., pure research), write:
-
-```markdown
-n/a
-```
+If not applicable: `n/a`.
 
 ### `## NEXT`
 
-A concise handoff to the orchestrator. When status is `complete`, state the next task or delegate. When status is `blocked`, list the blocker(s) and what is needed to unblock. When status is `partial`, state what remains.
+Concise handoff. When `complete`, state the next task or delegate. When `blocked`, list blockers and what is needed. When `partial`, state what remains.
 
 ## Rules
 
-- Omit nothing: all five sections must be present, even if empty (`none` or `n/a`).
-- Keep terse: one line per artifact, one line per verification, one to three lines for NEXT.
-- No prose padding: do not write introductions, conclusions, or explanations outside the sections.
+- All five sections must be present, even if empty (`none` or `n/a`).
+- One line per artifact, one line per verification, one to three lines for NEXT.
+- No introductions, conclusions, or explanations outside the sections.
 - No XML tags, tables, or code fences for metadata.
-- Use markdown headers only; section order is fixed.
-- Functional em-dashes only; do not use emojis.
+- Fixed section order; markdown headers only.
+- Functional em-dashes only; no emojis.
 
 ## Orchestrator Parsing Guidance
 
-Parse by top-level markdown headers. Match the regular expression:
+Parse by top-level markdown headers matching:
 
 ```regex
 ^## (STATUS|SUMMARY|ARTIFACTS|VERIFICATION|NEXT)
 ```
 
-The section body is everything up to the next matching `## ` header or end-of-response.
+The body is everything up to the next matching `## ` header or end-of-response.
 
 - Extract `STATUS` to route the workflow.
 - Detect `blocked` immediately to trigger Rule 4 escalation.
 - Read `ARTIFACTS` to update the work log.
 - Read `VERIFICATION` to decide if acceptance checks are satisfied.
-- Read `NEXT` to determine the following action or the unblock requirement.
+- Read `NEXT` to determine the next action or unblock requirement.
 
-Because sections are declared by simple headers, a regex-based splitter can reconstruct the envelope without an XML parser.
+A regex-based splitter reconstructs the envelope without an XML parser.
 
 ## Example: Executor Task (Code Change)
 
@@ -128,9 +120,7 @@ Hand to Wave 5 planner to redesign the two changed hooks before hook implementat
 
 ## Writing for Clarity
 
-The response format is terse by design. Keep the same discipline in every agent output:
-
-- Write for the orchestrator, not for general readers.
+- Write for the orchestrator, not general readers.
 - One idea per sentence.
 - Use active voice.
 - Avoid filler, emojis, and decorative separators.
@@ -138,4 +128,8 @@ The response format is terse by design. Keep the same discipline in every agent 
 
 ## Why This Replaces XML
 
-The old XML envelope carried heavy tag tax, nested elements, and duplicated state fields. The markdown-header format preserves the same semantics — status, artifacts, verification, next steps — while dropping the structural overhead. It is still machine-parseable by regex over `## ` headers, easier to read in chat logs, and cheaper in token budget without arbitrary size caps.
+XML carried heavy tag tax, nested elements, and duplicated state fields. Markdown headers preserve the same semantics with less structural overhead and remain regex-parseable over `## ` headers.
+
+---
+
+*Sub-Agent Response Format v1.0 — GoopSpec Reference*
