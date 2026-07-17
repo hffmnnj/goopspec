@@ -148,6 +148,62 @@ export interface V2EventCapability {
   subscribe(): Promise<AsyncIterable<V2ServerEvent>>;
 }
 
+/** Model reference assigned to a V2 agent draft. */
+export interface V2AgentModelRef {
+  readonly providerID: string;
+  readonly id: string;
+  variant?: string;
+}
+
+/** Mutable provider request carried by a V2 agent draft. */
+export interface V2AgentRequest {
+  headers: Record<string, string>;
+  body: Record<string, unknown>;
+}
+
+/** Minimal mutable shape required to update a GoopSpec agent. */
+export interface V2AgentInfo {
+  readonly id: string;
+  model?: V2AgentModelRef;
+  request: V2AgentRequest;
+}
+
+/** Mutable agent collection exposed by the documented V2 transform hook. */
+export interface V2AgentDraft {
+  list(): readonly V2AgentInfo[];
+  update(id: string, update: (agent: V2AgentInfo) => void): void;
+}
+
+/** Documented V2 agent transform and reload capability. */
+export interface V2AgentCapability {
+  transform(callback: (agents: V2AgentDraft) => void | Promise<void>): Promise<unknown>;
+  reload(): Promise<void>;
+}
+
+/** Minimal catalog model shape needed by the shared thinking resolver. */
+export interface V2CatalogModel {
+  readonly variants?: unknown;
+}
+
+/** Provider record exposed while transforming the V2 catalog. */
+export interface V2CatalogProviderRecord {
+  readonly provider: { readonly id: string };
+  readonly models: ReadonlyMap<string, V2CatalogModel>;
+}
+
+/** Catalog draft used to snapshot live model capabilities for agent transforms. */
+export interface V2CatalogDraft {
+  readonly provider: {
+    list(): readonly V2CatalogProviderRecord[];
+  };
+}
+
+/** Documented V2 catalog transform and reload capability. */
+export interface V2CatalogCapability {
+  transform(callback: (catalog: V2CatalogDraft) => void | Promise<void>): Promise<unknown>;
+  reload(): Promise<void>;
+}
+
 /**
  * Runtime V2 context as documented by OpenCode.
  *
@@ -159,6 +215,8 @@ export type V2RuntimeContext = V2PluginContext & {
   readonly session?: V2SessionCapability;
   readonly tool?: V2ToolCapability;
   readonly event?: V2EventCapability;
+  readonly agent?: V2AgentCapability;
+  readonly catalog?: V2CatalogCapability;
 };
 
 // ---------------------------------------------------------------------------
@@ -166,12 +224,9 @@ export type V2RuntimeContext = V2PluginContext & {
 // ---------------------------------------------------------------------------
 
 export type {
-  AgentDraft as V2AgentDraft,
   AgentHooks as V2AgentHooks,
   AISDKHooks as V2AISDKHooks,
-  CatalogDraft as V2CatalogDraft,
   CatalogHooks as V2CatalogHooks,
-  CatalogProviderRecord as V2CatalogProviderRecord,
   CommandDraft as V2CommandDraft,
   CommandHooks as V2CommandHooks,
   IntegrationDraft as V2IntegrationDraft,

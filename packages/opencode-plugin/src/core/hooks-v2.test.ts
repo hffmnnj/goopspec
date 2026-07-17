@@ -1,10 +1,19 @@
 import { afterEach, describe, expect, it } from "bun:test";
+import { writeFileSync } from "node:fs";
+import { join } from "node:path";
 
 import { DEFAULT_HOOK_FACTORIES, createHooks } from "../hooks/index.js";
 import { clearMemoryCache } from "../hooks/system-transform.js";
-import { type PluginContext, createMockPluginContext } from "../test-utils.js";
+import {
+  type PluginContext,
+  createMockPluginContext,
+  setupTestEnvironment,
+} from "../test-utils.js";
 import { registerHooksV2 } from "./hooks-v2.js";
 import type {
+  V2AgentDraft,
+  V2AgentInfo,
+  V2CatalogDraft,
   V2RuntimeContext,
   V2SessionRequestEvent,
   V2ToolExecuteAfterEvent,
@@ -15,6 +24,8 @@ interface Registrations {
   request?: (event: V2SessionRequestEvent) => void | Promise<void>;
   before?: (event: V2ToolExecuteBeforeEvent) => void | Promise<void>;
   after?: (event: V2ToolExecuteAfterEvent) => void | Promise<void>;
+  agentTransform?: (draft: V2AgentDraft) => void | Promise<void>;
+  catalogTransform?: (draft: V2CatalogDraft) => void | Promise<void>;
 }
 
 function createRuntimeContext(registrations: Registrations): V2RuntimeContext {
@@ -51,6 +62,18 @@ function createRuntimeContext(registrations: Registrations): V2RuntimeContext {
           ) => void | Promise<void>;
         }
       },
+    },
+    agent: {
+      transform: async (callback: (draft: V2AgentDraft) => void | Promise<void>) => {
+        registrations.agentTransform = callback;
+      },
+      reload: async () => {},
+    },
+    catalog: {
+      transform: async (callback: (draft: V2CatalogDraft) => void | Promise<void>) => {
+        registrations.catalogTransform = callback;
+      },
+      reload: async () => {},
     },
   } as unknown as V2RuntimeContext;
 }
@@ -129,5 +152,57 @@ describe("registerHooksV2()", () => {
     contexts.push(ctx);
 
     await expect(registerHooksV2({} as V2RuntimeContext, ctx)).resolves.toBeUndefined();
+  });
+
+  it("applies the selected catalog variant body and headers to GoopSpec agents", async () => {
+    const env = setupTestEnvironment("v2-thinking-transform");
+    const ctx = createMockPluginContext({ testDir: env.testDir, db: env.db });
+    writeFileSync(
+      join(ctx.sdk.directory, "goopspec.json"),
+      JSON.stringify({ agentThinkingLevels: { "executor-high": "medium" } }),
+    );
+    const registrations: Registrations = {};
+
+    await registerHooksV2(createRuntimeContext(registrations), ctx);
+    const agent: V2AgentInfo = {
+      id: "goop-executor-high",
+      model: { providerID: "openai", id: "gpt-test" },
+      request: { headers: { "x-existing": "keep" }, body: { existing: true } },
+    };
+    const catalog: V2CatalogDraft = {
+      provider: {
+        list: () => [
+          {
+            provider: { id: "openai" },
+            models: new Map([
+              [
+                "gpt-test",
+                {
+                  variants: [
+                    {
+                      id: "medium",
+                      headers: { "x-reasoning": "medium" },
+                      body: { reasoning_effort: "medium" },
+                    },
+                  ],
+                },
+              ],
+            ]),
+          },
+        ],
+      },
+    };
+    const agents: V2AgentDraft = {
+      list: () => [agent],
+      update: (_id, update) => update(agent),
+    };
+
+    await registrations.catalogTransform?.(catalog);
+    await registrations.agentTransform?.(agents);
+
+    expect(agent.model?.variant).toBe("medium");
+    expect(agent.request.headers).toEqual({ "x-existing": "keep", "x-reasoning": "medium" });
+    expect(agent.request.body).toEqual({ existing: true, reasoning_effort: "medium" });
+    env.cleanup();
   });
 });

@@ -5,11 +5,17 @@
  * merged Hooks object once, then adapts the runtime events supplied by V2.
  */
 
+import { getEffectiveThinkingLevels } from "../features/setup/index.js";
+import { type CapabilityResult, resolveCapabilities } from "../features/thinking/capability.js";
+import { resolveThinkingValue } from "../features/thinking/resolve.js";
 import { DEFAULT_HOOK_FACTORIES, createHooks } from "../hooks/index.js";
 import type { Hooks } from "../hooks/types.js";
 import { log, logError } from "../shared/logger.js";
+import { AGENT_ROLES, type AgentRole } from "./constants.js";
 import type { PluginContext } from "./types.js";
 import type {
+  V2AgentDraft,
+  V2CatalogDraft,
   V2RuntimeContext,
   V2SessionRequestEvent,
   V2ToolExecuteAfterEvent,
@@ -113,6 +119,91 @@ function createToolCallQueue(): {
   };
 }
 
+function getGoopRole(agentID: string): AgentRole | undefined {
+  if (!agentID.startsWith("goop-")) return undefined;
+  const role = agentID.slice("goop-".length);
+  return (AGENT_ROLES as readonly string[]).includes(role) ? (role as AgentRole) : undefined;
+}
+
+function catalogKey(providerID: string, modelID: string): string {
+  return `${providerID}\u0000${modelID}`;
+}
+
+function captureCatalogCapabilities(
+  draft: V2CatalogDraft,
+  capabilitiesByModel: Map<string, CapabilityResult>,
+): void {
+  capabilitiesByModel.clear();
+  for (const record of draft.provider.list()) {
+    for (const [modelID, model] of record.models) {
+      capabilitiesByModel.set(catalogKey(record.provider.id, modelID), resolveCapabilities(model));
+    }
+  }
+}
+
+function applyThinkingLevelsToAgents(
+  draft: V2AgentDraft,
+  ctx: PluginContext,
+  capabilitiesByModel: ReadonlyMap<string, CapabilityResult>,
+): void {
+  const levels = getEffectiveThinkingLevels(ctx.sdk.directory);
+
+  for (const candidate of draft.list()) {
+    const role = getGoopRole(candidate.id);
+    const model = candidate.model;
+    if (!role || !model) continue;
+
+    const capabilities = capabilitiesByModel.get(catalogKey(model.providerID, model.id));
+    const resolution = resolveThinkingValue(
+      levels[role],
+      capabilities ?? resolveCapabilities(undefined),
+    );
+    if (resolution.apply === null) {
+      logError(
+        `GoopSpec ${candidate.id}: ${resolution.warning ?? "preserving the provider default."}`,
+      );
+      continue;
+    }
+
+    if (typeof resolution.apply === "string") continue;
+    const variant = resolution.apply;
+    draft.update(candidate.id, (agent) => {
+      agent.request.headers = { ...agent.request.headers, ...variant.headers };
+      agent.request.body = { ...agent.request.body, ...variant.body };
+      if (agent.model) agent.model.variant = variant.id;
+    });
+  }
+}
+
+async function registerThinkingLevelAgentTransform(
+  runtimeCtx: V2RuntimeContext,
+  ctx: PluginContext,
+): Promise<void> {
+  const agentCapability = runtimeCtx.agent;
+  const catalogCapability = runtimeCtx.catalog;
+  if (
+    !agentCapability ||
+    typeof agentCapability.transform !== "function" ||
+    !catalogCapability ||
+    typeof catalogCapability.transform !== "function"
+  ) {
+    log("V2 thinking-level transform skipped: agent or catalog capability is unavailable");
+    return;
+  }
+
+  const capabilitiesByModel = new Map<string, CapabilityResult>();
+  try {
+    await catalogCapability.transform((draft) => {
+      captureCatalogCapabilities(draft, capabilitiesByModel);
+    });
+    await agentCapability.transform((draft) => {
+      applyThinkingLevelsToAgents(draft, ctx, capabilitiesByModel);
+    });
+  } catch (error) {
+    logError("V2 thinking-level agent transform registration failed", error);
+  }
+}
+
 /**
  * Register V1 GoopSpec hook behavior with documented V2 runtime hooks.
  *
@@ -128,6 +219,8 @@ export async function registerHooksV2(
   const hooks = createHooks(ctx, [...DEFAULT_HOOK_FACTORIES]);
   const sessionCapability = runtimeCtx.session;
   const toolCapability = runtimeCtx.tool;
+
+  await registerThinkingLevelAgentTransform(runtimeCtx, ctx);
 
   if (hooks["experimental.chat.system.transform"]) {
     if (!sessionCapability || typeof sessionCapability.hook !== "function") {
