@@ -250,7 +250,7 @@ describe("goop_write_wave combinator mode", () => {
     const rows = ctx.db.getVerifications("default", wave?.id ?? -1);
     expect(rows.length).toBe(1);
     expect(rows[0].check_name).toBe("typecheck");
-    expect(rows[0].wave_id).toBe(wave?.id);
+    expect(rows[0].wave_id).toBe(wave?.id ?? null);
 
     const events = ctx.db.getEvents("default", "verification_record");
     expect(events.length).toBe(2);
@@ -312,7 +312,7 @@ describe("goop_write_wave combinator mode", () => {
     const verifications = ctx.db.getVerifications("default", wave?.id ?? -1);
     expect(verifications.length).toBe(1);
     expect(verifications[0].check_name).toBe("lint");
-    expect(verifications[0].wave_id).toBe(wave?.id);
+    expect(verifications[0].wave_id).toBe(wave?.id ?? null);
 
     const traceability = ctx.db.getTraceability("default");
     expect(traceability.some((r) => r.requirement_key === "MH2" && r.wave_number === 3)).toBe(true);
