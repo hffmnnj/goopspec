@@ -52,6 +52,9 @@ export const DEFAULT_MODEL_MAP: Record<AgentRole, string> = {
 // Types
 // ---------------------------------------------------------------------------
 
+export const THINKING_LEVELS = ["none", "low", "medium", "high", "xhigh"] as const;
+export type ThinkingLevel = (typeof THINKING_LEVELS)[number];
+
 /** Persisted project-level config stored in `.goopspec/config.json`. */
 export interface GoopConfig {
   projectName?: string;
@@ -59,6 +62,7 @@ export interface GoopConfig {
   enforcement?: EnforcementMode;
   adlEnabled?: boolean;
   agentModels?: Partial<Record<string, string>>;
+  agentThinkingLevels?: Partial<Record<string, ThinkingLevel>>;
   agentThinkingBudgets?: Partial<Record<string, number>>;
   memoryEnabled?: boolean;
   gitignoreGoopspec?: boolean;
@@ -361,6 +365,28 @@ export function normalizeConfig(raw: Record<string, unknown>): GoopConfig {
   if (typeof raw.memoryEnabled === "boolean") config.memoryEnabled = raw.memoryEnabled;
   if (typeof raw.gitignoreGoopspec === "boolean") config.gitignoreGoopspec = raw.gitignoreGoopspec;
 
+  // New format: agentThinkingLevels (bare role → canonical thinking level)
+  if (raw.agentThinkingLevels && typeof raw.agentThinkingLevels === "object") {
+    config.agentThinkingLevels = {};
+    for (const [role, label] of Object.entries(
+      raw.agentThinkingLevels as Record<string, unknown>,
+    )) {
+      if (typeof label !== "string") {
+        logError(`normalizeConfig: agentThinkingLevels["${role}"] must be a string — skipping.`);
+        continue;
+      }
+
+      const normalized = label.trim().toLowerCase();
+      if ((THINKING_LEVELS as readonly string[]).includes(normalized)) {
+        config.agentThinkingLevels[role] = normalized as ThinkingLevel;
+      } else {
+        logError(
+          `normalizeConfig: unknown thinking level "${label}" for role "${role}" — skipping. Valid levels: ${THINKING_LEVELS.join(", ")}.`,
+        );
+      }
+    }
+  }
+
   // New format: agentModels (bare role → model string)
   if (raw.agentModels && typeof raw.agentModels === "object") {
     config.agentModels = {};
@@ -447,6 +473,10 @@ export function loadMergedConfig(projectDir: string): GoopConfig {
           normalized.agentModels !== undefined
             ? { ...(merged.agentModels ?? {}), ...normalized.agentModels }
             : merged.agentModels,
+        agentThinkingLevels:
+          normalized.agentThinkingLevels !== undefined
+            ? { ...(merged.agentThinkingLevels ?? {}), ...normalized.agentThinkingLevels }
+            : merged.agentThinkingLevels,
         agentThinkingBudgets:
           normalized.agentThinkingBudgets !== undefined
             ? { ...(merged.agentThinkingBudgets ?? {}), ...normalized.agentThinkingBudgets }
