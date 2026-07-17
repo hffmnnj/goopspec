@@ -210,6 +210,12 @@ async function registerThinkingLevelAgentTransform(
 
   return async (): Promise<void> => {
     try {
+      await catalogCapability.transform((draft) => {
+        captureCatalogCapabilities(draft, capabilitiesByModel);
+      });
+      await agentCapability.transform((draft) => {
+        applyThinkingLevelsToAgents(draft, ctx, capabilitiesByModel);
+      });
       if (typeof catalogCapability.reload === "function") await catalogCapability.reload();
       if (typeof agentCapability.reload === "function") await agentCapability.reload();
     } catch (error) {
