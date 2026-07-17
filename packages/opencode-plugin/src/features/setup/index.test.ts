@@ -395,6 +395,78 @@ describe("setup feature", () => {
       const levels = getEffectiveThinkingLevels(freshDir);
       expect(levels.orchestrator).toBe("high");
     });
+
+    it("getEffectiveThinkingLevels applies all four precedence tiers: project > internal > global > default", () => {
+      const freshDir = join(testDir, "thinking-levels-precedence");
+      mkdirSync(join(freshDir, ".goopspec"), { recursive: true });
+      const globalPath = join(freshDir, "global-goopspec.json");
+      process.env.GOOPSPEC_GLOBAL_CONFIG_PATH = globalPath;
+
+      writeFileSync(
+        globalPath,
+        JSON.stringify({
+          agentThinkingLevels: { orchestrator: "low", researcher: "low" },
+        }),
+      );
+      writeFileSync(
+        join(freshDir, ".goopspec", "config.json"),
+        JSON.stringify({
+          agentThinkingLevels: { orchestrator: "medium", explorer: "medium" },
+        }),
+      );
+      writeFileSync(
+        join(freshDir, "goopspec.json"),
+        JSON.stringify({
+          agentThinkingLevels: { orchestrator: "high" },
+        }),
+      );
+
+      const levels = getEffectiveThinkingLevels(freshDir);
+      expect(levels.orchestrator).toBe("high"); // project wins
+      expect(levels.researcher).toBe("low"); // global, no override
+      expect(levels.explorer).toBe("medium"); // internal, no override
+      expect(levels["executor-high"]).toBe("high"); // built-in default
+    });
+
+    it("new thinking level wins over legacy numeric budget for the same role", () => {
+      const freshDir = join(testDir, "thinking-level-wins-budget");
+      mkdirSync(join(freshDir, ".goopspec"), { recursive: true });
+      process.env.GOOPSPEC_GLOBAL_CONFIG_PATH = join(freshDir, "nonexistent-global.json");
+
+      writeFileSync(
+        join(freshDir, "goopspec.json"),
+        JSON.stringify({
+          agentThinkingLevels: { orchestrator: "low" },
+          orchestrator: { model: "anthropic/claude-opus-4-6", thinkingBudget: 32000 },
+        }),
+      );
+
+      const merged = loadMergedConfig(freshDir);
+      expect(merged.agentThinkingBudgets?.orchestrator).toBe(32000);
+
+      const levels = getEffectiveThinkingLevels(freshDir);
+      expect(levels.orchestrator).toBe("low");
+    });
+
+    it("legacy numeric budget is preserved when no new level is present for a role", () => {
+      const freshDir = join(testDir, "legacy-budget-only");
+      mkdirSync(join(freshDir, ".goopspec"), { recursive: true });
+      process.env.GOOPSPEC_GLOBAL_CONFIG_PATH = join(freshDir, "nonexistent-global.json");
+
+      writeFileSync(
+        join(freshDir, "goopspec.json"),
+        JSON.stringify({
+          orchestrator: { model: "anthropic/claude-opus-4-6", thinkingBudget: 16000 },
+        }),
+      );
+
+      const merged = loadMergedConfig(freshDir);
+      expect(merged.agentThinkingBudgets?.orchestrator).toBe(16000);
+      expect(merged.agentThinkingLevels?.orchestrator).toBeUndefined();
+
+      const levels = getEffectiveThinkingLevels(freshDir);
+      expect(levels.orchestrator).toBe("high");
+    });
   });
 
   // =========================================================================
