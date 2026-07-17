@@ -126,7 +126,6 @@ The fastest mental model is: if the tool has a plural/batch argument (`doc_types
 | `goop_adl` | `action: "read" \| "append"`, `type?`, `description?`, `entry_action?`, `rule?`, `files?` | `goop_adl({ action: "append", type: "deviation", description: "Bypassed code-review gate", entry_action: "Escalated to user", rule: 4, files: ["src/auth.ts"] })` |
 | `goop_get_global_config` | none | `goop_get_global_config({})` |
 | `goop_create_pr` | `title`, `body`, `branch`, `base?: "main"`, `draft?` | `goop_create_pr({ title: "fix(db): prevent section shadowing", body: "...", branch: "feat/section-tool-hardening", base: "main" })` |
-| `goop_infer_intent` | `transcript`, `workflowPhase?`, `hasActiveWorkflow?` | `goop_infer_intent({ transcript: "create a plan for the auth refactor", hasActiveWorkflow: false })` |
 
 **Behavioral note:** `goop_create_pr` includes a mandatory GoopSpec terminology gate — it scans the title, body, and branch for internal terms and blocks creation on violations. The title, body, and branch must contain no GoopSpec internal terms (e.g., "goop_", "MH1", "wave_number").
 
