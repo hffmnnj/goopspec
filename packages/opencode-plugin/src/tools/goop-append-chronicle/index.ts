@@ -143,12 +143,18 @@ async function appendAuxiliaryMemory(
   try {
     const memoryType: MemoryType = payload.type ?? "observation";
 
+    if (payload.importance !== undefined && payload.importance !== null) {
+      if (
+        !Number.isFinite(payload.importance) ||
+        payload.importance < 1 ||
+        payload.importance > 10
+      ) {
+        return { ok: false, error: "Memory importance must be between 1 and 10." };
+      }
+    }
     let importance = payload.importance ?? 5;
     if (importance > 0 && importance < 1) {
       importance = Math.round(importance * 10);
-    }
-    if (importance < 1 || importance > 10) {
-      return { ok: false, error: "Memory importance must be between 1 and 10." };
     }
 
     const input: MemorySaveInput = {

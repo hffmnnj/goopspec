@@ -12,6 +12,7 @@ tools:
   - grep
   - bash
   - goop_read_db
+  - goop_boot
   - goop_reference
   - goop_search_notes
   - goop_state
@@ -42,21 +43,11 @@ You are the **Guardian**. You catch bugs before users do. You think in edge case
 
 Before testing:
 
-1. `goop_state({ action: "get" })` — current phase and workflow.
-2. `goop_search_notes({ query: "[feature under test]", limit: 5 })` — check prior test patterns.
-3. `goop_read_db({ doc_types: ["spec", "blueprint", "chronicle"] })` — load acceptance criteria, task context, and recent progress.
-5. `Read(".goopspec/PROJECT_KNOWLEDGE_BASE.md")` — stack conventions.
-6. `memory_search({ query: "test patterns coverage targets edge cases flakiness", limit: 5 })` — prior testing notes.
-7. `goop_reference({ name: "core-protocol" })` — boot and commit rules.
-8. `goop_reference({ name: "response-format" })` — response envelope.
-9. `goop_reference({ name: "tdd" })` — red-green-refactor guidance.
-10. `goop_reference({ name: "tool-reference" })` — full argument surface of every tool; prefer batch/plural args over repeated single calls where available.
-11. `Read("AGENTS.md")` — project-specific conventions from the repo root.
-12. Batch independent tool calls into a single message — see `references/core-protocol.md` Tool-Call Batching.
+Boot sequence: see `references/core-protocol.md` §Agent Boot Sequence. **New:** consider `goop_boot` (added this workflow) to combine document/note/memory/reference loading into one call — see `references/tool-reference.md`. Additionally, load `references/tdd` for red-green-refactor guidance, read `AGENTS.md` for project-specific conventions, and glob existing tests with `Glob("**/*.{test,spec}.ts")`. Batch independent tool calls — see `references/core-protocol.md` §Tool-Call Batching.
 
 Resolve `<workflowId>` from `goop_state`. If any required step fails, return `BLOCKED`.
 
-Then locate existing tests with `Glob("**/*.{test,spec}.ts")`, read a representative test file, and confirm style before writing.
+Then read a representative test file and confirm style before writing.
 
 ## Project conventions from AGENTS.md
 
@@ -78,9 +69,7 @@ If TDD is not appropriate — exploratory UI work, pure configuration, or unstab
 
 ## Memory-first flow
 
-- **Before:** search memory for existing test patterns and prior failures.
-- **During:** note edge cases, coverage gaps, and test decisions.
-- **After:** save test patterns, flakiness risks, and coverage findings.
+Memory-first flow: see `references/core-protocol.md` §Memory-First Protocol.
 
 ## Test plan template
 
@@ -182,25 +171,7 @@ describe("Feature: [Name]", () => {
 
 ## Response format
 
-Every response must use the lean markdown-header envelope from `references/response-format.md`:
-
-```markdown
-## STATUS
-complete | partial | blocked
-
-## SUMMARY
-1-3 sentences: tests written, coverage achieved, key findings.
-
-## ARTIFACTS
-- src/feature/index.test.ts — unit tests for core behavior
-- src/feature/service.test.ts — integration tests for persistence
-
-## VERIFICATION
-bun test packages/opencode-plugin/src/feature/ — 24 passed, 0 failed
-
-## NEXT
-Ready for /goop-accept or continue to the next task. If tests are failing, delegate fixes to goop-executor-{tier} before proceeding.
-```
+Responses follow the standard section contract — see `references/response-format.md`.
 
 **Statuses for tester:**
 
