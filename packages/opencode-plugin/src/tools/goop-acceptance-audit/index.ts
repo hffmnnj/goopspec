@@ -45,7 +45,7 @@ function formatBlockers(workflowId: string, rows: BlockerRow[]): string {
 }
 
 // ---------------------------------------------------------------------------
-// Verification formatting (mirrors goop-read-verifications)
+// Verification formatting
 // ---------------------------------------------------------------------------
 
 function isFailingStatus(status: string): boolean {
@@ -102,7 +102,7 @@ function formatVerifications(workflowId: string, rows: VerificationRow[]): strin
 }
 
 // ---------------------------------------------------------------------------
-// Wave formatting (mirrors goop-read-waves)
+// Wave formatting
 // ---------------------------------------------------------------------------
 
 function formatWave(ctx: PluginContext, wave: WaveRow, progress?: WaveProgressRow): string {
