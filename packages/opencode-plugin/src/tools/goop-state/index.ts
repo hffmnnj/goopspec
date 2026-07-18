@@ -145,21 +145,8 @@ function renderStatusAfterMutation(ctx: PluginContext): void {
 export function createGoopStateTool(ctx: PluginContext): ToolDefinition {
   return tool({
     description:
-      "Safe atomic state operations for GoopSpec workflow. Use this instead of directly editing state.json.\n\n" +
-      "Actions:\n" +
-      "- 'get': Read current state\n" +
-      "- 'transition': Change workflow phase (requires `phase`)\n" +
-      "- 'complete-interview' / 'reset-interview': Toggle interview status\n" +
-      "- 'lock-spec' / 'unlock-spec': Toggle spec lock\n" +
-      "- 'confirm-acceptance' / 'reset-acceptance': Toggle acceptance\n" +
-      "- 'set-mode': Set task mode (requires `mode`)\n" +
-      "- 'set-depth': Set workflow depth (requires `depth`)\n" +
-      "- 'set-autopilot': Toggle autopilot (requires `autopilot`, optional `lazy`)\n" +
-      "- 'update-wave': Update wave progress (requires `currentWave`, `totalWaves`)\n" +
-      "- 'reset': Reset active workflow to idle\n" +
-      "- 'list-workflows': List all workflows\n" +
-      "- 'set-active-workflow': Switch active workflow (requires `workflowId`)\n" +
-      "- 'create-workflow': Create new workflow (requires `workflowId`, optional `activate`). Pass `activate: true` to also switch to the new workflow in the same call.",
+      "Safe atomic state operations for GoopSpec workflow. Use this instead of directly editing state.json. " +
+      "This is the ONLY sanctioned mutation boundary for workflow state.",
     args: {
       action: tool.schema.enum(STATE_ACTIONS),
       phase: tool.schema.string().optional(),

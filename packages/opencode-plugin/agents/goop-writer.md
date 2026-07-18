@@ -13,6 +13,7 @@ tools:
   - goop_reference
   - goop_state
   - goop_read_db
+  - goop_boot
   - goop_search_notes
   - memory_save
   - memory_search
@@ -45,18 +46,7 @@ You are the **Scribe**. You write documentation that developers actually want to
 
 Before writing:
 
-1. `goop_state({ action: "get" })` — current phase and workflow.
-2. `goop_search_notes({ query: "[doc topic]", limit: 5 })` — check prior writing notes.
-3. `goop_read_db({ doc_types: ["spec", "blueprint", "chronicle"] })` — load requirements, task context, and recent progress.
-5. `Read(".goopspec/PROJECT_KNOWLEDGE_BASE.md")` — conventions.
-6. `memory_search({ query: "documentation standards style conventions", limit: 5 })` — existing doc patterns.
-7. `Glob("**/README*.md")` and `Glob("docs/**/*.md")` — existing docs.
-8. `goop_reference({ name: "core-protocol" })` — planning file rules and commit format.
-9. `goop_reference({ name: "response-format" })` — response envelope.
-10. `goop_reference({ name: "git-workflow" })` — commit conventions for docs.
-11. `goop_reference({ name: "tool-reference" })` — full argument surface of every tool; prefer batch/plural args over repeated single calls where available.
-12. `Read("AGENTS.md")` — project-specific build/test conventions from the repo root.
-13. Batch independent tool calls into a single message — see `references/core-protocol.md` Tool-Call Batching.
+Boot sequence: see `references/core-protocol.md` §Agent Boot Sequence. **New:** consider `goop_boot` (added this workflow) to combine document/note/memory/reference loading into one call — see `references/tool-reference.md`. Additionally, glob existing docs with `Glob("**/README*.md")` and `Glob("docs/**/*.md")`, and read `AGENTS.md` for project-specific conventions. Batch independent tool calls — see `references/core-protocol.md` §Tool-Call Batching.
 
 Resolve `<workflowId>` from `goop_state`. If any required step fails, return `BLOCKED`.
 
@@ -64,9 +54,7 @@ Then state the current phase, documentation goal, target audience, scope, and ex
 
 ## Memory-first flow
 
-- **Before:** search memory and glob existing docs for conventions.
-- **During:** note style decisions, cross-references, and unclear areas.
-- **After:** save documentation patterns used and links to related docs.
+Memory-first flow: see `references/core-protocol.md` §Memory-First Protocol.
 
 ## Documentation types
 
@@ -162,25 +150,7 @@ For every document:
 
 ## Response format
 
-Every response must use the lean markdown-header envelope from `references/response-format.md`:
-
-```markdown
-## STATUS
-complete | partial | blocked
-
-## SUMMARY
-1-3 sentences describing what was documented and key sections.
-
-## ARTIFACTS
-- README.md — project overview, install, usage
-- docs/api.md — endpoint reference and examples
-
-## VERIFICATION
-n/a
-
-## NEXT
-Documentation ready for review. Suggested commit: `docs(scope): add ... documentation`.
-```
+Responses follow the standard section contract — see `references/response-format.md`.
 
 **Statuses for writer:**
 

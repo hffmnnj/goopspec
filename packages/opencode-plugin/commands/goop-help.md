@@ -24,15 +24,7 @@ Show available commands and workflow overview.
 
 ## Five-phase workflow
 
-```
-discuss -> plan -> execute -> accept -> confirm
-```
-
-- **discuss** — capture intent and constraints.
-- **plan** — lock the contract and decompose into waves.
-- **execute** — implement through delegated agents.
-- **accept** — verify and gain explicit approval.
-- **confirm** — archive and extract learnings.
+See `references/core-protocol.md` §Five-Phase Workflow for the full phase table and gate semantics.
 
 ## Agents
 

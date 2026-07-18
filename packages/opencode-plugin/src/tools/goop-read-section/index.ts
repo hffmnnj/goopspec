@@ -21,15 +21,7 @@ export function createGoopReadSectionTool(ctx: PluginContext): ToolDefinition {
   return tool({
     description:
       "Read structured workflow document sections from GoopSpecDB. " +
-      "Section reads are separate from full-document goop_read_db reads.\n\n" +
-      "Args:\n" +
-      "- doc_type: Document type (spec, blueprint, chronicle, adl, handoff, requirements, research)\n" +
-      "- section_key: Optional single section key\n" +
-      "- section_keys: Optional array of section keys for batch loading\n" +
-      "- workflow_id: Optional workflow ID (defaults to active workflow)\n\n" +
-      "Provide either section_key (single) or section_keys (batch). " +
-      "Batch mode returns each section under a ## heading separated by ---; " +
-      "omitting both keys lists all sections.",
+      "Section reads are separate from full-document goop_read_db reads.",
     args: {
       doc_type: tool.schema.enum(DOC_TYPES),
       section_key: tool.schema.string().optional(),

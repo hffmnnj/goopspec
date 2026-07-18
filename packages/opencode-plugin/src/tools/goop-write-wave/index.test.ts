@@ -1,12 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 
+import { GoopSpecDB } from "../../features/db/index.js";
 import type { PluginContext, ToolContext } from "../../test-utils.js";
 import {
   createMockPluginContext,
   createMockToolContext,
   setupTestEnvironment,
 } from "../../test-utils.js";
-import { createGoopReadWavesTool } from "../goop-read-waves/index.js";
 import { createGoopWriteWaveTool } from "./index.js";
 
 describe("goop_write_wave tool", () => {
@@ -89,9 +89,8 @@ describe("goop_write_wave tool", () => {
     expect(tasks[1].status).toBe("done");
   });
 
-  it("proves the progress view reflects task status updates through read output", async () => {
+  it("proves the progress view reflects task status updates", async () => {
     const writeTool = createGoopWriteWaveTool(ctx);
-    const readTool = createGoopReadWavesTool(ctx);
     await writeTool.execute(
       {
         wave_number: 2,
@@ -109,9 +108,13 @@ describe("goop_write_wave tool", () => {
       toolCtx,
     );
 
-    const result = await readTool.execute({ wave_number: 2 }, toolCtx);
-    expect(result).toContain("- progress: 1/3 tasks complete");
-    expect(result).toContain("- 2. [done] Two");
+    const progress = ctx.db.getWaveProgress("default", 2);
+    expect(progress).toHaveLength(1);
+    expect(progress[0].completed_tasks).toBe(1);
+    expect(progress[0].total_tasks).toBe(3);
+
+    const tasks = ctx.db.getWaveTasks(progress[0].wave_id);
+    expect(tasks[1].status).toBe("done");
   });
 });
 
@@ -208,5 +211,201 @@ describe("goop_write_wave batch mode", () => {
     const tool = createGoopWriteWaveTool(ctx);
     const result = await tool.execute({ wave_number: 1, title: "Single Wave" }, toolCtx);
     expect(result).toContain("wave 1");
+  });
+});
+
+describe("goop_write_wave combinator mode", () => {
+  let ctx: PluginContext;
+  let toolCtx: ToolContext;
+  let cleanup: () => void;
+
+  beforeEach(() => {
+    const env = setupTestEnvironment("goop-write-wave-combinator");
+    cleanup = env.cleanup;
+    ctx = createMockPluginContext({ testDir: env.testDir, db: env.db });
+    toolCtx = createMockToolContext();
+  });
+
+  afterEach(() => cleanup());
+
+  it("records verifications in the same call as a wave write", async () => {
+    const tool = createGoopWriteWaveTool(ctx);
+    const result = await tool.execute(
+      {
+        wave_number: 2,
+        title: "Combinator wave",
+        status: "in_progress",
+        verifications: [
+          { check_name: "typecheck", status: "pass", detail: "no errors" },
+          { check_name: "test", status: "pass", wave_id: 2 },
+        ],
+      },
+      toolCtx,
+    );
+
+    expect(result).toContain("Written wave 2");
+    expect(result).toContain("Verifications:");
+    expect(result).toContain("typecheck=pass");
+    expect(result).toContain("test=pass");
+
+    const wave = ctx.db.getWave("default", 2);
+    const rows = ctx.db.getVerifications("default", wave?.id ?? -1);
+    expect(rows.length).toBe(1);
+    expect(rows[0].check_name).toBe("typecheck");
+    expect(rows[0].wave_id).toBe(wave?.id ?? null);
+
+    const events = ctx.db.getEvents("default", "verification_record");
+    expect(events.length).toBe(2);
+  });
+
+  it("writes traceability rows in the same call as a wave write", async () => {
+    const tool = createGoopWriteWaveTool(ctx);
+    const result = await tool.execute(
+      {
+        wave_number: 2,
+        title: "Combinator wave",
+        traceability: [
+          { requirement_key: "MH2", task_index: 1, status: "covered" },
+          { requirement_key: "MH11", wave_number: 2, status: "covered" },
+        ],
+      },
+      toolCtx,
+    );
+
+    expect(result).toContain("Written wave 2");
+    expect(result).toContain("Traceability:");
+    expect(result).toContain("MH2");
+    expect(result).toContain("MH11");
+
+    const rows = ctx.db.getTraceability("default");
+    expect(rows.length).toBe(2);
+    expect(rows.map((r) => r.requirement_key).sort()).toEqual(["MH11", "MH2"]);
+
+    const events = ctx.db.getEvents("default", "traceability_write");
+    expect(events.length).toBe(2);
+  });
+
+  it("combined call updates wave, tasks, verifications, and traceability", async () => {
+    const tool = createGoopWriteWaveTool(ctx);
+    const result = await tool.execute(
+      {
+        wave_number: 3,
+        title: "Combined wave",
+        status: "completed",
+        tasks: [{ task_index: 1, description: "Combined task", status: "done" }],
+        verifications: [{ check_name: "lint", status: "pass" }],
+        traceability: [{ requirement_key: "MH2", task_index: 1, status: "covered" }],
+      },
+      toolCtx,
+    );
+
+    expect(result).toContain("Written wave 3");
+    expect(result).toContain("Verifications:");
+    expect(result).toContain("Traceability:");
+
+    const wave = ctx.db.getWave("default", 3);
+    expect(wave).not.toBeNull();
+    expect(wave?.status).toBe("completed");
+
+    const tasks = ctx.db.getWaveTasks(wave?.id ?? -1);
+    expect(tasks.length).toBe(1);
+    expect(tasks[0].status).toBe("done");
+
+    const verifications = ctx.db.getVerifications("default", wave?.id ?? -1);
+    expect(verifications.length).toBe(1);
+    expect(verifications[0].check_name).toBe("lint");
+    expect(verifications[0].wave_id).toBe(wave?.id ?? null);
+
+    const traceability = ctx.db.getTraceability("default");
+    expect(traceability.some((r) => r.requirement_key === "MH2" && r.wave_number === 3)).toBe(true);
+  });
+
+  it("resolves verification wave_id to the wave's internal DB id, not the wave_number", async () => {
+    const realDb = new GoopSpecDB(":memory:");
+    const mockCtx = createMockPluginContext({ db: realDb });
+    const mockTool = createGoopWriteWaveTool(mockCtx);
+
+    // Seed multiple waves so the AUTOINCREMENT internal id for wave_number 1 is > 1.
+    realDb.upsertWorkflow("default", {});
+    for (let i = 0; i < 5; i++) {
+      realDb.upsertWave("default", {
+        wave_number: i + 100,
+        title: "Placeholder wave",
+        status: "pending",
+      });
+    }
+    realDb.upsertWave("default", {
+      wave_number: 1,
+      title: "Preseed wave",
+      status: "pending",
+    });
+    const wave = realDb.getWave("default", 1);
+    expect(wave).not.toBeNull();
+    const internalWaveId = wave?.id ?? -1;
+    expect(internalWaveId).toBeGreaterThan(1);
+
+    const result = await mockTool.execute(
+      {
+        wave_number: 1,
+        title: "Regression wave",
+        verifications: [
+          { check_name: "test", status: "pass", detail: "post-fix regression check" },
+          { check_name: "typecheck", status: "pass", wave_id: internalWaveId },
+        ],
+      },
+      toolCtx,
+    );
+
+    expect(result).toContain("Written wave 1");
+    expect(result).toContain("Verifications:");
+
+    const rows = realDb.getVerifications("default", internalWaveId);
+    expect(rows.length).toBe(2);
+    expect(rows.map((r) => r.check_name).sort()).toEqual(["test", "typecheck"]);
+    expect(rows.every((r) => r.wave_id === internalWaveId)).toBe(true);
+
+    // Sanity check: querying by the human-facing wave_number (1) finds nothing because the
+    // internal id is different.
+    const wrongRows = realDb.getVerifications("default", 1);
+    expect(wrongRows.length).toBe(0);
+
+    realDb.close();
+  });
+
+  it("rejects verifications/traceability in items[] batch mode", async () => {
+    const tool = createGoopWriteWaveTool(ctx);
+    const result = await tool.execute(
+      {
+        wave_number: 1,
+        items: [{ wave_number: 1, title: "Batch wave" }],
+        verifications: [{ check_name: "test", status: "pass" }],
+      },
+      toolCtx,
+    );
+
+    expect(result).toContain("not supported in items[] batch mode");
+  });
+
+  it("rejects verifications/traceability alongside task_updates", async () => {
+    const tool = createGoopWriteWaveTool(ctx);
+    await tool.execute(
+      {
+        wave_number: 1,
+        title: "Wave One",
+        tasks: [{ task_index: 1, description: "Task 1", status: "pending" }],
+      },
+      toolCtx,
+    );
+
+    const result = await tool.execute(
+      {
+        wave_number: 1,
+        task_updates: [{ task_index: 1, status: "completed" }],
+        traceability: [{ requirement_key: "MH2" }],
+      },
+      toolCtx,
+    );
+
+    expect(result).toContain("not supported alongside task_updates");
   });
 });

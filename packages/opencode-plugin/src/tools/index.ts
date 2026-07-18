@@ -9,9 +9,12 @@
 
 import type { ToolDefinition } from "../core/sdk-compat.js";
 import type { PluginContext } from "../core/types.js";
+import { createGoopAcceptanceAuditTool } from "./goop-acceptance-audit/index.js";
 import { createGoopAdlTool } from "./goop-adl/index.js";
 import { createGoopAppendChronicleTool } from "./goop-append-chronicle/index.js";
+import { createGoopBootTool } from "./goop-boot/index.js";
 import { createGoopCheckpointTool } from "./goop-checkpoint/index.js";
+import { createGoopCreatePrTool } from "./goop-create-pr/index.js";
 import { createGoopGetGlobalConfigTool } from "./goop-get-global-config/index.js";
 import { createGoopReadDbTool } from "./goop-read-db/index.js";
 import { createGoopReferenceTool } from "./goop-reference/index.js";
@@ -29,13 +32,9 @@ import { createGoopDashboardTool } from "./goop-dashboard/index.js";
 import { createGoopInferIntentTool } from "./goop-infer-intent/index.js";
 import { createGoopQueryDecisionsTool } from "./goop-query-decisions/index.js";
 import { createGoopReadSectionTool } from "./goop-read-section/index.js";
-import { createGoopReadVerificationsTool } from "./goop-read-verifications/index.js";
-import { createGoopReadWavesTool } from "./goop-read-waves/index.js";
-import { createGoopRecordVerificationTool } from "./goop-record-verification/index.js";
 import { createGoopSearchDocsTool } from "./goop-search-docs/index.js";
 import { createGoopTimelineTool } from "./goop-timeline/index.js";
 import { createGoopWriteSectionTool } from "./goop-write-section/index.js";
-import { createGoopWriteTraceabilityTool } from "./goop-write-traceability/index.js";
 import { createGoopWriteWaveTool } from "./goop-write-wave/index.js";
 
 import { createMemoryForgetTool } from "./memory-forget/index.js";
@@ -44,20 +43,20 @@ import { createMemorySearchTool } from "./memory-search/index.js";
 import { createSlashcommandTool } from "./slashcommand/index.js";
 
 export {
+  createGoopAcceptanceAuditTool,
   createGoopAdlTool,
   createGoopAppendChronicleTool,
+  createGoopBootTool,
   createGoopBlockerTool,
   createGoopCheckpointTool,
+  createGoopCreatePrTool,
   createGoopDashboardTool,
   createGoopGetGlobalConfigTool,
   createGoopInferIntentTool,
   createGoopQueryDecisionsTool,
   createGoopReadDbTool,
   createGoopReadSectionTool,
-  createGoopReadVerificationsTool,
-  createGoopReadWavesTool,
   createGoopReferenceTool,
-  createGoopRecordVerificationTool,
   createGoopSaveNoteTool,
   createGoopSearchDocsTool,
   createGoopSearchNotesTool,
@@ -68,7 +67,6 @@ export {
   createGoopTimelineTool,
   createGoopWriteDbTool,
   createGoopWriteSectionTool,
-  createGoopWriteTraceabilityTool,
   createGoopWriteWaveTool,
   createMemoryForgetTool,
   createMemorySaveTool,
@@ -88,7 +86,10 @@ export function createTools(ctx: PluginContext): Record<string, ToolDefinition> 
     goop_reference: createGoopReferenceTool(ctx),
     goop_read_db: createGoopReadDbTool(ctx),
     goop_write_db: createGoopWriteDbTool(ctx),
+    goop_acceptance_audit: createGoopAcceptanceAuditTool(ctx),
     goop_append_chronicle: createGoopAppendChronicleTool(ctx),
+    goop_boot: createGoopBootTool(ctx),
+    goop_create_pr: createGoopCreatePrTool(ctx),
     goop_save_note: createGoopSaveNoteTool(ctx),
     goop_search_notes: createGoopSearchNotesTool(ctx),
 
@@ -96,12 +97,8 @@ export function createTools(ctx: PluginContext): Record<string, ToolDefinition> 
     goop_write_section: createGoopWriteSectionTool(ctx),
     goop_read_section: createGoopReadSectionTool(ctx),
     goop_write_wave: createGoopWriteWaveTool(ctx),
-    goop_read_waves: createGoopReadWavesTool(ctx),
     goop_query_decisions: createGoopQueryDecisionsTool(ctx),
-    goop_record_verification: createGoopRecordVerificationTool(ctx),
-    goop_read_verifications: createGoopReadVerificationsTool(ctx),
     goop_blocker: createGoopBlockerTool(ctx),
-    goop_write_traceability: createGoopWriteTraceabilityTool(ctx),
     goop_search_docs: createGoopSearchDocsTool(ctx),
     goop_timeline: createGoopTimelineTool(ctx),
     goop_dashboard: createGoopDashboardTool(ctx),

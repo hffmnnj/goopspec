@@ -68,23 +68,22 @@ function formatResource(resource: ResolvedResource, section?: string): string {
 
 export function createGoopReferenceTool(ctx: PluginContext): ToolDefinition {
   return tool({
-    description:
-      "Load reference documents or templates. Supports loading multiple references in one call (pass `names` array) to reduce tool-call count. Use `list: true` to see available references.",
+    description: "Load reference documents or templates. Supports multi-load via `names` array.",
     args: {
-      name: tool.schema.string().optional().describe("Single reference name to load"),
+      name: tool.schema.string().optional().describe("Single reference name"),
       names: tool.schema
         .array(tool.schema.string())
         .optional()
-        .describe("Array of reference names to load in one call (multi-load)"),
+        .describe("Multiple reference names (multi-load)"),
       type: tool.schema
         .enum(RESOURCE_TYPES)
         .optional()
-        .describe("Filter by resource type: reference or template"),
-      list: tool.schema.boolean().optional().describe("List available reference names"),
+        .describe("Filter by type: reference or template"),
+      list: tool.schema.boolean().optional().describe("List available references"),
       section: tool.schema
         .string()
         .optional()
-        .describe("Extract a specific section (## heading) from the resource"),
+        .describe("Extract a specific ## section from the resource"),
     },
     async execute(args): Promise<string> {
       try {

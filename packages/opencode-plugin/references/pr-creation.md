@@ -60,7 +60,7 @@ To merge a stack: merge Wave 1 first, then Wave 2 (now re-targeted to main), and
 
 ## Single-Branch Parallelism Rule
 
-Parallel agents may only run simultaneously on the same branch. Never dispatch agents to different branches at the same time. Multiple branches = multiple sources of truth = merge conflicts and context loss.
+See `references/dispatch-patterns.md` §Single-Branch Parallelism Rule for the full Allowed/Forbidden table and dispatch-level context.
 
 ## Commit Timing
 

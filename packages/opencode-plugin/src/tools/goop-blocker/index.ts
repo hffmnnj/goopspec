@@ -142,18 +142,7 @@ function processBlockerItem(
 
 export function createGoopBlockerTool(ctx: PluginContext): ToolDefinition {
   return tool({
-    description:
-      "Open, resolve, or list workflow blockers in GoopSpecDB.\n\n" +
-      "Args:\n" +
-      "- action: open, resolve, or list\n" +
-      "- description: Required for open; optional passthrough for resolve\n" +
-      "- severity: Optional severity for open (low, medium, high; default medium)\n" +
-      "- wave_id: Optional wave ID to associate with the blocker\n" +
-      "- id: Required for resolve\n" +
-      "- resolution: Optional resolution text for resolve\n" +
-      "- status: Optional status filter for list (open, resolved)\n" +
-      "- workflow_id: Optional workflow ID (defaults to active workflow)\n" +
-      "- items: Optional batch of blocker payloads (action, description, severity, wave_id, id, resolution, status, workflow_id)",
+    description: "Open, resolve, or list workflow blockers in GoopSpecDB.",
     args: {
       action: tool.schema.enum(BLOCKER_ACTIONS).optional(),
       description: tool.schema.string().optional(),

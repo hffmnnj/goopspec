@@ -19,18 +19,14 @@ export function createMemoryForgetTool(ctx: PluginContext): ToolDefinition {
   return tool({
     description:
       "Delete memories from persistent storage by ID or query. " +
-      "Query-based deletes require confirm=true to prevent accidental loss. " +
-      "WARNING: deletions are irreversible.",
+      "Query-based deletes require confirm=true. WARNING: irreversible.",
     args: {
-      id: tool.schema.number().optional().describe("Specific memory ID to delete"),
+      id: tool.schema.number().optional().describe("Memory ID to delete"),
       query: tool.schema
         .string()
         .optional()
-        .describe("Search query to find and delete matching memories (requires confirm=true)"),
-      confirm: tool.schema
-        .boolean()
-        .optional()
-        .describe("Set to true to confirm deletion when using query"),
+        .describe("Search query to delete matching memories (requires confirm=true)"),
+      confirm: tool.schema.boolean().optional().describe("Confirm deletion when using query"),
     },
     async execute(
       args: {

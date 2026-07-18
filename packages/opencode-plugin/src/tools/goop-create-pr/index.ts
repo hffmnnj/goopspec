@@ -69,16 +69,13 @@ export function createGoopCreatePrTool(ctx: PluginContext): ToolDefinition {
   return tool({
     description:
       "Create a GitHub PR with a mandatory GoopSpec terminology gate. " +
-      "Scans title, body, and branch for internal terms and blocks creation " +
-      "if any error-severity violations are found. Calls `gh pr create` on clean input.",
+      "Scans title, body, and branch for internal terms; blocks on violations.",
     args: {
-      title: tool.schema.string().describe("PR title — must contain no GoopSpec internal terms"),
-      body: tool.schema
-        .string()
-        .describe("PR body/description — must contain no GoopSpec internal terms"),
-      branch: tool.schema.string().describe("Source branch (head) for the PR"),
-      base: tool.schema.string().optional().describe("Target branch (base). Defaults to 'main'"),
-      draft: tool.schema.boolean().optional().describe("Create as draft PR. Defaults to false"),
+      title: tool.schema.string().describe("PR title"),
+      body: tool.schema.string().describe("PR body/description"),
+      branch: tool.schema.string().describe("Source branch (head)"),
+      base: tool.schema.string().optional().describe("Target branch (default: main)"),
+      draft: tool.schema.boolean().optional().describe("Create as draft PR"),
     },
     async execute(
       args: {

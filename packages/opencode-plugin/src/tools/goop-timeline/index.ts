@@ -6,9 +6,7 @@ import { buildTimeline, formatTimelineMarkdown } from "../../shared/timeline.js"
 
 export function createGoopTimelineTool(ctx: PluginContext): ToolDefinition {
   return tool({
-    description:
-      "Render a unified chronological audit trail for a workflow. " +
-      "Merges events, chronicle entries, decisions, and verifications.",
+    description: "Render a unified chronological audit trail for a workflow.",
     args: {
       workflow_id: tool.schema.string().optional(),
       limit: tool.schema.number().optional(),

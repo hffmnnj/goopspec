@@ -46,7 +46,7 @@ For workflow path resolution:
 ## DB Tool Surface
 
 - Documents: `goop_read_db`, `goop_write_db`, `goop_append_chronicle`, `goop_read_section`, `goop_write_section`, `goop_search_docs`.
-- Waves and tracking: `goop_write_wave`, `goop_read_waves`, `goop_query_decisions`, `goop_record_verification`, `goop_read_verifications`, `goop_blocker`, `goop_write_traceability`.
+- Waves and tracking: `goop_write_wave`, `goop_query_decisions`, `goop_blocker`.
 - Project views: `goop_timeline`, `goop_dashboard`.
 - Field Notes: `goop_save_note`, `goop_search_notes`.
 
@@ -121,6 +121,8 @@ Single message, two parallel tool calls:
 ```
 
 ## Agent Boot Sequence
+
+**Recommended path:** [`goop_boot`](tool-reference.md) (documented in `tool-reference.md`) combines steps 2–6 below — doc reads, Field Note search, memory search, and reference load — into a single call. New agent work should prefer `goop_boot` for efficiency. The granular step-by-step sequence remains valid and is useful when an agent needs fine control over which pieces to fetch.
 
 Before doing work, every subagent must:
 

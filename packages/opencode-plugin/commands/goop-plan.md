@@ -23,39 +23,7 @@ Call `goop_state({ action: "get" })`. If `interviewComplete` is not `true` or th
 
 ## Research-first gate
 
-Before delegating to `goop-planner`, run a research pass to ground the plan in facts. Skip only for provably trivial work.
-
-### Default behavior
-
-Dispatch `goop-researcher` to explore the problem domain and relevant codebase surfaces. For complex, multi-domain, or architectural work, dispatch `goop-explorer` in parallel with the researcher. **Planner delegation is blocked until research returns `STATUS: complete`.**
-
-After research completes, assemble the planner payload:
-
-```
-goop_search_notes({ query: "[workflow topic]", limit: 10 })
-```
-
-Filter to notes with importance ≥ 6. Format them into a `## Research Summary` block (list of findings with `fn_` IDs) and include it in the `goop-planner` delegation prompt.
-
-### Skip heuristic (trivial workflows)
-
-Skip pre-plan research when **ALL** of the following are true:
-
-- The requirements describe a change to ≤ 2 files with no domain or technology unknowns.
-- No new libraries, patterns, or architectural decisions are involved.
-- `REQUIREMENTS.md` has ≤ 10 bullet points total.
-
-**When in doubt, run research.** Log every skip decision via `goop_adl` with the heuristic trigger and justification.
-
-### Fallback
-
-If the researcher returns `STATUS: blocked`, warn the user and allow them to explicitly proceed without research. Log the exception to ADL before continuing.
-
-### Sequencing
-
-```
-discovery gate → research (or skip + ADL log) → assemble Research Summary → planner delegation → contract gate → spec lock
-```
+Research-first gate: see `agents/goop-orchestrator.md` §Research-First Gate (Plan Phase) for the full procedure — dispatch rules, skip heuristic, fallback, mid-wave research, and sequencing. The orchestrator owns this gate; this command invokes it.
 
 ## Load references
 
