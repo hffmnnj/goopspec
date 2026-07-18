@@ -126,38 +126,7 @@ The same parallel-vs-sequential principle applies at the tool-call level. For ma
 
 **Narrative or sequential ordering in a plan is NOT the same as a data dependency.** If tool call B does not consume tool call A's output, batch them together in the same message — even if B logically follows A in your plan. Only call tools sequentially when a later call genuinely needs an earlier call's result.
 
-#### Worked Example
-
-**BEFORE (wrong — two separate messages/turns):**
-
-```
-Message 1: goop_state({ action: "create-workflow", workflowId: "my-workflow" })
-Message 2: goop_state({ action: "set-active-workflow", workflowId: "my-workflow" })
-```
-
-and
-
-```
-Message 1: goop_state({ action: "get" })
-Message 2: goop_state({ action: "set-autopilot", autopilot: true, lazy: true })
-```
-
-(In both cases, the second call's inputs did not depend on the first call's output — they should have been batched.)
-
-**AFTER (correct):**
-
-```
-Single message: goop_state({ action: "create-workflow", workflowId: "my-workflow", activate: true })
-```
-
-(Note: once the `activate` flag lands, this becomes a single call instead of two — the best fix is often to eliminate the second call entirely via a tool-design improvement, not just batch it.)
-
-```
-Single message, two parallel tool calls:
-  - goop_state({ action: "get" })
-  - goop_search_notes({ query: "..." })
-(called together in the same turn since neither depends on the other's output)
-```
+See `references/core-protocol.md` §Tool-Call Batching for the full worked example.
 
 ## Research Dispatch
 
@@ -210,7 +179,7 @@ Users can override models in `goopspec.json` under `models`.
 
 ## Verification Dispatch
 
-Use `goop-verifier` at acceptance gates and after high-risk changes. A verification report should check:
+Use `goop-verifier` at acceptance gates and after high-risk changes. At the accept gate, prefer [`goop_acceptance_audit`](tool-reference.md) — it replaces the 3-call blocker+verification+wave-read sequence with a single read-only call returning combined `{blockers, verifications, waves}`. A verification report should check:
 
 | Area | What to Confirm |
 |------|-----------------|
@@ -235,6 +204,8 @@ Use `goop-explorer` when entering an unfamiliar codebase. The agent should produ
 1. Log failure to state.
 2. Save checkpoint.
 3. Attempt recovery: retry with fresh context, fall back to a different agent, or escalate to the user.
+
+When logging a failure alongside an ADL entry, consider [`goop_append_chronicle`](tool-reference.md) with `alsoLogAdl` — it appends the chronicle entry and logs the ADL entry in one call. Granular tools remain available for separate logging.
 
 ### On Timeout
 

@@ -143,12 +143,18 @@ async function appendAuxiliaryMemory(
   try {
     const memoryType: MemoryType = payload.type ?? "observation";
 
+    if (payload.importance !== undefined && payload.importance !== null) {
+      if (
+        !Number.isFinite(payload.importance) ||
+        payload.importance < 1 ||
+        payload.importance > 10
+      ) {
+        return { ok: false, error: "Memory importance must be between 1 and 10." };
+      }
+    }
     let importance = payload.importance ?? 5;
     if (importance > 0 && importance < 1) {
       importance = Math.round(importance * 10);
-    }
-    if (importance < 1 || importance > 10) {
-      return { ok: false, error: "Memory importance must be between 1 and 10." };
     }
 
     const input: MemorySaveInput = {
@@ -196,14 +202,10 @@ export function createGoopAppendChronicleTool(ctx: PluginContext): ToolDefinitio
   return tool({
     description:
       "Append a timestamped entry to the chronicle. Optionally log an ADL entry " +
-      "and/or save a memory in the same call. Cross-store atomicity is unavailable; " +
-      "auxiliary writes are best-effort and reported separately.",
+      "and/or save a memory in the same call. Cross-store atomicity is unavailable.",
     args: {
       entry: tool.schema.string().optional().describe("Chronicle entry text"),
-      workflow_id: tool.schema
-        .string()
-        .optional()
-        .describe("Workflow ID (defaults to active workflow)"),
+      workflow_id: tool.schema.string().optional().describe("Workflow ID (defaults to active)"),
       entries: tool.schema
         .array(tool.schema.string())
         .optional()
@@ -217,7 +219,7 @@ export function createGoopAppendChronicleTool(ctx: PluginContext): ToolDefinitio
           files: tool.schema.array(tool.schema.string()).optional(),
         })
         .optional()
-        .describe("Optional ADL entry to log after the chronicle append"),
+        .describe("ADL entry to log alongside chronicle"),
       alsoSaveMemory: tool.schema
         .object({
           title: tool.schema.string(),
@@ -227,7 +229,7 @@ export function createGoopAppendChronicleTool(ctx: PluginContext): ToolDefinitio
           concepts: tool.schema.array(tool.schema.string()).optional(),
         })
         .optional()
-        .describe("Optional memory to save after the chronicle append"),
+        .describe("Memory to save alongside chronicle"),
     },
     async execute(
       args: {

@@ -17,7 +17,7 @@ import type { CheckpointData, GoopState, PluginContext } from "../../core/types.
 
 export function createGoopCheckpointTool(ctx: PluginContext): ToolDefinition {
   return tool({
-    description: "Save, load, or list execution checkpoints for resuming work later",
+    description: "Save, load, or list execution checkpoints.",
     args: {
       action: tool.schema.enum(["save", "load", "list"]),
       id: tool.schema.string().optional(),

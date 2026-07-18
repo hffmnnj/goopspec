@@ -577,9 +577,7 @@ async function classifyTranscript(
 
 export function createGoopInferIntentTool(ctx: PluginContext): ToolDefinition {
   return tool({
-    description:
-      "Classify a raw voice transcript into a GoopSpec command intent. " +
-      "Returns command, confidence, extracted slots, reasoning, and auto-run metadata.",
+    description: "Classify a raw voice transcript into a GoopSpec command intent.",
     args: {
       transcript: tool.schema.string(),
       workflowPhase: tool.schema.string().optional(),

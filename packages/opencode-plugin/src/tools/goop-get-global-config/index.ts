@@ -59,10 +59,7 @@ export async function readGlobalConfig(): Promise<GlobalConfigResult> {
 
 export function createGoopGetGlobalConfigTool(_ctx: PluginContext): ToolDefinition {
   return tool({
-    description:
-      "Read the global GoopSpec config from the OpenCode config directory " +
-      "(~/.config/opencode/goopspec.json, or GOOPSPEC_GLOBAL_CONFIG_PATH when set). " +
-      "Returns {} if the file does not exist.",
+    description: "Read the global GoopSpec config. Returns {} if the file does not exist.",
     args: {},
     async execute(_args: Record<string, never>, _context: ToolContext): Promise<string> {
       const result = await readGlobalConfig();

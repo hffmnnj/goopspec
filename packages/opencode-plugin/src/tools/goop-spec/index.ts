@@ -167,7 +167,7 @@ function validateDocs(ctx: PluginContext): string {
 
 export function createGoopSpecTool(ctx: PluginContext): ToolDefinition {
   return tool({
-    description: "Read, list, or validate SPEC.md and BLUEPRINT.md files for GoopSpec phases",
+    description: "Read, list, or validate SPEC.md and BLUEPRINT.md files.",
     args: {
       action: tool.schema.enum(["read", "list", "validate"]),
       file: tool.schema.enum(["spec", "plan", "both"]).optional(),

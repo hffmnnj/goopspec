@@ -18,8 +18,7 @@ import { logError } from "../../shared/logger.js";
 
 export function createGoopAdlTool(ctx: PluginContext): ToolDefinition {
   return tool({
-    description:
-      "Read or append to the Automated Decision Log (ADL). Use 'read' to view the log, or 'append' to add a new entry.",
+    description: "Read or append to the Automated Decision Log (ADL).",
     args: {
       action: tool.schema.enum(["read", "append"]),
       type: tool.schema.enum(["decision", "deviation", "observation"]).optional(),

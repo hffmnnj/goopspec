@@ -45,7 +45,7 @@ function formatBlockers(workflowId: string, rows: BlockerRow[]): string {
 }
 
 // ---------------------------------------------------------------------------
-// Verification formatting (mirrors goop-read-verifications)
+// Verification formatting
 // ---------------------------------------------------------------------------
 
 function isFailingStatus(status: string): boolean {
@@ -102,7 +102,7 @@ function formatVerifications(workflowId: string, rows: VerificationRow[]): strin
 }
 
 // ---------------------------------------------------------------------------
-// Wave formatting (mirrors goop-read-waves)
+// Wave formatting
 // ---------------------------------------------------------------------------
 
 function formatWave(ctx: PluginContext, wave: WaveRow, progress?: WaveProgressRow): string {
@@ -172,8 +172,7 @@ function formatWaves(
 
 export function createGoopAcceptanceAuditTool(ctx: PluginContext): ToolDefinition {
   return tool({
-    description:
-      "One-call acceptance gate audit combining blockers, verifications, and waves for a workflow.",
+    description: "One-call acceptance gate audit combining blockers, verifications, and waves.",
     args: {
       workflow_id: tool.schema.string().optional(),
       wave_ids: tool.schema.array(tool.schema.number()).optional(),

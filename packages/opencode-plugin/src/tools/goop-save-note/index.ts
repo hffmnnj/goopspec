@@ -39,35 +39,23 @@ function generateNoteId(): string {
 
 export function createGoopSaveNoteTool(ctx: PluginContext): ToolDefinition {
   return tool({
-    description:
-      "Save a Field Note to the global knowledge base. " +
-      "Notes persist across projects and workflows, forming a compounding knowledge layer.",
+    description: "Save a Field Note to the global knowledge base.",
     args: {
-      title: tool.schema.string().describe("Brief summary of the note"),
-      body: tool.schema.string().describe("Full note content (markdown)"),
-      tags: tool.schema
-        .array(tool.schema.string())
-        .describe('Categorization tags (e.g. ["sqlite", "performance", "migration"])'),
-      source_agent: tool.schema
-        .string()
-        .describe('Which agent is saving (e.g. "goop-researcher", "goop-explorer")'),
-      importance: tool.schema.number().optional().describe("Importance level 1-10 (default 5)"),
-      workflow_id: tool.schema.string().optional().describe("Originating workflow (optional)"),
-      project_id: tool.schema
-        .string()
-        .optional()
-        .describe("Originating project (optional, defaults to project name from paths)"),
+      title: tool.schema.string().describe("Note title"),
+      body: tool.schema.string().describe("Note body (markdown)"),
+      tags: tool.schema.array(tool.schema.string()).describe("Categorization tags"),
+      source_agent: tool.schema.string().describe("Agent saving the note"),
+      importance: tool.schema.number().optional().describe("Importance 1-10 (default 5)"),
+      workflow_id: tool.schema.string().optional().describe("Originating workflow"),
+      project_id: tool.schema.string().optional().describe("Originating project"),
       items: tool.schema
         .array(
           tool.schema.object({
-            title: tool.schema.string().describe("Brief summary of the note"),
-            body: tool.schema.string().describe("Full note content (markdown)"),
+            title: tool.schema.string().describe("Note title"),
+            body: tool.schema.string().describe("Note body (markdown)"),
             tags: tool.schema.array(tool.schema.string()).describe("Categorization tags"),
-            source_agent: tool.schema.string().describe("Which agent is saving"),
-            importance: tool.schema
-              .number()
-              .optional()
-              .describe("Importance level 1-10 (default 5)"),
+            source_agent: tool.schema.string().describe("Agent saving the note"),
+            importance: tool.schema.number().optional().describe("Importance 1-10 (default 5)"),
             workflow_id: tool.schema.string().optional().describe("Originating workflow"),
             project_id: tool.schema.string().optional().describe("Originating project"),
           }),

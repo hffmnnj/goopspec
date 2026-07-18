@@ -7,7 +7,6 @@ import {
   createMockToolContext,
   setupTestEnvironment,
 } from "../../test-utils.js";
-import { createGoopReadWavesTool } from "../goop-read-waves/index.js";
 import { createGoopWriteWaveTool } from "./index.js";
 
 describe("goop_write_wave tool", () => {
@@ -90,9 +89,8 @@ describe("goop_write_wave tool", () => {
     expect(tasks[1].status).toBe("done");
   });
 
-  it("proves the progress view reflects task status updates through read output", async () => {
+  it("proves the progress view reflects task status updates", async () => {
     const writeTool = createGoopWriteWaveTool(ctx);
-    const readTool = createGoopReadWavesTool(ctx);
     await writeTool.execute(
       {
         wave_number: 2,
@@ -110,9 +108,13 @@ describe("goop_write_wave tool", () => {
       toolCtx,
     );
 
-    const result = await readTool.execute({ wave_number: 2 }, toolCtx);
-    expect(result).toContain("- progress: 1/3 tasks complete");
-    expect(result).toContain("- 2. [done] Two");
+    const progress = ctx.db.getWaveProgress("default", 2);
+    expect(progress).toHaveLength(1);
+    expect(progress[0].completed_tasks).toBe(1);
+    expect(progress[0].total_tasks).toBe(3);
+
+    const tasks = ctx.db.getWaveTasks(progress[0].wave_id);
+    expect(tasks[1].status).toBe("done");
   });
 });
 
@@ -250,7 +252,7 @@ describe("goop_write_wave combinator mode", () => {
     const rows = ctx.db.getVerifications("default", wave?.id ?? -1);
     expect(rows.length).toBe(1);
     expect(rows[0].check_name).toBe("typecheck");
-    expect(rows[0].wave_id).toBe(wave?.id);
+    expect(rows[0].wave_id).toBe(wave?.id ?? null);
 
     const events = ctx.db.getEvents("default", "verification_record");
     expect(events.length).toBe(2);
@@ -312,7 +314,7 @@ describe("goop_write_wave combinator mode", () => {
     const verifications = ctx.db.getVerifications("default", wave?.id ?? -1);
     expect(verifications.length).toBe(1);
     expect(verifications[0].check_name).toBe("lint");
-    expect(verifications[0].wave_id).toBe(wave?.id);
+    expect(verifications[0].wave_id).toBe(wave?.id ?? null);
 
     const traceability = ctx.db.getTraceability("default");
     expect(traceability.some((r) => r.requirement_key === "MH2" && r.wave_number === 3)).toBe(true);

@@ -22,13 +22,7 @@ import { DOC_TYPE_FILENAMES, renderSidecars } from "../../shared/render-sidecars
 export function createGoopWriteDbTool(ctx: PluginContext): ToolDefinition {
   return tool({
     description:
-      "Write or update a workflow document in GoopSpecDB. Renders a markdown sidecar file.\n\n" +
-      "Args:\n" +
-      "- doc_type: Document type (spec, blueprint, chronicle, adl, handoff, requirements, research)\n" +
-      "- content: Markdown body to write\n" +
-      "- workflow_id: Optional workflow ID (defaults to active workflow)\n" +
-      "- mode: 'replace' (default) overwrites; 'append' concatenates to existing content\n" +
-      "- items: Optional batch of document writes for the same workflow_id",
+      "Write or update a workflow document in GoopSpecDB. Renders a markdown sidecar file.",
     args: {
       doc_type: tool.schema.enum(DOC_TYPES),
       content: tool.schema.string(),

@@ -346,7 +346,7 @@ The config watcher (`src/features/setup/config-watcher.ts`) watches the project-
 ## DB Tools Available
 
 - Documents: `goop_read_db`, `goop_write_db`, `goop_append_chronicle`, `goop_read_section`, `goop_write_section`, `goop_search_docs`
-- Waves and tracking: `goop_write_wave`, `goop_read_waves`, `goop_query_decisions`, `goop_record_verification`, `goop_read_verifications`, `goop_blocker`, `goop_write_traceability`
+- Waves and tracking: `goop_write_wave`, `goop_query_decisions`, `goop_blocker`
 - Project views: `goop_timeline`, `goop_dashboard`
 - Field Notes: `goop_save_note`, `goop_search_notes`
 
@@ -366,6 +366,6 @@ The config watcher (`src/features/setup/config-watcher.ts`) watches the project-
 
 - **Memory is in-process via `bun:sqlite`.** The memory feature runs inside the plugin process using SQLite with FTS5 + LIKE fallback. There is no separate worker process and no `port-37777` service.
 
-- **Prefer `items[]` batch mode for multi-write turns.** All five write tools (`goop_write_db`, `goop_write_section`, `goop_write_wave`, `goop_write_traceability`, `goop_save_note`) now accept an optional `items[]` parameter. When writing more than one doc/section/wave/row/note in a turn, use the batch form to minimize tool calls and wrap writes in a single transaction. Single-item usage is unchanged and still supported.
+- **Prefer `items[]` batch mode for multi-write turns.** All four write tools (`goop_write_db`, `goop_write_section`, `goop_write_wave`, `goop_save_note`) now accept an optional `items[]` parameter. When writing more than one doc/section/wave/row/note in a turn, use the batch form to minimize tool calls and wrap writes in a single transaction. Single-item usage is unchanged and still supported.
 
 - **Knowledge lives in `references/`, not `skills/`.** GoopSpec 1.0.0 removed the skills feature. Use `goop_reference` to load the 13 consolidated reference documents (including `field-notes-protocol`).

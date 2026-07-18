@@ -153,9 +153,7 @@ export function formatStatus(
 
 export function createGoopStatusTool(ctx: PluginContext): ToolDefinition {
   return tool({
-    description:
-      "Show current GoopSpec workflow state, phase, progress, and next steps. " +
-      "Use this to understand where the workflow is and what to do next.",
+    description: "Show current GoopSpec workflow state, phase, progress, and next steps.",
     args: {
       verbose: tool.schema.boolean().optional(),
     },

@@ -62,15 +62,7 @@ export function createGoopWriteSectionTool(ctx: PluginContext): ToolDefinition {
   return tool({
     description:
       "Write, update, or delete a structured workflow document section in GoopSpecDB. " +
-      "Section writes are separate from full-document goop_write_db writes and render the assembled section sidecar.\n\n" +
-      "Args:\n" +
-      "- action: 'write' (default) or 'delete'\n" +
-      "- doc_type: Document type (spec, blueprint, chronicle, adl, handoff, requirements, research)\n" +
-      "- section_key: Stable key for the section to write or delete\n" +
-      "- content: Markdown body for a section write\n" +
-      "- position: Optional ordering position for assembly\n" +
-      "- workflow_id: Optional workflow ID (defaults to active workflow)\n" +
-      "- items: Optional batch of section writes for the same workflow_id",
+      "Section writes are separate from full-document goop_write_db writes and render the assembled section sidecar.",
     args: {
       action: tool.schema.enum(["write", "delete"] as const).optional(),
       doc_type: tool.schema.enum(DOC_TYPES),

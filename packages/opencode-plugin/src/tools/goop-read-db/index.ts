@@ -25,13 +25,8 @@ export function createGoopReadDbTool(ctx: PluginContext): ToolDefinition {
 
   return tool({
     description:
-      "Read workflow documents from the GoopSpecDB.\n\n" +
-      "Args:\n" +
-      "- doc_type: Single document type (spec, blueprint, chronicle, adl, handoff, requirements, research)\n" +
-      '- doc_types: Array of document types for batch loading (e.g. ["spec", "blueprint"])\n' +
-      "- workflow_id: Optional workflow ID (defaults to active workflow)\n\n" +
-      "Provide either doc_type (single) or doc_types (batch). " +
-      "Batch mode returns each document under a ## heading separated by ---.",
+      "Read workflow documents from the GoopSpecDB. " +
+      "Provide doc_type (single) or doc_types (batch).",
     args: {
       doc_type: tool.schema.string().optional(),
       doc_types: tool.schema.array(tool.schema.string()).optional(),
