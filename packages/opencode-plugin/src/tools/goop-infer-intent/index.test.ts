@@ -416,7 +416,7 @@ ${"**Command:** `/goop-plan` (plan)  "}
     expect(createWorkflow).not.toHaveBeenCalled();
   });
 
-  it("never auto-applies a destructive transition target", async () => {
+  it("never auto-applies an invalid transition target", async () => {
     const transitionPhase = mock(ctx.stateManager.transitionPhase);
     const sdkCtx = withSdkClassification(ctx, {
       command: "transition",
@@ -430,7 +430,204 @@ ${"**Command:** `/goop-plan` (plan)  "}
       createMockToolContext(),
     )) as string;
 
-    expect(parseResult(result).mutation).toMatchObject({ applied: false, action: "transition" });
+    expect(parseResult(result).mutation).toMatchObject({
+      applied: false,
+      action: "transition",
+      error: "A single valid targetPhase slot is required.",
+    });
     expect(transitionPhase).not.toHaveBeenCalled();
+  });
+
+  it("rejects auto-apply transition to accept because it requires an explicit audit", async () => {
+    const transitionPhase = mock(ctx.stateManager.transitionPhase);
+    const sdkCtx = withSdkClassification(ctx, {
+      command: "transition",
+      confidence: 0.99,
+      slots: { targetPhase: "accept" },
+      reasoning: "Wants to approve the workflow.",
+    });
+    sdkCtx.stateManager.transitionPhase = transitionPhase;
+    const state = sdkCtx.stateManager.getState();
+    state.workflows[state.activeWorkflowId].phase = "execute";
+    const result = (await createGoopInferIntentTool(sdkCtx).execute(
+      { transcript: "accept the workflow", autoApply: true },
+      createMockToolContext(),
+    )) as string;
+
+    expect(parseResult(result).mutation).toMatchObject({
+      applied: false,
+      action: "transition",
+      error:
+        "Cannot auto-apply transition to accept because execution-gate evidence requires an explicit audit.",
+    });
+    expect(transitionPhase).not.toHaveBeenCalled();
+  });
+
+  it("rejects auto-apply transition to plan before interview is complete", async () => {
+    const transitionPhase = mock(ctx.stateManager.transitionPhase);
+    const sdkCtx = withSdkClassification(ctx, {
+      command: "transition",
+      confidence: 0.99,
+      slots: { targetPhase: "plan" },
+      reasoning: "Wants to start planning.",
+    });
+    sdkCtx.stateManager.transitionPhase = transitionPhase;
+    const state = sdkCtx.stateManager.getState();
+    state.workflows[state.activeWorkflowId].phase = "discuss";
+    state.workflows[state.activeWorkflowId].interviewComplete = false;
+    const result = (await createGoopInferIntentTool(sdkCtx).execute(
+      { transcript: "transition to plan", autoApply: true },
+      createMockToolContext(),
+    )) as string;
+
+    expect(parseResult(result).mutation).toMatchObject({
+      applied: false,
+      action: "transition",
+      error: "Cannot transition to plan before the interview is complete.",
+    });
+    expect(transitionPhase).not.toHaveBeenCalled();
+  });
+
+  it("rejects auto-apply transition to plan when requirements document is missing", async () => {
+    const transitionPhase = mock(ctx.stateManager.transitionPhase);
+    const appendADL = mock(ctx.stateManager.appendADL);
+    const sdkCtx = withSdkClassification(ctx, {
+      command: "transition",
+      confidence: 0.99,
+      slots: { targetPhase: "plan" },
+      reasoning: "Wants to start planning.",
+    });
+    sdkCtx.stateManager.transitionPhase = transitionPhase;
+    sdkCtx.stateManager.appendADL = appendADL;
+    const state = sdkCtx.stateManager.getState();
+    state.workflows[state.activeWorkflowId].phase = "discuss";
+    state.workflows[state.activeWorkflowId].interviewComplete = true;
+    // No requirements document for the active workflow.
+    const result = (await createGoopInferIntentTool(sdkCtx).execute(
+      { transcript: "transition to plan", autoApply: true },
+      createMockToolContext(),
+    )) as string;
+
+    expect(parseResult(result).mutation).toMatchObject({
+      applied: false,
+      action: "transition",
+      error: "Cannot transition to plan before a requirements document exists.",
+    });
+    expect(transitionPhase).not.toHaveBeenCalled();
+  });
+
+  it("rejects auto-apply transition to execute before the specification is locked", async () => {
+    const transitionPhase = mock(ctx.stateManager.transitionPhase);
+    const sdkCtx = withSdkClassification(ctx, {
+      command: "transition",
+      confidence: 0.99,
+      slots: { targetPhase: "execute" },
+      reasoning: "Wants to start executing.",
+    });
+    sdkCtx.stateManager.transitionPhase = transitionPhase;
+    const state = sdkCtx.stateManager.getState();
+    state.workflows[state.activeWorkflowId].phase = "plan";
+    state.workflows[state.activeWorkflowId].specLocked = false;
+    const result = (await createGoopInferIntentTool(sdkCtx).execute(
+      { transcript: "transition to execute", autoApply: true },
+      createMockToolContext(),
+    )) as string;
+
+    expect(parseResult(result).mutation).toMatchObject({
+      applied: false,
+      action: "transition",
+      error: "Cannot transition to execute before the specification is locked.",
+    });
+    expect(transitionPhase).not.toHaveBeenCalled();
+  });
+
+  it("auto-applies a valid transition to plan and logs an observation", async () => {
+    const transitionPhase = mock(ctx.stateManager.transitionPhase);
+    const appendADL = mock(ctx.stateManager.appendADL);
+    const sdkCtx = withSdkClassification(ctx, {
+      command: "transition",
+      confidence: 0.95,
+      slots: { targetPhase: "plan" },
+      reasoning: "Wants to start planning.",
+    });
+    sdkCtx.stateManager.transitionPhase = transitionPhase;
+    sdkCtx.stateManager.appendADL = appendADL;
+    const state = sdkCtx.stateManager.getState();
+    state.workflows[state.activeWorkflowId].phase = "discuss";
+    state.workflows[state.activeWorkflowId].interviewComplete = true;
+    sdkCtx.db.upsertDocument(state.activeWorkflowId, "requirements", "# Requirements\n\nItems.");
+
+    const result = (await createGoopInferIntentTool(sdkCtx).execute(
+      { transcript: "transition to plan", autoApply: true },
+      createMockToolContext(),
+    )) as string;
+
+    expect(parseResult(result).mutation).toMatchObject({
+      applied: true,
+      action: "transition",
+      result: 'Phase transitioned to "plan".',
+    });
+    expect(transitionPhase).toHaveBeenCalledWith("plan");
+    expect(appendADL).toHaveBeenCalledWith(expect.objectContaining({ type: "observation" }));
+  });
+
+  it("rejects auto-apply when confidence is at or below the hard floor of 0.85", async () => {
+    const createWorkflow = mock(ctx.stateManager.createWorkflow);
+    const transitionPhase = mock(ctx.stateManager.transitionPhase);
+    const sdkCtx = withSdkClassification(ctx, {
+      command: "create-workflow",
+      confidence: 0.85,
+      slots: { workflowId: "auth-refresh" },
+      reasoning: "Explicit workflow request but at the floor.",
+    });
+    sdkCtx.stateManager.createWorkflow = createWorkflow;
+    sdkCtx.stateManager.transitionPhase = transitionPhase;
+
+    const result = (await createGoopInferIntentTool(sdkCtx).execute(
+      {
+        transcript: "create workflow auth-refresh",
+        autoApply: true,
+        confidenceThreshold: 0.8,
+      },
+      createMockToolContext(),
+    )) as string;
+
+    expect(parseResult(result).mutation).toMatchObject({
+      applied: false,
+      action: "create-workflow",
+      error: "Confidence must be greater than 0.85 for auto-apply.",
+    });
+    expect(createWorkflow).not.toHaveBeenCalled();
+    expect(transitionPhase).not.toHaveBeenCalled();
+  });
+
+  it("does not auto-apply when autoApply is false even if confidenceThreshold is set", async () => {
+    const createWorkflow = mock(ctx.stateManager.createWorkflow);
+    const setActiveWorkflow = mock(ctx.stateManager.setActiveWorkflow);
+    const sdkCtx = withSdkClassification(ctx, {
+      command: "create-workflow",
+      confidence: 0.99,
+      slots: { workflowId: "auth-refresh" },
+      reasoning: "Explicit workflow request.",
+    });
+    sdkCtx.stateManager.createWorkflow = createWorkflow;
+    sdkCtx.stateManager.setActiveWorkflow = setActiveWorkflow;
+
+    const result = (await createGoopInferIntentTool(sdkCtx).execute(
+      {
+        transcript: "create workflow auth-refresh",
+        autoApply: false,
+        confidenceThreshold: 0.9,
+      },
+      createMockToolContext(),
+    )) as string;
+
+    expect(parseResult(result).mutation).toMatchObject({
+      applied: false,
+      action: "transition",
+      error: "autoApply is disabled.",
+    });
+    expect(createWorkflow).not.toHaveBeenCalled();
+    expect(setActiveWorkflow).not.toHaveBeenCalled();
   });
 });

@@ -11,16 +11,12 @@ The fastest mental model is: if the tool has a plural/batch argument (`doc_types
 | If you need to... | Don't do this... | Do this instead |
 |---|---|---|
 | Read 3 workflow docs | 3 separate `goop_read_db` calls | `goop_read_db({ doc_types: ["spec", "blueprint", "chronicle"] })` |
-| Read 3 waves | 3 separate `goop_read_waves` calls | `goop_read_waves({ wave_numbers: [1, 2, 3] })` |
-| Read 3 sections | 3 separate `goop_read_section` calls | `goop_read_section({ doc_type: "spec", section_keys: ["vision", "scope", "risks"] })` |
 | Write 3 docs | 3 separate `goop_write_db` calls | `goop_write_db({ items: [...] })` |
 | Write 3 sections | 3 separate `goop_write_section` calls | `goop_write_section({ items: [...] })` |
 | Append 3 chronicle entries | 3 separate `goop_append_chronicle` calls | `goop_append_chronicle({ entries: [...] })` |
 | Save 3 field notes | 3 separate `goop_save_note` calls | `goop_save_note({ items: [...] })` |
 | Update 3 task statuses | 3 separate `goop_write_wave` calls | `goop_write_wave({ wave_number: 1, task_updates: [...] })` |
-| Record 3 verifications | 3 separate `goop_record_verification` calls | `goop_record_verification({ items: [...] })` |
 | Open 3 blockers | 3 separate `goop_blocker` calls | `goop_blocker({ items: [...] })` |
-| Read verifications for 3 waves | 3 separate `goop_read_verifications` calls | `goop_read_verifications({ wave_ids: [1, 2, 3] })` |
 
 ## Document tools
 
@@ -45,17 +41,13 @@ The fastest mental model is: if the tool has a plural/batch argument (`doc_types
 | Tool | Arguments | Example |
 |---|---|---|
 | `goop_write_wave` | `wave_number`, `title?`, `status?`, `pr_branch?`, `pr_url?`, `tasks?: {task_index, description?, agent?, status?}[]`, `task_update?: {task_index, status}`, `task_updates?: {task_index, status}[]`, `workflow_id?`, `items?: {wave_number, title?, status?, pr_branch?, pr_url?, tasks?}[]`, `verifications?: {check_name, status, detail?, wave_id?}[]`, `traceability?: {requirement_key, wave_number?, task_index?, status?}[]` | `goop_write_wave({ wave_number: 2, task_updates: [{ task_index: 1, status: "complete" }, { task_index: 2, status: "complete" }], verifications: [{ check_name: "typecheck", status: "pass" }] })` |
-| `goop_read_waves` | `wave_number?`, `wave_numbers?: number[]`, `status?`, `workflow_id?` | `goop_read_waves({ wave_numbers: [1, 2, 3] })` |
-| `goop_write_traceability` | `requirement_key`, `wave_number?`, `task_index?`, `status?`, `workflow_id?`, `items?: {requirement_key, wave_number?, task_index?, status?}[]` | `goop_write_traceability({ requirement_key: "MH2", wave_number: 2, task_index: 1, status: "covered" })` |
 | `goop_query_decisions` | `rule?`, `rules?: number[]`, `type?`, `types?: string[]`, `workflow_id?`, `limit?` | `goop_query_decisions({ rules: [2, 3], types: ["deviation", "observation"], limit: 20 })` |
-| `goop_record_verification` | `check_name: "typecheck" \| "test" \| "lint" \| "custom"`, `status: "pass" \| "fail" \| "skip"`, `wave_id?`, `detail?`, `workflow_id?`, `items?: {check_name, status, wave_id?, detail?, workflow_id?}[]` | `goop_record_verification({ items: [{ check_name: "typecheck", status: "pass", wave_id: 2 }, { check_name: "test", status: "pass", wave_id: 2 }] })` |
-| `goop_read_verifications` | `wave_id?`, `wave_ids?: number[]`, `workflow_id?` | `goop_read_verifications({ wave_ids: [1, 2, 3] })` |
 | `goop_blocker` | `action: "open" \| "resolve" \| "list"`, `description?`, `severity?`, `wave_id?`, `id?`, `resolution?`, `status?`, `workflow_id?`, `items?: {action, description?, severity?, wave_id?, id?, resolution?, status?, workflow_id?}[]` | `goop_blocker({ action: "open", description: "CI token expired", severity: "high", wave_id: 2 })` |
 | `goop_acceptance_audit` | `workflow_id?`, `wave_ids?: number[]`, `include_all_blockers?: boolean` | `goop_acceptance_audit({ wave_ids: [1, 2], include_all_blockers: true })` |
 
-`goop_write_wave`'s `verifications`/`traceability` fields replace separate `goop_record_verification`/`goop_write_traceability` calls when used together with a wave/task update. Not available alongside `items` or `task_updates` batch modes.
+`goop_write_wave`'s `verifications`/`traceability` fields replace the retired standalone `goop_record_verification` and `goop_write_traceability` tools — their behavior is fully absorbed as inline args. Not available alongside `items` or `task_updates` batch modes.
 
-`goop_acceptance_audit` replaces the 3-call blocker+verification+wave-read sequence at the accept gate. Returns combined `{blockers, verifications, waves}` in a JSON comment.
+`goop_acceptance_audit` replaces the retired `goop_read_verifications` and `goop_read_waves` tools at the accept gate, plus blockers. Returns combined `{blockers, verifications, waves}` in a JSON comment.
 
 ## Project view tools
 
@@ -126,21 +118,20 @@ The fastest mental model is: if the tool has a plural/batch argument (`doc_types
 | `goop_adl` | `action: "read" \| "append"`, `type?`, `description?`, `entry_action?`, `rule?`, `files?` | `goop_adl({ action: "append", type: "deviation", description: "Bypassed code-review gate", entry_action: "Escalated to user", rule: 4, files: ["src/auth.ts"] })` |
 | `goop_get_global_config` | none | `goop_get_global_config({})` |
 | `goop_create_pr` | `title`, `body`, `branch`, `base?: "main"`, `draft?` | `goop_create_pr({ title: "fix(db): prevent section shadowing", body: "...", branch: "feat/section-tool-hardening", base: "main" })` |
-| `goop_infer_intent` | `transcript`, `workflowPhase?`, `hasActiveWorkflow?` | `goop_infer_intent({ transcript: "create a plan for the auth refactor", hasActiveWorkflow: false })` |
 
 **Behavioral note:** `goop_create_pr` includes a mandatory GoopSpec terminology gate — it scans the title, body, and branch for internal terms and blocks creation on violations. The title, body, and branch must contain no GoopSpec internal terms (e.g., "goop_", "MH1", "wave_number").
 
 ## Combinator tools (added 2026-07)
 
-The following tools and extended arguments reduce multi-call sequences to single calls. All granular tools remain available and unchanged — combinators are additive, not replacements.
+The following tools and extended arguments reduce multi-call sequences to single calls. The 4 granular tools they supersede (`goop_record_verification`, `goop_write_traceability`, `goop_read_verifications`, `goop_read_waves`) have been retired — their behavior is fully absorbed into the combinators below.
 
 | Pattern | Replaces | How |
-|---|---|---|
+|---------|----------|------|
 | `goop_boot` | 4-5-call agent boot (read docs + search notes + search memory + load references) | Single call returns all requested blocks. Defaults to `["spec", "blueprint"]` docs. |
-| `goop_write_wave` + `verifications`/`traceability` | Separate `goop_record_verification`/`goop_write_traceability` calls after a wave/task update | Side-payloads run sequentially inside the same `execute()`. Not available in `items`/`task_updates` batch modes. |
+| `goop_write_wave` + `verifications`/`traceability` | Retired `goop_record_verification`/`goop_write_traceability` | Side-payloads run sequentially inside the same `execute()`. Not available in `items`/`task_updates` batch modes. |
 | `goop_infer_intent` + `autoApply` | Manual infer-then-act two-call flow for `create-workflow`/`transition` | Opt-in (`autoApply: true`), confidence-gated (threshold `0.9`, minimum `0.85`), non-destructive-only. Returns `mutation` in result. |
 | `goop_append_chronicle` + `alsoLogAdl`/`alsoSaveMemory` | Separate `goop_adl`/`memory_save` calls alongside a chronicle entry | Best-effort sequential writes with partial-failure reporting. Not available in `entries` batch mode. |
-| `goop_acceptance_audit` | 3-call blocker+verification+wave-read sequence at the accept gate | Single read-only call returns combined `{blockers, verifications, waves}`. |
+| `goop_acceptance_audit` | Retired `goop_read_verifications`/`goop_read_waves` + blockers at the accept gate | Single read-only call returns combined `{blockers, verifications, waves}`. |
 
 ---
 

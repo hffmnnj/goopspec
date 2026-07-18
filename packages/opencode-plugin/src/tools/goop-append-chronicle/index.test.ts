@@ -344,4 +344,28 @@ describe("goop_append_chronicle tool", () => {
     expect(result).toContain("[OK] Chronicle entry appended");
     expect(result).toContain("[FAIL] ADL: ADL disk full");
   });
+
+  it("rejects out-of-range alsoSaveMemory importance without crashing", async () => {
+    const tool = createGoopAppendChronicleTool(ctx);
+
+    for (const badImportance of [0, 11, -1, Number.NaN]) {
+      const result = await tool.execute(
+        {
+          entry: "Entry with bad importance.",
+          alsoSaveMemory: {
+            title: "Bad importance memory",
+            content: "This importance value is invalid.",
+            importance: badImportance,
+          },
+        },
+        toolCtx,
+      );
+
+      expect(result).toContain("[OK] Chronicle entry appended");
+      expect(result).toContain("[FAIL] Memory: Memory importance must be between 1 and 10.");
+    }
+
+    const memories = await ctx.memory.search({ query: "Bad importance memory" });
+    expect(memories.length).toBe(0);
+  });
 });
