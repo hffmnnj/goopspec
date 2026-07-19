@@ -47,8 +47,8 @@ Before wave decomposition is finalized, validate:
 - Every must-have maps to one or more tasks.
 - Every task maps to a must-have or an explicit enabler.
 - Out-of-scope, assumptions, and risks are captured.
-- The blueprint has 2–4 tasks per wave and clear verification steps.
-- If atomic PRs enabled (REQUIREMENTS.md `## Atomic PR Strategy` is `Yes`): every wave in BLUEPRINT.md must have `**PR:** <title>` and `**Branch:** <name>` fields.
+- The wave/task plan has 2–4 tasks per wave and clear verification steps (verified via `goop_read_wave`).
+- If atomic PRs enabled (REQUIREMENTS.md `## Atomic PR Strategy` is `Yes`): every wave written via `goop_write_wave` must have `pr_branch` and `pr_url` populated.
 
 If validation fails, send the planner back to fix gaps.
 
@@ -73,7 +73,7 @@ mcp_slashcommand({ command: "/goop-execute" })
 | Document | Tool | Purpose |
 |----------|------|---------|
 | `spec` | `goop_write_db({ doc_type: "spec", content: "..." })` | Locked contract |
-| `blueprint` | `goop_write_db({ doc_type: "blueprint", content: "..." })` | Wave/task plan |
+| `blueprint` | `goop_write_db({ doc_type: "blueprint", content: "..." })` | Non-wave planning context (overview, risks, deviation protocol, execution notes, handoff protocol) |
 | `chronicle` | `goop_write_db({ doc_type: "chronicle", content: "..." })` | Progress log |
 | `PROJECT_KNOWLEDGE_BASE.md` | `Write(...)` | Shared conventions (global, not workflow-scoped) |
 
@@ -82,5 +82,5 @@ mcp_slashcommand({ command: "/goop-execute" })
 - Plan without a completed interview.
 - Lock a spec that does not cover every must-have.
 - Announce `/goop-execute` without calling `mcp_slashcommand`.
-- Produce a BLUEPRINT.md without `**PR:**` and `**Branch:**` wave fields when atomic PRs are enabled.
+- Produce waves via `goop_write_wave` without `pr_branch`/`pr_url` when atomic PRs are enabled.
 - Delegate to the planner before the research gate resolves (unless the skip heuristic fired and the decision was logged to ADL).

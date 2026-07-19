@@ -346,7 +346,7 @@ The config watcher (`src/features/setup/config-watcher.ts`) watches the project-
 ## DB Tools Available
 
 - Documents: `goop_read_db`, `goop_write_db`, `goop_append_chronicle`, `goop_read_section`, `goop_write_section`, `goop_search_docs`
-- Waves and tracking: `goop_write_wave`, `goop_query_decisions`, `goop_blocker`
+- Waves and tracking: `goop_write_wave`, `goop_read_wave`, `goop_query_decisions`, `goop_blocker`
 - Project views: `goop_timeline`, `goop_dashboard`
 - Field Notes: `goop_save_note`, `goop_search_notes`
 

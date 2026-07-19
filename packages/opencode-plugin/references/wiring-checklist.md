@@ -100,8 +100,9 @@ Mandatory handoffs at phase completion, wave completion, checkpoint reached, or 
 
 ### Documents to Read First
 1. `goop_read_db({ doc_type: "spec" })`
-2. `goop_read_db({ doc_type: "blueprint" })`
-3. `goop_read_db({ doc_type: "chronicle" })`
+2. `goop_read_db({ doc_type: "blueprint" })` — plan narrative (overview, risks, deviation protocol, execution notes, handoff protocol)
+3. `goop_read_wave({})` — wave/task/PR/status/traceability context
+4. `goop_read_db({ doc_type: "chronicle" })`
 
 ### Context Summary
 [2-4 sentences: decisions, patterns, gotchas]

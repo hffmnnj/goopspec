@@ -33,6 +33,7 @@ import { createGoopDashboardTool } from "./goop-dashboard/index.js";
 import { createGoopInferIntentTool } from "./goop-infer-intent/index.js";
 import { createGoopQueryDecisionsTool } from "./goop-query-decisions/index.js";
 import { createGoopReadSectionTool } from "./goop-read-section/index.js";
+import { createGoopReadWaveTool } from "./goop-read-wave/index.js";
 import { createGoopSearchDocsTool } from "./goop-search-docs/index.js";
 import { createGoopTimelineTool } from "./goop-timeline/index.js";
 import { createGoopWriteSectionTool } from "./goop-write-section/index.js";
@@ -58,6 +59,7 @@ export {
   createGoopQueryDecisionsTool,
   createGoopReadDbTool,
   createGoopReadSectionTool,
+  createGoopReadWaveTool,
   createGoopReferenceTool,
   createGoopSaveNoteTool,
   createGoopSearchDocsTool,
@@ -100,6 +102,7 @@ export function createTools(ctx: PluginContext): Record<string, ToolDefinition> 
     goop_write_section: createGoopWriteSectionTool(ctx),
     goop_read_section: createGoopReadSectionTool(ctx),
     goop_write_wave: createGoopWriteWaveTool(ctx),
+    goop_read_wave: createGoopReadWaveTool(ctx),
     goop_query_decisions: createGoopQueryDecisionsTool(ctx),
     goop_blocker: createGoopBlockerTool(ctx),
     goop_search_docs: createGoopSearchDocsTool(ctx),
