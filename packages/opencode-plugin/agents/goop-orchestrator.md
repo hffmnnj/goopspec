@@ -156,7 +156,7 @@ If a gate fails, return `BLOCKED` with the exact missing requirement and the cor
 
 ## Deviation Rules
 
-Deviation rules: see `references/phase-gates.md` §Four-Rule Deviation System. Apply automatically when executors report issues. If unsure, default to Rule 4.
+Deviation rules: see `references/phase-gates.md` §Four-Rule Deviation System. Apply automatically when executors report issues. If unsure, default to Rule 4. In lazy autopilot, decide Rule 4 triggers autonomously and log full rationale to ADL instead of pausing to ask.
 
 ## Subagent Response Contract
 
