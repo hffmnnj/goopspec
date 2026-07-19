@@ -45,7 +45,7 @@ Boot sequence: see `references/core-protocol.md` §Agent Boot Sequence. **New:**
 - Minor accessibility fixes (contrast, labels, roles).
 - Frontend scaffolding and file renaming.
 
-Applies regardless of size — mechanical nature, not line count.
+UI mechanical tasks (markup, simple styling, copy) where the correct approach is obvious and the risk is low. Escalate to medium if the task hides real design, UX, or accessibility judgment.
 
 **Do NOT handle:**
 - Component architecture or design-system decisions.

@@ -69,16 +69,16 @@ discuss -> plan -> execute -> accept -> confirm
 
 ## Delegation Table
 
-Default to `goop-executor-medium` / `goop-executor-frontend-medium` for all standard implementation work; escalate to `high` tiers only when the task has clear architecture, security, or blast-radius weight; use `low` tiers only when the task is purely mechanical / pattern-following (not determined by line count or size).
+Default to `goop-executor-medium` / `goop-executor-frontend-medium` for standard implementation work; scope, consequence, and blast radius are signals to double-check the tier choice, not reasons to skip past medium. Escalate to `high` tiers when the work is clearly architecture-sensitive, security-sensitive, or has broad blast radius; use `low` tiers when the work is purely mechanical and pattern-following.
 
 | Intent | Agent | Notes |
 |--------|-------|-------|
-| Mechanical / config / scaffolding / markdown / renames / copy / boilerplate (any size) | `goop-executor-low` | Pattern-following, no judgment required |
-| Business logic / utilities / tests / refactoring / most bug fixes / most new endpoints | `goop-executor-medium` | **Default tier for all implementation work** |
-| Architecture / complex algorithms / security-sensitive / high blast-radius / cross-cutting API design | `goop-executor-high` | Reserved — do not default here |
-| UI mechanical (markup, tokens, copy, simple styling, any size) | `goop-executor-frontend-low` | Pattern-following |
+| Mechanical / config / scaffolding / markdown / renames / copy / boilerplate | `goop-executor-low` | Pattern-following; escalate if the task hides real complexity or judgment |
+| Business logic / utilities / tests / refactoring / most bug fixes / most new endpoints | `goop-executor-medium` | **Default tier for standard implementation work** |
+| Architecture / complex algorithms / security-sensitive / high blast-radius / cross-cutting API design | `goop-executor-high` | Use when the work is clearly architecture/security/blast-radius sensitive; do not assume high is the safe default, but do not route genuinely weighty work to medium just to avoid high |
+| UI mechanical (markup, tokens, copy, simple styling) | `goop-executor-frontend-low` | Pattern-following; escalate if the task hides real design or UX judgment |
 | UI component work, state wiring, moderate refactors not requiring deep design judgment | `goop-executor-frontend-medium` | **Default frontend tier** |
-| UI design-sensitive (architecture, design systems, accessibility, animation, visual polish) | `goop-executor-frontend-high` | Reserved — do not default here |
+| UI design-sensitive (architecture, design systems, accessibility, animation, visual polish) | `goop-executor-frontend-high` | Use when the work is clearly design/architecture/UX sensitive; do not assume high is the safe default, but do not route genuinely weighty UI work to medium just to avoid high |
 | Research / compare options | `goop-researcher` (+ `goop-explorer` in parallel if useful) | |
 | Codebase mapping / pattern detection | `goop-explorer` | |
 | Verification / security audit | `goop-verifier` | |

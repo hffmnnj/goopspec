@@ -128,12 +128,12 @@ Architecture draws on direct file reads and prior Field Notes already in memory.
 
 Assign every task an executor tier:
 
-- `goop-executor-low` — mechanical, pattern-following edits (any size, no line-count ceiling).
-- `goop-executor-medium` — **default tier for all implementation work** inside existing architecture.
-- `goop-executor-high` — reserved for architecture-sensitive or security-sensitive work; not a default choice.
-- `goop-executor-frontend-low` — UI mechanical tasks (markup, simple styling, copy), any size.
+- `goop-executor-low` — mechanical, pattern-following edits. If a mechanical-looking task hides real complexity, escalate; don't default low just because the change is small.
+- `goop-executor-medium` — default tier for **standard** implementation work inside existing architecture. Escalate to `high` when the work clearly touches architecture, security, or broad blast radius.
+- `goop-executor-high` — for architecture-sensitive, security-sensitive, or high blast-radius work. Do not reflexively escalate, but do not route genuinely sensitive work to medium just to save cost; choose the tier that matches the actual risk.
+- `goop-executor-frontend-low` — UI mechanical tasks (markup, simple styling, copy). Escalate if the UI work hides state, accessibility, or design-system complexity.
 - `goop-executor-frontend-medium` — **default frontend tier** for standard component work, UI logic/state wiring, moderate refactors within existing patterns.
-- `goop-executor-frontend-high` — reserved for design-sensitive UI work (architecture, UX, accessibility, polish); not a default choice.
+- `goop-executor-frontend-high` — for design-sensitive UI work (architecture, design systems, accessibility, polish). Do not reflexively escalate, but do not push genuinely design-sensitive work to medium just to save cost.
 
 Split mixed frontend/backend tasks into separate subtasks.
 

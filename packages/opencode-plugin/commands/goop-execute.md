@@ -33,12 +33,12 @@ goop_reference({ name: "core-protocol" })
 1. Read `goop_read_db({ doc_types: ["spec", "blueprint", "chronicle"] })` for narrative context and `goop_read_wave({ workflow_id })` for wave/task context; read `PROJECT_KNOWLEDGE_BASE.md`.
 2. For each wave:
    - Delegate tasks to the right executor tier via `task()`:
-      - `goop-executor-low` for mechanical/pattern-following edits (any size).
-      - `goop-executor-medium` for standard implementation work — the default tier.
-      - `goop-executor-high` for architecture-sensitive or security-critical work — reserved, not a default.
-       - `goop-executor-frontend-low` for UI mechanical tasks (markup, tokens, simple styling, any size).
-      - `goop-executor-frontend-medium` for standard UI component work — the default frontend tier.
-       - `goop-executor-frontend-high` for deep design or UI-architecture work — reserved, not a default.
+      - `goop-executor-low` for mechanical/pattern-following edits; escalate if hidden complexity.
+      - `goop-executor-medium` for standard implementation work — the default tier when a task isn't clearly mechanical or complex/critical.
+      - `goop-executor-high` for architecture-sensitive or security-critical work — use when genuinely warranted.
+      - `goop-executor-frontend-low` for UI mechanical tasks; escalate if hidden complexity.
+      - `goop-executor-frontend-medium` for standard UI component work — the default frontend tier when UI work isn't clearly mechanical or design/architectural.
+      - `goop-executor-frontend-high` for deep design or UI-architecture work — use when genuinely warranted.
    - Use sequential dispatch for shared files; parallel dispatch for independent tasks.
    - Require every task to return `STATUS`, `SUMMARY`, `ARTIFACTS`, `VERIFICATION`, `NEXT`.
 3. Apply the four-rule deviation system from `phase-gates`. Log every deviation to `ADL.md` via `goop_adl`.

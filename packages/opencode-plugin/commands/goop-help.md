@@ -32,12 +32,12 @@ The orchestrator delegates to 13 specialized agents:
 
 - `goop-orchestrator` — workflow conductor.
 - `goop-planner` — spec and blueprint authoring.
-- `goop-executor-low` — mechanical/pattern-following edits (any size).
-- `goop-executor-medium` — standard implementation work (default tier).
-- `goop-executor-high` — architecture-sensitive or security-critical work (reserved).
-- `goop-executor-frontend-low` — UI mechanical tasks (markup, tokens, simple styling, any size).
-- `goop-executor-frontend-medium` — standard UI component work (default frontend tier).
-- `goop-executor-frontend-high` — deep design or UI-architecture work (reserved).
+- `goop-executor-low` — mechanical/pattern-following edits; escalate if hidden complexity.
+- `goop-executor-medium` — standard implementation work; default when a task isn't clearly mechanical or complex/critical.
+- `goop-executor-high` — architecture-sensitive or security-critical work; use when genuinely warranted.
+- `goop-executor-frontend-low` — UI mechanical tasks; escalate if hidden complexity.
+- `goop-executor-frontend-medium` — standard UI component work; default when UI work isn't clearly mechanical or design/architectural.
+- `goop-executor-frontend-high` — deep design or UI-architecture work; use when genuinely warranted.
 - `goop-researcher` — domain and technology research.
 - `goop-explorer` — codebase mapping.
 - `goop-verifier` — spec compliance and security audit.
