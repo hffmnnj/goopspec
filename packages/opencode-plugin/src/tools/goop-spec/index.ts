@@ -137,7 +137,9 @@ function validateDocs(ctx: PluginContext): string {
       }
     }
     lines.push(`- Found: ${planContent.length} chars`);
-    lines.push(`- Non-wave shape: ${issues.some((i) => i.startsWith("BLUEPRINT.md:")) ? "No" : "Yes"}`);
+    lines.push(
+      `- Non-wave shape: ${issues.some((i) => i.startsWith("BLUEPRINT.md:")) ? "No" : "Yes"}`,
+    );
   } else {
     issues.push("BLUEPRINT.md not found");
     lines.push("- **NOT FOUND**");
@@ -148,11 +150,11 @@ function validateDocs(ctx: PluginContext): string {
   lines.push("\n## Wave Plan\n");
   if (waveRows.length === 0) {
     issues.push("No waves found. Use goop_write_wave to create a locked, traceable plan.");
-    lines.push(`- Waves: 0`);
-    lines.push(`- Plan present: No`);
+    lines.push("- Waves: 0");
+    lines.push("- Plan present: No");
   } else {
     lines.push(`- Waves: ${waveRows.length}`);
-    lines.push(`- Plan present: Yes`);
+    lines.push("- Plan present: Yes");
   }
 
   // --- Summary ---
