@@ -213,13 +213,21 @@ export class SqliteMemoryManager implements MemoryManager {
     const { whereClause, params } = buildFilters(options);
     const limit = options.limit ?? 10;
 
-    // BM25 weights: title=10, content=5, facts=2, concepts=2
+    // Keep the score fragments separate so additional retrieval signals can
+    // extend the final score without rewriting the base relevance formula.
+    const decayFactorSql = memoryDecayFactorSql("m.created_at");
+    const bm25ScoreSql = "ABS(bm25(memories_fts, 10.0, 5.0, 2.0, 2.0))";
+    const relevanceScoreSql = `(${bm25ScoreSql} * (m.importance / 10.0))`;
+    const finalScoreSql = `(${relevanceScoreSql} * ${decayFactorSql})`;
+
+    // BM25 weights: title=10, content=5, facts=2, concepts=2.
     const sql = `
-      SELECT m.*, bm25(memories_fts, 10.0, 5.0, 2.0, 2.0) AS rank
+      SELECT m.*, bm25(memories_fts, 10.0, 5.0, 2.0, 2.0) AS rank,
+        ${finalScoreSql} AS score
       FROM memories m
       JOIN memories_fts ON m.id = memories_fts.rowid
       WHERE memories_fts MATCH '${ftsQuery}' ${whereClause}
-      ORDER BY (ABS(rank) * (m.importance / 10.0)) DESC
+      ORDER BY score DESC
       LIMIT ${limit}
     `;
 
@@ -227,7 +235,7 @@ export class SqliteMemoryManager implements MemoryManager {
 
     return rows.map((row) => ({
       memory: rowToEntry(row),
-      score: roundScore(Math.abs(row.rank) * (row.importance / 10)),
+      score: roundScore(row.score),
       matchType: "fts" as const,
     }));
   }
@@ -243,11 +251,14 @@ export class SqliteMemoryManager implements MemoryManager {
 
     params.$pattern = pattern;
 
+    const decayFactorSql = memoryDecayFactorSql("m.created_at");
+    const finalScoreSql = `((m.importance / 10.0) * ${decayFactorSql})`;
+
     const sql = `
       SELECT * FROM memories m
       WHERE (m.title LIKE $pattern ESCAPE '\\' OR m.content LIKE $pattern ESCAPE '\\' OR m.facts LIKE $pattern ESCAPE '\\' OR m.concepts LIKE $pattern ESCAPE '\\')
       ${whereClause}
-      ORDER BY m.importance DESC, m.created_at DESC
+      ORDER BY ${finalScoreSql} DESC
       LIMIT ${limit}
     `;
 
@@ -255,7 +266,7 @@ export class SqliteMemoryManager implements MemoryManager {
 
     return rows.map((row) => ({
       memory: rowToEntry(row),
-      score: roundScore(row.importance / 10),
+      score: roundScore((row.importance / 10) * memoryDecayFactor(row.created_at)),
       matchType: "fts" as const, // Report as fts for interface compat
     }));
   }
@@ -285,6 +296,19 @@ function buildContent(input: MemorySaveInput): string {
 
 function roundScore(n: number): number {
   return Math.round(n * 100) / 100;
+}
+
+/**
+ * Applies the retrieval recency decay specified for persisted Unix timestamps.
+ * The SQL fragment is shared by FTS5 and LIKE ranking to keep their ordering
+ * semantics identical when FTS5 is unavailable.
+ */
+function memoryDecayFactorSql(createdAtColumn: string): string {
+  return `EXP(-0.001 * (unixepoch() - ${createdAtColumn}) / 86400.0)`;
+}
+
+function memoryDecayFactor(createdAt: number): number {
+  return Math.exp((-0.001 * (Math.floor(Date.now() / 1000) - createdAt)) / 86400);
 }
 
 /**
