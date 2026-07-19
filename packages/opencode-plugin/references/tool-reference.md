@@ -93,9 +93,20 @@ The fastest mental model is: if the tool has a plural/batch argument (`doc_types
 
 | Tool | Arguments | Example |
 |---|---|---|
-| `memory_save` | `title`, `content`, `type?: "observation" \| "decision" \| "note" \| "todo"`, `concepts?`, `facts?`, `importance?`, `sourceFiles?`, `reasoning?`, `alternatives?` | `memory_save({ title: "bun:sqlite FTS5 requires explicit tokenizer", content: "...", type: "observation", concepts: ["bun", "sqlite", "fts5"], importance: 8 })` |
-| `memory_search` | `query`, `limit?`, `types?: string[]`, `concepts?: string[]`, `minImportance?` | `memory_search({ query: "SQLite FTS5", concepts: ["sqlite", "fts5"], limit: 10 })` |
+| `memory_save` | `title`, `content`, `type?: "observation" \| "decision" \| "note" \| "todo"`, `concepts?`, `facts?`, `importance?`, `sourceFiles?`, `reasoning?`, `alternatives?`, `deduplicate?: boolean` | `memory_save({ title: "bun:sqlite FTS5 requires explicit tokenizer", content: "...", type: "observation", concepts: ["bun", "sqlite", "fts5"], importance: 8 })` |
+| `memory_search` | `query`, `limit?`, `types?: string[]`, `concepts?: string[]`, `minImportance?`, `includeFieldNotes?: boolean` | `memory_search({ query: "SQLite FTS5", concepts: ["sqlite", "fts5"], limit: 10 })` |
 | `memory_forget` | `id?`, `query?`, `confirm?` | `memory_forget({ id: 42 })` |
+
+**`memory_save.deduplicate`** (default `false`) — opt in to near-duplicate consolidation before inserting. When `true`, the manager runs an FTS5 similarity query against the combined `title` + stored `content` tokens. If the best candidate scores ≥ 0.85 (bounded token-F1 over the same normalized tokens used for search), the new insert is skipped and the existing row is reinforced: its `importance` becomes `MAX(existing, new)`, its `created_at` is refreshed, and the existing content is returned. No row is deleted. When `false` or absent, behavior is byte-identical to before.
+
+**`memory_search.includeFieldNotes`** (default `false`) — opt in to cross-store search. When `true`, `memory_search` queries `memory.db` and Field Notes in parallel, then fuses the two ranked lists with reciprocal-rank fusion (RRF, `k=60`). Each returned result is tagged with its origin store:
+
+- **Memory results** — `origin: "memory"`, a normalized RRF score, and the usual `MemoryEntry` fields (`id`, `type`, `title`, `content`, `facts`, `concepts`, `importance`, `sourceFiles`, `createdAt`).
+- **Field Note results** — `origin: "field_note"`, a normalized RRF score, and the curated note fields (`id`, `title`, `body`, `tags`, `source_agent`, `importance`, `workflow_id`, `project_id`, `created_at`).
+
+When `false` or absent, only `memory.db` results are returned, identical to the prior contract.
+
+**Scoring notes:** The underlying memory ranking is now multi-signal: FTS5 BM25 (`title=10, content=5, facts=2, concepts=2`) is multiplied by `(importance / 10)` and a recency-decay factor `EXP(-0.001 * (unixepoch() - created_at) / 86400)` (~693-day / ~1.9-year half-life; `ln(2)/0.001 ≈ 693`), then further boosted by concept/fact overlap (`0.7 + 0.3 * conceptBoost`). This is all internal to `memory.db`; Field Notes enter the fused result through RRF rank, not their raw native score.
 
 ## Reference and command tools
 

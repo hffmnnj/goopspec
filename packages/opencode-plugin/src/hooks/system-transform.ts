@@ -11,6 +11,7 @@
 
 import type { SdkModel } from "../core/sdk-compat.js";
 import type { MemorySearchResult, PluginContext, WorkflowState } from "../core/types.js";
+import type { FieldNoteRow } from "../features/db/types.js";
 import { buildEnforcementContext } from "../features/enforcement/phase-context.js";
 import { log } from "../shared/logger.js";
 import type { HookFactory, Hooks } from "./types.js";
@@ -21,6 +22,7 @@ import { safeHandler } from "./utils.js";
 // ---------------------------------------------------------------------------
 
 interface MemoryCacheEntry {
+  fieldNotes: FieldNoteRow[];
   results: MemorySearchResult[];
   timestamp: number;
 }
@@ -56,6 +58,10 @@ export function clearDocTypeCache(): void {
 
 /** Default token budget for memory injection (~800 tokens ≈ 3200 chars). */
 const DEFAULT_MEMORY_TOKEN_BUDGET = 800;
+
+/** Additive Field Notes budget; preserves the established 800-token memory budget. */
+const DEFAULT_FIELD_NOTES_TOKEN_BUDGET = 300;
+const MIN_FIELD_NOTE_IMPORTANCE = 8;
 
 /**
  * Rough token estimator: ~4 characters per token.
@@ -141,6 +147,28 @@ export function buildMemoryBlock(memories: MemorySearchResult[], tokenBudget: nu
   if (lines.length === 1) return "";
 
   lines.push("</goopspec_memory>");
+  return lines.join("\n");
+}
+
+/** Build a token-budgeted Field Notes block from high-importance notes. */
+export function buildFieldNotesBlock(notes: FieldNoteRow[], tokenBudget: number): string {
+  if (notes.length === 0) return "";
+
+  const lines: string[] = ["<goopspec_field_notes>"];
+  let tokensUsed = estimateTokens(lines[0]);
+
+  for (const note of notes) {
+    const entry = `- ${note.title}: ${note.body}`;
+    const entryTokens = estimateTokens(entry);
+    if (tokensUsed + entryTokens > tokenBudget) break;
+
+    lines.push(entry);
+    tokensUsed += entryTokens;
+  }
+
+  if (lines.length === 1) return "";
+
+  lines.push("</goopspec_field_notes>");
   return lines.join("\n");
 }
 
@@ -232,8 +260,9 @@ export function createSystemTransformHook(ctx: PluginContext): Partial<Hooks> {
         log("system-transform: DB context block failed, skipping", { error });
       }
 
-      // 4. Memory block — token-budgeted, with session-level caching
+      // 4. Memory and Field Notes blocks — token-budgeted, with shared session caching
       let memoryBlock = "";
+      let fieldNotesBlock = "";
       const tokenBudget = DEFAULT_MEMORY_TOKEN_BUDGET;
       const sessionID = _input.sessionID ?? "unknown";
       const cacheKey = `${sessionID}:${workflow.phase}:${workflow.currentWave}`;
@@ -241,15 +270,25 @@ export function createSystemTransformHook(ctx: PluginContext): Partial<Hooks> {
       const cached = _memoryCache.get(cacheKey);
 
       let searchResults: MemorySearchResult[];
+      let fieldNotes: FieldNoteRow[];
       if (cached && now - cached.timestamp < CACHE_TTL_MS) {
         searchResults = cached.results;
+        fieldNotes = cached.fieldNotes;
         log("system-transform: memory cache hit", { cacheKey });
       } else {
         searchResults = await ctx.memory.search({
           query: `${workflow.phase} workflow`,
           limit: 10,
         });
-        _memoryCache.set(cacheKey, { results: searchResults, timestamp: now });
+        fieldNotes = [];
+        try {
+          fieldNotes = ctx.db
+            .searchNotes(`${workflow.phase} workflow`, { workflowId, limit: 10 })
+            .filter((note) => note.importance >= MIN_FIELD_NOTE_IMPORTANCE);
+        } catch (error) {
+          log("system-transform: Field Notes unavailable, skipping", { error });
+        }
+        _memoryCache.set(cacheKey, { results: searchResults, fieldNotes, timestamp: now });
         // Prune to prevent unbounded growth
         if (_memoryCache.size > 50) {
           const oldest = [..._memoryCache.entries()].sort(
@@ -264,6 +303,12 @@ export function createSystemTransformHook(ctx: PluginContext): Partial<Hooks> {
         memoryBlock = buildMemoryBlock(searchResults, tokenBudget);
       }
 
+      try {
+        fieldNotesBlock = buildFieldNotesBlock(fieldNotes, DEFAULT_FIELD_NOTES_TOKEN_BUDGET);
+      } catch (error) {
+        log("system-transform: Field Notes context block failed, skipping", { error });
+      }
+
       // Assemble the full context block
       const parts = [stateBlock, phaseRulesBlock];
       if (dbBlock) {
@@ -271,6 +316,9 @@ export function createSystemTransformHook(ctx: PluginContext): Partial<Hooks> {
       }
       if (memoryBlock) {
         parts.push(memoryBlock);
+      }
+      if (fieldNotesBlock) {
+        parts.push(fieldNotesBlock);
       }
 
       const contextBlock = parts.join("\n\n");
