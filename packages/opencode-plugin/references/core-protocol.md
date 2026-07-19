@@ -26,7 +26,7 @@ Project state lives in GoopSpecDB (`.goopspec/goopspec.db`). Markdown files unde
 |------|-------|---------|---------|
 | `REQUIREMENTS.md` | workflow | Vision, must-haves, constraints, out of scope, assumptions, risks | `documents` table; rendered sidecar |
 | `SPEC.md` | workflow | Locked contract with must-haves, nice-to-haves, out of scope, traceability | `documents` table; rendered sidecar |
-| `BLUEPRINT.md` | workflow | Wave/task plan with verification and spec coverage | `documents` table; rendered sidecar |
+| `BLUEPRINT.md` | workflow | Overview, risk assessment, deviation protocol, execution notes, handoff protocol (non-wave planning context) | `documents` table; rendered sidecar |
 | `CHRONICLE.md` | workflow | Progress log, decisions, deviations, blockers | `documents` table; rendered sidecar |
 | `ADL.md` | workflow | Automated Decision Log | `documents` table; rendered sidecar |
 | `HANDOFF.md` | workflow | Session handoff context | `documents` table; rendered sidecar |
@@ -46,7 +46,7 @@ For workflow path resolution:
 ## DB Tool Surface
 
 - Documents: `goop_read_db`, `goop_write_db`, `goop_append_chronicle`, `goop_read_section`, `goop_write_section`, `goop_search_docs`.
-- Waves and tracking: `goop_write_wave`, `goop_query_decisions`, `goop_blocker`.
+- Waves and tracking: `goop_write_wave`, `goop_read_wave`, `goop_query_decisions`, `goop_blocker`.
 - Project views: `goop_timeline`, `goop_dashboard`.
 - Field Notes: `goop_save_note`, `goop_search_notes`.
 
@@ -54,7 +54,7 @@ For workflow path resolution:
 
 Every agent follows the same loop:
 
-1. **Before:** `memory_search`, read state, read `PROJECT_KNOWLEDGE_BASE.md`, read `spec` and `blueprint` via `goop_read_db`.
+1. **Before:** `memory_search`, read state, read `PROJECT_KNOWLEDGE_BASE.md`, read `spec` via `goop_read_db`, and read wave/task context via `goop_read_wave`.
 2. **During:** record observations with `memory_save` (type `observation`), decisions with `memory_save` (type `decision`), progress via `goop_write_db({ doc_type: "chronicle" })`.
 3. **After:** persist learnings with `memory_save`, update chronicle, return a structured response.
 
@@ -134,7 +134,7 @@ Before doing work, every subagent must:
 
 1. `goop_state({ action: "get" })`
 2. `goop_read_db({ doc_type: "spec" })` — load spec contract
-3. `goop_read_db({ doc_type: "blueprint" })` — load task context
+3. `goop_read_wave({ wave_numbers: [N, ...] })` — load wave/task context (use the active workflow by default; omit `wave_numbers` to read all waves)
 4. `goop_search_notes({ query: "[task context]" })` — check Field Notes for prior research. If a snippet is relevant but insufficient, use `note_id` (when the ID is already known from the snippet) or `full: true` (when re-issuing the query) to retrieve the complete body — see `field-notes-protocol.md` (Enhanced Retrieval) for full guidance.
 5. `memory_search({ query: "[task context]" })`
 6. `goop_reference({ name: "tool-reference" })` — load the full argument surface of every tool; prefer batch/plural args over repeated single calls where available.
@@ -146,7 +146,7 @@ If any required bootstrap step fails, return `BLOCKED`.
 ## Planning File Rules
 
 - `spec` document is read-only for executors; only the orchestrator/planner may write it.
-- `blueprint` document is read-only for executors; only the orchestrator/planner may write it.
+- `blueprint` document is read-only for executors; only the orchestrator/planner may write it. Wave/task context lives in the `waves` table and is read via `goop_read_wave`.
 - `chronicle` document is read-write for all agents; update it after each task via `goop_write_db({ doc_type: "chronicle" })`.
 - Research findings are persisted as Field Notes via `goop_save_note` and searched via `goop_search_notes`.
 

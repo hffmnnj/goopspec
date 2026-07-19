@@ -65,7 +65,9 @@ function formatReference(resource: ResolvedResource, section?: string): string {
 
 export function createGoopBootTool(ctx: PluginContext): ToolDefinition {
   return tool({
-    description: "Load workflow state, documents, Field Notes, memory, and references in one call.",
+    description:
+      "Load workflow state, documents, Field Notes, memory, and references in one call. " +
+      "Wave/task context is loaded separately via goop_read_wave; blueprint is loaded here for its non-wave planning narrative.",
     args: {
       workflow_id: tool.schema.string().optional(),
       doc_types: tool.schema.array(tool.schema.string()).optional(),

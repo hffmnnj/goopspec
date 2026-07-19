@@ -28,9 +28,8 @@ Required documents (checked via `goop_read_db({ doc_type: "..." })` returning co
 
 | Type | Required In |
 |------|-------------|
-| `spec` | plan, research, specify, execute, accept |
-| `blueprint` | specify, execute, accept |
-| `chronicle` | plan, research, specify, execute, accept |
+| `spec` | plan, execute, accept |
+| `chronicle` | execute, accept |
 
 ### Validators
 
@@ -107,8 +106,8 @@ MUST NOT DO:
 
 MUST DO:
 
-- Create blueprint via `goop_write_db({ doc_type: "blueprint", content: "..." })` with wave-based plan.
-- Map all must-haves to tasks.
+- Create blueprint via `goop_write_db({ doc_type: "blueprint", content: "..." })` for non-wave planning context (overview, risks, deviation protocol, execution notes, handoff protocol).
+- Create wave/task plan via `goop_write_wave` and map all must-haves to tasks.
 - Get user confirmation to lock specification.
 
 MUST NOT DO:
@@ -182,8 +181,8 @@ Delegate to `goop-executor-{tier}`. The orchestrator is blocked from writing imp
 
 Ensure required documents exist in DB:
 
-- `execute` requires `spec` document.
-- `accept` requires `spec`, `blueprint`, and `chronicle` documents.
+- `execute` requires `spec` document and at least one wave row (checked via `goop_read_wave`).
+- `accept` requires `spec` and `chronicle` documents plus all waves complete.
 
 ### Commands not triggering state changes
 

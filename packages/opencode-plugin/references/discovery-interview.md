@@ -22,7 +22,7 @@ Bad: "Auth stuff."
 - What MUST be delivered?
 - What are the acceptance criteria?
 
-Every must-have must be specific, testable, and traced to blueprint tasks.
+Every must-have must be specific, testable, and traced to wave tasks recorded via `goop_write_wave`.
 
 ### 3. Constraints
 - Stack, frameworks, versions.
@@ -53,7 +53,7 @@ Every risk needs impact, likelihood, and mitigation.
 - Prefer atomic PRs? One PR per wave, merged before the next begins.
 - Options: `Yes, one PR per wave (Recommended)` / `No, single PR for all work` / `Custom`.
 - Written to REQUIREMENTS.md under `## Atomic PR Strategy`.
-- `Yes`: planner adds `**PR:**` and `**Branch:**` to every wave in BLUEPRINT.md.
+- `Yes`: planner records `**PR:**` and `**Branch:**` for every wave via `goop_write_wave`. BLUEPRINT.md no longer carries per-wave PR/branch fields.
 - `No`: all work lands in one branch and one PR.
 
 ## Interview Flow

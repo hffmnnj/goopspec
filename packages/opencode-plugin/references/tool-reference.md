@@ -28,11 +28,11 @@ The fastest mental model is: if the tool has a plural/batch argument (`doc_types
 | `goop_write_section` | `action?: "write" \| "delete"`, `doc_type`, `section_key`, `content?`, `position?`, `workflow_id?`, `items?: {doc_type, section_key, content, position?}[]` | `goop_write_section({ action: "delete", doc_type: "spec", section_key: "risks" })` |
 | `goop_append_chronicle` | `entry?`, `workflow_id?`, `entries?: string[]`, `alsoLogAdl?: {type, rule?, description, entry_action?, files?}`, `alsoSaveMemory?: {title, content, type?, importance?, concepts?}` | `goop_append_chronicle({ entry: "Wave 2 passed.", alsoLogAdl: { type: "observation", description: "Wave 2 verification complete", entry_action: "Logged" } })` |
 | `goop_search_docs` | `query`, `workflow_id?`, `workflow_ids?: string[]`, `doc_type?`, `doc_types?: string[]`, `section_key?`, `section_keys?: string[]`, `since?`, `until?`, `limit?` | `goop_search_docs({ query: "batch guidance", doc_types: ["spec", "blueprint"], limit: 10 })` |
-| `goop_boot` | `workflow_id?`, `doc_types?: string[]` (default `["spec","blueprint"]`), `include_state?`, `note_query?`, `note_tags?`, `note_limit?`, `note_full?`, `memory_query?`, `memory_limit?`, `memory_types?`, `memory_concepts?`, `memory_min_importance?`, `references?: string[]`, `reference_section?` | `goop_boot({ doc_types: ["spec", "blueprint", "chronicle"], note_query: "token efficiency", references: ["core-protocol"] })` |
+| `goop_boot` | `workflow_id?`, `doc_types?: string[]` (default `["spec"]` — wave context is fetched via `goop_read_wave` separately), `include_state?`, `note_query?`, `note_tags?`, `note_limit?`, `note_full?`, `memory_query?`, `memory_limit?`, `memory_types?`, `memory_concepts?`, `memory_min_importance?`, `references?: string[]`, `reference_section?` | `goop_boot({ doc_types: ["spec", "chronicle"], note_query: "token efficiency", references: ["core-protocol"] })` |
 
 **Behavioral notes:** `goop_write_db` clears all `doc_sections` for that doc before writing, so monolithic writes always win. `goop_write_section` auto-migrates existing monolithic content into a `_migrated-legacy-content` section on the first sectioned write, preventing silent shadowing. `goop_write_section` delete mode is single-section only; `items` is write-only.
 
-`goop_boot` replaces the 4-5-call agent boot sequence (read docs + search notes + search memory + load references) with a single call. Granular tools remain available and unchanged.
+`goop_boot` replaces the 4-5-call agent boot sequence (read docs + search notes + search memory + load references) with a single call. Wave/task context is not part of the default document set; fetch it with `goop_read_wave` when needed. Granular tools remain available and unchanged.
 
 `goop_append_chronicle`'s `alsoLogAdl`/`alsoSaveMemory` replace separate `goop_adl`/`memory_save` calls when logging alongside a chronicle entry. Cross-store atomicity is unavailable — writes are best-effort sequential with partial-failure reporting. Not available in `entries` batch mode.
 
@@ -139,7 +139,7 @@ The following tools and extended arguments reduce multi-call sequences to single
 
 | Pattern | Replaces | How |
 |---------|----------|------|
-| `goop_boot` | 4-5-call agent boot (read docs + search notes + search memory + load references) | Single call returns all requested blocks. Defaults to `["spec", "blueprint"]` docs. |
+| `goop_boot` | 4-5-call agent boot (read docs + search notes + search memory + load references) | Single call returns all requested blocks. Defaults to `["spec"]` docs; wave context is fetched separately via `goop_read_wave`. |
 | `goop_write_wave` + `verifications`/`traceability` | Retired `goop_record_verification`/`goop_write_traceability` | Side-payloads run sequentially inside the same `execute()`. Not available in `items`/`task_updates` batch modes. |
 | `goop_infer_intent` + `autoApply` | Manual infer-then-act two-call flow for `create-workflow`/`transition` | Opt-in (`autoApply: true`), confidence-gated (threshold `0.9`, minimum `0.85`), non-destructive-only. Returns `mutation` in result. |
 | `goop_append_chronicle` + `alsoLogAdl`/`alsoSaveMemory` | Separate `goop_adl`/`memory_save` calls alongside a chronicle entry | Best-effort sequential writes with partial-failure reporting. Not available in `entries` batch mode. |
