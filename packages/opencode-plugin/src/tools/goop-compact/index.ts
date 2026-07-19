@@ -24,9 +24,6 @@ interface SessionMessage {
   };
 }
 
-const RESUME_PROMPT =
-  "Continue from the compaction summary. Recheck the workflow documents only if needed.";
-
 interface FieldsResponse<T> {
   data?: T;
   error?: unknown;
@@ -72,51 +69,11 @@ function currentModel(messages: SessionMessage[]): ModelRef | undefined {
   return undefined;
 }
 
-function currentAgent(messages: SessionMessage[]): string | undefined {
-  for (let index = messages.length - 1; index >= 0; index -= 1) {
-    const info = messages[index]?.info;
-    if (info?.role === "user" && info.agent) return info.agent;
-  }
-  return undefined;
+interface SummarizeBody extends ModelRef {
+  auto?: boolean;
 }
 
-function sendResume(ctx: PluginContext, sessionID: string, model: ModelRef, agent?: string): void {
-  try {
-    if (typeof ctx.sdk.client?.session?.promptAsync !== "function") {
-      logError(
-        "goop_compact could not resume the session",
-        new Error("promptAsync is unavailable"),
-      );
-      return;
-    }
-    const request = ctx.sdk.client.session.promptAsync({
-      path: { id: sessionID },
-      body: {
-        model,
-        ...(agent ? { agent } : {}),
-        parts: [{ type: "text", text: RESUME_PROMPT }],
-      },
-    });
-    void request
-      .then((result) => {
-        const response = fieldsResponse<unknown>(result);
-        if (response.error !== undefined) {
-          logError("goop_compact resume request rejected", response.error);
-        }
-      })
-      .catch((error: unknown) => logError("goop_compact resume request failed", error));
-  } catch (error) {
-    logError("goop_compact resume dispatch failed", error);
-  }
-}
-
-function observeCompaction(
-  request: Promise<unknown>,
-  ctx: PluginContext,
-  sessionID: string,
-  model: ModelRef,
-  agent?: string,
-): void {
+function observeCompaction(request: Promise<unknown>, ctx: PluginContext, sessionID: string): void {
   void request
     .then((result) => {
       const response = fieldsResponse<boolean>(result);
@@ -133,7 +90,6 @@ function observeCompaction(
         );
         return;
       }
-      sendResume(ctx, sessionID, model, agent);
     })
     .catch((error: unknown) => {
       ctx.compactionHandoff.delete(sessionID);
@@ -179,23 +135,20 @@ export function createGoopCompactTool(ctx: PluginContext): ToolDefinition {
           ctx.compactionHandoff.delete(sessionID);
           return "goop_compact failed: unable to resolve the current session model.";
         }
-        const agent = currentAgent(messagesResult.data ?? []);
 
         ctx.compactionHandoff.set(sessionID, args.next_step);
-        // SDK 1.18.3 SessionSummarizeData names the model body and returns a
-        // boolean 200 payload. The generated body is optional for legacy
-        // compatibility, but the host route requires providerID and modelID.
-        // The legacy summarize handler joins the session's existing runner.
-        // Awaiting it from a tool on that runner creates a same-session wait
-        // cycle. OpenCode's TUI intentionally dispatches this request with
-        // `void`; observe completion only for best-effort error cleanup.
+        // `auto: true` makes the host the sole owner of the post-compaction
+        // continuation. The dispatch is fire-and-forget because awaiting from
+        // the same session runner would deadlock; observeCompaction handles
+        // best-effort error cleanup and handoff maintenance.
+        const body: SummarizeBody = { ...model, auto: true };
         const request = ctx.sdk.client.session.summarize({
           path: { id: sessionID },
-          body: model,
+          body,
         });
-        observeCompaction(request, ctx, sessionID, model, agent);
+        observeCompaction(request, ctx, sessionID);
 
-        return `Compaction requested for session ${sessionID}; it will apply after this turn completes. Will resume with: ${args.next_step}`;
+        return `Compaction requested for session ${sessionID}; it will apply after this turn completes. The host will continue automatically with: ${args.next_step}`;
       } catch (error) {
         if (sessionID) {
           ctx.compactionHandoff.delete(sessionID);

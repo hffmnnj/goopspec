@@ -30,7 +30,7 @@ goop_reference({ name: "security-checklist" })
 
 ## Steps
 
-1. Read `goop_read_db({ doc_types: ["spec", "blueprint"] })`.
+1. Read `goop_read_db({ doc_types: ["spec", "blueprint", "chronicle"] })` for non-wave planning context and progress log; read wave/task/verification context via `goop_acceptance_audit` (which wraps `goop_read_wave`).
 2. Spawn `goop-verifier` to check must-have coverage, artifacts, key links, and quality.
 3. Spawn `goop-tester` for test and build verification.
 4. Present a verification matrix. Require explicit user acceptance.

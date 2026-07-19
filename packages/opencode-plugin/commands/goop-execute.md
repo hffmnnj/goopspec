@@ -17,7 +17,7 @@ Implement the blueprint one wave at a time. The orchestrator delegates all imple
 
 ## Gate check
 
-Call `goop_state({ action: "get" })`. If `specLocked` is not `true` or the `blueprint` document does not exist — check via `goop_read_db({ doc_type: "blueprint" })` returning content (not a 'not found' message) — return `BLOCKED` with:
+Call `goop_state({ action: "get" })`. If `specLocked` is not `true` or no wave rows exist — check via `goop_read_wave({ workflow_id })` returning at least one wave (not a 'no waves' message) — return `BLOCKED` with:
 
 > Run `/goop-plan` first.
 
@@ -30,7 +30,7 @@ goop_reference({ name: "core-protocol" })
 
 ## Steps
 
-1. Read `goop_read_db({ doc_types: ["spec", "blueprint", "chronicle"] })` and `PROJECT_KNOWLEDGE_BASE.md`.
+1. Read `goop_read_db({ doc_types: ["spec", "blueprint", "chronicle"] })` for narrative context and `goop_read_wave({ workflow_id })` for wave/task context; read `PROJECT_KNOWLEDGE_BASE.md`.
 2. For each wave:
    - Delegate tasks to the right executor tier via `task()`:
       - `goop-executor-low` for mechanical/pattern-following edits (any size).

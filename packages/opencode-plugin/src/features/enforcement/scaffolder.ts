@@ -61,7 +61,7 @@ const DOCUMENT_RULES: readonly DocumentRule[] = [
     name: "BLUEPRINT.md",
     requiredIn: new Set<WorkflowPhase>(["execute", "accept"]),
     template: (workflowId, date) =>
-      `# BLUEPRINT: ${workflowId}\n\n**Created:** ${date}\n**Mode:** standard\n\n---\n\n## Overview\n\n**Goal:** [Define the goal]\n\n---\n\n## Waves\n\n[Define waves and tasks here]\n`,
+      `# BLUEPRINT: ${workflowId}\n\n**Created:** ${date}\n**Mode:** standard\n\n---\n\n## Overview\n\n**Goal:** [Define the goal]\n\n**Approach:** [Describe the approach]\n\n---\n\n## Risk Assessment\n\n[Add risks, mitigations, and contingencies]\n\n---\n\n## Deviation Protocol\n\n[Document how deviations are handled]\n`,
   },
   {
     name: "CHRONICLE.md",
