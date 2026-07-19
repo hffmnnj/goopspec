@@ -23,9 +23,9 @@ The fastest mental model is: if the tool has a plural/batch argument (`doc_types
 | Tool | Arguments | Example |
 |---|---|---|
 | `goop_read_db` | `doc_type?`, `doc_types?: string[]`, `workflow_id?` | `goop_read_db({ doc_types: ["spec", "blueprint", "chronicle"] })` |
-| `goop_write_db` | `doc_type`, `content`, `mode?: "replace" \| "append"`, `workflow_id?`, `items?: {doc_type, content, mode?}[]` | `goop_write_db({ doc_type: "chronicle", content: "### 2026-07-16\n\nWave 9 complete." })` |
+| `goop_write_db` | `doc_type`, `content?`, `mode?: "replace" \| "append"`, `old_string?`, `new_string?`, `replace_all?`, `workflow_id?`, `items?: {doc_type, content?, mode?, old_string?, new_string?, replace_all?}[]` | `goop_write_db({ doc_type: "chronicle", content: "### 2026-07-16\n\nWave 9 complete." })` |
 | `goop_read_section` | `doc_type`, `section_key?`, `section_keys?: string[]`, `workflow_id?` | `goop_read_section({ doc_type: "spec", section_keys: ["vision", "must-haves"] })` |
-| `goop_write_section` | `action?: "write" \| "delete"`, `doc_type`, `section_key`, `content?`, `position?`, `workflow_id?`, `items?: {doc_type, section_key, content, position?}[]` | `goop_write_section({ action: "delete", doc_type: "spec", section_key: "risks" })` |
+| `goop_write_section` | `action?: "write" \| "delete"`, `doc_type`, `section_key`, `content?`, `position?`, `old_string?`, `new_string?`, `replace_all?`, `workflow_id?`, `items?: {doc_type, section_key, content?, position?, old_string?, new_string?, replace_all?}[]` | `goop_write_section({ action: "delete", doc_type: "spec", section_key: "risks" })` |
 | `goop_append_chronicle` | `entry?`, `workflow_id?`, `entries?: string[]`, `alsoLogAdl?: {type, rule?, description, entry_action?, files?}`, `alsoSaveMemory?: {title, content, type?, importance?, concepts?}` | `goop_append_chronicle({ entry: "Wave 2 passed.", alsoLogAdl: { type: "observation", description: "Wave 2 verification complete", entry_action: "Logged" } })` |
 | `goop_search_docs` | `query`, `workflow_id?`, `workflow_ids?: string[]`, `doc_type?`, `doc_types?: string[]`, `section_key?`, `section_keys?: string[]`, `since?`, `until?`, `limit?` | `goop_search_docs({ query: "batch guidance", doc_types: ["spec", "blueprint"], limit: 10 })` |
 | `goop_boot` | `workflow_id?`, `doc_types?: string[]` (default `["spec","blueprint"]`), `include_state?`, `note_query?`, `note_tags?`, `note_limit?`, `note_full?`, `memory_query?`, `memory_limit?`, `memory_types?`, `memory_concepts?`, `memory_min_importance?`, `references?: string[]`, `reference_section?` | `goop_boot({ doc_types: ["spec", "blueprint", "chronicle"], note_query: "token efficiency", references: ["core-protocol"] })` |
@@ -60,7 +60,7 @@ The fastest mental model is: if the tool has a plural/batch argument (`doc_types
 
 | Tool | Arguments | Example |
 |---|---|---|
-| `goop_save_note` | `title`, `body`, `tags`, `source_agent`, `importance?`, `workflow_id?`, `project_id?`, `items?: {title, body, tags, source_agent, importance?, workflow_id?, project_id?}[]` | `goop_save_note({ title: "SQLite FTS5 tokenization", body: "...", tags: ["sqlite", "fts5"], source_agent: "goop-researcher", importance: 8 })` |
+| `goop_save_note` | `title`, `body`, `tags`, `source_agent`, `importance?`, `note_id?`, `old_string?`, `new_string?`, `replace_all?`, `workflow_id?`, `project_id?`, `items?: {title, body, tags, source_agent, importance?, note_id?, old_string?, new_string?, replace_all?, workflow_id?, project_id?}[]` | `goop_save_note({ title: "SQLite FTS5 tokenization", body: "...", tags: ["sqlite", "fts5"], source_agent: "goop-researcher", importance: 8 })` |
 | `goop_search_notes` | `query?`, `tags?`, `project_id?`, `workflow_id?`, `limit?`, `full?`, `body_offset?`, `body_limit?`, `note_id?` | `goop_search_notes({ note_id: "fn_20260716_0v28qlej" })` |
 
 **Behavioral note:** `note_id` bypasses search and returns the full body; when you already have the ID from a snippet, prefer `note_id` over narrowing queries. Use `full: true` to retrieve full bodies via a normal search.
