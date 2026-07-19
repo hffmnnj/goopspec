@@ -21,7 +21,7 @@ interface CompactionClient {
     }) => Promise<unknown>;
     summarize: (input: {
       path: { id: string };
-      body?: { providerID: string; modelID: string };
+      body?: { providerID: string; modelID: string; auto?: boolean };
     }) => Promise<unknown>;
   };
 }
@@ -72,25 +72,14 @@ describe("createGoopCompactTool", () => {
 
     expect(summarize).toHaveBeenCalledWith({
       path: { id: sessionID },
-      body: { providerID: "opencode", modelID: "deepseek-v4" },
+      body: { providerID: "opencode", modelID: "deepseek-v4", auto: true },
     });
     expect(ctx.compactionHandoff.get(sessionID)).toBe(nextStep);
     expect(result).not.toBe("timed out");
     expect(result).toContain(`Compaction requested for session ${sessionID}`);
     expect(result).toContain("it will apply after this turn completes");
-    expect(promptAsync).toHaveBeenCalledWith({
-      path: { id: sessionID },
-      body: {
-        model: { providerID: "opencode", modelID: "deepseek-v4" },
-        agent: "goop-orchestrator",
-        parts: [
-          {
-            type: "text",
-            text: "Continue from the compaction summary. Recheck the workflow documents only if needed.",
-          },
-        ],
-      },
-    });
+    expect(result).toContain("The host will continue automatically");
+    expect(promptAsync).not.toHaveBeenCalled();
   });
 
   it("returns promptly when the compaction request remains pending", async () => {
@@ -120,7 +109,7 @@ describe("createGoopCompactTool", () => {
     expect(result).not.toBe("timed out");
     expect(summarize).toHaveBeenCalledWith({
       path: { id: sessionID },
-      body: { providerID: "opencode", modelID: "deepseek-v4" },
+      body: { providerID: "opencode", modelID: "deepseek-v4", auto: true },
     });
   });
 
