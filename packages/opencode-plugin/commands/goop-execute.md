@@ -36,9 +36,9 @@ goop_reference({ name: "core-protocol" })
       - `goop-executor-low` for mechanical/pattern-following edits (any size).
       - `goop-executor-medium` for standard implementation work — the default tier.
       - `goop-executor-high` for architecture-sensitive or security-critical work — reserved, not a default.
-      - `goop-executor-frontend-low` for UI mechanical tasks (markup, tokens, simple styling).
+       - `goop-executor-frontend-low` for UI mechanical tasks (markup, tokens, simple styling, any size).
       - `goop-executor-frontend-medium` for standard UI component work — the default frontend tier.
-      - `goop-executor-frontend-high` for design-sensitive or UI-architecture work — reserved, not a default.
+       - `goop-executor-frontend-high` for deep design or UI-architecture work — reserved, not a default.
    - Use sequential dispatch for shared files; parallel dispatch for independent tasks.
    - Require every task to return `STATUS`, `SUMMARY`, `ARTIFACTS`, `VERIFICATION`, `NEXT`.
 3. Apply the four-rule deviation system from `phase-gates`. Log every deviation to `ADL.md` via `goop_adl`.

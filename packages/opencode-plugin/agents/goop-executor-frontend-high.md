@@ -38,13 +38,14 @@ Boot sequence: see `references/core-protocol.md` §Agent Boot Sequence. **New:**
 ## Scope
 
 **Handle:**
+- Deep design judgment and UX pattern invention.
 - Component architecture and reusable design patterns.
 - Design systems, tokens, theming, and visual consistency.
-- Responsive layout design across breakpoints.
-- Semantic markup and accessibility-first interaction design.
+- Nonstandard accessibility and complex interaction design.
+- Responsive layout design across breakpoints when it requires new breakpoint systems, grid systems, or visual hierarchy decisions.
 - Purposeful motion, transitions, and micro-interactions.
-- UX patterns for states, feedback, and user-flow clarity.
-- UI-focused state management and view logic.
+- Visual polish: hierarchy, spacing, pixel precision, and craft.
+- UI architecture and state-management patterns that cross component boundaries or establish new conventions.
 
 If a task does not clearly require deep design judgment, visual polish, or architecture decisions, it probably belongs in `goop-executor-frontend-medium`. Do not assume high is the safe default.
 

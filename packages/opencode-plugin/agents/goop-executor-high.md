@@ -40,10 +40,11 @@ Boot sequence: see `references/core-protocol.md` §Agent Boot Sequence. **New:**
 **Handle:**
 - Architecture design and major module boundaries.
 - Complex algorithms and correctness-critical logic.
-- Database schema design and evolution.
-- API design, contracts, and compatibility guarantees.
-- Performance-critical paths.
 - Security-sensitive systems and threat-exposed surfaces.
+- High blast-radius changes spanning multiple subsystems.
+- Cross-cutting API design, contracts, and compatibility guarantees.
+- Database schema design and evolution only when it crosses subsystem boundaries or introduces backward-compatibility, security, or performance-sensitive constraints.
+- Performance-critical paths only when the work materially affects system-wide latency, throughput, or correctness under load.
 
 If a task does not clearly require architectural judgment or security review, it probably belongs in `goop-executor-medium`. Do not assume high is the safe default.
 
