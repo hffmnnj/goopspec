@@ -201,6 +201,8 @@ export interface MemorySaveInput {
   importance?: number;
   reasoning?: string;
   alternatives?: string[];
+  /** Opt in to FTS-backed near-duplicate consolidation before inserting. */
+  deduplicate?: boolean;
 }
 
 // ---------------------------------------------------------------------------

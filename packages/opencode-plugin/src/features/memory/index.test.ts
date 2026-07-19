@@ -125,6 +125,43 @@ describe("SqliteMemoryManager", () => {
       expect(entry.concepts).toEqual([]);
       expect(entry.sourceFiles).toEqual([]);
     });
+
+    it("consolidates an opt-in near-duplicate by reinforcing the existing entry", async () => {
+      const original = await mgr.save({
+        ...baseSaveInput,
+        title: "Use FTS5 for local memory search",
+        content: "Use SQLite FTS5 for local memory retrieval with BM25 ranking.",
+        importance: 4,
+      });
+      const reinforced = await mgr.save({
+        ...baseSaveInput,
+        title: "Use FTS5 for local memory search",
+        content: "Use SQLite FTS5 for local memory retrieval with BM25 ranking.",
+        importance: 8,
+        deduplicate: true,
+      });
+
+      expect(reinforced.id).toBe(original.id);
+      expect(reinforced.importance).toBe(8);
+      expect(reinforced.createdAt).toBeGreaterThanOrEqual(original.createdAt);
+      expect(await mgr.search({ query: "FTS5 local memory retrieval" })).toHaveLength(1);
+    });
+
+    it("inserts duplicate entries when deduplication is absent or false", async () => {
+      const input = {
+        ...baseSaveInput,
+        title: "Default save remains an insert",
+        content: "The default save path does not consolidate matching memories.",
+      };
+
+      const first = await mgr.save(input);
+      const absent = await mgr.save(input);
+      const disabled = await mgr.save({ ...input, deduplicate: false });
+
+      expect(absent.id).toBeGreaterThan(first.id);
+      expect(disabled.id).toBeGreaterThan(absent.id);
+      expect(await mgr.search({ query: "default save path consolidate" })).toHaveLength(3);
+    });
   });
 
   // -----------------------------------------------------------------------
