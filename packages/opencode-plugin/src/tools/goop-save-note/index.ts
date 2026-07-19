@@ -12,7 +12,8 @@
 import { tool } from "../../core/sdk-compat.js";
 import type { ToolContext, ToolDefinition } from "../../core/sdk-compat.js";
 import type { PluginContext } from "../../core/types.js";
-import { formatBatchResult, runBatch } from "../../features/db/batch.js";
+import type { BatchItemResult, BatchResult } from "../../features/db/batch.js";
+import { formatBatchResult } from "../../features/db/batch.js";
 
 // ---------------------------------------------------------------------------
 // ID generation
@@ -141,50 +142,69 @@ export function createGoopSaveNoteTool(ctx: PluginContext): ToolDefinition {
     async execute(args: SaveNoteArgs, _context: ToolContext): Promise<string> {
       try {
         if (args.items !== undefined) {
-          const result = runBatch(ctx.db, args.items, (item) => {
-            if (item.note_id !== undefined) {
-              if (item.old_string === undefined) {
-                throw new Error("old_string is required when note_id is provided for patch mode");
+          const batchItems: BatchItemResult[] = [];
+          let succeeded = 0;
+          let failed = 0;
+
+          for (const [index, item] of args.items.entries()) {
+            try {
+              if (item.note_id !== undefined) {
+                if (item.old_string === undefined) {
+                  throw new Error("old_string is required when note_id is provided for patch mode");
+                }
+
+                const updateResult = ctx.db.updateNote(item.note_id, {
+                  oldString: item.old_string,
+                  newString: item.new_string ?? "",
+                  replaceAll: item.replace_all ?? false,
+                });
+
+                if (!updateResult.ok) {
+                  throw new Error(updateResult.error ?? "Patch failed");
+                }
+
+                batchItems.push({ index, ok: true, detail: `patched ${item.note_id}` });
+                succeeded++;
+                continue;
               }
 
-              const updateResult = ctx.db.updateNote(item.note_id, {
-                oldString: item.old_string,
-                newString: item.new_string ?? "",
-                replaceAll: item.replace_all ?? false,
+              const validation = validateCreateFields(item);
+              if (!validation.ok) {
+                throw new Error(validation.error);
+              }
+
+              const itemImportance = item.importance ?? 5;
+              if (itemImportance < 1 || itemImportance > 10) {
+                throw new Error(`importance out of range (${itemImportance})`);
+              }
+
+              const id = generateNoteId();
+              ctx.db.saveNote({
+                id,
+                title: item.title as string,
+                body: item.body as string,
+                tags: JSON.stringify(item.tags as string[]),
+                source_agent: item.source_agent as string,
+                importance: itemImportance,
+                workflow_id: item.workflow_id ?? null,
+                project_id: item.project_id ?? null,
               });
 
-              if (!updateResult.ok) {
-                throw new Error(updateResult.error ?? "Patch failed");
-              }
-
-              return `patched ${item.note_id}`;
+              batchItems.push({ index, ok: true, detail: `saved ${id}` });
+              succeeded++;
+            } catch (error: unknown) {
+              const msg = error instanceof Error ? error.message : String(error);
+              batchItems.push({ index, ok: false, detail: msg });
+              failed++;
             }
+          }
 
-            const validation = validateCreateFields(item);
-            if (!validation.ok) {
-              throw new Error(validation.error);
-            }
-
-            const itemImportance = item.importance ?? 5;
-            if (itemImportance < 1 || itemImportance > 10) {
-              throw new Error(`importance out of range (${itemImportance})`);
-            }
-
-            const id = generateNoteId();
-            ctx.db.saveNote({
-              id,
-              title: item.title as string,
-              body: item.body as string,
-              tags: JSON.stringify(item.tags as string[]),
-              source_agent: item.source_agent as string,
-              importance: itemImportance,
-              workflow_id: item.workflow_id ?? null,
-              project_id: item.project_id ?? null,
-            });
-
-            return `saved ${id}`;
-          });
-
+          const result: BatchResult = {
+            total: args.items.length,
+            succeeded,
+            failed,
+            items: batchItems,
+          };
           return formatBatchResult(result, "save-note");
         }
 

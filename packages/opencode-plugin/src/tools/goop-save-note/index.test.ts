@@ -297,7 +297,7 @@ describe("goop_save_note tool", () => {
       expect(result).toContain("3/3 succeeded");
     });
 
-    it("rolls back the whole batch when any item fails validation", async () => {
+    it("continues processing the batch when one item fails validation", async () => {
       const tool = createGoopSaveNoteTool(ctx);
       const result = await tool.execute(
         {
@@ -313,9 +313,13 @@ describe("goop_save_note tool", () => {
         },
         toolCtx,
       );
-      expect(result).toContain("0/3 succeeded");
+      expect(result).toContain("2/3 succeeded");
       expect(result).toContain("FAIL");
       expect(result).toContain("importance out of range");
+
+      // Both valid items persisted despite the middle failure.
+      const search = ctx.db.searchNotes("Body");
+      expect(search.length).toBe(2);
     });
 
     it("backward-compat: single-note path works when items absent", async () => {
@@ -445,6 +449,46 @@ describe("goop_save_note tool", () => {
       const search = ctx.db.searchNotes("Fresh body");
       expect(search.length).toBe(1);
       expect(search[0].title).toBe("Fresh note");
+    });
+
+    it("partial success: valid creates persist despite a failed patch", async () => {
+      const tool = createGoopSaveNoteTool(ctx);
+
+      const batchResult = await tool.execute(
+        {
+          title: "",
+          body: "",
+          tags: [],
+          source_agent: "agent",
+          items: [
+            {
+              title: "First note",
+              body: "first-unique-body-abc",
+              tags: ["a"],
+              source_agent: "agent",
+            },
+            { note_id: "fn_20260618_missing0001", old_string: "no match", new_string: "x" },
+            {
+              title: "Third note",
+              body: "third-unique-body-xyz",
+              tags: ["c"],
+              source_agent: "agent",
+            },
+          ],
+        },
+        toolCtx,
+      );
+
+      expect(batchResult).toContain("2/3 succeeded");
+      expect(batchResult).toContain("FAIL");
+
+      const firstSearch = ctx.db.searchNotes("first-unique-body-abc");
+      expect(firstSearch.length).toBe(1);
+      expect(firstSearch[0].title).toBe("First note");
+
+      const thirdSearch = ctx.db.searchNotes("third-unique-body-xyz");
+      expect(thirdSearch.length).toBe(1);
+      expect(thirdSearch[0].title).toBe("Third note");
     });
   });
 
