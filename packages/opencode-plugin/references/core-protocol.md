@@ -69,6 +69,10 @@ Useful memory types:
 
 Tag memories with relevant `concepts` so later searches surface them.
 
+Retrieval is multi-signal: memory search combines FTS5 relevance with `importance` weighting, a recency-decay factor (newer memories rank higher), and a concept/fact overlap boost. All new signals are internal to ranking; callers pass the same arguments and receive the same result shape as before. Exact scoring formulas and optional arguments are documented in `tool-reference.md`.
+
+The system-transform hook also injects high-importance, workflow-scoped Field Notes alongside the memory block. For the cross-store retrieval bridge and auto-injection details, see `field-notes-protocol.md`.
+
 ### Memory Hygiene
 
 | Priority | Importance | What to Save |
@@ -80,6 +84,8 @@ Tag memories with relevant `concepts` so later searches surface them.
 **Never store:** secrets, private keys, personal information, content inside `<private>` tags, large code blocks (store file paths instead).
 
 **Search strategy:** search before starting work, save after learning something, search when asked about history. Be specific with titles, extract atomic facts, use consistent concepts, include source files.
+
+**Deduplication:** `memory_save` accepts an optional `deduplicate` flag (default `false`). When set to `true`, the save path checks for a near-duplicate memory using normalized token overlap; if a match is strong enough, it soft-updates the existing entry (higher of the two importances, refreshed timestamp) and returns it instead of inserting a new row. No entry is ever deleted. When the flag is absent or `false`, behavior is identical to before.
 
 ## Tool-Call Batching
 

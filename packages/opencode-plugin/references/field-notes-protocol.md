@@ -106,6 +106,32 @@ goop_search_notes("state migration", { project_id: "goopspec", workflow_id: "goo
 
 Narrows to a specific project or workflow context.
 
+## Cross-Store Retrieval Bridge
+
+Field Notes and `memory.db` are intentionally kept as separate stores (different write patterns, storage models, and lifecycles). They are now bridged at retrieval time via `memory_search` rather than merged.
+
+```
+memory_search({ query: "FTS5 tokenization", includeFieldNotes: true })
+```
+
+When `includeFieldNotes: true`:
+
+1. `memory_search` queries `memory.db` through the upgraded scoring path and queries Field Notes through `goop_search_notes` in parallel.
+2. The two ranked lists are fused with reciprocal-rank fusion (`RRF k=60`), which normalizes across their incompatible native scores.
+3. Each result is tagged with its origin store (`origin: "memory"` or `origin: "field_note"`).
+4. Memory results carry the normal `MemoryEntry` shape; Field Note results carry the curated note shape (`id`, `title`, `body`, `tags`, `source_agent`, `importance`, `workflow_id`, `project_id`, `created_at`).
+
+The default (`includeFieldNotes: false` or absent) returns only `memory.db` results, preserving the existing tool contract.
+
+## Auto-Injection in System Prompts
+
+The `system-transform` hook now surfaces high-importance, workflow-scoped Field Notes alongside the existing memory injection block. This is additive — the memory block still runs with its own 800-token budget and is not replaced.
+
+- **Trigger:** For the active workflow, the hook searches Field Notes with the same phase-aware query used for memory (`${workflow.phase} workflow`) and filters to notes with `importance >= 8`.
+- **Token budget:** A separate 300-token budget (`DEFAULT_FIELD_NOTES_TOKEN_BUDGET`) is used for the Field Notes block.
+- **Behavior:** Notes are appended in a `<goopspec_field_notes>` block after `<goopspec_memory>`. If no high-importance notes match, the block is omitted and the existing system prompt is unchanged. If Field Notes are unavailable, the hook logs and skips gracefully — it never crashes the LLM call.
+- **Caching:** Results share the same session-level cache as the memory block (keyed by `sessionID:phase:currentWave`, TTL 30s) to avoid repeated DB work on every turn.
+
 ## Enhanced Retrieval: `full`, `body_offset`, `body_limit`, `note_id`
 
 `goop_search_notes` supports four optional arguments for fine-grained body retrieval. Default behavior (all four absent) returns a 200-character snippet — this is the norm and keeps token usage low.
