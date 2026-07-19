@@ -67,7 +67,7 @@ const PHASE_RULES: Record<WorkflowPhase, Omit<PhaseRules, "phase">> = {
     label: "PLAN",
     mustDo: [
       "Create SPEC.md with must-haves, nice-to-haves, out-of-scope",
-      "Create BLUEPRINT.md with wave-based execution plan",
+      "Decompose work into waves and tasks via goop_write_wave",
       "Map all must-haves to specific tasks",
       "Define verification steps for each task",
       "Get user confirmation before locking the spec",
@@ -95,9 +95,9 @@ const PHASE_RULES: Record<WorkflowPhase, Omit<PhaseRules, "phase">> = {
       "Write code directly — ALWAYS delegate to subagents",
       "Skip verification steps",
       "Ignore test failures",
-      "Modify files outside BLUEPRINT.md scope",
+      "Modify files outside the plan's scope",
     ],
-    requiredDocuments: ["SPEC.md", "BLUEPRINT.md", "CHRONICLE.md"],
+    requiredDocuments: ["SPEC.md", "CHRONICLE.md"],
     delegationNote: DELEGATION_NOTE,
   },
 
@@ -115,7 +115,7 @@ const PHASE_RULES: Record<WorkflowPhase, Omit<PhaseRules, "phase">> = {
       "Ignore failing tests",
       "Write new features — only fixes for acceptance gaps",
     ],
-    requiredDocuments: ["SPEC.md", "BLUEPRINT.md", "CHRONICLE.md"],
+    requiredDocuments: ["SPEC.md", "CHRONICLE.md"],
   },
 };
 

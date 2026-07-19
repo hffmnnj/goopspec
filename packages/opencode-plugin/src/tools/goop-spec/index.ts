@@ -98,13 +98,14 @@ function readDocs(ctx: PluginContext, file: string): string {
 /** Required sections for SPEC.md validation. */
 const SPEC_REQUIRED_SECTIONS = ["Must-Haves", "Out of Scope", "Acceptance Criteria"] as const;
 
-/** Required sections for BLUEPRINT.md validation. */
-const BLUEPRINT_REQUIRED_SECTIONS = ["Wave", "Spec Mapping"] as const;
+/** Required sections for the blueprint's narrower non-wave shape. */
+const BLUEPRINT_REQUIRED_SECTIONS = ["Overview", "Risk Assessment", "Deviation Protocol"] as const;
 
 function validateDocs(ctx: PluginContext): string {
   const docDir = resolveDocDir(ctx);
+  const workflowId = ctx.stateManager.getActiveWorkflowId();
   const issues: string[] = [];
-  const lines = [`# Validation — ${ctx.stateManager.getActiveWorkflowId()}\n`];
+  const lines = [`# Validation — ${workflowId}\n`];
 
   // --- SPEC.md ---
   const specContent = safeRead(join(docDir, "SPEC.md"));
@@ -126,7 +127,7 @@ function validateDocs(ctx: PluginContext): string {
     lines.push("- **NOT FOUND**");
   }
 
-  // --- BLUEPRINT.md ---
+  // --- BLUEPRINT.md (non-wave planning narrative) ---
   const planContent = safeRead(join(docDir, "BLUEPRINT.md"));
   lines.push("\n## BLUEPRINT.md\n");
   if (planContent) {
@@ -135,16 +136,23 @@ function validateDocs(ctx: PluginContext): string {
         issues.push(`BLUEPRINT.md: Missing required section "${section}"`);
       }
     }
-    // Check traceability: at least one MH reference in the plan
-    const hasTraceability = /MH\d+/.test(planContent);
-    if (!hasTraceability) {
-      issues.push("BLUEPRINT.md: No traceability references to must-haves (MH1, MH2, …)");
-    }
     lines.push(`- Found: ${planContent.length} chars`);
-    lines.push(`- Traceability: ${hasTraceability ? "Yes" : "No"}`);
+    lines.push(`- Non-wave shape: ${issues.some((i) => i.startsWith("BLUEPRINT.md:")) ? "No" : "Yes"}`);
   } else {
     issues.push("BLUEPRINT.md not found");
     lines.push("- **NOT FOUND**");
+  }
+
+  // --- Wave plan existence (substantive Spec gate) ---
+  const waveRows = ctx.db.getWaves(workflowId);
+  lines.push("\n## Wave Plan\n");
+  if (waveRows.length === 0) {
+    issues.push("No waves found. Use goop_write_wave to create a locked, traceable plan.");
+    lines.push(`- Waves: 0`);
+    lines.push(`- Plan present: No`);
+  } else {
+    lines.push(`- Waves: ${waveRows.length}`);
+    lines.push(`- Plan present: Yes`);
   }
 
   // --- Summary ---
