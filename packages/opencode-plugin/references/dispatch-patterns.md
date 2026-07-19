@@ -66,10 +66,10 @@ Do not pass full conversation history, verbose logs, unrelated files, or complet
 | Planning | `goop-planner` | orchestrator |
 | Mechanical / pattern-following | `goop-executor-low` | — |
 | Standard implementation (default) | `goop-executor-medium` | — |
-| Complex / architectural / security-critical (reserve) | `goop-executor-high` | — |
-| UI mechanical / pattern-following (any size) | `goop-executor-frontend-low` | — |
+| Complex / architectural / security-critical | `goop-executor-high` | — |
+| UI mechanical / pattern-following | `goop-executor-frontend-low` | — |
 | Standard UI implementation (default) | `goop-executor-frontend-medium` | `goop-executor-frontend-low` / `goop-executor-frontend-high` |
-| Deep UI design / UI architecture (reserve) | `goop-executor-frontend-high` | — |
+| Deep UI design / UI architecture | `goop-executor-frontend-high` | — |
 | Research | `goop-researcher` | `goop-explorer` |
 | Exploration | `goop-explorer` | — |
 | Verification | `goop-verifier` | `goop-tester` |
@@ -81,13 +81,13 @@ Do not pass full conversation history, verbose logs, unrelated files, or complet
 
 | Complexity | Tier | Rule of Thumb | Context Budget |
 |------------|------|----------------|-----------------|
-| Mechanical | `goop-executor-low` | Pattern-following, config, scaffolding, markdown — any line count | 40% |
-| Standard (default) | `goop-executor-medium` | **Default — all implementation work not in low or high** | 60% |
-| UI mechanical/pattern-following (any size) | `goop-executor-frontend-low` | Markup, tokens, simple styling, copy | 40% |
-| Standard UI (default) | `goop-executor-frontend-medium` | Standard UI state/view logic and accessibility within existing patterns | 60% |
-| Deep UI design / UI architecture | `goop-executor-frontend-high` | Reserved for deep design/UI-architecture work | 80% |
-| Complex | `goop-executor-high` | Architecture, security-critical, high blast-radius — reserve | 80% |
-| Critical | `goop-executor-high` + thinking | Reserve; highest stakes only | 90% |
+| Mechanical | `goop-executor-low` | Pattern-following; escalate if complexity is hidden | 40% |
+| Standard (default) | `goop-executor-medium` | Default when a task isn't clearly mechanical or clearly complex/critical | 60% |
+| UI mechanical/pattern-following | `goop-executor-frontend-low` | Markup, tokens, simple styling, copy; escalate if complexity is hidden | 40% |
+| Standard UI (default) | `goop-executor-frontend-medium` | Default when UI work isn't clearly mechanical or clearly design/architectural | 60% |
+| Deep UI design / UI architecture | `goop-executor-frontend-high` | Deep design/UI-architecture; don't default high, but don't avoid it when warranted | 80% |
+| Complex | `goop-executor-high` | Architecture, security-critical, high blast-radius; don't default high, but don't avoid it when genuinely warranted | 80% |
+| Critical | `goop-executor-high` + thinking | Highest-stakes architecture, security, or safety-critical work | 90% |
 
 ## Dispatch Modes
 
