@@ -7,6 +7,7 @@ import {
   setupTestEnvironment,
 } from "../test-utils.js";
 import {
+  buildFieldNotesBlock,
   buildMemoryBlock,
   buildStateBlock,
   clearDocTypeCache,
@@ -150,6 +151,30 @@ describe("buildMemoryBlock", () => {
   });
 });
 
+describe("buildFieldNotesBlock", () => {
+  it("formats notes within budget", () => {
+    const block = buildFieldNotesBlock(
+      [
+        {
+          id: "fn_20260718_highnote",
+          title: "Workflow decision",
+          body: "Use the additive Field Notes context budget.",
+          tags: "[]",
+          source_agent: "goop-executor-high",
+          importance: 8,
+          workflow_id: "default",
+          project_id: "goopspec",
+          created_at: Date.now(),
+        },
+      ],
+      300,
+    );
+
+    expect(block).toContain("<goopspec_field_notes>");
+    expect(estimateTokens(block)).toBeLessThanOrEqual(300);
+  });
+});
+
 // ---------------------------------------------------------------------------
 // createSystemTransformHook (integration)
 // ---------------------------------------------------------------------------
@@ -284,6 +309,89 @@ describe("createSystemTransformHook", () => {
 
       const injected = output.system[0];
       expect(injected).not.toContain("<goopspec_memory>");
+    } finally {
+      cleanup();
+    }
+  });
+
+  it("injects high-importance workflow Field Notes within their additive budget", async () => {
+    const { testDir, cleanup } = setupTestEnvironment("sys-transform-field-notes");
+    try {
+      const ctx = createMockPluginContext({
+        testDir,
+        state: {
+          activeWorkflowId: "notes-workflow",
+          workflows: {
+            "notes-workflow": createDefaultWorkflowState({ phase: "execute" }),
+          },
+        },
+      });
+      ctx.db.saveNote({
+        id: "fn_20260718_important",
+        title: "execute workflow decision",
+        body: "Inject high-value Field Notes as additive agent context.",
+        tags: '["memory"]',
+        source_agent: "goop-researcher",
+        importance: 8,
+        workflow_id: "notes-workflow",
+        project_id: "goopspec",
+      });
+      ctx.db.saveNote({
+        id: "fn_20260718_lowpriority",
+        title: "execute workflow reminder",
+        body: "This note should not be injected.",
+        tags: '["memory"]',
+        source_agent: "goop-researcher",
+        importance: 7,
+        workflow_id: "notes-workflow",
+        project_id: "goopspec",
+      });
+
+      const hooks = createSystemTransformHook(ctx);
+      const output = { system: [] as string[] };
+      await hooks["experimental.chat.system.transform"]?.(
+        { sessionID: "field-notes", model: {} as SdkModel },
+        output,
+      );
+
+      const fieldNotesBlock = output.system[0].match(
+        /<goopspec_field_notes>[\s\S]*?<\/goopspec_field_notes>/,
+      )?.[0];
+      expect(fieldNotesBlock).toContain("Inject high-value Field Notes");
+      expect(fieldNotesBlock).not.toContain("This note should not be injected");
+      expect(estimateTokens(fieldNotesBlock ?? "")).toBeLessThanOrEqual(300);
+    } finally {
+      cleanup();
+    }
+  });
+
+  it("preserves the memory-only block when the workflow has no Field Notes", async () => {
+    const { testDir, cleanup } = setupTestEnvironment("sys-transform-memory-only");
+    try {
+      const memory = makeMemoryResult(
+        "execute workflow decision",
+        "Keep memory context behavior unchanged when no Field Notes exist.",
+      );
+      const ctx = createMockPluginContext({
+        testDir,
+        memories: [memory.memory],
+        state: {
+          activeWorkflowId: "default",
+          workflows: {
+            default: createDefaultWorkflowState({ phase: "execute" }),
+          },
+        },
+      });
+
+      const hooks = createSystemTransformHook(ctx);
+      const output = { system: [] as string[] };
+      await hooks["experimental.chat.system.transform"]?.(
+        { sessionID: "memory-only", model: {} as SdkModel },
+        output,
+      );
+
+      expect(output.system[0]).toContain(buildMemoryBlock([memory], 800));
+      expect(output.system[0]).not.toContain("<goopspec_field_notes>");
     } finally {
       cleanup();
     }
