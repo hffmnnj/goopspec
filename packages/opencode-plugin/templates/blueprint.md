@@ -15,101 +15,9 @@
 
 | Metric | Value |
 |--------|-------|
-| Waves | {{wave_count}} |
-| Total Tasks | {{task_count}} |
-| Parallel Execution | {{parallel_percentage}}% |
 | Estimated Effort | {{estimated_effort}} |
 
----
-
-## Spec Mapping
-
-Every must-have from SPEC.md is covered:
-
-| Must-Have | Tasks | Coverage |
-|-----------|-------|----------|
-{{#spec_mapping}}
-| MH{{number}}: {{title}} | {{tasks}} | {{coverage}} |
-{{/spec_mapping}}
-
-**Total Coverage:** {{total_coverage}}%
-
----
-
-## Wave Architecture
-
-```
-{{#waves}}
-Wave {{number}}: {{name}} {{#parallel}}[PARALLEL]{{/parallel}}{{^parallel}}[SEQUENTIAL]{{/parallel}}
-{{#tasks}}  ├── Task {{wave}}.{{number}}: {{name}}
-{{/tasks}}{{#depends_on}}  └── depends on Wave {{.}}
-{{/depends_on}}
-{{/waves}}
-```
-
----
-
-{{#waves}}
-## Wave {{number}}: {{name}}
-
-**Goal:** {{goal}}
-
-**Execution:** {{#parallel}}Parallel — tasks can run concurrently{{/parallel}}{{^parallel}}Sequential — tasks must run in order{{/parallel}}
-
-{{#depends_on}}**Depends On:** Wave {{.}} must complete first{{/depends_on}}
-
-### Verification Matrix
-
-| Check | Command | Expected |
-|-------|---------|----------|
-{{#verification_matrix}}
-| {{check}} | `{{command}}` | {{expected}} |
-{{/verification_matrix}}
-
----
-
-{{#tasks}}
-### Task {{wave}}.{{number}}: {{name}}
-
-| Attribute | Value |
-|-----------|-------|
-| **Intent** | {{intent}} |
-| **Executor** | {{executor}} |
-| **Parallel** | {{#parallel}}Yes{{/parallel}}{{^parallel}}No{{/parallel}} |
-{{#depends_on}}| **Depends On** | Task {{depends_on}} |{{/depends_on}}
-{{#blocks}}| **Blocks** | Task {{blocks}} |{{/blocks}}
-| **Spec Coverage** | {{spec_coverage}} |
-
-**Deliverables:**
-{{#deliverables}}
-- [ ] {{.}}
-{{/deliverables}}
-
-**Files:**
-{{#files}}
-- `{{path}}` — {{action}}
-{{/files}}
-
-**Verification:**
-```bash
-{{verification_command}}
-```
-
-**Acceptance:**
-{{acceptance}}
-
----
-
-{{/tasks}}
-{{/waves}}
-
-## Verification Checklist
-
-Before marking blueprint complete:
-
-{{#verification_checklist}}
-- [ ] {{.}}
-{{/verification_checklist}}
+> **Wave & task tracking:** Wave, task, PR, status, verification, and traceability data live in the `waves` / `wave_tasks` database tables, written via `goop_write_wave` and read via `goop_read_wave`. This document covers non-wave planning content only — consult the wave tool for execution state.
 
 ---
 
@@ -130,7 +38,6 @@ Before marking blueprint complete:
 
 ---
 {{/risks}}
-
 {{^risks}}
 No significant risks identified.
 {{/risks}}
@@ -165,22 +72,18 @@ If issues are encountered during execution:
 - Load PROJECT_KNOWLEDGE_BASE.md for conventions
 - Use memory_search before decisions
 - Persist learnings with memory_save
-- Return XML response envelope
-
-### Parallel Execution Rules
-- Tasks within a parallel wave can run concurrently
-- Wait for all tasks in wave before proceeding to next wave
-- If any task blocks, continue others and handle blocker separately
+- Return markdown response envelope per `references/response-format.md`
 
 ---
 
 ## Handoff Protocol
 
 At wave boundaries:
-1. Update CHRONICLE.md with completed tasks
-2. Save checkpoint with goop_checkpoint
-3. If context full or natural pause, generate HANDOFF.md
-4. Suggest: "Start new session and run `/goop-execute`"
+1. Record wave/task completion via `goop_write_wave` (the source of truth for progress)
+2. Update CHRONICLE.md with completed tasks
+3. Save checkpoint with `goop_checkpoint`
+4. If context is full or at a natural pause, generate HANDOFF.md
+5. Suggest: "Start new session and run `/goop-execute`"
 
 ---
 
