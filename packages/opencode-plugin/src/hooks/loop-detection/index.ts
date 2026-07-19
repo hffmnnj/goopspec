@@ -1,3 +1,4 @@
+import type { SdkPermission } from "../../core/sdk-compat.js";
 import type { PluginContext } from "../../core/types.js";
 import { loadMergedConfig, resolveLoopDetectionConfig } from "../../features/setup/index.js";
 import { logError } from "../../shared/logger.js";
@@ -6,6 +7,7 @@ import { safeHandler } from "../utils.js";
 import { type ClassificationResult, classify, resetSignature } from "./classify.js";
 import { buildTier1Message, buildTier2Message } from "./message.js";
 import { canonicalArgsHash, outputHash } from "./normalize.js";
+import { derivePermissionSignature } from "./permission.js";
 import { type LoopTracker, createLoopTracker } from "./tracker.js";
 
 /**
@@ -106,7 +108,37 @@ export function createLoopDetectionHook(ctx: PluginContext): Partial<Hooks> {
     },
   );
 
-  return { "tool.execute.after": after };
+  const permissionAsk: NonNullable<Hooks["permission.ask"]> = safeHandler(
+    "loop-detection:permission-ask",
+    async (input, output): Promise<void> => {
+      try {
+        const permission = input as SdkPermission;
+        const signature = derivePermissionSignature(permission);
+        if (!signature || typeof permission.sessionID !== "string") return;
+
+        if (
+          !loopDetectionState.isTier1Flagged(
+            permission.sessionID,
+            signature.tool,
+            signature.argsSignature,
+          )
+        ) {
+          return;
+        }
+
+        output.status = "deny";
+        loopDetectionState.clearTier1Flag(
+          permission.sessionID,
+          signature.tool,
+          signature.argsSignature,
+        );
+      } catch (error: unknown) {
+        logError("loop-detection: unable to evaluate permission request", error);
+      }
+    },
+  );
+
+  return { "tool.execute.after": after, "permission.ask": permissionAsk };
 }
 
 /** HookFactory-compatible wrapper. */
