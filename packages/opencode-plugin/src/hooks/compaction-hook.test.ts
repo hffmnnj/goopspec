@@ -52,6 +52,7 @@ describe("buildWorkflowSurvivalBlock", () => {
 
     expect(block).toContain("AUTOPILOT ACTIVE");
     expect(block).toContain("Continue to the next phase immediately");
+    expect(block).toContain("Hard stops still apply per phase-gates");
     expect(block).toContain("AUTOPILOT SESSION RULES");
   });
 
@@ -72,6 +73,16 @@ describe("buildWorkflowSurvivalBlock", () => {
 
     expect(block).toContain("LAZY AUTOPILOT ACTIVE");
     expect(block).toContain("Do NOT ask the user any questions");
+    expect(block).toContain(
+      "ONLY stop for: (1) missing credentials/secrets, (2) ambiguous destructive/irreversible operations.",
+    );
+    expect(block).toContain(
+      "On a Rule 4 architectural decision, decide autonomously using best judgment.",
+    );
+    expect(block).toContain("Log full rationale to ADL via goop_adl");
+    // Old stop-list items should NOT appear in the ONLY-stop-for list
+    expect(block).not.toContain("external blockers");
+    // "Rule 4" appears in the autonomous-decision sentence, not in the stop list
     expect(block).toContain("AUTOPILOT SESSION RULES");
   });
 
