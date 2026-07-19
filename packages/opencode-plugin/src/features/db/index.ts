@@ -29,6 +29,7 @@ import type {
   WorkflowRow,
   WorkflowSummaryRow,
 } from "./types.js";
+import { patchContent } from "../../shared/content-patch.js";
 
 /** Named parameter bindings accepted by bun:sqlite. */
 type NamedBindings = Record<string, string | bigint | number | boolean | null>;
@@ -862,6 +863,30 @@ export class GoopSpecDB {
         .query<FieldNoteRow, NamedBindings>("SELECT * FROM field_notes WHERE id = $id")
         .get({ $id: id }) ?? null
     );
+  }
+
+  updateNote(
+    id: string,
+    patch: { oldString: string; newString: string; replaceAll?: boolean },
+  ): { ok: boolean; error?: string } {
+    const note = this.getNoteById(id);
+    if (note === null) {
+      return { ok: false, error: `Note '${id}' not found` };
+    }
+
+    const result = patchContent(note.body, patch.oldString, patch.newString, {
+      replaceAll: patch.replaceAll ?? false,
+    });
+
+    if (!result.ok) {
+      return { ok: false, error: result.error };
+    }
+
+    this.db
+      .query<FieldNoteRow, NamedBindings>("UPDATE field_notes SET body = $body WHERE id = $id")
+      .run({ $id: id, $body: result.content! });
+
+    return { ok: true };
   }
 
   runTransaction<T>(fn: () => T): T {
