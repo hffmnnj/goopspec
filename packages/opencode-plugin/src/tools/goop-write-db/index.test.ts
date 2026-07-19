@@ -301,4 +301,99 @@ describe("goop_write_db tool", () => {
       expect(ctx.db.getDocument("default", "adl")?.content).toBe("# ADL");
     });
   });
+
+  // -----------------------------------------------------------------------
+  // Patch mode (old_string / new_string / replace_all)
+  // -----------------------------------------------------------------------
+
+  describe("patch mode", () => {
+    it("patches an existing document on a single old_string match", async () => {
+      ctx.db.upsertDocument("default", "spec", "Hello world");
+
+      const tool = createGoopWriteDbTool(ctx);
+      const result = await tool.execute(
+        { doc_type: "spec", old_string: "world", new_string: "GoopSpec" },
+        toolCtx,
+      );
+
+      expect(result).toContain("Patched spec");
+      expect(ctx.db.getDocument("default", "spec")?.content).toBe("Hello GoopSpec");
+    });
+
+    it("returns an error and leaves content unchanged when old_string does not match", async () => {
+      ctx.db.upsertDocument("default", "spec", "Hello world");
+
+      const tool = createGoopWriteDbTool(ctx);
+      const result = await tool.execute(
+        { doc_type: "spec", old_string: "missing", new_string: "replacement" },
+        toolCtx,
+      );
+
+      expect(result).toContain("Error in goop_write_db");
+      expect(result).toContain("did not appear verbatim");
+      expect(ctx.db.getDocument("default", "spec")?.content).toBe("Hello world");
+    });
+
+    it("returns an error mentioning occurrence count when old_string matches multiple times", async () => {
+      ctx.db.upsertDocument("default", "spec", "foo bar foo baz foo");
+
+      const tool = createGoopWriteDbTool(ctx);
+      const result = await tool.execute(
+        { doc_type: "spec", old_string: "foo", new_string: "qux" },
+        toolCtx,
+      );
+
+      expect(result).toContain("Error in goop_write_db");
+      expect(result).toContain("3 occurrences");
+      expect(ctx.db.getDocument("default", "spec")?.content).toBe("foo bar foo baz foo");
+    });
+
+    it("replaces all occurrences when replace_all is true", async () => {
+      ctx.db.upsertDocument("default", "spec", "foo bar foo baz foo");
+
+      const tool = createGoopWriteDbTool(ctx);
+      const result = await tool.execute(
+        { doc_type: "spec", old_string: "foo", new_string: "qux", replace_all: true },
+        toolCtx,
+      );
+
+      expect(result).toContain("Patched spec");
+      expect(ctx.db.getDocument("default", "spec")?.content).toBe("qux bar qux baz qux");
+    });
+
+    it("patches one item and writes another via items[] mixed batch", async () => {
+      ctx.db.upsertDocument("default", "spec", "Hello world");
+
+      const tool = createGoopWriteDbTool(ctx);
+      const result = await tool.execute(
+        {
+          doc_type: "spec",
+          content: "",
+          items: [
+            { doc_type: "spec", old_string: "world", new_string: "GoopSpec" },
+            { doc_type: "blueprint", content: "# Blueprint" },
+          ],
+        },
+        toolCtx,
+      );
+
+      expect(result).toContain("2/2 succeeded");
+      expect(ctx.db.getDocument("default", "spec")?.content).toBe("Hello GoopSpec");
+      expect(ctx.db.getDocument("default", "blueprint")?.content).toBe("# Blueprint");
+    });
+
+    it("backward-compat: content/mode write is unchanged when patch args are absent", async () => {
+      ctx.db.upsertDocument("default", "spec", "# Old");
+
+      const tool = createGoopWriteDbTool(ctx);
+      const result = await tool.execute(
+        { doc_type: "spec", content: "# New", mode: "replace" },
+        toolCtx,
+      );
+
+      expect(result).toContain("Written spec");
+      expect(result).toContain("mode: replace");
+      expect(ctx.db.getDocument("default", "spec")?.content).toBe("# New");
+    });
+  });
 });
