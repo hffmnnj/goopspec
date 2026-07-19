@@ -26,7 +26,7 @@ import { safeHandler } from "./utils.js";
  * context. Includes phase, wave progress, spec lock, autopilot directives,
  * and pointers to key documents.
  */
-export function buildWorkflowSurvivalBlock(ctx: PluginContext): string {
+export function buildWorkflowSurvivalBlock(ctx: PluginContext, nextStep?: string): string {
   const state = ctx.stateManager.getState();
   const workflowId = state.activeWorkflowId;
   const workflow = state.workflows[workflowId];
@@ -42,6 +42,9 @@ export function buildWorkflowSurvivalBlock(ctx: PluginContext): string {
   lines.push("## GoopSpec Workflow State (Compaction Survival)");
   lines.push("");
   lines.push(`RESUME FROM THIS POINT. You are in the ${workflow.phase.toUpperCase()} phase.`);
+  if (nextStep?.trim()) {
+    lines.push(`IMMEDIATE NEXT STEP (declared before compaction): ${nextStep}`);
+  }
   lines.push("");
   lines.push("Current Status:");
   lines.push(`- Active Workflow: ${workflowId}`);
@@ -111,10 +114,13 @@ export const createCompactionHook: HookFactory = (ctx: PluginContext): Partial<H
   const handler = safeHandler(
     "experimental.session.compacting",
     async (
-      _input: { sessionID: string },
+      input: { sessionID: string },
       output: { context: string[]; prompt?: string },
     ): Promise<void> => {
-      const block = buildWorkflowSurvivalBlock(ctx);
+      const sessionID = input.sessionID;
+      const nextStep = sessionID ? ctx.compactionHandoff.get(sessionID) : undefined;
+      if (sessionID) ctx.compactionHandoff.delete(sessionID);
+      const block = buildWorkflowSurvivalBlock(ctx, nextStep);
 
       if (block.trim().length > 0) {
         if (!Array.isArray(output.context)) {
