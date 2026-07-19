@@ -55,7 +55,7 @@ export function buildWorkflowSurvivalBlock(ctx: PluginContext): string {
   }
 
   // Autopilot directives — CRITICAL for surviving compaction
-  if (workflow.autopilot) {
+  if (workflow.autopilot && !workflow.lazyAutopilot) {
     lines.push("");
     lines.push(
       "AUTOPILOT ACTIVE: Do not pause between phases. Continue to the next phase immediately. " +
@@ -67,7 +67,7 @@ export function buildWorkflowSurvivalBlock(ctx: PluginContext): string {
     );
   }
 
-  if (workflow.lazyAutopilot) {
+  if (workflow.autopilot && workflow.lazyAutopilot) {
     lines.push("");
     lines.push("LAZY AUTOPILOT ACTIVE. Rules:");
     lines.push("- Do NOT ask the user any questions.");
