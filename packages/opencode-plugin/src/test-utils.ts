@@ -454,6 +454,7 @@ export function createMockPluginContext(opts: MockPluginContextOptions = {}): Pl
     resolver: createMockResolver(opts.resources ?? []),
     session,
     sessionManager: createSessionManager(),
+    compactionHandoff: new Map<string, string>(),
   };
 }
 

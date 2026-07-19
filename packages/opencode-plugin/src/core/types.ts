@@ -65,6 +65,8 @@ export interface PluginContext {
   readonly resolver: ResourceResolver;
   readonly session: SessionInfo;
   readonly sessionManager: SessionManager;
+  /** Session-scoped ephemeral tool→hook handoff for compaction `next_step`; the hook reads then deletes entries. */
+  readonly compactionHandoff: Map<string, string>;
 }
 
 // ---------------------------------------------------------------------------
