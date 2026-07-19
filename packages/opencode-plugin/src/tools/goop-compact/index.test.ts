@@ -11,6 +11,14 @@ import { createGoopCompactTool } from "./index.js";
 interface CompactionClient {
   session: {
     messages?: (input: { path: { id: string } }) => Promise<unknown>;
+    promptAsync?: (input: {
+      path: { id: string };
+      body?: {
+        model?: { providerID: string; modelID: string };
+        agent?: string;
+        parts: Array<{ type: "text"; text: string }>;
+      };
+    }) => Promise<unknown>;
     summarize: (input: {
       path: { id: string };
       body?: { providerID: string; modelID: string };
@@ -40,6 +48,7 @@ describe("createGoopCompactTool", () => {
         {
           info: {
             role: "user",
+            agent: "goop-orchestrator",
             model: { providerID: "opencode", modelID: "deepseek-v4" },
           },
           parts: [],
@@ -47,22 +56,41 @@ describe("createGoopCompactTool", () => {
       ],
     }));
     const summarize = mock(async () => ({ data: true }));
-    setCompactionClient(ctx, { session: { messages, summarize } });
+    const promptAsync = mock(() => new Promise<unknown>(() => {}));
+    setCompactionClient(ctx, { session: { messages, promptAsync, summarize } });
     const sessionID = "session-compact-001";
     const nextStep = "Verify the completed implementation, then begin the next work item.";
 
-    const result = await createGoopCompactTool(ctx).execute(
-      { next_step: nextStep },
-      createMockToolContext({ sessionID }),
-    );
+    const result = await Promise.race([
+      createGoopCompactTool(ctx).execute(
+        { next_step: nextStep },
+        createMockToolContext({ sessionID }),
+      ),
+      new Promise<string>((resolve) => setTimeout(() => resolve("timed out"), 20)),
+    ]);
+    await new Promise((resolve) => setTimeout(resolve, 0));
 
     expect(summarize).toHaveBeenCalledWith({
       path: { id: sessionID },
       body: { providerID: "opencode", modelID: "deepseek-v4" },
     });
     expect(ctx.compactionHandoff.get(sessionID)).toBe(nextStep);
+    expect(result).not.toBe("timed out");
     expect(result).toContain(`Compaction requested for session ${sessionID}`);
     expect(result).toContain("it will apply after this turn completes");
+    expect(promptAsync).toHaveBeenCalledWith({
+      path: { id: sessionID },
+      body: {
+        model: { providerID: "opencode", modelID: "deepseek-v4" },
+        agent: "goop-orchestrator",
+        parts: [
+          {
+            type: "text",
+            text: "Continue from the compaction summary. Recheck the workflow documents only if needed.",
+          },
+        ],
+      },
+    });
   });
 
   it("returns promptly when the compaction request remains pending", async () => {
@@ -123,7 +151,8 @@ describe("createGoopCompactTool", () => {
     const summarize = mock(async () => {
       throw new Error("session unavailable");
     });
-    setCompactionClient(ctx, { session: { messages, summarize } });
+    const promptAsync = mock(async () => ({ data: {} }));
+    setCompactionClient(ctx, { session: { messages, promptAsync, summarize } });
     const sessionID = "session-compact-error";
     const consoleSpy = spyOn(console, "error").mockImplementation(() => {});
 
@@ -136,6 +165,7 @@ describe("createGoopCompactTool", () => {
     expect(result).toContain("Compaction requested");
     expect(consoleSpy).toHaveBeenCalled();
     expect(ctx.compactionHandoff.has(sessionID)).toBeFalse();
+    expect(promptAsync).not.toHaveBeenCalled();
     consoleSpy.mockRestore();
   });
 
@@ -185,7 +215,8 @@ describe("createGoopCompactTool", () => {
       data: undefined,
       error: { name: "BadRequest", data: { message: "model is required" } },
     }));
-    setCompactionClient(ctx, { session: { messages, summarize } });
+    const promptAsync = mock(async () => ({ data: {} }));
+    setCompactionClient(ctx, { session: { messages, promptAsync, summarize } });
     const sessionID = "session-compact-rejected";
     const consoleSpy = spyOn(console, "error").mockImplementation(() => {});
 
@@ -198,6 +229,7 @@ describe("createGoopCompactTool", () => {
     expect(result).toContain("Compaction requested");
     expect(consoleSpy).toHaveBeenCalled();
     expect(ctx.compactionHandoff.has(sessionID)).toBeFalse();
+    expect(promptAsync).not.toHaveBeenCalled();
     consoleSpy.mockRestore();
   });
 

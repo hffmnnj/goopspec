@@ -17,11 +17,15 @@ interface ModelRef {
 interface SessionMessage {
   info?: {
     role?: string;
+    agent?: string;
     model?: ModelRef;
     providerID?: string;
     modelID?: string;
   };
 }
+
+const RESUME_PROMPT =
+  "Continue from the compaction summary. Recheck the workflow documents only if needed.";
 
 interface FieldsResponse<T> {
   data?: T;
@@ -68,7 +72,51 @@ function currentModel(messages: SessionMessage[]): ModelRef | undefined {
   return undefined;
 }
 
-function observeCompaction(request: Promise<unknown>, ctx: PluginContext, sessionID: string): void {
+function currentAgent(messages: SessionMessage[]): string | undefined {
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const info = messages[index]?.info;
+    if (info?.role === "user" && info.agent) return info.agent;
+  }
+  return undefined;
+}
+
+function sendResume(ctx: PluginContext, sessionID: string, model: ModelRef, agent?: string): void {
+  try {
+    if (typeof ctx.sdk.client?.session?.promptAsync !== "function") {
+      logError(
+        "goop_compact could not resume the session",
+        new Error("promptAsync is unavailable"),
+      );
+      return;
+    }
+    const request = ctx.sdk.client.session.promptAsync({
+      path: { id: sessionID },
+      body: {
+        model,
+        ...(agent ? { agent } : {}),
+        parts: [{ type: "text", text: RESUME_PROMPT }],
+      },
+    });
+    void request
+      .then((result) => {
+        const response = fieldsResponse<unknown>(result);
+        if (response.error !== undefined) {
+          logError("goop_compact resume request rejected", response.error);
+        }
+      })
+      .catch((error: unknown) => logError("goop_compact resume request failed", error));
+  } catch (error) {
+    logError("goop_compact resume dispatch failed", error);
+  }
+}
+
+function observeCompaction(
+  request: Promise<unknown>,
+  ctx: PluginContext,
+  sessionID: string,
+  model: ModelRef,
+  agent?: string,
+): void {
   void request
     .then((result) => {
       const response = fieldsResponse<boolean>(result);
@@ -83,7 +131,9 @@ function observeCompaction(request: Promise<unknown>, ctx: PluginContext, sessio
           "goop_compact request was not confirmed by the host",
           new Error(`Unexpected compaction response: ${String(response.data)}`),
         );
+        return;
       }
+      sendResume(ctx, sessionID, model, agent);
     })
     .catch((error: unknown) => {
       ctx.compactionHandoff.delete(sessionID);
@@ -129,6 +179,7 @@ export function createGoopCompactTool(ctx: PluginContext): ToolDefinition {
           ctx.compactionHandoff.delete(sessionID);
           return "goop_compact failed: unable to resolve the current session model.";
         }
+        const agent = currentAgent(messagesResult.data ?? []);
 
         ctx.compactionHandoff.set(sessionID, args.next_step);
         // SDK 1.18.3 SessionSummarizeData names the model body and returns a
@@ -142,7 +193,7 @@ export function createGoopCompactTool(ctx: PluginContext): ToolDefinition {
           path: { id: sessionID },
           body: model,
         });
-        observeCompaction(request, ctx, sessionID);
+        observeCompaction(request, ctx, sessionID, model, agent);
 
         return `Compaction requested for session ${sessionID}; it will apply after this turn completes. Will resume with: ${args.next_step}`;
       } catch (error) {
