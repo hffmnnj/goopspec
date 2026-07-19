@@ -63,6 +63,7 @@ describe("buildWorkflowSurvivalBlock", () => {
         workflows: {
           default: createDefaultWorkflowState({
             phase: "execute",
+            autopilot: true,
             lazyAutopilot: true,
           }),
         },
@@ -84,6 +85,8 @@ describe("buildWorkflowSurvivalBlock", () => {
     expect(block).not.toContain("external blockers");
     // "Rule 4" appears in the autonomous-decision sentence, not in the stop list
     expect(block).toContain("AUTOPILOT SESSION RULES");
+    // Lazy mode must NOT re-emit the regular autopilot Rule-4-as-stop wording
+    expect(block).not.toContain("Hard stops still apply per phase-gates: Rule 4");
   });
 
   it("omits autopilot directives when autopilot is false", () => {
@@ -206,7 +209,7 @@ describe("createCompactionHook", () => {
     expect(output.prompt).toBeUndefined();
   });
 
-  it("includes autopilot survival directive when autopilot is active", async () => {
+  it("includes regular autopilot survival directive when autopilot is active without lazy", async () => {
     const ctx = createMockPluginContext({
       state: {
         activeWorkflowId: "default",
@@ -214,6 +217,7 @@ describe("createCompactionHook", () => {
           default: createDefaultWorkflowState({
             phase: "execute",
             autopilot: true,
+            lazyAutopilot: false,
           }),
         },
       },
