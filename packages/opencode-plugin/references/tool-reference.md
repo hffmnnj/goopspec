@@ -106,7 +106,7 @@ The fastest mental model is: if the tool has a plural/batch argument (`doc_types
 
 When `false` or absent, only `memory.db` results are returned, identical to the prior contract.
 
-**Scoring notes:** The underlying memory ranking is now multi-signal: FTS5 BM25 (`title=10, content=5, facts=2, concepts=2`) is multiplied by `(importance / 10)` and a recency-decay factor `EXP(-0.001 * (unixepoch() - created_at) / 86400)` (~30-day half-life), then further boosted by concept/fact overlap (`0.7 + 0.3 * conceptBoost`). This is all internal to `memory.db`; Field Notes enter the fused result through RRF rank, not their raw native score.
+**Scoring notes:** The underlying memory ranking is now multi-signal: FTS5 BM25 (`title=10, content=5, facts=2, concepts=2`) is multiplied by `(importance / 10)` and a recency-decay factor `EXP(-0.001 * (unixepoch() - created_at) / 86400)` (~693-day / ~1.9-year half-life; `ln(2)/0.001 ≈ 693`), then further boosted by concept/fact overlap (`0.7 + 0.3 * conceptBoost`). This is all internal to `memory.db`; Field Notes enter the fused result through RRF rank, not their raw native score.
 
 ## Reference and command tools
 
