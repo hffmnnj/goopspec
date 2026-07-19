@@ -52,6 +52,8 @@ const EXPECTED_TOOL_KEYS = [
   "slashcommand",
 ] as const;
 
+const V2_EXPECTED_TOOL_KEYS = EXPECTED_TOOL_KEYS.filter((key) => key !== "goop_compact");
+
 function createMockPluginInput(directory: string): PluginInput {
   return {
     client: {} as PluginInput["client"],
@@ -169,7 +171,7 @@ describe("plugin entrypoint", () => {
     expect(statusResult).toContain("GoopSpec");
   });
 
-  it("V2 setup registers exactly 30 tools and goop_status matches V1 output", async () => {
+  it("V2 setup registers 29 tools and goop_status matches V1 output", async () => {
     interface V2ToolLike {
       name: string;
       execute: (input: unknown, context: unknown) => Promise<unknown>;
@@ -192,10 +194,13 @@ describe("plugin entrypoint", () => {
 
     await plugin.setup(v2Ctx);
 
-    expect(Object.keys(v2Tools)).toHaveLength(30);
-    for (const key of EXPECTED_TOOL_KEYS) {
+    // goop_compact is the single capability-gated omission: V2 has no
+    // session.summarize client capability.
+    expect(Object.keys(v2Tools)).toHaveLength(29);
+    for (const key of V2_EXPECTED_TOOL_KEYS) {
       expect(v2Tools).toHaveProperty(key);
     }
+    expect(v2Tools).not.toHaveProperty("goop_compact");
 
     const v1Input = createMockPluginInput(testDir);
     const v1Result = await plugin(v1Input);

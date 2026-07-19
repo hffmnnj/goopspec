@@ -40,14 +40,21 @@ export async function registerToolsV2(
   }
 
   const tools = createTools(ctx);
+  // goop_compact requires a real OpenCode session-compaction client, which the
+  // V2 plugin context does not provide (ctx.sdk.client is a {} stub). Omit it so
+  // V2 users never see a non-functional compaction tool.
+  const canCompact = typeof ctx.sdk.client?.session?.summarize === "function";
+  const registrations = Object.entries(tools).filter(
+    ([name]) => name !== "goop_compact" || canCompact,
+  );
 
   try {
     await toolCapability.transform((draft) => {
-      for (const [name, definition] of Object.entries(tools)) {
+      for (const [name, definition] of registrations) {
         draft.add(createV2ToolDefinition(name, definition, ctx));
       }
     });
-    log("Registered GoopSpec tools with V2 runtime", { count: Object.keys(tools).length });
+    log("Registered GoopSpec tools with V2 runtime", { count: registrations.length });
   } catch (error) {
     logError("V2 tool registration failed", error);
   }

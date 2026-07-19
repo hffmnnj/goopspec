@@ -199,7 +199,7 @@ describe("dual-contract parity", () => {
     expect(Object.keys(result.tool ?? {}).sort()).toEqual(directTools);
   });
 
-  it("V2 setup registers the same 30 tools as the V1 path", async () => {
+  it("V2 setup differs from V1 only by the capability-gated compaction tool", async () => {
     const registrations: { tools: Record<string, V2ToolLike>; systemHook?: unknown } = {
       tools: {},
     };
@@ -208,8 +208,14 @@ describe("dual-contract parity", () => {
     const v1Tools = Object.keys(createTools(createMockPluginContext({ testDir }))).sort();
     const v2Tools = Object.keys(registrations.tools).sort();
 
-    expect(v2Tools).toEqual(v1Tools);
-    expect(v2Tools).toHaveLength(30);
+    const v1Only = v1Tools.filter((name) => !v2Tools.includes(name));
+    const v2Only = v2Tools.filter((name) => !v1Tools.includes(name));
+
+    // goop_compact is capability-gated because V2 has no session.summarize.
+    // Every other V1/V2 tool registration must remain in strict parity.
+    expect(v1Only).toEqual(["goop_compact"]);
+    expect(v2Only).toEqual([]);
+    expect(v2Tools).toHaveLength(29);
   });
 
   it("goop_status produces identical text through V1 and V2", async () => {
