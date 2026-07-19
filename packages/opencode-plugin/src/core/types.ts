@@ -183,6 +183,8 @@ export interface MemorySearchOptions {
   types?: MemoryType[];
   concepts?: string[];
   minImportance?: number;
+  /** Include matching curated Field Notes in the tool-level result. */
+  includeFieldNotes?: boolean;
 }
 
 export interface MemorySearchResult {
@@ -190,6 +192,36 @@ export interface MemorySearchResult {
   score: number;
   matchType: "fts" | "vector" | "hybrid";
 }
+
+/** A Field Note returned by the cross-store memory search bridge. */
+export interface FieldNoteSearchResult {
+  id: string;
+  title: string;
+  body: string;
+  tags: string;
+  source_agent: string;
+  importance: number;
+  workflow_id: string | null;
+  project_id: string | null;
+  created_at: number;
+}
+
+/** A memory result in a cross-store result set, ranked with RRF. */
+export interface CrossStoreMemorySearchResult {
+  origin: "memory";
+  entry: MemoryEntry;
+  score: number;
+}
+
+/** A Field Note result in a cross-store result set, ranked with RRF. */
+export interface CrossStoreFieldNoteSearchResult {
+  origin: "field_note";
+  entry: FieldNoteSearchResult;
+  score: number;
+}
+
+/** A cross-store result, tagged by its source store and ranked with RRF. */
+export type CrossStoreSearchResult = CrossStoreMemorySearchResult | CrossStoreFieldNoteSearchResult;
 
 export interface MemorySaveInput {
   type: MemoryType;

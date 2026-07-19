@@ -90,6 +90,51 @@ describe("memory_search tool", () => {
     expect(result).toContain("Tip:");
   });
 
+  it("keeps absent and false includeFieldNotes behavior byte-identical", async () => {
+    ctx.db.saveNote({
+      id: "fn_20260719_bridge01",
+      title: "Repository Field Note",
+      body: "The repository pattern is documented in this Field Note.",
+      tags: '["architecture"]',
+      source_agent: "goop-researcher",
+      importance: 8,
+      workflow_id: null,
+      project_id: null,
+    });
+    const tool = createMemorySearchTool(ctx);
+
+    const absent = await tool.execute({ query: "repository" }, toolCtx);
+    const explicitFalse = await tool.execute(
+      { query: "repository", includeFieldNotes: false },
+      toolCtx,
+    );
+
+    expect(explicitFalse).toBe(absent);
+    expect(absent).toContain("Repository pattern in data layer");
+    expect(absent).not.toContain("Repository Field Note");
+  });
+
+  it("fuses memory and Field Note matches with origin tags", async () => {
+    ctx.db.saveNote({
+      id: "fn_20260719_bridge02",
+      title: "Repository architecture Field Note",
+      body: "The repository pattern governs this architecture.",
+      tags: '["architecture", "patterns"]',
+      source_agent: "goop-researcher",
+      importance: 9,
+      workflow_id: null,
+      project_id: null,
+    });
+    const tool = createMemorySearchTool(ctx);
+    const result = await tool.execute({ query: "repository", includeFieldNotes: true }, toolCtx);
+
+    expect(result).toContain("Repository pattern in data layer");
+    expect(result).toContain("Repository architecture Field Note");
+    expect(result).toContain("**Origin:** memory");
+    expect(result).toContain("**Origin:** field_note");
+    expect(result).toContain("**RRF Score:** 0.0164");
+  });
+
   // -------------------------------------------------------------------------
   // Filters
   // -------------------------------------------------------------------------
