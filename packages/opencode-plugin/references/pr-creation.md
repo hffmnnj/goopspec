@@ -54,9 +54,7 @@ Wave branches form a stack rooted at `main`:
 main ← feat/wave-1 ← feat/wave-2 ← feat/wave-3 ← …
 ```
 
-Each PR targets the previous branch. When GitHub merges an upstream PR, it automatically re-targets the next PR in the stack to the new base.
-
-To merge a stack: merge Wave 1 first, then Wave 2 (now re-targeted to main), and so on in order. The accept step handles this automatically when you choose to merge.
+Each PR targets the previous branch. The merge order is newest-first, cascading down: merge Wave N into Wave N-1's branch, then Wave N-1 (carrying Wave N's work) into Wave N-2, and so on, until Wave 1 — already targeting `main` — merges last. Every merge in this order targets an already-known branch, so no GitHub auto-retargeting is required. GitHub only auto-retargets a stacked PR's base when the upstream branch is *deleted* after merge, never on merge alone (see `fn_20260625_ci0wv3tu`). The accept step (`/goop-accept`) automates this cascade when the user opts in to merge.
 
 ## Single-Branch Parallelism Rule
 
