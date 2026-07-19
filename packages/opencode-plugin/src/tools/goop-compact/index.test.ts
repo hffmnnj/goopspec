@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, mock } from "bun:test";
+import { afterEach, beforeEach, describe, expect, it, mock, spyOn } from "bun:test";
 
 import {
   createMockPluginContext,
@@ -61,7 +61,39 @@ describe("createGoopCompactTool", () => {
       body: { providerID: "opencode", modelID: "deepseek-v4" },
     });
     expect(ctx.compactionHandoff.get(sessionID)).toBe(nextStep);
-    expect(result).toContain(`Compaction completed for session ${sessionID}`);
+    expect(result).toContain(`Compaction requested for session ${sessionID}`);
+    expect(result).toContain("it will apply after this turn completes");
+  });
+
+  it("returns promptly when the compaction request remains pending", async () => {
+    const messages = mock(async () => ({
+      data: [
+        {
+          info: {
+            role: "user",
+            model: { providerID: "opencode", modelID: "deepseek-v4" },
+          },
+          parts: [],
+        },
+      ],
+    }));
+    const summarize = mock(() => new Promise<unknown>(() => {}));
+    setCompactionClient(ctx, { session: { messages, summarize } });
+    const sessionID = "session-compact-pending";
+
+    const result = await Promise.race([
+      createGoopCompactTool(ctx).execute(
+        { next_step: "Resume after queued compaction." },
+        createMockToolContext({ sessionID }),
+      ),
+      new Promise<string>((resolve) => setTimeout(() => resolve("timed out"), 20)),
+    ]);
+
+    expect(result).not.toBe("timed out");
+    expect(summarize).toHaveBeenCalledWith({
+      path: { id: sessionID },
+      body: { providerID: "opencode", modelID: "deepseek-v4" },
+    });
   });
 
   it("returns an unavailable status when session compaction is unsupported", async () => {
@@ -75,7 +107,7 @@ describe("createGoopCompactTool", () => {
     );
   });
 
-  it("returns a failure status and clears the handoff when compaction throws", async () => {
+  it("returns promptly, logs, and clears the handoff when compaction later rejects", async () => {
     const messages = mock(async () => ({
       data: [
         {
@@ -93,6 +125,38 @@ describe("createGoopCompactTool", () => {
     });
     setCompactionClient(ctx, { session: { messages, summarize } });
     const sessionID = "session-compact-error";
+    const consoleSpy = spyOn(console, "error").mockImplementation(() => {});
+
+    const result = await createGoopCompactTool(ctx).execute(
+      { next_step: "Resume after the compaction attempt." },
+      createMockToolContext({ sessionID }),
+    );
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(result).toContain("Compaction requested");
+    expect(consoleSpy).toHaveBeenCalled();
+    expect(ctx.compactionHandoff.has(sessionID)).toBeFalse();
+    consoleSpy.mockRestore();
+  });
+
+  it("returns a failure status and clears the handoff when dispatch throws synchronously", async () => {
+    const messages = mock(async () => ({
+      data: [
+        {
+          info: {
+            role: "user",
+            model: { providerID: "opencode", modelID: "deepseek-v4" },
+          },
+          parts: [],
+        },
+      ],
+    }));
+    const summarize = mock(() => {
+      throw new Error("dispatch unavailable");
+    });
+    setCompactionClient(ctx, { session: { messages, summarize } });
+    const sessionID = "session-compact-dispatch-error";
+    const consoleSpy = spyOn(console, "error").mockImplementation(() => {});
 
     const result = await createGoopCompactTool(ctx).execute(
       { next_step: "Resume after the compaction attempt." },
@@ -100,10 +164,12 @@ describe("createGoopCompactTool", () => {
     );
 
     expect(result).toBe("goop_compact failed: unable to trigger session compaction.");
+    expect(consoleSpy).toHaveBeenCalled();
     expect(ctx.compactionHandoff.has(sessionID)).toBeFalse();
+    consoleSpy.mockRestore();
   });
 
-  it("returns a failure status and clears the handoff when the SDK returns an error", async () => {
+  it("logs and clears the handoff when the SDK later returns an error", async () => {
     const messages = mock(async () => ({
       data: [
         {
@@ -121,19 +187,21 @@ describe("createGoopCompactTool", () => {
     }));
     setCompactionClient(ctx, { session: { messages, summarize } });
     const sessionID = "session-compact-rejected";
+    const consoleSpy = spyOn(console, "error").mockImplementation(() => {});
 
     const result = await createGoopCompactTool(ctx).execute(
       { next_step: "Resume only after accepted compaction." },
       createMockToolContext({ sessionID }),
     );
+    await new Promise((resolve) => setTimeout(resolve, 0));
 
-    expect(result).toContain("goop_compact failed");
-    expect(result).toContain("model is required");
-    expect(result).not.toContain("Compaction triggered");
+    expect(result).toContain("Compaction requested");
+    expect(consoleSpy).toHaveBeenCalled();
     expect(ctx.compactionHandoff.has(sessionID)).toBeFalse();
+    consoleSpy.mockRestore();
   });
 
-  it("returns a failure status when compaction responds with data false", async () => {
+  it("logs and clears the handoff when compaction later responds with data false", async () => {
     const messages = mock(async () => ({
       data: [
         {
@@ -148,15 +216,18 @@ describe("createGoopCompactTool", () => {
     const summarize = mock(async () => ({ data: false }));
     setCompactionClient(ctx, { session: { messages, summarize } });
     const sessionID = "session-compact-false";
+    const consoleSpy = spyOn(console, "error").mockImplementation(() => {});
 
     const result = await createGoopCompactTool(ctx).execute(
       { next_step: "Resume after successful compaction." },
       createMockToolContext({ sessionID }),
     );
+    await new Promise((resolve) => setTimeout(resolve, 0));
 
-    expect(result).toContain("goop_compact failed");
-    expect(result).not.toContain("Compaction triggered");
+    expect(result).toContain("Compaction requested");
+    expect(consoleSpy).toHaveBeenCalled();
     expect(ctx.compactionHandoff.has(sessionID)).toBeFalse();
+    consoleSpy.mockRestore();
   });
 
   it("rejects an empty session ID without calling the SDK", async () => {

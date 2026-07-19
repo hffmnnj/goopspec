@@ -68,6 +68,29 @@ function currentModel(messages: SessionMessage[]): ModelRef | undefined {
   return undefined;
 }
 
+function observeCompaction(request: Promise<unknown>, ctx: PluginContext, sessionID: string): void {
+  void request
+    .then((result) => {
+      const response = fieldsResponse<boolean>(result);
+      if (response.error !== undefined) {
+        ctx.compactionHandoff.delete(sessionID);
+        logError(`goop_compact request rejected: ${errorDetail(response.error)}`, response.error);
+        return;
+      }
+      if (response.data !== true) {
+        ctx.compactionHandoff.delete(sessionID);
+        logError(
+          "goop_compact request was not confirmed by the host",
+          new Error(`Unexpected compaction response: ${String(response.data)}`),
+        );
+      }
+    })
+    .catch((error: unknown) => {
+      ctx.compactionHandoff.delete(sessionID);
+      logError("goop_compact request failed", error);
+    });
+}
+
 export function createGoopCompactTool(ctx: PluginContext): ToolDefinition {
   return tool({
     description: "Trigger session compaction and record the immediate resume step.",
@@ -111,26 +134,17 @@ export function createGoopCompactTool(ctx: PluginContext): ToolDefinition {
         // SDK 1.18.3 SessionSummarizeData names the model body and returns a
         // boolean 200 payload. The generated body is optional for legacy
         // compatibility, but the host route requires providerID and modelID.
-        const summarizeResult = fieldsResponse<boolean>(
-          await ctx.sdk.client.session.summarize({
-            path: { id: sessionID },
-            body: model,
-          }),
-        );
+        // The legacy summarize handler joins the session's existing runner.
+        // Awaiting it from a tool on that runner creates a same-session wait
+        // cycle. OpenCode's TUI intentionally dispatches this request with
+        // `void`; observe completion only for best-effort error cleanup.
+        const request = ctx.sdk.client.session.summarize({
+          path: { id: sessionID },
+          body: model,
+        });
+        observeCompaction(request, ctx, sessionID);
 
-        if (summarizeResult.error !== undefined) {
-          ctx.compactionHandoff.delete(sessionID);
-          const detail = errorDetail(summarizeResult.error);
-          logError("goop_compact request rejected", summarizeResult.error);
-          return `goop_compact failed: session compaction was rejected: ${detail}`;
-        }
-
-        if (summarizeResult.data !== true) {
-          ctx.compactionHandoff.delete(sessionID);
-          return "goop_compact failed: the host did not confirm session compaction.";
-        }
-
-        return `Compaction completed for session ${sessionID}. Will resume with: ${args.next_step}`;
+        return `Compaction requested for session ${sessionID}; it will apply after this turn completes. Will resume with: ${args.next_step}`;
       } catch (error) {
         if (sessionID) {
           ctx.compactionHandoff.delete(sessionID);
