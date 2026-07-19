@@ -17,6 +17,15 @@ import { log } from "../shared/logger.js";
 import type { HookFactory, Hooks } from "./types.js";
 import { safeHandler } from "./utils.js";
 
+export const MAX_NEXT_STEP_CHARS = 200;
+
+function sanitizeNextStep(nextStep?: string): string | undefined {
+  const sanitized = nextStep?.replace(/\s+/g, " ").trim();
+  if (!sanitized) return undefined;
+  if (sanitized.length <= MAX_NEXT_STEP_CHARS) return sanitized;
+  return `${sanitized.slice(0, MAX_NEXT_STEP_CHARS - 1).trimEnd()}…`;
+}
+
 // ---------------------------------------------------------------------------
 // Survival block builder
 // ---------------------------------------------------------------------------
@@ -36,14 +45,15 @@ export function buildWorkflowSurvivalBlock(ctx: PluginContext, nextStep?: string
   }
 
   const docPrefix = workflowId === "default" ? ".goopspec/" : `.goopspec/${workflowId}/`;
+  const safeNextStep = sanitizeNextStep(nextStep);
 
   const lines: string[] = [];
 
   lines.push("## GoopSpec Workflow State (Compaction Survival)");
   lines.push("");
   lines.push(`RESUME FROM THIS POINT. You are in the ${workflow.phase.toUpperCase()} phase.`);
-  if (nextStep?.trim()) {
-    lines.push(`IMMEDIATE NEXT STEP (declared before compaction): ${nextStep}`);
+  if (safeNextStep) {
+    lines.push(`IMMEDIATE NEXT STEP (declared before compaction): ${safeNextStep}`);
   }
   lines.push("");
   lines.push("Current Status:");

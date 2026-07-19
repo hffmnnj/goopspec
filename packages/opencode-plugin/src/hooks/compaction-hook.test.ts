@@ -1,6 +1,10 @@
 import { describe, expect, it, spyOn } from "bun:test";
 import { createDefaultWorkflowState, createMockPluginContext } from "../test-utils.js";
-import { buildWorkflowSurvivalBlock, createCompactionHook } from "./compaction-hook.js";
+import {
+  MAX_NEXT_STEP_CHARS,
+  buildWorkflowSurvivalBlock,
+  createCompactionHook,
+} from "./compaction-hook.js";
 
 // ---------------------------------------------------------------------------
 // buildWorkflowSurvivalBlock
@@ -105,6 +109,22 @@ describe("buildWorkflowSurvivalBlock", () => {
     );
     expect(buildWorkflowSurvivalBlock(ctx)).not.toContain("IMMEDIATE NEXT STEP");
     expect(buildWorkflowSurvivalBlock(ctx, "  ")).not.toContain("IMMEDIATE NEXT STEP");
+  });
+
+  it("collapses whitespace and bounds an oversized next step", () => {
+    const ctx = createMockPluginContext();
+    const block = buildWorkflowSurvivalBlock(
+      ctx,
+      `  Review\n\n  ${"changes ".repeat(40)}then verify.  `,
+    );
+    const line = block.split("\n").find((value) => value.startsWith("IMMEDIATE NEXT STEP"));
+    const prefix = "IMMEDIATE NEXT STEP (declared before compaction): ";
+
+    expect(line).toBeDefined();
+    expect(line).not.toContain("\n");
+    expect(line).not.toMatch(/\s{2,}/);
+    expect(line?.slice(prefix.length).length).toBeLessThanOrEqual(MAX_NEXT_STEP_CHARS);
+    expect(line?.endsWith("…")).toBeTrue();
   });
 
   it("includes document pointers for re-hydration", () => {
