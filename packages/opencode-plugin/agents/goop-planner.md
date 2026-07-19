@@ -122,12 +122,12 @@ Architecture draws on direct file reads and prior Field Notes already in memory.
 
 Assign every task an executor tier:
 
-- `goop-executor-low` — mechanical, bounded edits.
-- `goop-executor-medium` — business logic inside existing architecture.
-- `goop-executor-high` — architecture-sensitive or security-sensitive work.
-- `goop-executor-frontend-low` — UI mechanical tasks (markup, simple styling, copy).
-- `goop-executor-frontend-medium` — standard component work, UI logic/state wiring, moderate refactors within existing patterns.
-- `goop-executor-frontend-high` — design-sensitive UI work (components, UX, accessibility, polish).
+- `goop-executor-low` — mechanical, pattern-following edits (any size, no line-count ceiling).
+- `goop-executor-medium` — **default tier for all implementation work** inside existing architecture.
+- `goop-executor-high` — reserved for architecture-sensitive or security-sensitive work; not a default choice.
+- `goop-executor-frontend-low` — UI mechanical tasks (markup, simple styling, copy), any size.
+- `goop-executor-frontend-medium` — **default frontend tier** for standard component work, UI logic/state wiring, moderate refactors within existing patterns.
+- `goop-executor-frontend-high` — reserved for design-sensitive UI work (architecture, UX, accessibility, polish); not a default choice.
 
 Split mixed frontend/backend tasks into separate subtasks.
 
