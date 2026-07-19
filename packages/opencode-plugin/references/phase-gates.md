@@ -7,7 +7,7 @@ Mandatory checkpoints that enforce workflow discipline. No phase proceeds until 
 | Gate | Location | Requirement | Enforced By |
 |------|----------|-------------|-------------|
 | Discovery | Before `/goop-plan` | `interview_complete == true`, `requirements` document exists in DB (`goop_read_db({ doc_type: "requirements" })` returns content) | Orchestrator |
-| Spec | Before `/goop-execute` | `spec_locked == true`, `spec` and `blueprint` documents exist in DB, 100% traceability | Orchestrator |
+| Spec | Before `/goop-execute` | `spec_locked == true`, `spec` document exists in DB, at least one wave row exists (via `goop_read_wave`), 100% traceability | Orchestrator |
 | Execution | Before `/goop-accept` | All waves and tasks complete, verification passing, no blockers | Orchestrator |
 | Acceptance | Within `/goop-accept` | Verification passed, user explicitly accepts | Orchestrator |
 

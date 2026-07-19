@@ -150,7 +150,7 @@ discovery gate → research (or skip + ADL log) → assemble Research Summary �
 Check before proceeding:
 
 1. **Discovery gate** — before `/goop-plan`: `interview_complete == true` and `REQUIREMENTS.md` exists.
-2. **Spec gate** — before `/goop-execute`: `spec_locked == true`, `goop_read_db({ doc_types: ["spec", "blueprint"] })` returns non-empty content for both, traceability complete.
+2. **Spec gate** — before `/goop-execute`: `spec_locked == true`, `goop_read_db({ doc_type: "spec" })` returns non-empty content, `goop_read_wave({ workflow_id })` returns at least one wave row, traceability complete.
 3. **Execution gate** — before `/goop-accept`: all waves/tasks complete, no blockers.
 4. **Acceptance gate** — within `/goop-accept`: verification passed and user explicitly accepts.
 
