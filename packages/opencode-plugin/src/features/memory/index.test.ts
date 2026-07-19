@@ -202,6 +202,33 @@ describe("SqliteMemoryManager", () => {
       // Higher importance should rank first
       expect(results[0].memory.importance).toBeGreaterThanOrEqual(results[1].memory.importance);
     });
+
+    it("boosts a metadata overlap above an otherwise equal result", async () => {
+      await mgr.save({
+        ...baseSaveInput,
+        title: "Metadata overlap",
+        content: "shared retrieval signal",
+        facts: ["retrieval metadata"],
+        concepts: [],
+        importance: 7,
+      });
+      await mgr.save({
+        ...baseSaveInput,
+        title: "No metadata overlap",
+        content: "shared retrieval signal",
+        facts: [],
+        concepts: [],
+        importance: 7,
+      });
+
+      // The LIKE fallback gives both rows an identical base score, isolating
+      // the concept/fact signal from FTS's built-in metadata weighting.
+      (mgr as unknown as { fts5Enabled: boolean }).fts5Enabled = false;
+      const results = await mgr.search({ query: "shared retrieval signal" });
+
+      expect(results).toHaveLength(2);
+      expect(results[0].memory.title).toBe("Metadata overlap");
+    });
   });
 
   // -----------------------------------------------------------------------

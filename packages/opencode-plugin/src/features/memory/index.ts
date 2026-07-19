@@ -58,13 +58,22 @@ function safeParse(json: string): string[] {
  * double-quotes with a prefix wildcard, and joins with OR.
  */
 function sanitiseFtsQuery(raw: string): string {
+  return tokeniseFtsQuery(raw)
+    .map((token) => `"${token}"*`)
+    .join(" OR ");
+}
+
+/**
+ * Extract the safe query tokens shared by FTS query construction and metadata
+ * overlap scoring. Keeping this normalization in one place prevents the two
+ * retrieval signals from interpreting user input differently.
+ */
+function tokeniseFtsQuery(raw: string): string[] {
   return raw
     .replace(/[*"(){}:^~<>]/g, " ")
     .trim()
     .split(/\s+/)
-    .filter((w) => w.length > 0)
-    .map((w) => `"${w}"*`)
-    .join(" OR ");
+    .filter((token) => token.length > 0);
 }
 
 // ---------------------------------------------------------------------------
@@ -210,8 +219,10 @@ export class SqliteMemoryManager implements MemoryManager {
     const ftsQuery = sanitiseFtsQuery(options.query);
     if (!ftsQuery) return [];
 
+    const queryTokens = tokeniseFtsQuery(options.query);
     const { whereClause, params } = buildFilters(options);
     const limit = options.limit ?? 10;
+    const candidateLimit = conceptBoostCandidateLimit(limit);
 
     // Keep the score fragments separate so additional retrieval signals can
     // extend the final score without rewriting the base relevance formula.
@@ -228,16 +239,12 @@ export class SqliteMemoryManager implements MemoryManager {
       JOIN memories_fts ON m.id = memories_fts.rowid
       WHERE memories_fts MATCH '${ftsQuery}' ${whereClause}
       ORDER BY score DESC
-      LIMIT ${limit}
+      LIMIT ${candidateLimit}
     `;
 
     const rows = this.db.query<FtsSearchRow, NamedBindings>(sql).all(params);
 
-    return rows.map((row) => ({
-      memory: rowToEntry(row),
-      score: roundScore(row.score),
-      matchType: "fts" as const,
-    }));
+    return scoreAndLimitResults(rows, queryTokens, limit, (row) => row.score);
   }
 
   // -----------------------------------------------------------------------
@@ -248,6 +255,8 @@ export class SqliteMemoryManager implements MemoryManager {
     const pattern = `%${options.query.replace(/%/g, "\\%").replace(/_/g, "\\_")}%`;
     const { whereClause, params } = buildFilters(options);
     const limit = options.limit ?? 10;
+    const queryTokens = tokeniseFtsQuery(options.query);
+    const candidateLimit = conceptBoostCandidateLimit(limit);
 
     params.$pattern = pattern;
 
@@ -259,16 +268,17 @@ export class SqliteMemoryManager implements MemoryManager {
       WHERE (m.title LIKE $pattern ESCAPE '\\' OR m.content LIKE $pattern ESCAPE '\\' OR m.facts LIKE $pattern ESCAPE '\\' OR m.concepts LIKE $pattern ESCAPE '\\')
       ${whereClause}
       ORDER BY ${finalScoreSql} DESC
-      LIMIT ${limit}
+      LIMIT ${candidateLimit}
     `;
 
     const rows = this.db.query<MemoryRow, NamedBindings>(sql).all(params);
 
-    return rows.map((row) => ({
-      memory: rowToEntry(row),
-      score: roundScore((row.importance / 10) * memoryDecayFactor(row.created_at)),
-      matchType: "fts" as const, // Report as fts for interface compat
-    }));
+    return scoreAndLimitResults(
+      rows,
+      queryTokens,
+      limit,
+      (row) => (row.importance / 10) * memoryDecayFactor(row.created_at),
+    );
   }
 }
 
@@ -296,6 +306,52 @@ function buildContent(input: MemorySaveInput): string {
 
 function roundScore(n: number): number {
   return Math.round(n * 100) / 100;
+}
+
+/**
+ * Bound the post-query scoring set while giving a metadata match room to
+ * overtake near-neighbour BM25/importance results.
+ */
+function conceptBoostCandidateLimit(limit: number): number {
+  return Math.max(limit, Math.min(limit * 5, 100));
+}
+
+/**
+ * Fraction of normalized query tokens represented in concepts or facts.
+ * Metadata arrays are short JSON payloads, so case-insensitive substring
+ * matching is both predictable and sufficient for this lightweight signal.
+ */
+function conceptBoost(row: MemoryRow, queryTokens: string[]): number {
+  if (queryTokens.length === 0) return 0;
+
+  const metadata = [...safeParse(row.concepts), ...safeParse(row.facts)].join(" ").toLowerCase();
+  const matchingTokens = queryTokens.filter((token) =>
+    metadata.includes(token.toLowerCase()),
+  ).length;
+  return Math.max(0, Math.min(1, matchingTokens / queryTokens.length));
+}
+
+function scoreAndLimitResults<T extends MemoryRow>(
+  rows: T[],
+  queryTokens: string[],
+  limit: number,
+  baseScore: (row: T) => number,
+): MemorySearchResult[] {
+  return rows
+    .map((row) => {
+      const boostedScore = baseScore(row) * (0.7 + 0.3 * conceptBoost(row, queryTokens));
+      return {
+        memory: rowToEntry(row),
+        score: boostedScore,
+      };
+    })
+    .sort((a, b) => b.score - a.score)
+    .slice(0, limit)
+    .map((result) => ({
+      ...result,
+      score: roundScore(result.score),
+      matchType: "fts" as const, // Report as fts for interface compatibility.
+    }));
 }
 
 /**
