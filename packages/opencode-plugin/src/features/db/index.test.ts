@@ -413,6 +413,65 @@ describe("GoopSpecDB", () => {
       expect(results[0].id).toBe(baseNote.id);
       db.close();
     });
+
+    it("updateNote replaces a single occurrence and returns ok", () => {
+      const db = new GoopSpecDB(":memory:");
+      db.saveNote({ ...baseNote, body: "Hello world" });
+
+      const result = db.updateNote(baseNote.id, { oldString: "world", newString: "universe" });
+      expect(result).toEqual({ ok: true });
+
+      const note = db.getNoteById(baseNote.id);
+      expect(note?.body).toBe("Hello universe");
+      db.close();
+    });
+
+    it("updateNote returns an error and leaves the body unchanged on no match", () => {
+      const db = new GoopSpecDB(":memory:");
+      db.saveNote({ ...baseNote, body: "Hello world" });
+
+      const result = db.updateNote(baseNote.id, { oldString: "missing", newString: "x" });
+      expect(result.ok).toBe(false);
+      expect(result.error).toContain("did not appear verbatim");
+
+      const note = db.getNoteById(baseNote.id);
+      expect(note?.body).toBe("Hello world");
+      db.close();
+    });
+
+    it("updateNote returns an error on multiple occurrences without replaceAll", () => {
+      const db = new GoopSpecDB(":memory:");
+      db.saveNote({ ...baseNote, body: "foo bar foo" });
+
+      const result = db.updateNote(baseNote.id, { oldString: "foo", newString: "baz" });
+      expect(result.ok).toBe(false);
+      expect(result.error).toContain("2");
+      expect(result.error).toContain("occurrences");
+
+      const note = db.getNoteById(baseNote.id);
+      expect(note?.body).toBe("foo bar foo");
+      db.close();
+    });
+
+    it("updateNote replaces all occurrences when replaceAll is true", () => {
+      const db = new GoopSpecDB(":memory:");
+      db.saveNote({ ...baseNote, body: "foo bar foo" });
+
+      const result = db.updateNote(baseNote.id, { oldString: "foo", newString: "baz", replaceAll: true });
+      expect(result).toEqual({ ok: true });
+
+      const note = db.getNoteById(baseNote.id);
+      expect(note?.body).toBe("baz bar baz");
+      db.close();
+    });
+
+    it("updateNote returns an error for a missing id without throwing", () => {
+      const db = new GoopSpecDB(":memory:");
+      const result = db.updateNote("fn_missing_00000000", { oldString: "x", newString: "y" });
+      expect(result.ok).toBe(false);
+      expect(result.error).toContain("fn_missing_00000000");
+      db.close();
+    });
   });
 
   // -----------------------------------------------------------------------
