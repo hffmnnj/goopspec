@@ -20,6 +20,9 @@ import type { FtsSearchRow, MemoryManagerOptions, MemoryRow } from "./types.js";
 /** Named parameter bindings accepted by bun:sqlite. */
 type NamedBindings = Record<string, string | bigint | number | boolean | null>;
 
+const DEDUPLICATION_SIMILARITY_THRESHOLD = 0.85;
+const DEDUPLICATION_CANDIDATE_LIMIT = 20;
+
 // ---------------------------------------------------------------------------
 // Row ↔ MemoryEntry conversion
 // ---------------------------------------------------------------------------
@@ -103,6 +106,14 @@ export class SqliteMemoryManager implements MemoryManager {
     try {
       const importance = clampImportance(input.importance);
       const now = Math.floor(Date.now() / 1000);
+      const content = buildContent(input);
+
+      if (input.deduplicate) {
+        const duplicate = this.findNearDuplicate(`${input.title} ${content}`);
+        if (duplicate) {
+          return this.reinforceDuplicate(duplicate.id, importance, now);
+        }
+      }
 
       const row = this.db
         .query<MemoryRow, NamedBindings>(
@@ -113,7 +124,7 @@ export class SqliteMemoryManager implements MemoryManager {
         .get({
           $type: input.type,
           $title: input.title,
-          $content: buildContent(input),
+          $content: content,
           $facts: JSON.stringify(input.facts ?? []),
           $concepts: JSON.stringify(input.concepts ?? []),
           $sourceFiles: JSON.stringify(input.sourceFiles ?? []),
@@ -280,6 +291,59 @@ export class SqliteMemoryManager implements MemoryManager {
       (row) => (row.importance / 10) * memoryDecayFactor(row.created_at),
     );
   }
+
+  /**
+   * Select FTS5's strongest candidates, then calculate a bounded lexical
+   * similarity score over the same title/content tokens used for the MATCH
+   * query. BM25 determines candidacy and ordering; token F1 makes the 0.85
+   * threshold stable across SQLite corpora, whose BM25 magnitudes are not.
+   */
+  private findNearDuplicate(query: string): MemoryRow | null {
+    if (!this.fts5Enabled) return null;
+
+    const ftsQuery = sanitiseFtsQuery(query);
+    if (!ftsQuery) return null;
+
+    const rows = this.db
+      .query<FtsSearchRow, NamedBindings>(
+        `SELECT m.*, bm25(memories_fts, 10.0, 5.0, 2.0, 2.0) AS rank, 0 AS score
+         FROM memories m
+         JOIN memories_fts ON m.id = memories_fts.rowid
+         WHERE memories_fts MATCH '${ftsQuery}'
+         ORDER BY rank ASC
+         LIMIT ${DEDUPLICATION_CANDIDATE_LIMIT}`,
+      )
+      .all({});
+
+    let bestMatch: MemoryRow | null = null;
+    let bestSimilarity = 0;
+    for (const row of rows) {
+      const similarity = normalisedTokenF1(query, `${row.title} ${row.content}`);
+      if (similarity > bestSimilarity) {
+        bestSimilarity = similarity;
+        bestMatch = row;
+      }
+    }
+
+    return bestSimilarity >= DEDUPLICATION_SIMILARITY_THRESHOLD ? bestMatch : null;
+  }
+
+  /** Reinforce rather than overwrite a matched memory; no row is deleted. */
+  private reinforceDuplicate(id: number, importance: number, now: number): MemoryEntry {
+    const row = this.db
+      .query<MemoryRow, NamedBindings>(
+        `UPDATE memories
+         SET importance = MAX(importance, $importance), created_at = $createdAt
+         WHERE id = $id
+         RETURNING *`,
+      )
+      .get({ $id: id, $importance: importance, $createdAt: now });
+
+    if (!row) {
+      throw new Error("Duplicate reinforcement produced no row");
+    }
+    return rowToEntry(row);
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -302,6 +366,22 @@ function buildContent(input: MemorySaveInput): string {
     content += `\n\nAlternatives considered: ${input.alternatives.join(", ")}`;
   }
   return content;
+}
+
+/**
+ * Bounded F1 overlap of distinct FTS-normalized tokens. A score of 1 means
+ * identical token sets; 0.85 requires substantial overlap in both entries.
+ */
+function normalisedTokenF1(left: string, right: string): number {
+  const leftTokens = new Set(tokeniseFtsQuery(left).map((token) => token.toLowerCase()));
+  const rightTokens = new Set(tokeniseFtsQuery(right).map((token) => token.toLowerCase()));
+  if (leftTokens.size === 0 || rightTokens.size === 0) return 0;
+
+  let shared = 0;
+  for (const token of leftTokens) {
+    if (rightTokens.has(token)) shared += 1;
+  }
+  return (2 * shared) / (leftTokens.size + rightTokens.size);
 }
 
 function roundScore(n: number): number {

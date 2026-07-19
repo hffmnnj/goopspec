@@ -10,7 +10,13 @@
 import { MEMORY_TYPES } from "../../core/constants.js";
 import { tool } from "../../core/sdk-compat.js";
 import type { ToolContext, ToolDefinition } from "../../core/sdk-compat.js";
-import type { MemorySearchResult, PluginContext } from "../../core/types.js";
+import type {
+  CrossStoreSearchResult,
+  MemorySearchOptions,
+  MemorySearchResult,
+  PluginContext,
+} from "../../core/types.js";
+import { fuseSearchResults } from "./rrf.js";
 
 // ---------------------------------------------------------------------------
 // Formatting
@@ -45,6 +51,29 @@ function formatResult(result: MemorySearchResult, index: number): string {
   return lines.join("\n");
 }
 
+function formatCrossStoreResult(result: CrossStoreSearchResult, index: number): string {
+  if (result.origin === "memory") {
+    const date = new Date(result.entry.createdAt).toLocaleDateString();
+    return [
+      `### [${index + 1}] ${result.entry.title}`,
+      `**Origin:** memory | **RRF Score:** ${result.score.toFixed(4)} | **Date:** ${date}`,
+      "",
+      result.entry.content.length > 500
+        ? `${result.entry.content.slice(0, 500)}...`
+        : result.entry.content,
+    ].join("\n");
+  }
+
+  const date = new Date(result.entry.created_at * 1000).toLocaleDateString();
+  return [
+    `### [${index + 1}] ${result.entry.title}`,
+    `**Origin:** field_note | **RRF Score:** ${result.score.toFixed(4)} | **Date:** ${date}`,
+    `**Agent:** ${result.entry.source_agent} | **Tags:** ${result.entry.tags}`,
+    "",
+    result.entry.body.length > 500 ? `${result.entry.body.slice(0, 500)}...` : result.entry.body,
+  ].join("\n");
+}
+
 // ---------------------------------------------------------------------------
 // Tool factory
 // ---------------------------------------------------------------------------
@@ -65,6 +94,10 @@ export function createMemorySearchTool(ctx: PluginContext): ToolDefinition {
         .optional()
         .describe("Filter by concept tags"),
       minImportance: tool.schema.number().optional().describe("Minimum importance (1-10)"),
+      includeFieldNotes: tool.schema
+        .boolean()
+        .optional()
+        .describe("Include matching Field Notes, fused with memories using reciprocal-rank fusion"),
     },
     async execute(
       args: {
@@ -73,6 +106,7 @@ export function createMemorySearchTool(ctx: PluginContext): ToolDefinition {
         types?: (typeof MEMORY_TYPES)[number][];
         concepts?: string[];
         minImportance?: number;
+        includeFieldNotes?: boolean;
       },
       _context: ToolContext,
     ): Promise<string> {
@@ -80,13 +114,44 @@ export function createMemorySearchTool(ctx: PluginContext): ToolDefinition {
         // Validate and cap limit
         const limit = Math.min(Math.max(args.limit ?? 5, 1), 20);
 
-        const results = await ctx.memory.search({
+        const searchOptions: MemorySearchOptions = {
           query: args.query,
           limit,
           types: args.types,
           concepts: args.concepts,
           minImportance: args.minImportance,
-        });
+        };
+
+        if (args.includeFieldNotes) {
+          const [memoryResults, fieldNotes] = await Promise.all([
+            ctx.memory.search(searchOptions),
+            ctx.db.searchNotes(args.query, { limit }),
+          ]);
+          const results = fuseSearchResults(memoryResults, fieldNotes).slice(0, limit);
+
+          if (!results.length) {
+            return [
+              `No memories or Field Notes found matching: "${args.query}"`,
+              "",
+              "Tip: Try broader search terms or different keywords.",
+            ].join("\n");
+          }
+
+          const lines: string[] = [
+            "# Memory Search Results",
+            `Found ${results.length} matching result${results.length === 1 ? "" : "s"} for: "${args.query}"`,
+            "",
+          ];
+
+          for (let i = 0; i < results.length; i++) {
+            lines.push(formatCrossStoreResult(results[i], i));
+            lines.push("", "---", "");
+          }
+
+          return lines.join("\n");
+        }
+
+        const results = await ctx.memory.search(searchOptions);
 
         if (!results.length) {
           return [

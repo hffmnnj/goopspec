@@ -125,6 +125,133 @@ describe("SqliteMemoryManager", () => {
       expect(entry.concepts).toEqual([]);
       expect(entry.sourceFiles).toEqual([]);
     });
+
+    it("consolidates an opt-in near-duplicate by reinforcing the existing entry", async () => {
+      const original = await mgr.save({
+        ...baseSaveInput,
+        title: "Use FTS5 for local memory search",
+        content: "Use SQLite FTS5 for local memory retrieval with BM25 ranking.",
+        importance: 4,
+      });
+      const reinforced = await mgr.save({
+        ...baseSaveInput,
+        title: "Use FTS5 for local memory search",
+        content: "Use SQLite FTS5 for local memory retrieval with BM25 ranking.",
+        importance: 8,
+        deduplicate: true,
+      });
+
+      expect(reinforced.id).toBe(original.id);
+      expect(reinforced.importance).toBe(8);
+      expect(reinforced.createdAt).toBeGreaterThanOrEqual(original.createdAt);
+      expect(await mgr.search({ query: "FTS5 local memory retrieval" })).toHaveLength(1);
+    });
+
+    it("inserts duplicate entries when deduplication is absent or false", async () => {
+      const input = {
+        ...baseSaveInput,
+        title: "Default save remains an insert",
+        content: "The default save path does not consolidate matching memories.",
+      };
+
+      const first = await mgr.save(input);
+      const absent = await mgr.save(input);
+      const disabled = await mgr.save({ ...input, deduplicate: false });
+
+      expect(absent.id).toBeGreaterThan(first.id);
+      expect(disabled.id).toBeGreaterThan(absent.id);
+      expect(await mgr.search({ query: "default save path consolidate" })).toHaveLength(3);
+    });
+
+    it("deduplicate: true skips insert and soft-updates the existing entry", async () => {
+      const original = await mgr.save({
+        ...baseSaveInput,
+        title: "Soft update target",
+        content: "FTS5 local memory retrieval with BM25 ranking remains the chosen approach.",
+        importance: 3,
+      });
+
+      // Sleep long enough so the refreshed created_at is strictly greater.
+      await new Promise((resolve) => setTimeout(resolve, 1100));
+
+      const reinforced = await mgr.save({
+        ...baseSaveInput,
+        title: "Soft update target",
+        content: "FTS5 local memory retrieval with BM25 ranking remains the chosen approach.",
+        importance: 9,
+        deduplicate: true,
+      });
+
+      expect(reinforced.id).toBe(original.id);
+      expect(reinforced.importance).toBe(9);
+      expect(reinforced.createdAt).toBeGreaterThan(original.createdAt);
+      expect(await mgr.search({ query: "FTS5 local memory retrieval" })).toHaveLength(1);
+    });
+
+    it("deduplicate: false and absent insert normally even for near-duplicate content", async () => {
+      // This is the critical backward-compat guard: the same content that
+      // would consolidate with deduplicate: true must create distinct rows
+      // when the flag is absent or false.
+      const nearDup = {
+        ...baseSaveInput,
+        title: "Backward compat duplicate",
+        content: "Near-duplicate content used to verify the default path stays unchanged.",
+      };
+
+      const withDedup = await mgr.save({ ...nearDup, deduplicate: true });
+      const withoutField = await mgr.save(nearDup);
+      const explicitFalse = await mgr.save({ ...nearDup, deduplicate: false });
+
+      expect(withoutField.id).toBeGreaterThan(withDedup.id);
+      expect(explicitFalse.id).toBeGreaterThan(withoutField.id);
+      expect(await mgr.search({ query: "Backward compat duplicate" })).toHaveLength(3);
+    });
+
+    it("omitting deduplicate from MemorySaveInput keeps the prior insert behavior", async () => {
+      // Assert at the type/input level that the optional field can be absent.
+      const input: MemorySaveInput = {
+        type: "observation",
+        title: "Optional arg backward compat",
+        content: "MemorySaveInput without deduplicate must behave like the pre-dedup contract.",
+      };
+
+      const first = await mgr.save(input);
+      const second = await mgr.save(input);
+
+      expect(second.id).toBeGreaterThan(first.id);
+    });
+
+    it("consolidates clearly-similar content but inserts clearly-dissimilar content with deduplicate: true", async () => {
+      // The 0.85 threshold is defined on normalised token F1 over the same
+      // title+content tokens used for the FTS query. Hitting exactly 0.85 in
+      // a stable, cross-platform way is brittle (it requires a precise shared/
+      // total token count), so this test uses the boundary in spirit: identical
+      // token sets score 1.0 and disjoint token sets score 0.
+      const similar = await mgr.save({
+        ...baseSaveInput,
+        title: "Threshold boundary similar",
+        content: "alpha bravo charlie delta echo foxtrot golf hotel india juliet",
+        deduplicate: true,
+      });
+
+      const similarAgain = await mgr.save({
+        ...baseSaveInput,
+        title: "Threshold boundary similar",
+        content: "alpha bravo charlie delta echo foxtrot golf hotel india juliet",
+        deduplicate: true,
+      });
+
+      const dissimilar = await mgr.save({
+        ...baseSaveInput,
+        title: "Threshold boundary dissimilar",
+        content: "zyxwvutsrqponmlkjihgfedcba unique tokens no overlap whatsoever",
+        deduplicate: true,
+      });
+
+      expect(similarAgain.id).toBe(similar.id);
+      expect(dissimilar.id).toBeGreaterThan(similarAgain.id);
+      expect(await mgr.search({ query: "Threshold boundary" })).toHaveLength(2);
+    });
   });
 
   // -----------------------------------------------------------------------
