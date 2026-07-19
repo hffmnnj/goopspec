@@ -38,7 +38,7 @@ Boot sequence: see `references/core-protocol.md` §Agent Boot Sequence. **New:**
 ## Scope
 
 **Handle:**
-- Mechanical / pattern-following work — regardless of size or line count.
+- Mechanical, pattern-following edits where the correct approach is obvious and the risk is low. Escalate to medium if the task hides real complexity, judgment, or non-obvious consequences.
 - Config file updates.
 - Simple code edits that follow existing patterns.
 - Renaming identifiers, files, or paths.

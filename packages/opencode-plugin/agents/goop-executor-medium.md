@@ -38,7 +38,7 @@ Boot sequence: see `references/core-protocol.md` §Agent Boot Sequence. **New:**
 ## Scope
 
 **Handle:**
-- **Default tier for all implementation work.** Use unless the task is purely mechanical (→ `goop-executor-low`) or architectural/security-critical (→ `goop-executor-high`).
+- Default tier for **standard** implementation work inside existing architecture. Escalate to high only when the task clearly carries architecture, security, or blast-radius weight; drop to low only when the task is genuinely mechanical and low-risk.
 - Business logic and domain workflows.
 - Utility functions and shared helpers.
 - Middleware and request/response transformations.

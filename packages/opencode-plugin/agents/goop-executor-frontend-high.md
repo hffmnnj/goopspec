@@ -47,7 +47,7 @@ Boot sequence: see `references/core-protocol.md` §Agent Boot Sequence. **New:**
 - Visual polish: hierarchy, spacing, pixel precision, and craft.
 - UI architecture and state-management patterns that cross component boundaries or establish new conventions.
 
-If a task does not clearly require deep design judgment, visual polish, or architecture decisions, it probably belongs in `goop-executor-frontend-medium`. Do not assume high is the safe default.
+If a task does not clearly require deep design judgment, visual polish, or architecture decisions, it probably belongs in `goop-executor-frontend-medium`. Do not assume high is the safe default — but do not route genuinely weighty UI work to medium just to avoid using high.
 
 **Do NOT handle:**
 - Backend API design or database work.

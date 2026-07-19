@@ -38,7 +38,7 @@ Boot sequence: see `references/core-protocol.md` §Agent Boot Sequence. **New:**
 ## Scope
 
 **Handle:**
-- **Default frontend tier.** Use for all frontend work not purely mechanical (→ frontend-low) or deeply design-sensitive (→ frontend-high).
+- Default frontend tier for standard component work, UI logic/state wiring, moderate refactors within existing patterns. Escalate to high only when the task clearly carries design, architecture, UX, or accessibility weight; drop to low only when the task is genuinely mechanical and low-risk.
 - Wiring a new component into an existing app or page.
 - Moderate refactors of UI logic, props, or local/component state.
 - Connecting UI state to existing APIs, hooks, or stores.
