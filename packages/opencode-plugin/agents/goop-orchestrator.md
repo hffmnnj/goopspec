@@ -17,6 +17,7 @@ tools:
   - goop_checkpoint
   - goop_reference
   - goop_read_db
+  - goop_read_wave
   - goop_boot
   - goop_search_notes
   - goop_write_db

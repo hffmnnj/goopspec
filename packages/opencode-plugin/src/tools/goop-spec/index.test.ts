@@ -141,6 +141,7 @@ describe("goop_spec tool", () => {
   describe("action: validate", () => {
     it("reports VALID when all sections present", async () => {
       const docDir = join(testDir, GOOPSPEC_DIR);
+      const workflowId = ctx.stateManager.getActiveWorkflowId();
       const specContent = [
         "# SPEC",
         "## Must-Haves",
@@ -148,12 +149,24 @@ describe("goop_spec tool", () => {
         "## Out of Scope",
         "## Acceptance Criteria",
       ].join("\n");
-      const planContent = ["# BLUEPRINT", "## Spec Mapping", "| MH1 | W1.T1 |", "## Wave 1"].join(
-        "\n",
-      );
+      const planContent = [
+        "# BLUEPRINT",
+        "## Overview",
+        "Goal and approach.",
+        "## Risk Assessment",
+        "Low risk.",
+        "## Deviation Protocol",
+        "Follow the rules.",
+      ].join("\n");
 
       writeFileSync(join(docDir, "SPEC.md"), specContent, "utf-8");
       writeFileSync(join(docDir, "BLUEPRINT.md"), planContent, "utf-8");
+
+      ctx.db.upsertWave(workflowId, {
+        wave_number: 1,
+        title: "Wave one",
+        status: "pending",
+      });
 
       const tool = createGoopSpecTool(ctx);
       const result = await tool.execute({ action: "validate" }, toolCtx);
@@ -193,7 +206,7 @@ describe("goop_spec tool", () => {
       expect(result).toContain("BLUEPRINT.md not found");
     });
 
-    it("reports missing traceability in BLUEPRINT.md", async () => {
+    it("reports missing wave rows when blueprint is otherwise valid", async () => {
       const docDir = join(testDir, GOOPSPEC_DIR);
       writeFileSync(
         join(docDir, "SPEC.md"),
@@ -202,7 +215,15 @@ describe("goop_spec tool", () => {
       );
       writeFileSync(
         join(docDir, "BLUEPRINT.md"),
-        "# Plan\n## Spec Mapping\nNothing here\n## Wave 1",
+        [
+          "# Plan",
+          "## Overview",
+          "Goal and approach.",
+          "## Risk Assessment",
+          "Low risk.",
+          "## Deviation Protocol",
+          "Follow the rules.",
+        ].join("\n"),
         "utf-8",
       );
 
@@ -210,7 +231,8 @@ describe("goop_spec tool", () => {
       const result = await tool.execute({ action: "validate" }, toolCtx);
 
       expect(result).toContain("ISSUES FOUND");
-      expect(result).toContain("traceability");
+      expect(result).toContain("No waves found");
+      expect(result).toContain("goop_write_wave");
     });
 
     it("reports both files missing", async () => {
