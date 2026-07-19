@@ -14,6 +14,8 @@ tools:
   - goop_state
   - goop_search_notes
   - goop_read_db
+  - goop_read_wave
+  - goop_acceptance_audit
   - goop_boot
   - goop_adl
   - memory_save

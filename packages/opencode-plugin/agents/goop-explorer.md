@@ -10,6 +10,7 @@ tools:
   - grep
   - goop_boot
   - goop_read_db
+  - goop_read_wave
   - goop_reference
   - goop_save_note
   - goop_search_notes
