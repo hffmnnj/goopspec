@@ -10,12 +10,8 @@
 import { tool } from "../../core/sdk-compat.js";
 import type { ToolContext, ToolDefinition } from "../../core/sdk-compat.js";
 import type { PluginContext } from "../../core/types.js";
-import type {
-  BlockerRow,
-  VerificationRow,
-  WaveProgressRow,
-  WaveRow,
-} from "../../features/db/types.js";
+import type { BlockerRow, VerificationRow } from "../../features/db/types.js";
+import { formatWaves } from "../../features/db/wave-format.js";
 
 // ---------------------------------------------------------------------------
 // Blocker formatting (mirrors goop-blocker)
@@ -102,71 +98,6 @@ function formatVerifications(workflowId: string, rows: VerificationRow[]): strin
 }
 
 // ---------------------------------------------------------------------------
-// Wave formatting
-// ---------------------------------------------------------------------------
-
-function formatWave(ctx: PluginContext, wave: WaveRow, progress?: WaveProgressRow): string {
-  const tasks = ctx.db.getWaveTasks(wave.id);
-  const completedTasks = progress?.completed_tasks ?? 0;
-  const totalTasks = progress?.total_tasks ?? tasks.length;
-  const lines = [
-    `## Wave ${wave.wave_number}: ${wave.title || "Untitled"}`,
-    "",
-    `- status: ${wave.status}`,
-    `- progress: ${completedTasks}/${totalTasks} tasks complete`,
-  ];
-
-  if (wave.pr_branch !== null && wave.pr_branch !== "") {
-    lines.push(`- pr_branch: ${wave.pr_branch}`);
-  }
-  if (wave.pr_url !== null && wave.pr_url !== "") {
-    lines.push(`- pr_url: ${wave.pr_url}`);
-  }
-
-  lines.push("", "### Tasks");
-
-  if (tasks.length === 0) {
-    lines.push("", "_(No tasks found.)_");
-  } else {
-    for (const task of tasks) {
-      const description = task.description || "(no description)";
-      lines.push(`- ${task.task_index}. [${task.status}] ${description}`);
-      if (task.agent !== null && task.agent !== "") {
-        lines.push(`  - agent: ${task.agent}`);
-      }
-    }
-  }
-
-  return lines.join("\n");
-}
-
-function formatWaves(
-  ctx: PluginContext,
-  workflowId: string,
-  waves: WaveRow[],
-  waveNumbers?: number[],
-): string {
-  if (waves.length === 0) {
-    const scope =
-      waveNumbers !== undefined && waveNumbers.length > 0
-        ? `wave numbers [${waveNumbers.join(", ")}]`
-        : "waves";
-    return `No ${scope} found for workflow '${workflowId}'. Use goop_write_wave to create one.`;
-  }
-
-  const progressRows =
-    waveNumbers !== undefined && waveNumbers.length > 0
-      ? ctx.db.getWaveProgress(workflowId, undefined, waveNumbers)
-      : ctx.db.getWaveProgress(workflowId);
-
-  const progressByWaveNumber = new Map(progressRows.map((row) => [row.wave_number, row] as const));
-
-  return waves
-    .map((wave) => formatWave(ctx, wave, progressByWaveNumber.get(wave.wave_number)))
-    .join("\n\n---\n\n");
-}
-
-// ---------------------------------------------------------------------------
 // Tool factory
 // ---------------------------------------------------------------------------
 
@@ -204,7 +135,7 @@ export function createGoopAcceptanceAuditTool(ctx: PluginContext): ToolDefinitio
         const result = {
           blockers: formatBlockers(workflowId, blockers),
           verifications: formatVerifications(workflowId, verifications),
-          waves: formatWaves(ctx, workflowId, waves, waveIds),
+          waves: formatWaves(ctx.db, workflowId, waves, waveIds),
         };
 
         return `<!--\n${JSON.stringify(result, null, 2)}\n-->`;
