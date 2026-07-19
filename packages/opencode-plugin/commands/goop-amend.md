@@ -28,14 +28,14 @@ goop_reference({ name: "core-protocol" })
 ## Steps
 
 1. Load the current spec via `goop_spec`.
-2. Analyze impact: scope added/removed, risk, timeline, affected waves.
+2. Analyze impact: scope added/removed, risk, timeline, affected waves (read via `goop_read_wave`).
 3. Present options via `question`:
-   - **Confirm amendment (Recommended)** → update spec and blueprint via `goop_write_db`.
+   - **Confirm amendment (Recommended)** → update spec via `goop_write_db` and wave/task plan via `goop_write_wave`.
    - **Defer** → add to a future milestone/task.
    - **Cancel** → abort.
 4. On confirm:
    - Append an amendment entry to spec via `goop_write_db({ doc_type: "spec", content: "..." })`.
-   - Adjust tasks in blueprint via `goop_write_db({ doc_type: "blueprint", content: "..." })`.
+   - Adjust wave/tasks via `goop_write_wave` (e.g. `task_updates` or `items`).
    - Log to `ADL.md` via `goop_adl`.
    - Record rationale with `memory_decision`.
 5. If the change adds work, return to `/goop-execute`.
