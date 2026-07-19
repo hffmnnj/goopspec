@@ -52,6 +52,7 @@ describe("buildWorkflowSurvivalBlock", () => {
 
     expect(block).toContain("AUTOPILOT ACTIVE");
     expect(block).toContain("Continue to the next phase immediately");
+    expect(block).toContain("Hard stops still apply per phase-gates");
     expect(block).toContain("AUTOPILOT SESSION RULES");
   });
 
@@ -62,6 +63,7 @@ describe("buildWorkflowSurvivalBlock", () => {
         workflows: {
           default: createDefaultWorkflowState({
             phase: "execute",
+            autopilot: true,
             lazyAutopilot: true,
           }),
         },
@@ -72,7 +74,19 @@ describe("buildWorkflowSurvivalBlock", () => {
 
     expect(block).toContain("LAZY AUTOPILOT ACTIVE");
     expect(block).toContain("Do NOT ask the user any questions");
+    expect(block).toContain(
+      "ONLY stop for: (1) missing credentials/secrets, (2) ambiguous destructive/irreversible operations.",
+    );
+    expect(block).toContain(
+      "On a Rule 4 architectural decision, decide autonomously using best judgment.",
+    );
+    expect(block).toContain("Log full rationale to ADL via goop_adl");
+    // Old stop-list items should NOT appear in the ONLY-stop-for list
+    expect(block).not.toContain("external blockers");
+    // "Rule 4" appears in the autonomous-decision sentence, not in the stop list
     expect(block).toContain("AUTOPILOT SESSION RULES");
+    // Lazy mode must NOT re-emit the regular autopilot Rule-4-as-stop wording
+    expect(block).not.toContain("Hard stops still apply per phase-gates: Rule 4");
   });
 
   it("omits autopilot directives when autopilot is false", () => {
@@ -195,7 +209,7 @@ describe("createCompactionHook", () => {
     expect(output.prompt).toBeUndefined();
   });
 
-  it("includes autopilot survival directive when autopilot is active", async () => {
+  it("includes regular autopilot survival directive when autopilot is active without lazy", async () => {
     const ctx = createMockPluginContext({
       state: {
         activeWorkflowId: "default",
@@ -203,6 +217,7 @@ describe("createCompactionHook", () => {
           default: createDefaultWorkflowState({
             phase: "execute",
             autopilot: true,
+            lazyAutopilot: false,
           }),
         },
       },
