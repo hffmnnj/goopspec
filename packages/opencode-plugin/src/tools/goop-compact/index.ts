@@ -1,0 +1,208 @@
+/**
+ * goop_compact tool — trigger OpenCode session compaction with a resume handoff.
+ *
+ * @module tools/goop-compact
+ */
+
+import { tool } from "../../core/sdk-compat.js";
+import type { ToolContext, ToolDefinition } from "../../core/sdk-compat.js";
+import type { PluginContext } from "../../core/types.js";
+import { logError } from "../../shared/logger.js";
+
+interface ModelRef {
+  providerID: string;
+  modelID: string;
+}
+
+interface SessionMessage {
+  info?: {
+    role?: string;
+    agent?: string;
+    model?: ModelRef;
+    providerID?: string;
+    modelID?: string;
+  };
+}
+
+const RESUME_PROMPT =
+  "Continue from the compaction summary. Recheck the workflow documents only if needed.";
+
+interface FieldsResponse<T> {
+  data?: T;
+  error?: unknown;
+}
+
+function fieldsResponse<T>(value: unknown): FieldsResponse<T> {
+  if (value !== null && typeof value === "object" && ("data" in value || "error" in value)) {
+    return value as FieldsResponse<T>;
+  }
+  return { data: value as T };
+}
+
+function errorDetail(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  if (error !== null && typeof error === "object") {
+    const value = error as { message?: unknown; data?: { message?: unknown } };
+    if (typeof value.data?.message === "string") return value.data.message;
+    if (typeof value.message === "string") return value.message;
+    try {
+      return JSON.stringify(error);
+    } catch {
+      return String(error);
+    }
+  }
+  return String(error);
+}
+
+function currentModel(messages: SessionMessage[]): ModelRef | undefined {
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const info = messages[index]?.info;
+    if (info?.role === "user" && info.model?.providerID && info.model.modelID) {
+      return info.model;
+    }
+  }
+
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const info = messages[index]?.info;
+    if (info?.providerID && info.modelID) {
+      return { providerID: info.providerID, modelID: info.modelID };
+    }
+  }
+
+  return undefined;
+}
+
+function currentAgent(messages: SessionMessage[]): string | undefined {
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const info = messages[index]?.info;
+    if (info?.role === "user" && info.agent) return info.agent;
+  }
+  return undefined;
+}
+
+function sendResume(ctx: PluginContext, sessionID: string, model: ModelRef, agent?: string): void {
+  try {
+    if (typeof ctx.sdk.client?.session?.promptAsync !== "function") {
+      logError(
+        "goop_compact could not resume the session",
+        new Error("promptAsync is unavailable"),
+      );
+      return;
+    }
+    const request = ctx.sdk.client.session.promptAsync({
+      path: { id: sessionID },
+      body: {
+        model,
+        ...(agent ? { agent } : {}),
+        parts: [{ type: "text", text: RESUME_PROMPT }],
+      },
+    });
+    void request
+      .then((result) => {
+        const response = fieldsResponse<unknown>(result);
+        if (response.error !== undefined) {
+          logError("goop_compact resume request rejected", response.error);
+        }
+      })
+      .catch((error: unknown) => logError("goop_compact resume request failed", error));
+  } catch (error) {
+    logError("goop_compact resume dispatch failed", error);
+  }
+}
+
+function observeCompaction(
+  request: Promise<unknown>,
+  ctx: PluginContext,
+  sessionID: string,
+  model: ModelRef,
+  agent?: string,
+): void {
+  void request
+    .then((result) => {
+      const response = fieldsResponse<boolean>(result);
+      if (response.error !== undefined) {
+        ctx.compactionHandoff.delete(sessionID);
+        logError(`goop_compact request rejected: ${errorDetail(response.error)}`, response.error);
+        return;
+      }
+      if (response.data !== true) {
+        ctx.compactionHandoff.delete(sessionID);
+        logError(
+          "goop_compact request was not confirmed by the host",
+          new Error(`Unexpected compaction response: ${String(response.data)}`),
+        );
+        return;
+      }
+      sendResume(ctx, sessionID, model, agent);
+    })
+    .catch((error: unknown) => {
+      ctx.compactionHandoff.delete(sessionID);
+      logError("goop_compact request failed", error);
+    });
+}
+
+export function createGoopCompactTool(ctx: PluginContext): ToolDefinition {
+  return tool({
+    description: "Trigger session compaction and record the immediate resume step.",
+    args: {
+      next_step: tool.schema
+        .string()
+        .describe(
+          "A short 1-2 sentence description of what the Orchestrator will do immediately after compaction.",
+        ),
+    },
+    async execute(args: { next_step: string }, context: ToolContext): Promise<string> {
+      let sessionID: string | undefined;
+
+      try {
+        if (typeof ctx.sdk.client?.session?.summarize !== "function") {
+          return "goop_compact unavailable: session compaction is not supported on this host.";
+        }
+
+        sessionID = context.sessionID.trim();
+        if (!sessionID) {
+          return "goop_compact failed: a session ID is required to trigger compaction.";
+        }
+
+        const messagesResult = fieldsResponse<SessionMessage[]>(
+          await ctx.sdk.client.session.messages({ path: { id: sessionID } }),
+        );
+        if (messagesResult.error !== undefined) {
+          ctx.compactionHandoff.delete(sessionID);
+          const detail = errorDetail(messagesResult.error);
+          logError("goop_compact failed to resolve the session model", messagesResult.error);
+          return `goop_compact failed: unable to resolve the current session model: ${detail}`;
+        }
+
+        const model = currentModel(messagesResult.data ?? []);
+        if (!model) {
+          ctx.compactionHandoff.delete(sessionID);
+          return "goop_compact failed: unable to resolve the current session model.";
+        }
+        const agent = currentAgent(messagesResult.data ?? []);
+
+        ctx.compactionHandoff.set(sessionID, args.next_step);
+        // SDK 1.18.3 SessionSummarizeData names the model body and returns a
+        // boolean 200 payload. The generated body is optional for legacy
+        // compatibility, but the host route requires providerID and modelID.
+        // The legacy summarize handler joins the session's existing runner.
+        // Awaiting it from a tool on that runner creates a same-session wait
+        // cycle. OpenCode's TUI intentionally dispatches this request with
+        // `void`; observe completion only for best-effort error cleanup.
+        const request = ctx.sdk.client.session.summarize({
+          path: { id: sessionID },
+          body: model,
+        });
+        observeCompaction(request, ctx, sessionID, model, agent);
+
+        return `Compaction requested for session ${sessionID}; it will apply after this turn completes. Will resume with: ${args.next_step}`;
+      } catch (error) {
+        if (sessionID) {
+          ctx.compactionHandoff.delete(sessionID);
+        }
+        logError("goop_compact failed", error);
+        return "goop_compact failed: unable to trigger session compaction.";
+      }
+    },
+  });
+}

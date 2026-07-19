@@ -188,18 +188,18 @@ describe("dual-contract parity", () => {
     expect(typeof plugin.setup).toBe("function");
   });
 
-  it("V1 path returns the canonical 29-tool set", async () => {
+  it("V1 path returns the canonical 30-tool set", async () => {
     const input = createV1MockPluginInput(testDir);
     const result = await plugin(input);
 
     expect(result.tool).toBeDefined();
-    expect(Object.keys(result.tool ?? {})).toHaveLength(29);
+    expect(Object.keys(result.tool ?? {})).toHaveLength(30);
 
     const directTools = Object.keys(createTools(createMockPluginContext({ testDir }))).sort();
     expect(Object.keys(result.tool ?? {}).sort()).toEqual(directTools);
   });
 
-  it("V2 setup registers the same 29 tools as the V1 path", async () => {
+  it("V2 setup differs from V1 only by the capability-gated compaction tool", async () => {
     const registrations: { tools: Record<string, V2ToolLike>; systemHook?: unknown } = {
       tools: {},
     };
@@ -208,7 +208,13 @@ describe("dual-contract parity", () => {
     const v1Tools = Object.keys(createTools(createMockPluginContext({ testDir }))).sort();
     const v2Tools = Object.keys(registrations.tools).sort();
 
-    expect(v2Tools).toEqual(v1Tools);
+    const v1Only = v1Tools.filter((name) => !v2Tools.includes(name));
+    const v2Only = v2Tools.filter((name) => !v1Tools.includes(name));
+
+    // goop_compact is capability-gated because V2 has no session.summarize.
+    // Every other V1/V2 tool registration must remain in strict parity.
+    expect(v1Only).toEqual(["goop_compact"]);
+    expect(v2Only).toEqual([]);
     expect(v2Tools).toHaveLength(29);
   });
 

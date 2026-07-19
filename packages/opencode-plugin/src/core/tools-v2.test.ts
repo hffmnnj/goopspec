@@ -29,6 +29,17 @@ function createRuntimeContext(registrations: V2ToolDefinition[]): V2RuntimeConte
   } as unknown as V2RuntimeContext;
 }
 
+function addCompactionCapability(ctx: PluginContext): void {
+  Object.defineProperty(ctx.sdk, "client", {
+    configurable: true,
+    value: {
+      session: {
+        summarize: async (): Promise<boolean> => true,
+      },
+    },
+  });
+}
+
 describe("registerToolsV2()", () => {
   const contexts: PluginContext[] = [];
 
@@ -38,9 +49,22 @@ describe("registerToolsV2()", () => {
     }
   });
 
-  it("registers every canonical tool name", async () => {
+  it("omits goop_compact when the V2 client cannot compact sessions", async () => {
     const ctx = createMockPluginContext();
     contexts.push(ctx);
+    const registrations: V2ToolDefinition[] = [];
+
+    await registerToolsV2(createRuntimeContext(registrations), ctx);
+
+    const names = registrations.map((definition) => definition.name);
+    expect(names).not.toContain("goop_compact");
+    expect(names).toContain("goop_status");
+  });
+
+  it("registers goop_compact when the client can compact sessions", async () => {
+    const ctx = createMockPluginContext();
+    contexts.push(ctx);
+    addCompactionCapability(ctx);
     const registrations: V2ToolDefinition[] = [];
 
     await registerToolsV2(createRuntimeContext(registrations), ctx);
@@ -48,7 +72,7 @@ describe("registerToolsV2()", () => {
     expect(registrations.map((definition) => definition.name).sort()).toEqual(
       Object.keys(createTools(ctx)).sort(),
     );
-    expect(registrations).toHaveLength(29);
+    expect(registrations).toHaveLength(30);
   });
 
   it("converts goop_status arguments with Zod's native JSON Schema support", () => {

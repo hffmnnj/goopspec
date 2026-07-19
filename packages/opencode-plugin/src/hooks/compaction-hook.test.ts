@@ -1,6 +1,10 @@
 import { describe, expect, it, spyOn } from "bun:test";
 import { createDefaultWorkflowState, createMockPluginContext } from "../test-utils.js";
-import { buildWorkflowSurvivalBlock, createCompactionHook } from "./compaction-hook.js";
+import {
+  MAX_NEXT_STEP_CHARS,
+  buildWorkflowSurvivalBlock,
+  createCompactionHook,
+} from "./compaction-hook.js";
 
 // ---------------------------------------------------------------------------
 // buildWorkflowSurvivalBlock
@@ -85,6 +89,7 @@ describe("buildWorkflowSurvivalBlock", () => {
     expect(block).not.toContain("external blockers");
     // "Rule 4" appears in the autonomous-decision sentence, not in the stop list
     expect(block).toContain("AUTOPILOT SESSION RULES");
+    expect(block).toContain("Do NOT warn about context length or token limits");
     // Lazy mode must NOT re-emit the regular autopilot Rule-4-as-stop wording
     expect(block).not.toContain("Hard stops still apply per phase-gates: Rule 4");
   });
@@ -108,6 +113,32 @@ describe("buildWorkflowSurvivalBlock", () => {
     expect(block).not.toContain("AUTOPILOT ACTIVE");
     expect(block).not.toContain("LAZY AUTOPILOT ACTIVE");
     expect(block).not.toContain("AUTOPILOT SESSION RULES");
+  });
+
+  it("includes a declared next step only when non-empty", () => {
+    const ctx = createMockPluginContext();
+
+    expect(buildWorkflowSurvivalBlock(ctx, "Resume wave verification.")).toContain(
+      "IMMEDIATE NEXT STEP (declared before compaction): Resume wave verification.",
+    );
+    expect(buildWorkflowSurvivalBlock(ctx)).not.toContain("IMMEDIATE NEXT STEP");
+    expect(buildWorkflowSurvivalBlock(ctx, "  ")).not.toContain("IMMEDIATE NEXT STEP");
+  });
+
+  it("collapses whitespace and bounds an oversized next step", () => {
+    const ctx = createMockPluginContext();
+    const block = buildWorkflowSurvivalBlock(
+      ctx,
+      `  Review\n\n  ${"changes ".repeat(40)}then verify.  `,
+    );
+    const line = block.split("\n").find((value) => value.startsWith("IMMEDIATE NEXT STEP"));
+    const prefix = "IMMEDIATE NEXT STEP (declared before compaction): ";
+
+    expect(line).toBeDefined();
+    expect(line).not.toContain("\n");
+    expect(line).not.toMatch(/\s{2,}/);
+    expect(line?.slice(prefix.length).length).toBeLessThanOrEqual(MAX_NEXT_STEP_CHARS);
+    expect(line?.endsWith("…")).toBeTrue();
   });
 
   it("includes document pointers for re-hydration", () => {
@@ -209,6 +240,46 @@ describe("createCompactionHook", () => {
     expect(output.prompt).toBeUndefined();
   });
 
+  it("includes and clears the declared next step for its session", async () => {
+    const ctx = createMockPluginContext();
+    ctx.compactionHandoff.set("session-a", "Run the focused hook tests.");
+
+    const hooks = createCompactionHook(ctx);
+    const output: { context: string[]; prompt?: string } = { context: [] };
+    await hooks["experimental.session.compacting"]?.({ sessionID: "session-a" }, output);
+
+    expect(output.context.join("\n")).toContain(
+      "IMMEDIATE NEXT STEP (declared before compaction): Run the focused hook tests.",
+    );
+    expect(ctx.compactionHandoff.get("session-a")).toBeUndefined();
+
+    const secondOutput: { context: string[]; prompt?: string } = { context: [] };
+    await hooks["experimental.session.compacting"]?.({ sessionID: "session-a" }, secondOutput);
+    expect(secondOutput.context.join("\n")).not.toContain("IMMEDIATE NEXT STEP");
+  });
+
+  it("does not use a handoff declared for another session", async () => {
+    const ctx = createMockPluginContext();
+    ctx.compactionHandoff.set("session-a", "Only session A may resume this step.");
+
+    const hooks = createCompactionHook(ctx);
+    const output: { context: string[]; prompt?: string } = { context: [] };
+    await hooks["experimental.session.compacting"]?.({ sessionID: "session-b" }, output);
+
+    expect(output.context.join("\n")).not.toContain("IMMEDIATE NEXT STEP");
+    expect(ctx.compactionHandoff.get("session-a")).toBe("Only session A may resume this step.");
+  });
+
+  it("omits the next step when no handoff exists for the session", async () => {
+    const ctx = createMockPluginContext();
+    const hooks = createCompactionHook(ctx);
+    const output: { context: string[]; prompt?: string } = { context: [] };
+
+    await hooks["experimental.session.compacting"]?.({ sessionID: "session-a" }, output);
+
+    expect(output.context.join("\n")).not.toContain("IMMEDIATE NEXT STEP");
+  });
+
   it("includes regular autopilot survival directive when autopilot is active without lazy", async () => {
     const ctx = createMockPluginContext({
       state: {
@@ -230,6 +301,7 @@ describe("createCompactionHook", () => {
     const joined = output.context.join("\n");
     expect(joined).toContain("AUTOPILOT ACTIVE");
     expect(joined).toContain("Continue to the next phase immediately");
+    expect(joined).toContain("Do NOT warn about context length or token limits");
   });
 
   it("does not push empty block when workflow is missing", async () => {
