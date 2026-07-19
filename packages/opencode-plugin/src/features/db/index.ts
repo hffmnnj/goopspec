@@ -8,6 +8,7 @@
 
 import { Database } from "bun:sqlite";
 
+import { patchContent } from "../../shared/content-patch.js";
 import { runMigrations } from "./migrations.js";
 import { initSchema } from "./schema.js";
 import type {
@@ -29,7 +30,6 @@ import type {
   WorkflowRow,
   WorkflowSummaryRow,
 } from "./types.js";
-import { patchContent } from "../../shared/content-patch.js";
 
 /** Named parameter bindings accepted by bun:sqlite. */
 type NamedBindings = Record<string, string | bigint | number | boolean | null>;
@@ -882,9 +882,10 @@ export class GoopSpecDB {
       return { ok: false, error: result.error };
     }
 
+    const patchedBody = result.content ?? "";
     this.db
       .query<FieldNoteRow, NamedBindings>("UPDATE field_notes SET body = $body WHERE id = $id")
-      .run({ $id: id, $body: result.content! });
+      .run({ $id: id, $body: patchedBody });
 
     return { ok: true };
   }

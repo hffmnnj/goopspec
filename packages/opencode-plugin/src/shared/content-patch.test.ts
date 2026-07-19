@@ -30,11 +30,7 @@ describe("patchContent()", () => {
   });
 
   it("returns an error on multiple matches when replaceAll is not set", () => {
-    const result = patchContent(
-      "foo bar foo baz foo qux",
-      "foo",
-      "zoo",
-    );
+    const result = patchContent("foo bar foo baz foo qux", "foo", "zoo");
 
     expect(result.ok).toBe(false);
     expect(result.matchCount).toBe(3);
@@ -45,12 +41,7 @@ describe("patchContent()", () => {
   });
 
   it("replaces all occurrences when replaceAll is true", () => {
-    const result = patchContent(
-      "foo bar foo baz foo qux",
-      "foo",
-      "zoo",
-      { replaceAll: true },
-    );
+    const result = patchContent("foo bar foo baz foo qux", "foo", "zoo", { replaceAll: true });
 
     expect(result.ok).toBe(true);
     expect(result.matchCount).toBe(3);

@@ -367,9 +367,7 @@ describe("goop_write_section tool", () => {
 
       expect(result).toContain("Error in goop_write_section");
       expect(result).toContain("3 occurrences");
-      expect(ctx.db.getSection("default", "spec", "overview")?.content).toBe(
-        "foo bar foo baz foo",
-      );
+      expect(ctx.db.getSection("default", "spec", "overview")?.content).toBe("foo bar foo baz foo");
     });
 
     it("replaces all occurrences in a section when replace_all is true", async () => {
@@ -388,9 +386,7 @@ describe("goop_write_section tool", () => {
       );
 
       expect(result).toContain("Patched section 'overview'");
-      expect(ctx.db.getSection("default", "spec", "overview")?.content).toBe(
-        "qux bar qux baz qux",
-      );
+      expect(ctx.db.getSection("default", "spec", "overview")?.content).toBe("qux bar qux baz qux");
     });
 
     it("patches one item and writes another via items[] mixed batch", async () => {
@@ -403,7 +399,12 @@ describe("goop_write_section tool", () => {
           section_key: "",
           content: "",
           items: [
-            { doc_type: "spec", section_key: "overview", old_string: "world", new_string: "GoopSpec" },
+            {
+              doc_type: "spec",
+              section_key: "overview",
+              old_string: "world",
+              new_string: "GoopSpec",
+            },
             { doc_type: "spec", section_key: "plan", content: "# Plan" },
           ],
         },
