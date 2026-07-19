@@ -64,10 +64,10 @@ Do not pass full conversation history, verbose logs, unrelated files, or complet
 | Task Type | Primary Agent | Fallback |
 |-----------|--------------|----------|
 | Planning | `goop-planner` | orchestrator |
-| Simple config/mechanical | `goop-executor-low` | — |
-| Business logic | `goop-executor-medium` | — |
-| Complex/architectural | `goop-executor-high` | — |
-| UI/UX implementation | `goop-executor-frontend-medium` | `goop-executor-frontend-low` / `goop-executor-frontend-high` |
+| Mechanical / pattern-following | `goop-executor-low` | — |
+| Standard implementation (default) | `goop-executor-medium` | — |
+| Complex / architectural / security-critical (reserve) | `goop-executor-high` | — |
+| Standard UI implementation (default) | `goop-executor-frontend-medium` | `goop-executor-frontend-low` / `goop-executor-frontend-high` |
 | Research | `goop-researcher` | `goop-explorer` |
 | Exploration | `goop-explorer` | — |
 | Verification | `goop-verifier` | `goop-tester` |
@@ -77,13 +77,13 @@ Do not pass full conversation history, verbose logs, unrelated files, or complet
 
 ### By Complexity
 
-| Complexity | Tier | Context Budget |
-|------------|------|----------------|
-| Simple | `goop-executor-low` | 40% |
-| Standard | `goop-executor-medium` | 60% |
-| Standard UI | `goop-executor-frontend-medium` | 60% |
-| Complex | `goop-executor-high` | 80% |
-| Critical | `goop-executor-high` + thinking | 90% |
+| Complexity | Tier | Rule of Thumb | Context Budget |
+|------------|------|----------------|-----------------|
+| Mechanical | `goop-executor-low` | Pattern-following, config, scaffolding, markdown — any line count | 40% |
+| Standard (default) | `goop-executor-medium` | **Default — all implementation work not in low or high** | 60% |
+| Standard UI (default) | `goop-executor-frontend-medium` | **Default frontend tier** | 60% |
+| Complex | `goop-executor-high` | Architecture, security-critical, high blast-radius — reserve | 80% |
+| Critical | `goop-executor-high` + thinking | Reserve; highest stakes only | 90% |
 
 ## Dispatch Modes
 
