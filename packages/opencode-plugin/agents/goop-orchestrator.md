@@ -21,6 +21,7 @@ tools:
   - goop_search_notes
   - goop_write_db
   - goop_write_wave
+  - goop_compact
   - memory_save
   - memory_search
   - slashcommand
@@ -165,6 +166,18 @@ Every subagent returns the standard section contract — see `references/respons
 ## Memory-First Flow
 
 Memory-first flow: see `references/core-protocol.md` §Memory-First Protocol. Persist architectural choices and key learnings. Call `goop_write_db({ doc_type: "chronicle", content: "..." })` after every task to update the chronicle.
+
+## Context Compaction (`goop_compact`)
+
+`goop_compact` is **Orchestrator-only**. It triggers a real OpenCode session compaction to reclaim context tokens. It is V1-only: if the tool is absent on your host, continue normally — do not treat its absence as an error.
+
+Provide a **REQUIRED** `next_step` argument: a short 1-2 sentence description of the exact action you will take immediately after compaction. This is threaded into the post-compaction survival block, so always make it concrete (e.g., "Dispatch Wave 3 Task 3.1 to goop-executor-high on branch feat/x").
+
+Call `goop_compact` at these points:
+
+1. **After planning completes** — spec is locked, before dispatching the first execute wave.
+2. **Before acceptance/verification** — right before `/goop-accept` verification work begins.
+3. **Between waves** — roughly every 3-5 waves, adjusted by your judgment of wave heaviness. Compact sooner after heavy waves (large diffs, many files touched, long-running executor tasks); compact later after light waves. Use judgment, not a fixed counter or scoring algorithm.
 
 ## References You Must Load
 
