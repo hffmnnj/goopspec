@@ -297,7 +297,7 @@ describe("goop_save_note tool", () => {
       expect(result).toContain("3/3 succeeded");
     });
 
-    it("surfaces per-item validation failures for invalid importance without failing others", async () => {
+    it("continues processing the batch when one item fails validation", async () => {
       const tool = createGoopSaveNoteTool(ctx);
       const result = await tool.execute(
         {
@@ -315,6 +315,11 @@ describe("goop_save_note tool", () => {
       );
       expect(result).toContain("2/3 succeeded");
       expect(result).toContain("FAIL");
+      expect(result).toContain("importance out of range");
+
+      // Both valid items persisted despite the middle failure.
+      const search = ctx.db.searchNotes("Body");
+      expect(search.length).toBe(2);
     });
 
     it("backward-compat: single-note path works when items absent", async () => {
@@ -331,5 +336,189 @@ describe("goop_save_note tool", () => {
       expect(result).toContain("Field Note saved:");
       expect(result).toContain("fn_");
     });
+
+    it("patches an existing note via note_id", async () => {
+      const tool = createGoopSaveNoteTool(ctx);
+      const createResult = await tool.execute(
+        {
+          title: "Patch target",
+          body: "alpha beta gamma",
+          tags: ["patch"],
+          source_agent: "agent",
+        },
+        toolCtx,
+      );
+
+      const idMatch = String(createResult).match(/fn_\d{8}_[a-z0-9]+/);
+      const noteId = idMatch?.[0] ?? "";
+
+      const patchResult = await tool.execute(
+        {
+          note_id: noteId,
+          old_string: "beta",
+          new_string: "BETA",
+        },
+        toolCtx,
+      );
+
+      expect(patchResult).toContain(noteId);
+      expect(patchResult).toContain("patched");
+
+      const note = ctx.db.getNoteById(noteId);
+      expect(note?.body).toBe("alpha BETA gamma");
+    });
+
+    it("surfaces patch errors as a tool error string", async () => {
+      const tool = createGoopSaveNoteTool(ctx);
+      const createResult = await tool.execute(
+        {
+          title: "Patch target",
+          body: "alpha beta gamma",
+          tags: ["patch"],
+          source_agent: "agent",
+        },
+        toolCtx,
+      );
+
+      const idMatch = String(createResult).match(/fn_\d{8}_[a-z0-9]+/);
+      const noteId = idMatch?.[0] ?? "";
+
+      const patchResult = await tool.execute(
+        {
+          note_id: noteId,
+          old_string: "missing text",
+          new_string: "BETA",
+        },
+        toolCtx,
+      );
+
+      expect(patchResult).toContain("Error");
+      expect(patchResult).toContain("did not appear verbatim");
+
+      const note = ctx.db.getNoteById(noteId);
+      expect(note?.body).toBe("alpha beta gamma");
+    });
+
+    it("requires old_string when note_id is provided", async () => {
+      const tool = createGoopSaveNoteTool(ctx);
+      const result = await tool.execute(
+        {
+          note_id: "fn_20260618_missing0001",
+          new_string: "replacement",
+        },
+        toolCtx,
+      );
+      expect(result).toContain("Error");
+      expect(result).toContain("old_string is required when note_id is provided");
+    });
+
+    it("mixes create and patch items in one batch call", async () => {
+      const tool = createGoopSaveNoteTool(ctx);
+      const createResult = await tool.execute(
+        {
+          title: "Patch target",
+          body: "foo bar baz",
+          tags: ["patch"],
+          source_agent: "agent",
+        },
+        toolCtx,
+      );
+
+      const idMatch = String(createResult).match(/fn_\d{8}_[a-z0-9]+/);
+      const noteId = idMatch?.[0] ?? "";
+
+      const batchResult = await tool.execute(
+        {
+          title: "",
+          body: "",
+          tags: [],
+          source_agent: "agent",
+          items: [
+            { title: "Fresh note", body: "Fresh body", tags: ["new"], source_agent: "agent" },
+            { note_id: noteId, old_string: "bar", new_string: "BAR" },
+          ],
+        },
+        toolCtx,
+      );
+
+      expect(batchResult).toContain("2/2 succeeded");
+
+      const patchedNote = ctx.db.getNoteById(noteId);
+      expect(patchedNote?.body).toBe("foo BAR baz");
+
+      const search = ctx.db.searchNotes("Fresh body");
+      expect(search.length).toBe(1);
+      expect(search[0].title).toBe("Fresh note");
+    });
+
+    it("partial success: valid creates persist despite a failed patch", async () => {
+      const tool = createGoopSaveNoteTool(ctx);
+
+      const batchResult = await tool.execute(
+        {
+          title: "",
+          body: "",
+          tags: [],
+          source_agent: "agent",
+          items: [
+            {
+              title: "First note",
+              body: "first-unique-body-abc",
+              tags: ["a"],
+              source_agent: "agent",
+            },
+            { note_id: "fn_20260618_missing0001", old_string: "no match", new_string: "x" },
+            {
+              title: "Third note",
+              body: "third-unique-body-xyz",
+              tags: ["c"],
+              source_agent: "agent",
+            },
+          ],
+        },
+        toolCtx,
+      );
+
+      expect(batchResult).toContain("2/3 succeeded");
+      expect(batchResult).toContain("FAIL");
+
+      const firstSearch = ctx.db.searchNotes("first-unique-body-abc");
+      expect(firstSearch.length).toBe(1);
+      expect(firstSearch[0].title).toBe("First note");
+
+      const thirdSearch = ctx.db.searchNotes("third-unique-body-xyz");
+      expect(thirdSearch.length).toBe(1);
+      expect(thirdSearch[0].title).toBe("Third note");
+    });
+  });
+
+  // -----------------------------------------------------------------------
+  // Backward compatibility
+  // -----------------------------------------------------------------------
+
+  it("backward-compat: plain create call still behaves as before", async () => {
+    const tool = createGoopSaveNoteTool(ctx);
+    const result = String(
+      await tool.execute(
+        {
+          title: "Plain create",
+          body: "Plain body",
+          tags: ["plain"],
+          source_agent: "goop-tester",
+          importance: 6,
+        },
+        toolCtx,
+      ),
+    );
+
+    expect(result).toContain("Field Note saved:");
+    expect(result).toContain("Plain create");
+    expect(result).toContain("plain");
+
+    const idMatch = result.match(/fn_\d{8}_[a-z0-9]+/);
+    const note = ctx.db.getNoteById(idMatch?.[0] ?? "");
+    expect(note?.body).toBe("Plain body");
+    expect(note?.importance).toBe(6);
+    expect(JSON.parse(note?.tags ?? "[]")).toEqual(["plain"]);
   });
 });
