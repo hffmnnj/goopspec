@@ -59,6 +59,53 @@ describe("memory_save tool", () => {
     expect(result).toContain("**Concepts:** patterns, architecture");
   });
 
+  it("passes the optional deduplicate flag to the memory manager", async () => {
+    const tool = createMemorySaveTool(ctx);
+    const save = ctx.memory.save;
+    let receivedDeduplicate: boolean | undefined;
+    ctx.memory.save = async (input) => {
+      receivedDeduplicate = input.deduplicate;
+      return save(input);
+    };
+
+    const result = await tool.execute(
+      {
+        title: "Prefer FTS5 for local search",
+        content: "SQLite FTS5 keeps memory retrieval local and dependency-free.",
+        importance: 8,
+        deduplicate: true,
+      },
+      toolCtx,
+    );
+
+    expect(result).toContain("**ID:** 1");
+    expect(result).toContain("**Importance:** 8/10");
+    expect(receivedDeduplicate).toBe(true);
+  });
+
+  it("omits deduplicate entirely from the tool args and still behaves as before", async () => {
+    const tool = createMemorySaveTool(ctx);
+    const save = ctx.memory.save;
+    let receivedInput: Parameters<typeof save>[0] | undefined;
+    ctx.memory.save = async (input) => {
+      receivedInput = input;
+      return save(input);
+    };
+
+    const result = await tool.execute(
+      {
+        title: "No deduplicate flag",
+        content: "Tool call without deduplicate must keep the prior save behavior.",
+      },
+      toolCtx,
+    );
+
+    expect(result).toContain("Memory saved successfully!");
+    expect(result).toContain("**ID:** 1");
+    expect(receivedInput?.deduplicate).toBeUndefined();
+    expect(receivedInput?.title).toBe("No deduplicate flag");
+  });
+
   // -------------------------------------------------------------------------
   // Decision type (absorbs old memory_decision)
   // -------------------------------------------------------------------------

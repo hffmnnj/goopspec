@@ -118,6 +118,10 @@ export function createMemorySaveTool(ctx: PluginContext): ToolDefinition {
         .array(tool.schema.string())
         .optional()
         .describe("Alternatives considered"),
+      deduplicate: tool.schema
+        .boolean()
+        .optional()
+        .describe("Consolidate a near-duplicate memory instead of inserting a new entry"),
     },
     async execute(
       args: {
@@ -130,6 +134,7 @@ export function createMemorySaveTool(ctx: PluginContext): ToolDefinition {
         sourceFiles?: string[];
         reasoning?: string;
         alternatives?: string[];
+        deduplicate?: boolean;
       },
       _context: ToolContext,
     ): Promise<string> {
@@ -169,6 +174,7 @@ export function createMemorySaveTool(ctx: PluginContext): ToolDefinition {
           importance,
           reasoning: memoryType === "decision" ? args.reasoning : undefined,
           alternatives: memoryType === "decision" ? args.alternatives : undefined,
+          deduplicate: args.deduplicate,
         });
 
         // Format confirmation

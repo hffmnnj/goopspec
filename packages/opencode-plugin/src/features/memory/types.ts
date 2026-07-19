@@ -36,6 +36,7 @@ export interface MemoryRow {
  */
 export interface FtsSearchRow extends MemoryRow {
   rank: number;
+  score: number;
 }
 
 /**

@@ -68,25 +68,31 @@ export function buildWorkflowSurvivalBlock(ctx: PluginContext, nextStep?: string
   }
 
   // Autopilot directives — CRITICAL for surviving compaction
-  if (workflow.autopilot) {
+  if (workflow.autopilot && !workflow.lazyAutopilot) {
     lines.push("");
     lines.push(
       "AUTOPILOT ACTIVE: Do not pause between phases. Continue to the next phase immediately. " +
         "Do not suggest starting a new session. Keep driving phase transitions unattended.",
     );
+    lines.push(
+      "Hard stops still apply per phase-gates: Rule 4 architectural decisions, credentials/secrets, " +
+        "and destructive/irreversible operations.",
+    );
   }
 
-  if (workflow.lazyAutopilot) {
+  if (workflow.autopilot && workflow.lazyAutopilot) {
     lines.push("");
     lines.push("LAZY AUTOPILOT ACTIVE. Rules:");
     lines.push("- Do NOT ask the user any questions.");
     lines.push("- Do NOT pause for phase confirmations or reviews.");
     lines.push("- Do NOT request clarifications — infer from context.");
     lines.push(
-      "- ONLY stop for: (1) Rule 4 architectural decisions, " +
-        "(2) missing credentials/secrets, " +
-        "(3) ambiguous destructive operations, " +
-        "(4) external blockers.",
+      "- ONLY stop for: (1) missing credentials/secrets, " +
+        "(2) ambiguous destructive/irreversible operations.",
+    );
+    lines.push(
+      "- On a Rule 4 architectural decision, decide autonomously using best judgment. " +
+        "Log full rationale to ADL via goop_adl (rule, issue, decision, reasoning, affected files) — do not pause.",
     );
     lines.push("- For ALL other situations: make your best inference and continue.");
   }

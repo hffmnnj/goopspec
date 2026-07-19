@@ -47,7 +47,7 @@ All bypasses must be logged via `goop_adl`.
 
 ## Autopilot Behavior
 
-Autopilot and lazy-autopilot reduce human checkpoints but do not relax rules.
+Lazy autopilot relaxes checkpoint/pause behavior (skips the discovery interview, in-flight questions, and the contract-gate confirmation), but the spec-lock requirement and acceptance gate remain absolute and non-negotiable in both autopilot and lazy-autopilot modes.
 
 ### What Changes
 
@@ -70,11 +70,22 @@ All bypasses and rule applications must be appended via `goop_adl` with the rule
 
 ### Hard Stops in Autopilot
 
+#### Regular Autopilot
+
 Stop and wait for user input only for:
 
 1. Rule 4 architectural decisions.
 2. Credentials or secrets.
 3. Destructive, irreversible operations.
+
+#### Lazy Autopilot
+
+Stop and wait for user input only for:
+
+1. Credentials or secrets.
+2. Destructive, irreversible operations.
+
+On a Rule 4 trigger, decide autonomously using best judgment (do not pause to ask the user). Log the full rationale to ADL via `goop_adl` for every such call, including the rule number, the issue, the decision made, the reasoning, and the affected files.
 
 ### Phase Transition Rule
 

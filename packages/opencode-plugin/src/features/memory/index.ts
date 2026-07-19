@@ -20,6 +20,9 @@ import type { FtsSearchRow, MemoryManagerOptions, MemoryRow } from "./types.js";
 /** Named parameter bindings accepted by bun:sqlite. */
 type NamedBindings = Record<string, string | bigint | number | boolean | null>;
 
+const DEDUPLICATION_SIMILARITY_THRESHOLD = 0.85;
+const DEDUPLICATION_CANDIDATE_LIMIT = 20;
+
 // ---------------------------------------------------------------------------
 // Row ↔ MemoryEntry conversion
 // ---------------------------------------------------------------------------
@@ -58,13 +61,22 @@ function safeParse(json: string): string[] {
  * double-quotes with a prefix wildcard, and joins with OR.
  */
 function sanitiseFtsQuery(raw: string): string {
+  return tokeniseFtsQuery(raw)
+    .map((token) => `"${token}"*`)
+    .join(" OR ");
+}
+
+/**
+ * Extract the safe query tokens shared by FTS query construction and metadata
+ * overlap scoring. Keeping this normalization in one place prevents the two
+ * retrieval signals from interpreting user input differently.
+ */
+function tokeniseFtsQuery(raw: string): string[] {
   return raw
     .replace(/[*"(){}:^~<>]/g, " ")
     .trim()
     .split(/\s+/)
-    .filter((w) => w.length > 0)
-    .map((w) => `"${w}"*`)
-    .join(" OR ");
+    .filter((token) => token.length > 0);
 }
 
 // ---------------------------------------------------------------------------
@@ -94,6 +106,14 @@ export class SqliteMemoryManager implements MemoryManager {
     try {
       const importance = clampImportance(input.importance);
       const now = Math.floor(Date.now() / 1000);
+      const content = buildContent(input);
+
+      if (input.deduplicate) {
+        const duplicate = this.findNearDuplicate(`${input.title} ${content}`);
+        if (duplicate) {
+          return this.reinforceDuplicate(duplicate.id, importance, now);
+        }
+      }
 
       const row = this.db
         .query<MemoryRow, NamedBindings>(
@@ -104,7 +124,7 @@ export class SqliteMemoryManager implements MemoryManager {
         .get({
           $type: input.type,
           $title: input.title,
-          $content: buildContent(input),
+          $content: content,
           $facts: JSON.stringify(input.facts ?? []),
           $concepts: JSON.stringify(input.concepts ?? []),
           $sourceFiles: JSON.stringify(input.sourceFiles ?? []),
@@ -210,26 +230,32 @@ export class SqliteMemoryManager implements MemoryManager {
     const ftsQuery = sanitiseFtsQuery(options.query);
     if (!ftsQuery) return [];
 
+    const queryTokens = tokeniseFtsQuery(options.query);
     const { whereClause, params } = buildFilters(options);
     const limit = options.limit ?? 10;
+    const candidateLimit = conceptBoostCandidateLimit(limit);
 
-    // BM25 weights: title=10, content=5, facts=2, concepts=2
+    // Keep the score fragments separate so additional retrieval signals can
+    // extend the final score without rewriting the base relevance formula.
+    const decayFactorSql = memoryDecayFactorSql("m.created_at");
+    const bm25ScoreSql = "ABS(bm25(memories_fts, 10.0, 5.0, 2.0, 2.0))";
+    const relevanceScoreSql = `(${bm25ScoreSql} * (m.importance / 10.0))`;
+    const finalScoreSql = `(${relevanceScoreSql} * ${decayFactorSql})`;
+
+    // BM25 weights: title=10, content=5, facts=2, concepts=2.
     const sql = `
-      SELECT m.*, bm25(memories_fts, 10.0, 5.0, 2.0, 2.0) AS rank
+      SELECT m.*, bm25(memories_fts, 10.0, 5.0, 2.0, 2.0) AS rank,
+        ${finalScoreSql} AS score
       FROM memories m
       JOIN memories_fts ON m.id = memories_fts.rowid
       WHERE memories_fts MATCH '${ftsQuery}' ${whereClause}
-      ORDER BY (ABS(rank) * (m.importance / 10.0)) DESC
-      LIMIT ${limit}
+      ORDER BY score DESC
+      LIMIT ${candidateLimit}
     `;
 
     const rows = this.db.query<FtsSearchRow, NamedBindings>(sql).all(params);
 
-    return rows.map((row) => ({
-      memory: rowToEntry(row),
-      score: roundScore(Math.abs(row.rank) * (row.importance / 10)),
-      matchType: "fts" as const,
-    }));
+    return scoreAndLimitResults(rows, queryTokens, limit, (row) => row.score);
   }
 
   // -----------------------------------------------------------------------
@@ -240,24 +266,83 @@ export class SqliteMemoryManager implements MemoryManager {
     const pattern = `%${options.query.replace(/%/g, "\\%").replace(/_/g, "\\_")}%`;
     const { whereClause, params } = buildFilters(options);
     const limit = options.limit ?? 10;
+    const queryTokens = tokeniseFtsQuery(options.query);
+    const candidateLimit = conceptBoostCandidateLimit(limit);
 
     params.$pattern = pattern;
+
+    const decayFactorSql = memoryDecayFactorSql("m.created_at");
+    const finalScoreSql = `((m.importance / 10.0) * ${decayFactorSql})`;
 
     const sql = `
       SELECT * FROM memories m
       WHERE (m.title LIKE $pattern ESCAPE '\\' OR m.content LIKE $pattern ESCAPE '\\' OR m.facts LIKE $pattern ESCAPE '\\' OR m.concepts LIKE $pattern ESCAPE '\\')
       ${whereClause}
-      ORDER BY m.importance DESC, m.created_at DESC
-      LIMIT ${limit}
+      ORDER BY ${finalScoreSql} DESC
+      LIMIT ${candidateLimit}
     `;
 
     const rows = this.db.query<MemoryRow, NamedBindings>(sql).all(params);
 
-    return rows.map((row) => ({
-      memory: rowToEntry(row),
-      score: roundScore(row.importance / 10),
-      matchType: "fts" as const, // Report as fts for interface compat
-    }));
+    return scoreAndLimitResults(
+      rows,
+      queryTokens,
+      limit,
+      (row) => (row.importance / 10) * memoryDecayFactor(row.created_at),
+    );
+  }
+
+  /**
+   * Select FTS5's strongest candidates, then calculate a bounded lexical
+   * similarity score over the same title/content tokens used for the MATCH
+   * query. BM25 determines candidacy and ordering; token F1 makes the 0.85
+   * threshold stable across SQLite corpora, whose BM25 magnitudes are not.
+   */
+  private findNearDuplicate(query: string): MemoryRow | null {
+    if (!this.fts5Enabled) return null;
+
+    const ftsQuery = sanitiseFtsQuery(query);
+    if (!ftsQuery) return null;
+
+    const rows = this.db
+      .query<FtsSearchRow, NamedBindings>(
+        `SELECT m.*, bm25(memories_fts, 10.0, 5.0, 2.0, 2.0) AS rank, 0 AS score
+         FROM memories m
+         JOIN memories_fts ON m.id = memories_fts.rowid
+         WHERE memories_fts MATCH '${ftsQuery}'
+         ORDER BY rank ASC
+         LIMIT ${DEDUPLICATION_CANDIDATE_LIMIT}`,
+      )
+      .all({});
+
+    let bestMatch: MemoryRow | null = null;
+    let bestSimilarity = 0;
+    for (const row of rows) {
+      const similarity = normalisedTokenF1(query, `${row.title} ${row.content}`);
+      if (similarity > bestSimilarity) {
+        bestSimilarity = similarity;
+        bestMatch = row;
+      }
+    }
+
+    return bestSimilarity >= DEDUPLICATION_SIMILARITY_THRESHOLD ? bestMatch : null;
+  }
+
+  /** Reinforce rather than overwrite a matched memory; no row is deleted. */
+  private reinforceDuplicate(id: number, importance: number, now: number): MemoryEntry {
+    const row = this.db
+      .query<MemoryRow, NamedBindings>(
+        `UPDATE memories
+         SET importance = MAX(importance, $importance), created_at = $createdAt
+         WHERE id = $id
+         RETURNING *`,
+      )
+      .get({ $id: id, $importance: importance, $createdAt: now });
+
+    if (!row) {
+      throw new Error("Duplicate reinforcement produced no row");
+    }
+    return rowToEntry(row);
   }
 }
 
@@ -283,8 +368,83 @@ function buildContent(input: MemorySaveInput): string {
   return content;
 }
 
+/**
+ * Bounded F1 overlap of distinct FTS-normalized tokens. A score of 1 means
+ * identical token sets; 0.85 requires substantial overlap in both entries.
+ */
+function normalisedTokenF1(left: string, right: string): number {
+  const leftTokens = new Set(tokeniseFtsQuery(left).map((token) => token.toLowerCase()));
+  const rightTokens = new Set(tokeniseFtsQuery(right).map((token) => token.toLowerCase()));
+  if (leftTokens.size === 0 || rightTokens.size === 0) return 0;
+
+  let shared = 0;
+  for (const token of leftTokens) {
+    if (rightTokens.has(token)) shared += 1;
+  }
+  return (2 * shared) / (leftTokens.size + rightTokens.size);
+}
+
 function roundScore(n: number): number {
   return Math.round(n * 100) / 100;
+}
+
+/**
+ * Bound the post-query scoring set while giving a metadata match room to
+ * overtake near-neighbour BM25/importance results.
+ */
+function conceptBoostCandidateLimit(limit: number): number {
+  return Math.max(limit, Math.min(limit * 5, 100));
+}
+
+/**
+ * Fraction of normalized query tokens represented in concepts or facts.
+ * Metadata arrays are short JSON payloads, so case-insensitive substring
+ * matching is both predictable and sufficient for this lightweight signal.
+ */
+function conceptBoost(row: MemoryRow, queryTokens: string[]): number {
+  if (queryTokens.length === 0) return 0;
+
+  const metadata = [...safeParse(row.concepts), ...safeParse(row.facts)].join(" ").toLowerCase();
+  const matchingTokens = queryTokens.filter((token) =>
+    metadata.includes(token.toLowerCase()),
+  ).length;
+  return Math.max(0, Math.min(1, matchingTokens / queryTokens.length));
+}
+
+function scoreAndLimitResults<T extends MemoryRow>(
+  rows: T[],
+  queryTokens: string[],
+  limit: number,
+  baseScore: (row: T) => number,
+): MemorySearchResult[] {
+  return rows
+    .map((row) => {
+      const boostedScore = baseScore(row) * (0.7 + 0.3 * conceptBoost(row, queryTokens));
+      return {
+        memory: rowToEntry(row),
+        score: boostedScore,
+      };
+    })
+    .sort((a, b) => b.score - a.score)
+    .slice(0, limit)
+    .map((result) => ({
+      ...result,
+      score: roundScore(result.score),
+      matchType: "fts" as const, // Report as fts for interface compatibility.
+    }));
+}
+
+/**
+ * Applies the retrieval recency decay specified for persisted Unix timestamps.
+ * The SQL fragment is shared by FTS5 and LIKE ranking to keep their ordering
+ * semantics identical when FTS5 is unavailable.
+ */
+function memoryDecayFactorSql(createdAtColumn: string): string {
+  return `EXP(-0.001 * (unixepoch() - ${createdAtColumn}) / 86400.0)`;
+}
+
+function memoryDecayFactor(createdAt: number): number {
+  return Math.exp((-0.001 * (Math.floor(Date.now() / 1000) - createdAt)) / 86400);
 }
 
 /**
