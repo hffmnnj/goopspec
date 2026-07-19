@@ -135,6 +135,74 @@ describe("memory_search tool", () => {
     expect(result).toContain("**RRF Score:** 0.0164");
   });
 
+  it("returns memory.db-only results when includeFieldNotes is true but no Field Notes match", async () => {
+    const tool = createMemorySearchTool(ctx);
+    const result = await tool.execute({ query: "repository", includeFieldNotes: true }, toolCtx);
+
+    expect(result).toContain("Repository pattern in data layer");
+    expect(result).toContain("**Origin:** memory");
+    expect(result).not.toContain("**Origin:** field_note");
+  });
+
+  it("orders cross-store results by RRF score (k=60)", async () => {
+    // Seed a second memory so memory.db has a clear top-two ranking.
+    await ctx.memory.save({
+      type: "note",
+      title: "Repository pattern second memory",
+      content: "Another repository pattern mention with lower score.",
+      concepts: ["patterns"],
+      importance: 4,
+    });
+
+    ctx.db.saveNote({
+      id: "fn_20260719_rrf02",
+      title: "Repository Field Note runner-up",
+      body: "Repository pattern described here but ranked second in Field Notes.",
+      tags: '["patterns"]',
+      source_agent: "goop-researcher",
+      importance: 7,
+      workflow_id: null,
+      project_id: null,
+    });
+
+    ctx.db.saveNote({
+      id: "fn_20260719_rrf01",
+      title: "Repository Field Note winner",
+      body: "The repository pattern wins in the Field Notes ranking.",
+      tags: '["architecture", "patterns"]',
+      source_agent: "goop-researcher",
+      importance: 9,
+      workflow_id: null,
+      project_id: null,
+    });
+
+    const tool = createMemorySearchTool(ctx);
+    const result = await tool.execute(
+      { query: "repository", includeFieldNotes: true, limit: 4 },
+      toolCtx,
+    );
+
+    // RRF scores with k=60:
+    //   memory #1 (rank 1)  -> 1 / 61  ≈ 0.016393
+    //   field_note #1       -> 1 / 61  ≈ 0.016393  (tied, stable sort keeps memory first)
+    //   memory #2 (rank 2)  -> 1 / 62  ≈ 0.016129
+    //   field_note #2       -> 1 / 62  ≈ 0.016129  (tied, stable sort keeps memory first)
+    const output = String(result);
+    const firstMemory = output.indexOf("Repository pattern in data layer");
+    const firstNote = output.indexOf("Repository Field Note winner");
+    const secondMemory = output.indexOf("Repository pattern second memory");
+    const secondNote = output.indexOf("Repository Field Note runner-up");
+
+    expect(firstMemory).toBeGreaterThan(-1);
+    expect(firstNote).toBeGreaterThan(-1);
+    expect(secondMemory).toBeGreaterThan(-1);
+    expect(secondNote).toBeGreaterThan(-1);
+
+    expect(firstMemory).toBeLessThan(firstNote);
+    expect(firstNote).toBeLessThan(secondMemory);
+    expect(secondMemory).toBeLessThan(secondNote);
+  });
+
   // -------------------------------------------------------------------------
   // Filters
   // -------------------------------------------------------------------------
