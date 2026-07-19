@@ -56,6 +56,14 @@ export const DEFAULT_MODEL_MAP: Record<AgentRole, string> = {
 export const THINKING_LEVELS = ["none", "low", "medium", "high", "xhigh"] as const;
 export type ThinkingLevel = (typeof THINKING_LEVELS)[number];
 
+/** Loop-detection configuration (MH6). */
+export interface LoopDetectionConfig {
+  enabled?: boolean;
+  tier1Threshold?: number;
+  windowSize?: number;
+  tier2Threshold?: number;
+}
+
 /** Persisted project-level config stored in `.goopspec/config.json`. */
 export interface GoopConfig {
   projectName?: string;
@@ -65,6 +73,7 @@ export interface GoopConfig {
   agentModels?: Partial<Record<string, string>>;
   agentThinkingLevels?: Partial<Record<string, ThinkingLevel>>;
   agentThinkingBudgets?: Partial<Record<string, number>>;
+  loopDetection?: LoopDetectionConfig;
   memoryEnabled?: boolean;
   gitignoreGoopspec?: boolean;
 }
@@ -402,6 +411,32 @@ export function normalizeConfig(raw: Record<string, unknown>): GoopConfig {
     }
   }
 
+  // Loop-detection config (MH6) — validate per-field, keep valid ones
+  if (raw.loopDetection && typeof raw.loopDetection === "object") {
+    config.loopDetection = {};
+    const incoming = raw.loopDetection as Record<string, unknown>;
+
+    if (typeof incoming.enabled === "boolean") {
+      config.loopDetection.enabled = incoming.enabled;
+    } else if ("enabled" in incoming) {
+      logError("normalizeConfig: loopDetection.enabled must be a boolean — skipping.");
+    }
+
+    for (const key of ["tier1Threshold", "windowSize", "tier2Threshold"] as const) {
+      const value = incoming[key];
+      if (
+        typeof value === "number" &&
+        Number.isFinite(value) &&
+        value > 0 &&
+        Number.isInteger(value)
+      ) {
+        config.loopDetection[key] = value;
+      } else if (key in incoming) {
+        logError(`normalizeConfig: loopDetection.${key} must be a positive integer — skipping.`);
+      }
+    }
+  }
+
   // New format: agentModels (bare role → model string)
   if (raw.agentModels && typeof raw.agentModels === "object") {
     config.agentModels = {};
@@ -500,6 +535,10 @@ export function loadMergedConfig(projectDir: string): GoopConfig {
           normalized.agentThinkingBudgets !== undefined
             ? { ...(merged.agentThinkingBudgets ?? {}), ...normalized.agentThinkingBudgets }
             : merged.agentThinkingBudgets,
+        loopDetection:
+          normalized.loopDetection !== undefined
+            ? { ...(merged.loopDetection ?? {}), ...normalized.loopDetection }
+            : merged.loopDetection,
       };
     } catch {
       log(`loadMergedConfig: skipping unreadable file ${filePath}`);
@@ -556,6 +595,27 @@ export function getEffectiveThinkingLevels(projectDir: string): Record<AgentRole
   }
 
   return base;
+}
+
+/** Default loop-detection settings (MH6). */
+const DEFAULT_LOOP_DETECTION: Required<LoopDetectionConfig> = {
+  enabled: true,
+  tier1Threshold: 3,
+  windowSize: 5,
+  tier2Threshold: 4,
+};
+
+/**
+ * Resolve the effective loop-detection config, applying defaults for any missing
+ * or undefined field. Exported for consumers in the loop-detection hook.
+ */
+export function resolveLoopDetectionConfig(config: GoopConfig): Required<LoopDetectionConfig> {
+  return {
+    enabled: config.loopDetection?.enabled ?? DEFAULT_LOOP_DETECTION.enabled,
+    tier1Threshold: config.loopDetection?.tier1Threshold ?? DEFAULT_LOOP_DETECTION.tier1Threshold,
+    windowSize: config.loopDetection?.windowSize ?? DEFAULT_LOOP_DETECTION.windowSize,
+    tier2Threshold: config.loopDetection?.tier2Threshold ?? DEFAULT_LOOP_DETECTION.tier2Threshold,
+  };
 }
 
 /**
