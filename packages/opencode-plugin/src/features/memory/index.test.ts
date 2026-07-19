@@ -1,9 +1,10 @@
+import type { Database } from "bun:sqlite";
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { existsSync, mkdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import type { MemorySaveInput } from "../../core/types.js";
+import type { MemoryEntry, MemorySaveInput } from "../../core/types.js";
 import { SqliteMemoryManager, createMemoryManager } from "./index.js";
 
 // ---------------------------------------------------------------------------
@@ -459,6 +460,228 @@ describe("SqliteMemoryManager", () => {
     it("getById never throws on bad id", async () => {
       const result = await mgr.getById(-1);
       expect(result).toBeNull();
+    });
+  });
+
+  // -----------------------------------------------------------------------
+  // retrieval-quality regression: decay + concept boosting
+  // -----------------------------------------------------------------------
+
+  describe("retrieval-quality regression", () => {
+    /**
+     * Insert a memory with an explicit created_at timestamp. Used to build
+     * ranking fixtures where age is the only variable.
+     */
+    function saveAt(
+      manager: SqliteMemoryManager,
+      input: MemorySaveInput,
+      createdAt: number,
+    ): Promise<MemoryEntry> {
+      // Save normally, then patch created_at directly in the DB so the FTS
+      // trigger already fired and the content index is consistent.
+      return manager.save(input).then((entry) => {
+        const db = (manager as unknown as { db: Database }).db;
+        db.query("UPDATE memories SET created_at = $createdAt WHERE id = $id").run({
+          $id: entry.id,
+          $createdAt: createdAt,
+        });
+        return manager.getById(entry.id) as Promise<MemoryEntry>;
+      });
+    }
+
+    /**
+     * Force the manager onto the LIKE fallback path by flipping the FTS5
+     * flag. The database still has the FTS5 table, but search() takes the
+     * non-FTS branch.
+     */
+    function useLikeFallback(manager: SqliteMemoryManager): () => void {
+      const original = (manager as unknown as { fts5Enabled: boolean }).fts5Enabled;
+      (manager as unknown as { fts5Enabled: boolean }).fts5Enabled = false;
+      return () => {
+        (manager as unknown as { fts5Enabled: boolean }).fts5Enabled = original;
+      };
+    }
+
+    it("ranks newer memories first when BM25 relevance and importance are equal", async () => {
+      const now = Math.floor(Date.now() / 1000);
+      const oneDayAgo = now - 86_400;
+      const tenDaysAgo = now - 864_000;
+
+      await saveAt(
+        mgr,
+        {
+          ...baseSaveInput,
+          title: "Older ranking note",
+          content: "identical retrieval ranking signal",
+          facts: [],
+          concepts: [],
+          importance: 7,
+        },
+        tenDaysAgo,
+      );
+
+      await saveAt(
+        mgr,
+        {
+          ...baseSaveInput,
+          title: "Newer ranking note",
+          content: "identical retrieval ranking signal",
+          facts: [],
+          concepts: [],
+          importance: 7,
+        },
+        oneDayAgo,
+      );
+
+      const results = await mgr.search({ query: "identical retrieval ranking signal" });
+
+      expect(results).toHaveLength(2);
+      expect(results[0].memory.title).toBe("Newer ranking note");
+      expect(results[1].memory.title).toBe("Older ranking note");
+      // Decay drives the ordering; the rounded FTS scores are too small to
+      // compare numerically, so we assert on the timestamp invariant.
+      expect(results[0].memory.createdAt).toBeGreaterThan(results[1].memory.createdAt);
+    });
+
+    it("concept-boost ordering raises an overlapping memory above an otherwise-equal peer", async () => {
+      await mgr.save({
+        ...baseSaveInput,
+        title: "Concept overlap",
+        content: "shared concept boost signal",
+        facts: [],
+        concepts: ["boost"],
+        importance: 7,
+      });
+      await mgr.save({
+        ...baseSaveInput,
+        title: "No concept overlap",
+        content: "shared concept boost signal",
+        facts: [],
+        concepts: ["unrelated"],
+        importance: 7,
+      });
+
+      const results = await mgr.search({ query: "shared concept boost signal" });
+
+      expect(results).toHaveLength(2);
+      expect(results[0].memory.title).toBe("Concept overlap");
+      expect(results[0].memory.concepts).toContain("boost");
+    });
+
+    it("preserves sane top results for representative baseline queries", async () => {
+      // Three obviously-different memories that should keep their distinct
+      // top positions under the new scoring for typical queries.
+      await mgr.save({
+        ...baseSaveInput,
+        type: "observation",
+        title: "React hooks pattern",
+        content: "useEffect cleanup avoids stale closures",
+        concepts: ["react"],
+        importance: 6,
+      });
+      await mgr.save({
+        ...baseSaveInput,
+        type: "decision",
+        title: "Chose Vitest",
+        content: "Better Bun integration for our test suite",
+        concepts: ["vitest", "bun"],
+        importance: 8,
+      });
+      await mgr.save({
+        ...baseSaveInput,
+        type: "note",
+        title: "Update documentation",
+        content: "Remember to update docs before release",
+        concepts: ["docs"],
+        importance: 4,
+      });
+
+      const vitestResults = await mgr.search({ query: "Vitest Bun integration" });
+      expect(vitestResults.length).toBeGreaterThanOrEqual(1);
+      expect(vitestResults[0].memory.title).toBe("Chose Vitest");
+
+      const reactResults = await mgr.search({ query: "React hooks useEffect" });
+      expect(reactResults.length).toBeGreaterThanOrEqual(1);
+      expect(reactResults[0].memory.title).toBe("React hooks pattern");
+
+      const docsResults = await mgr.search({ query: "update docs" });
+      expect(docsResults.length).toBeGreaterThanOrEqual(1);
+      expect(docsResults[0].memory.title).toBe("Update documentation");
+    });
+
+    it("decay ordering holds on the LIKE fallback path", async () => {
+      const restore = useLikeFallback(mgr);
+      const now = Math.floor(Date.now() / 1000);
+      const oneDayAgo = now - 86_400;
+      const tenDaysAgo = now - 864_000;
+
+      try {
+        await saveAt(
+          mgr,
+          {
+            ...baseSaveInput,
+            title: "Older like fallback note",
+            content: "fallback decay ranking signal",
+            facts: [],
+            concepts: [],
+            importance: 7,
+          },
+          tenDaysAgo,
+        );
+
+        await saveAt(
+          mgr,
+          {
+            ...baseSaveInput,
+            title: "Newer like fallback note",
+            content: "fallback decay ranking signal",
+            facts: [],
+            concepts: [],
+            importance: 7,
+          },
+          oneDayAgo,
+        );
+
+        const results = await mgr.search({ query: "fallback decay ranking signal" });
+
+        expect(results).toHaveLength(2);
+        expect(results[0].memory.title).toBe("Newer like fallback note");
+        expect(results[1].memory.title).toBe("Older like fallback note");
+        expect(results[0].memory.createdAt).toBeGreaterThan(results[1].memory.createdAt);
+      } finally {
+        restore();
+      }
+    });
+
+    it("concept-boost ordering holds on the LIKE fallback path", async () => {
+      const restore = useLikeFallback(mgr);
+
+      try {
+        await mgr.save({
+          ...baseSaveInput,
+          title: "Like fallback concept overlap",
+          content: "fallback concept boost signal",
+          facts: [],
+          concepts: ["fallback"],
+          importance: 7,
+        });
+        await mgr.save({
+          ...baseSaveInput,
+          title: "Like fallback no overlap",
+          content: "fallback concept boost signal",
+          facts: [],
+          concepts: ["unrelated"],
+          importance: 7,
+        });
+
+        const results = await mgr.search({ query: "fallback concept boost signal" });
+
+        expect(results).toHaveLength(2);
+        expect(results[0].memory.title).toBe("Like fallback concept overlap");
+        expect(results[0].memory.concepts).toContain("fallback");
+      } finally {
+        restore();
+      }
     });
   });
 
