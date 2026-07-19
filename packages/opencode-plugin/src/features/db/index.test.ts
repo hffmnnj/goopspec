@@ -457,7 +457,11 @@ describe("GoopSpecDB", () => {
       const db = new GoopSpecDB(":memory:");
       db.saveNote({ ...baseNote, body: "foo bar foo" });
 
-      const result = db.updateNote(baseNote.id, { oldString: "foo", newString: "baz", replaceAll: true });
+      const result = db.updateNote(baseNote.id, {
+        oldString: "foo",
+        newString: "baz",
+        replaceAll: true,
+      });
       expect(result).toEqual({ ok: true });
 
       const note = db.getNoteById(baseNote.id);
