@@ -6,7 +6,6 @@ import type { Hooks } from "./types.js";
 
 type EventInput = { event: SdkEvent };
 
-/** Build a minimal SDK Session object for event payloads. */
 function makeSdkSession(id: string) {
   return {
     id,
@@ -17,6 +16,10 @@ function makeSdkSession(id: string) {
     version: "1",
     time: { created: Date.now(), updated: Date.now() },
   };
+}
+
+function idleEvent(sessionID: string): EventInput {
+  return { event: { type: "session.idle", properties: { sessionID } } as SdkEvent };
 }
 
 describe("event-handler hook", () => {
@@ -31,38 +34,25 @@ describe("event-handler hook", () => {
 
   afterEach(() => cleanup());
 
-  // -----------------------------------------------------------------------
-  // session.created
-  // -----------------------------------------------------------------------
-
   it("registers a session on session.created", async () => {
     const ctx = createMockPluginContext({ testDir });
-    const hooks = createEventHandlerHook(ctx);
-    const handler = hooks.event as NonNullable<Hooks["event"]>;
-
-    const input: EventInput = {
+    const handler = createEventHandlerHook(ctx).event as NonNullable<Hooks["event"]>;
+    await handler({
       event: {
         type: "session.created",
         properties: { info: makeSdkSession("sess-1") },
       } as SdkEvent,
-    };
-
-    await handler(input);
-
-    const session = ctx.sessionManager.get("sess-1");
-    expect(session).toBeDefined();
-    expect(session?.info.id).toBe("sess-1");
+    });
+    expect(ctx.sessionManager.get("sess-1")?.info.id).toBe("sess-1");
   });
 
-  it("does not duplicate session on repeated session.created", async () => {
+  it("does not duplicate a repeated session.created event", async () => {
     const ctx = createMockPluginContext({ testDir });
-    const hooks = createEventHandlerHook(ctx);
-    const handler = hooks.event as NonNullable<Hooks["event"]>;
-
+    const handler = createEventHandlerHook(ctx).event as NonNullable<Hooks["event"]>;
     const input: EventInput = {
       event: {
         type: "session.created",
-        properties: { info: makeSdkSession("sess-dup") },
+        properties: { info: makeSdkSession("sess-duplicate") },
       } as SdkEvent,
     };
 
@@ -72,204 +62,112 @@ describe("event-handler hook", () => {
     expect(ctx.sessionManager.size()).toBe(1);
   });
 
-  // -----------------------------------------------------------------------
-  // session.idle
-  // -----------------------------------------------------------------------
-
-  it("marks a tracked session idle on session.idle", async () => {
-    const ctx = createMockPluginContext({ testDir });
-    const hooks = createEventHandlerHook(ctx);
-    const handler = hooks.event as NonNullable<Hooks["event"]>;
-
-    // First create the session
-    ctx.sessionManager.create("sess-idle");
-
-    const input: EventInput = {
-      event: {
-        type: "session.idle",
-        properties: { sessionID: "sess-idle" },
-      } as SdkEvent,
-    };
-
-    await handler(input);
-
-    const session = ctx.sessionManager.get("sess-idle");
-    expect(session?.meta.idleSince).not.toBeNull();
-  });
-
-  it("marks a tracked session idle without dispatching a compaction", async () => {
+  it("marks a tracked session idle and dispatches queued compaction with auto", async () => {
     const ctx = createMockPluginContext({ testDir });
     const summarize = mock(async () => ({ data: true }));
     Object.assign(ctx.sdk.client, { session: { summarize } });
     ctx.sessionManager.create("sess-compact");
-    ctx.compactionHandoff.set("sess-compact", "Resume after compaction.");
     ctx.pendingCompactions.set("sess-compact", {
       model: { providerID: "opencode", modelID: "deepseek-v4" },
-      status: "in-flight",
+      status: "queued",
     });
-    const hooks = createEventHandlerHook(ctx);
-    const handler = hooks.event as NonNullable<Hooks["event"]>;
+    const handler = createEventHandlerHook(ctx).event as NonNullable<Hooks["event"]>;
 
-    await handler({
-      event: {
-        type: "session.idle",
-        properties: { sessionID: "sess-compact" },
-      } as SdkEvent,
-    });
+    await handler(idleEvent("sess-compact"));
 
     expect(ctx.sessionManager.get("sess-compact")?.meta.idleSince).not.toBeNull();
-    expect(summarize).not.toHaveBeenCalled();
-    expect(ctx.pendingCompactions.has("sess-compact")).toBeTrue();
+    expect(summarize).toHaveBeenCalledWith({
+      path: { id: "sess-compact" },
+      body: { providerID: "opencode", modelID: "deepseek-v4", auto: true },
+    });
   });
 
-  it("ignores session.idle for untracked sessions", async () => {
+  it("dispatches queued compaction for untracked sessions", async () => {
     const ctx = createMockPluginContext({ testDir });
-    const hooks = createEventHandlerHook(ctx);
-    const handler = hooks.event as NonNullable<Hooks["event"]>;
+    const summarize = mock(async () => ({ data: true }));
+    Object.assign(ctx.sdk.client, { session: { summarize } });
+    ctx.pendingCompactions.set("unknown-sess", {
+      model: { providerID: "opencode", modelID: "deepseek-v4" },
+      status: "queued",
+    });
+    const handler = createEventHandlerHook(ctx).event as NonNullable<Hooks["event"]>;
 
-    const input: EventInput = {
-      event: {
-        type: "session.idle",
-        properties: { sessionID: "unknown-sess" },
-      } as SdkEvent,
-    };
-
-    // Should not throw
-    await handler(input);
+    await handler(idleEvent("unknown-sess"));
 
     expect(ctx.sessionManager.size()).toBe(0);
+    expect(summarize).toHaveBeenCalledWith({
+      path: { id: "unknown-sess" },
+      body: { providerID: "opencode", modelID: "deepseek-v4", auto: true },
+    });
   });
-
-  // -----------------------------------------------------------------------
-  // session.deleted
-  // -----------------------------------------------------------------------
 
   it("removes a session on session.deleted", async () => {
     const ctx = createMockPluginContext({ testDir });
-    const hooks = createEventHandlerHook(ctx);
-    const handler = hooks.event as NonNullable<Hooks["event"]>;
-
-    // Pre-register the session
     ctx.sessionManager.create("sess-del");
-    expect(ctx.sessionManager.size()).toBe(1);
-
-    const input: EventInput = {
+    const handler = createEventHandlerHook(ctx).event as NonNullable<Hooks["event"]>;
+    await handler({
       event: {
         type: "session.deleted",
         properties: { info: makeSdkSession("sess-del") },
       } as SdkEvent,
-    };
-
-    await handler(input);
-
+    });
     expect(ctx.sessionManager.get("sess-del")).toBeUndefined();
-    expect(ctx.sessionManager.size()).toBe(0);
   });
 
   it("does not throw when deleting an untracked session", async () => {
     const ctx = createMockPluginContext({ testDir });
-    const hooks = createEventHandlerHook(ctx);
-    const handler = hooks.event as NonNullable<Hooks["event"]>;
+    const handler = createEventHandlerHook(ctx).event as NonNullable<Hooks["event"]>;
 
-    const input: EventInput = {
+    await handler({
       event: {
         type: "session.deleted",
-        properties: { info: makeSdkSession("nonexistent") },
+        properties: { info: makeSdkSession("missing-session") },
       } as SdkEvent,
-    };
+    });
 
-    // Should not throw
-    await handler(input);
     expect(ctx.sessionManager.size()).toBe(0);
   });
-
-  // -----------------------------------------------------------------------
-  // Unknown event types — silently ignored
-  // -----------------------------------------------------------------------
 
   it("silently ignores unknown event types", async () => {
     const ctx = createMockPluginContext({ testDir });
-    const hooks = createEventHandlerHook(ctx);
-    const handler = hooks.event as NonNullable<Hooks["event"]>;
+    const handler = createEventHandlerHook(ctx).event as NonNullable<Hooks["event"]>;
+    await handler({
+      event: { type: "vcs.branch.updated", properties: { branch: "main" } } as SdkEvent,
+    });
+    expect(ctx.sessionManager.size()).toBe(0);
+  });
 
-    const input: EventInput = {
-      event: {
-        type: "vcs.branch.updated",
-        properties: { branch: "main" },
-      } as SdkEvent,
-    };
+  it("ignores malformed and null events", async () => {
+    const ctx = createMockPluginContext({ testDir });
+    const handler = createEventHandlerHook(ctx).event as NonNullable<Hooks["event"]>;
 
-    await handler(input);
+    // biome-ignore lint/suspicious/noExplicitAny: testing malformed SDK events
+    await handler({ event: {} } as any);
+    // biome-ignore lint/suspicious/noExplicitAny: testing malformed SDK events
+    await handler({ event: null } as any);
 
     expect(ctx.sessionManager.size()).toBe(0);
   });
 
-  // -----------------------------------------------------------------------
-  // Malformed events — graceful degradation
-  // -----------------------------------------------------------------------
-
-  it("handles malformed event with missing type gracefully", async () => {
+  it("does not throw when a lifecycle operation fails", async () => {
     const ctx = createMockPluginContext({ testDir });
-    const hooks = createEventHandlerHook(ctx);
-    const handler = hooks.event as NonNullable<Hooks["event"]>;
-
-    // biome-ignore lint/suspicious/noExplicitAny: testing malformed input
-    const input = { event: {} } as any;
-
-    await handler(input);
-    expect(ctx.sessionManager.size()).toBe(0);
-  });
-
-  it("handles null event gracefully", async () => {
-    const ctx = createMockPluginContext({ testDir });
-    const hooks = createEventHandlerHook(ctx);
-    const handler = hooks.event as NonNullable<Hooks["event"]>;
-
-    // biome-ignore lint/suspicious/noExplicitAny: testing malformed input
-    const input = { event: null } as any;
-
-    await handler(input);
-    expect(ctx.sessionManager.size()).toBe(0);
-  });
-
-  // -----------------------------------------------------------------------
-  // safeHandler wrapping — never throws
-  // -----------------------------------------------------------------------
-
-  it("does not throw even when sessionManager throws internally", async () => {
-    const ctx = createMockPluginContext({ testDir });
-
-    // Force sessionManager.create to throw
-    const originalCreate = ctx.sessionManager.create;
     (ctx as { sessionManager: typeof ctx.sessionManager }).sessionManager = {
       ...ctx.sessionManager,
       create: () => {
         throw new Error("simulated failure");
       },
     };
-
     const consoleSpy = spyOn(console, "error").mockImplementation(() => {});
+    const handler = createEventHandlerHook(ctx).event as NonNullable<Hooks["event"]>;
 
-    const hooks = createEventHandlerHook(ctx);
-    const handler = hooks.event as NonNullable<Hooks["event"]>;
-
-    const input: EventInput = {
+    await handler({
       event: {
         type: "session.created",
         properties: { info: makeSdkSession("fail-sess") },
       } as SdkEvent,
-    };
-
-    // safeHandler catches the error
-    await handler(input);
+    });
 
     expect(consoleSpy).toHaveBeenCalled();
     consoleSpy.mockRestore();
-
-    // Restore original
-    (ctx as { sessionManager: typeof ctx.sessionManager }).sessionManager = {
-      ...ctx.sessionManager,
-      create: originalCreate,
-    };
   });
 });

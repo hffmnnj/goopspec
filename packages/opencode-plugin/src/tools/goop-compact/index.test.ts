@@ -6,7 +6,7 @@ import {
   setupTestEnvironment,
 } from "../../test-utils.js";
 import type { PluginContext } from "../../test-utils.js";
-import { COMPACTION_SETTLE_MS, createGoopCompactTool } from "./index.js";
+import { createGoopCompactTool, dispatchPendingCompaction } from "./index.js";
 
 interface CompactionClient {
   session: {
@@ -14,7 +14,7 @@ interface CompactionClient {
     abort?: (input: { path: { id: string } }) => Promise<unknown>;
     summarize?: (input: {
       path: { id: string };
-      body?: { providerID: string; modelID: string };
+      body?: { providerID: string; modelID: string; auto?: boolean };
     }) => Promise<unknown>;
   };
 }
@@ -39,21 +39,8 @@ function modelMessages(): Promise<unknown> {
 describe("createGoopCompactTool", () => {
   let ctx: PluginContext;
   let cleanup: () => void;
-  let settleCallback: (() => void) | undefined;
-  let settleDelay: number | undefined;
-  let setTimeoutSpy: ReturnType<typeof spyOn>;
 
-  async function advanceThroughSettleDelay(): Promise<void> {
-    await Promise.resolve();
-    if (!settleCallback) throw new Error("Expected compaction settle timer to be scheduled");
-    settleCallback();
-    await Promise.resolve();
-    await Promise.resolve();
-  }
-
-  async function advanceFakeTimers(): Promise<void> {
-    await Promise.resolve();
-    settleCallback?.();
+  async function flushPromises(): Promise<void> {
     await Promise.resolve();
     await Promise.resolve();
   }
@@ -62,33 +49,13 @@ describe("createGoopCompactTool", () => {
     const env = setupTestEnvironment("goop-compact");
     cleanup = env.cleanup;
     ctx = createMockPluginContext({ testDir: env.testDir, db: env.db });
-    settleCallback = undefined;
-    settleDelay = undefined;
-    setTimeoutSpy = spyOn(globalThis, "setTimeout").mockImplementation(((
-      callback: () => void,
-      delay?: number,
-    ) => {
-      settleCallback = callback;
-      settleDelay = delay;
-      return 0 as unknown as ReturnType<typeof setTimeout>;
-    }) as typeof setTimeout);
   });
 
-  afterEach(() => {
-    setTimeoutSpy.mockRestore();
-    cleanup();
-  });
+  afterEach(() => cleanup());
 
-  it("aborts, waits for the settle delay, then summarizes once without auto", async () => {
-    const calls: string[] = [];
-    const abort = mock(async () => {
-      calls.push("abort");
-      return { data: true };
-    });
-    const summarize = mock(async () => {
-      calls.push("summarize");
-      return { data: true };
-    });
+  it("queues compaction without aborting or summarizing", async () => {
+    const abort = mock(async () => ({ data: true }));
+    const summarize = mock(async () => ({ data: true }));
     setCompactionClient(ctx, { session: { messages: modelMessages, abort, summarize } });
     const sessionID = "session-compact-001";
     const nextStep = "Verify the completed implementation, then begin the next work item.";
@@ -99,36 +66,19 @@ describe("createGoopCompactTool", () => {
     );
 
     expect(result).toContain(`Compaction requested for session ${sessionID}`);
-    expect(abort).toHaveBeenCalledWith({ path: { id: sessionID } });
+    expect(abort).not.toHaveBeenCalled();
     expect(summarize).not.toHaveBeenCalled();
     expect(ctx.compactionHandoff.get(sessionID)).toBe(nextStep);
-
-    await Promise.resolve();
-    expect(settleDelay).toBe(COMPACTION_SETTLE_MS);
-    expect(summarize).not.toHaveBeenCalled();
-
-    if (!settleCallback) throw new Error("Expected compaction settle timer to be scheduled");
-    settleCallback();
-    await Promise.resolve();
-    await Promise.resolve();
-
-    expect(calls).toEqual(["abort", "summarize"]);
-    expect(summarize).toHaveBeenCalledTimes(1);
-    expect(summarize).toHaveBeenCalledWith({
-      path: { id: sessionID },
-      body: { providerID: "opencode", modelID: "deepseek-v4" },
-    });
-    expect(ctx.pendingCompactions.has(sessionID)).toBeFalse();
+    expect(ctx.pendingCompactions.get(sessionID)?.status).toBe("queued");
   });
 
-  it("returns promptly and blocks duplicate compaction while the sequence is in flight", async () => {
-    const abort = mock(async () => ({ data: true }));
+  it("blocks duplicate requests while compaction is pending", async () => {
     const summarize = mock(async () => ({ data: true }));
-    setCompactionClient(ctx, { session: { messages: modelMessages, abort, summarize } });
+    setCompactionClient(ctx, { session: { messages: modelMessages, summarize } });
     const sessionID = "session-compact-duplicate";
     const compact = createGoopCompactTool(ctx);
 
-    const first = await compact.execute(
+    await compact.execute(
       { next_step: "Continue the first requested task." },
       createMockToolContext({ sessionID }),
     );
@@ -137,144 +87,111 @@ describe("createGoopCompactTool", () => {
       createMockToolContext({ sessionID }),
     );
 
-    expect(first).toContain("Compaction requested");
-    expect(duplicate).toContain("already pending or in flight");
-    expect(abort).toHaveBeenCalledTimes(1);
+    expect(duplicate).toBe(
+      `Compaction is already pending or in flight for session ${sessionID}; no additional compaction was requested.`,
+    );
     expect(summarize).not.toHaveBeenCalled();
-
-    await advanceThroughSettleDelay();
-
-    expect(summarize).toHaveBeenCalledTimes(1);
-    expect(ctx.compactionHandoff.get(sessionID)).toBe("Continue the first requested task.");
+    expect(ctx.pendingCompactions.get(sessionID)?.status).toBe("queued");
   });
 
-  it("returns unavailable without partial execution when abort is missing", async () => {
+  it("requires summarize but not abort", async () => {
     const summarize = mock(async () => ({ data: true }));
     setCompactionClient(ctx, { session: { messages: modelMessages, summarize } });
 
-    const result = await createGoopCompactTool(ctx).execute(
+    const available = await createGoopCompactTool(ctx).execute(
       { next_step: "Resume the current work." },
       createMockToolContext(),
     );
+    expect(available).toContain("Compaction requested");
 
-    expect(result).toBe(
-      "goop_compact unavailable: session compaction is not supported on this host.",
-    );
-    expect(summarize).not.toHaveBeenCalled();
-  });
-
-  it("returns unavailable without partial execution when summarize is missing", async () => {
-    const abort = mock(async () => ({ data: true }));
-    setCompactionClient(ctx, { session: { messages: modelMessages, abort } });
-
-    const result = await createGoopCompactTool(ctx).execute(
+    setCompactionClient(ctx, { session: { abort: mock(async () => ({ data: true })) } });
+    const unavailable = await createGoopCompactTool(ctx).execute(
       { next_step: "Resume the current work." },
       createMockToolContext(),
     );
-
-    expect(result).toBe(
+    expect(unavailable).toBe(
       "goop_compact unavailable: session compaction is not supported on this host.",
     );
-    expect(abort).not.toHaveBeenCalled();
   });
 
-  it("clears the handoff and guard when the detached sequence fails", async () => {
-    const abort = mock(async () => {
-      throw new Error("session unavailable");
+  it("clears a pre-existing handoff when model resolution fails", async () => {
+    const sessionID = "session-model-error";
+    setCompactionClient(ctx, {
+      session: {
+        messages: async () => ({ error: "unavailable" }),
+        summarize: mock(async () => ({ data: true })),
+      },
     });
-    const summarize = mock(async () => ({ data: true }));
-    setCompactionClient(ctx, { session: { messages: modelMessages, abort, summarize } });
-    const sessionID = "session-compact-error";
-    const consoleSpy = spyOn(console, "error").mockImplementation(() => {});
-
-    const result = await createGoopCompactTool(ctx).execute(
-      { next_step: "Resume after the compaction attempt." },
-      createMockToolContext({ sessionID }),
-    );
-    await Promise.resolve();
-    await Promise.resolve();
-
-    expect(result).toContain("Compaction requested");
-    expect(consoleSpy).toHaveBeenCalled();
-    expect(ctx.compactionHandoff.has(sessionID)).toBeFalse();
-    expect(ctx.pendingCompactions.has(sessionID)).toBeFalse();
-    expect(summarize).not.toHaveBeenCalled();
-    consoleSpy.mockRestore();
-  });
-
-  it("fails closed when abort returns false", async () => {
-    const abort = mock(async () => false);
-    const summarize = mock(async () => ({ data: true }));
-    setCompactionClient(ctx, { session: { messages: modelMessages, abort, summarize } });
-    const sessionID = "session-compact-abort-false";
-    const consoleSpy = spyOn(console, "error").mockImplementation(() => {});
-
-    await createGoopCompactTool(ctx).execute(
-      { next_step: "Resume only after an abort." },
-      createMockToolContext({ sessionID }),
-    );
-    await advanceFakeTimers();
-
-    expect(settleCallback).toBeUndefined();
-    expect(summarize).not.toHaveBeenCalled();
-    expect(ctx.pendingCompactions.has(sessionID)).toBeFalse();
-    expect(ctx.compactionHandoff.has(sessionID)).toBeFalse();
-    consoleSpy.mockRestore();
-  });
-
-  it("fails closed when abort returns an error response", async () => {
-    const abort = mock(async () => ({ error: { data: { message: "session still active" } } }));
-    const summarize = mock(async () => ({ data: true }));
-    setCompactionClient(ctx, { session: { messages: modelMessages, abort, summarize } });
-    const sessionID = "session-compact-abort-error";
-    const consoleSpy = spyOn(console, "error").mockImplementation(() => {});
-
-    await createGoopCompactTool(ctx).execute(
-      { next_step: "Resume only after an abort." },
-      createMockToolContext({ sessionID }),
-    );
-    await advanceFakeTimers();
-
-    expect(settleCallback).toBeUndefined();
-    expect(summarize).not.toHaveBeenCalled();
-    expect(ctx.pendingCompactions.has(sessionID)).toBeFalse();
-    expect(ctx.compactionHandoff.has(sessionID)).toBeFalse();
-    consoleSpy.mockRestore();
-  });
-
-  it("clears the handoff when summarize rejects after the settle delay", async () => {
-    const abort = mock(async () => ({ data: true }));
-    const summarize = mock(async () => {
-      throw new Error("summarize unavailable");
-    });
-    setCompactionClient(ctx, { session: { messages: modelMessages, abort, summarize } });
-    const sessionID = "session-compact-rejected";
-    const consoleSpy = spyOn(console, "error").mockImplementation(() => {});
-
-    await createGoopCompactTool(ctx).execute(
-      { next_step: "Resume after the compaction attempt." },
-      createMockToolContext({ sessionID }),
-    );
-    await advanceThroughSettleDelay();
-
-    expect(consoleSpy).toHaveBeenCalled();
-    expect(ctx.compactionHandoff.has(sessionID)).toBeFalse();
-    expect(ctx.pendingCompactions.has(sessionID)).toBeFalse();
-    consoleSpy.mockRestore();
-  });
-
-  it("rejects an empty session ID without calling the SDK", async () => {
-    const abort = mock(async () => ({ data: true }));
-    const summarize = mock(async () => ({ data: true }));
-    setCompactionClient(ctx, { session: { abort, summarize } });
+    ctx.compactionHandoff.set(sessionID, "Old handoff.");
 
     const result = await createGoopCompactTool(ctx).execute(
       { next_step: "Resume current work." },
-      createMockToolContext({ sessionID: "   " }),
+      createMockToolContext({ sessionID }),
     );
 
-    expect(result).toBe("goop_compact failed: a session ID is required to trigger compaction.");
-    expect(abort).not.toHaveBeenCalled();
-    expect(summarize).not.toHaveBeenCalled();
+    expect(result).toBe(
+      "goop_compact failed: unable to resolve the current session model: unavailable",
+    );
+    expect(ctx.compactionHandoff.has(sessionID)).toBeFalse();
+  });
+
+  it("dispatches queued compaction once with auto and clears it on success", async () => {
+    const summarize = mock(async () => ({ data: true }));
+    const sessionID = "session-dispatch";
+    setCompactionClient(ctx, { session: { summarize } });
+    ctx.compactionHandoff.set(sessionID, "Resume after compaction.");
+    ctx.pendingCompactions.set(sessionID, {
+      model: { providerID: "opencode", modelID: "deepseek-v4" },
+      status: "queued",
+    });
+
+    dispatchPendingCompaction(ctx, sessionID);
+    await flushPromises();
+
+    expect(summarize).toHaveBeenCalledTimes(1);
+    expect(summarize).toHaveBeenCalledWith({
+      path: { id: sessionID },
+      body: { providerID: "opencode", modelID: "deepseek-v4", auto: true },
+    });
+    expect(ctx.pendingCompactions.has(sessionID)).toBeFalse();
+  });
+
+  it("does not dispatch absent or already in-flight requests", async () => {
+    const summarize = mock(async () => ({ data: true }));
+    const sessionID = "session-in-flight";
+    setCompactionClient(ctx, { session: { summarize } });
+
+    dispatchPendingCompaction(ctx, sessionID);
+    ctx.pendingCompactions.set(sessionID, {
+      model: { providerID: "opencode", modelID: "deepseek-v4" },
+      status: "queued",
+    });
+    dispatchPendingCompaction(ctx, sessionID);
+    dispatchPendingCompaction(ctx, sessionID);
+    await flushPromises();
+
+    expect(summarize).toHaveBeenCalledTimes(1);
+  });
+
+  it("clears handoff and pending state when summarize rejects", async () => {
+    const summarize = mock(async () => {
+      throw new Error("summarize unavailable");
+    });
+    const sessionID = "session-compact-rejected";
+    const consoleSpy = spyOn(console, "error").mockImplementation(() => {});
+    setCompactionClient(ctx, { session: { summarize } });
+    ctx.compactionHandoff.set(sessionID, "Resume after the compaction attempt.");
+    ctx.pendingCompactions.set(sessionID, {
+      model: { providerID: "opencode", modelID: "deepseek-v4" },
+      status: "queued",
+    });
+
+    dispatchPendingCompaction(ctx, sessionID);
+    await flushPromises();
+
+    expect(consoleSpy).toHaveBeenCalled();
+    expect(ctx.compactionHandoff.has(sessionID)).toBeFalse();
+    expect(ctx.pendingCompactions.has(sessionID)).toBeFalse();
+    consoleSpy.mockRestore();
   });
 });
