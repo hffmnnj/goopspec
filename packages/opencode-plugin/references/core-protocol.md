@@ -128,12 +128,24 @@ Single message, two parallel tool calls:
 
 ## Agent Boot Sequence
 
-**Recommended path:** [`goop_boot`](tool-reference.md) (documented in `tool-reference.md`) combines steps 2–6 below — doc reads, Field Note search, memory search, and reference load — into a single call. New agent work should prefer `goop_boot` for efficiency. The granular step-by-step sequence remains valid and is useful when an agent needs fine control over which pieces to fetch.
+**Recommended path:** [`goop_boot`](tool-reference.md) (documented in `tool-reference.md`) can combine state, optional doc reads, Field Note search, memory search, and reference load into a single call. It loads documents only when you explicitly pass `doc_types` matching your role's default below (or more). New agent work should prefer `goop_boot` for efficiency. The granular step-by-step sequence remains valid and is useful when an agent needs fine control over which pieces to fetch.
 
 Before doing work, every subagent must:
 
 1. `goop_state({ action: "get" })`
-2. `goop_read_db({ doc_type: "spec" })` — load spec contract
+2. Load the default document(s) for your role, if any:
+
+| Role / Context | Default document load |
+|---|---|
+| Orchestrator @ `/goop-discuss` start | None — zero documents of any kind (state only) |
+| Orchestrator @ other phases | None as a "boot default" — uses the explicit, phase-specific reads already defined in each command doc (e.g. `/goop-plan` step 1 reads `requirements`) |
+| Planner | `requirements` only |
+| Executors (all six tiers) | Current assigned wave/task via `goop_read_wave` only — no spec/blueprint document by default |
+| Verifier | `spec` + `chronicle` |
+| Researcher / Explorer / Debugger / Tester / Writer | None by default — role-appropriate ad hoc reads as needed |
+
+These are DEFAULTS ONLY. Any additional document is always one explicit direct tool call away (`goop_read_db`, `goop_read_section`, or `goop_boot` with explicit `doc_types`). This is not a capability removal.
+
 3. `goop_read_wave({ wave_numbers: [N, ...] })` — load wave/task context (use the active workflow by default; omit `wave_numbers` to read all waves)
 4. `goop_search_notes({ query: "[task context]" })` — check Field Notes for prior research. If a snippet is relevant but insufficient, use `note_id` (when the ID is already known from the snippet) or `full: true` (when re-issuing the query) to retrieve the complete body — see `field-notes-protocol.md` (Enhanced Retrieval) for full guidance.
 5. `memory_search({ query: "[task context]" })`
