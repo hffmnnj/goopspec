@@ -123,7 +123,9 @@ export function createGoopBootTool(ctx: PluginContext): ToolDefinition {
 
       if (args.doc_types !== undefined) {
         const docTypes = args.doc_types;
-        const invalidDocTypes = docTypes.filter((docType) => !DOC_TYPES.includes(docType as DocType));
+        const invalidDocTypes = docTypes.filter(
+          (docType) => !DOC_TYPES.includes(docType as DocType),
+        );
         if (invalidDocTypes.length > 0) {
           sections.push(
             `## Documents\n\nUnknown doc_type(s): ${invalidDocTypes.join(", ")}. Valid types: ${DOC_TYPES.join(", ")}`,
