@@ -69,8 +69,10 @@ function currentModel(messages: SessionMessage[]): ModelRef | undefined {
   return undefined;
 }
 
-interface SummarizeBody extends ModelRef {
-  auto?: boolean;
+export const COMPACTION_SETTLE_MS = 500;
+
+function waitForCompactionSettle(): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, COMPACTION_SETTLE_MS));
 }
 
 function clearFailedCompaction(ctx: PluginContext, sessionID: string): void {
@@ -103,28 +105,42 @@ function observeCompaction(request: Promise<unknown>, ctx: PluginContext, sessio
     });
 }
 
-/** Dispatch a validated request only after the host reports its session idle. */
-export function dispatchPendingCompaction(ctx: PluginContext, sessionID: string): void {
+async function runCompactionSequence(ctx: PluginContext, sessionID: string): Promise<void> {
   const pending = ctx.pendingCompactions.get(sessionID);
-  if (!pending || pending.status !== "pending") return;
+  if (!pending) return;
 
+  const abort = ctx.sdk.client?.session?.abort;
   const summarize = ctx.sdk.client?.session?.summarize;
-  if (typeof summarize !== "function") {
+  if (typeof abort !== "function" || typeof summarize !== "function") {
     clearFailedCompaction(ctx, sessionID);
-    logError("goop_compact unavailable when the deferred request reached session idle");
+    logError("goop_compact unavailable while running the compaction sequence");
     return;
   }
 
-  // Mark in-flight before invoking the host so duplicate idle events cannot
-  // admit a second compaction while the first request is unresolved.
-  pending.status = "in-flight";
   try {
-    const body: SummarizeBody = { ...pending.model, auto: true };
-    const request = summarize({ path: { id: sessionID }, body });
-    observeCompaction(request, ctx, sessionID);
+    const abortResponse = fieldsResponse<boolean>(await abort({ path: { id: sessionID } }));
+    if (abortResponse.error !== undefined) {
+      clearFailedCompaction(ctx, sessionID);
+      logError(
+        `goop_compact abort request rejected: ${errorDetail(abortResponse.error)}`,
+        abortResponse.error,
+      );
+      return;
+    }
+    if (abortResponse.data !== true) {
+      clearFailedCompaction(ctx, sessionID);
+      logError(
+        "goop_compact abort was not confirmed by the host",
+        new Error(`Unexpected abort response: ${String(abortResponse.data)}`),
+      );
+      return;
+    }
+    await waitForCompactionSettle();
+    const request = summarize({ path: { id: sessionID }, body: pending.model });
+    observeCompaction(Promise.resolve(request), ctx, sessionID);
   } catch (error) {
     clearFailedCompaction(ctx, sessionID);
-    logError("goop_compact deferred request failed", error);
+    logError("goop_compact abort-then-summarize sequence failed", error);
   }
 }
 
@@ -142,7 +158,8 @@ export function createGoopCompactTool(ctx: PluginContext): ToolDefinition {
       let sessionID: string | undefined;
 
       try {
-        if (typeof ctx.sdk.client?.session?.summarize !== "function") {
+        const session = ctx.sdk.client?.session;
+        if (typeof session?.abort !== "function" || typeof session.summarize !== "function") {
           return "goop_compact unavailable: session compaction is not supported on this host.";
         }
 
@@ -156,7 +173,7 @@ export function createGoopCompactTool(ctx: PluginContext): ToolDefinition {
         }
 
         const messagesResult = fieldsResponse<SessionMessage[]>(
-          await ctx.sdk.client.session.messages({ path: { id: sessionID } }),
+          await session.messages({ path: { id: sessionID } }),
         );
         if (messagesResult.error !== undefined) {
           if (!ctx.pendingCompactions.has(sessionID)) ctx.compactionHandoff.delete(sessionID);
@@ -178,9 +195,9 @@ export function createGoopCompactTool(ctx: PluginContext): ToolDefinition {
         ctx.compactionHandoff.set(sessionID, args.next_step);
         ctx.pendingCompactions.set(sessionID, {
           model,
-          nextStep: args.next_step,
-          status: "pending",
+          status: "in-flight",
         });
+        void runCompactionSequence(ctx, sessionID);
 
         return `Compaction requested for session ${sessionID}; it will apply once the current turn completes. The host will continue automatically with: ${args.next_step}`;
       } catch (error) {

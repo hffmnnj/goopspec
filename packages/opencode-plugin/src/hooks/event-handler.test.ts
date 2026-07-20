@@ -97,15 +97,15 @@ describe("event-handler hook", () => {
     expect(session?.meta.idleSince).not.toBeNull();
   });
 
-  it("dispatches a queued compaction when its session becomes idle", async () => {
+  it("marks a tracked session idle without dispatching a compaction", async () => {
     const ctx = createMockPluginContext({ testDir });
     const summarize = mock(async () => ({ data: true }));
     Object.assign(ctx.sdk.client, { session: { summarize } });
+    ctx.sessionManager.create("sess-compact");
     ctx.compactionHandoff.set("sess-compact", "Resume after compaction.");
     ctx.pendingCompactions.set("sess-compact", {
       model: { providerID: "opencode", modelID: "deepseek-v4" },
-      nextStep: "Resume after compaction.",
-      status: "pending",
+      status: "in-flight",
     });
     const hooks = createEventHandlerHook(ctx);
     const handler = hooks.event as NonNullable<Hooks["event"]>;
@@ -117,11 +117,9 @@ describe("event-handler hook", () => {
       } as SdkEvent,
     });
 
-    expect(summarize).toHaveBeenCalledWith({
-      path: { id: "sess-compact" },
-      body: { providerID: "opencode", modelID: "deepseek-v4", auto: true },
-    });
-    expect(ctx.pendingCompactions.has("sess-compact")).toBeFalse();
+    expect(ctx.sessionManager.get("sess-compact")?.meta.idleSince).not.toBeNull();
+    expect(summarize).not.toHaveBeenCalled();
+    expect(ctx.pendingCompactions.has("sess-compact")).toBeTrue();
   });
 
   it("ignores session.idle for untracked sessions", async () => {

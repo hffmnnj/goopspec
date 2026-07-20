@@ -14,7 +14,6 @@
 
 import type { SdkEvent } from "../core/sdk-compat.js";
 import type { PluginContext } from "../core/types.js";
-import { dispatchPendingCompaction } from "../tools/goop-compact/index.js";
 import type { HookFactory, Hooks } from "./types.js";
 import { safeHandler } from "./utils.js";
 
@@ -58,7 +57,6 @@ export const createEventHandlerHook: HookFactory = (ctx: PluginContext): Partial
       if (ctx.sessionManager.get(sessionId)) {
         ctx.sessionManager.markIdle(sessionId);
       }
-      dispatchPendingCompaction(ctx, sessionId);
       return;
     }
 
