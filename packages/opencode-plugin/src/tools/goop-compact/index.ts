@@ -73,28 +73,59 @@ interface SummarizeBody extends ModelRef {
   auto?: boolean;
 }
 
+function clearFailedCompaction(ctx: PluginContext, sessionID: string): void {
+  ctx.pendingCompactions.delete(sessionID);
+  ctx.compactionHandoff.delete(sessionID);
+}
+
 function observeCompaction(request: Promise<unknown>, ctx: PluginContext, sessionID: string): void {
   void request
     .then((result) => {
       const response = fieldsResponse<boolean>(result);
       if (response.error !== undefined) {
-        ctx.compactionHandoff.delete(sessionID);
+        clearFailedCompaction(ctx, sessionID);
         logError(`goop_compact request rejected: ${errorDetail(response.error)}`, response.error);
         return;
       }
       if (response.data !== true) {
-        ctx.compactionHandoff.delete(sessionID);
+        clearFailedCompaction(ctx, sessionID);
         logError(
           "goop_compact request was not confirmed by the host",
           new Error(`Unexpected compaction response: ${String(response.data)}`),
         );
         return;
       }
+      ctx.pendingCompactions.delete(sessionID);
     })
     .catch((error: unknown) => {
-      ctx.compactionHandoff.delete(sessionID);
+      clearFailedCompaction(ctx, sessionID);
       logError("goop_compact request failed", error);
     });
+}
+
+/** Dispatch a validated request only after the host reports its session idle. */
+export function dispatchPendingCompaction(ctx: PluginContext, sessionID: string): void {
+  const pending = ctx.pendingCompactions.get(sessionID);
+  if (!pending || pending.status !== "pending") return;
+
+  const summarize = ctx.sdk.client?.session?.summarize;
+  if (typeof summarize !== "function") {
+    clearFailedCompaction(ctx, sessionID);
+    logError("goop_compact unavailable when the deferred request reached session idle");
+    return;
+  }
+
+  // Mark in-flight before invoking the host so duplicate idle events cannot
+  // admit a second compaction while the first request is unresolved.
+  pending.status = "in-flight";
+  try {
+    const body: SummarizeBody = { ...pending.model, auto: true };
+    const request = summarize({ path: { id: sessionID }, body });
+    observeCompaction(request, ctx, sessionID);
+  } catch (error) {
+    clearFailedCompaction(ctx, sessionID);
+    logError("goop_compact deferred request failed", error);
+  }
 }
 
 export function createGoopCompactTool(ctx: PluginContext): ToolDefinition {
@@ -120,11 +151,15 @@ export function createGoopCompactTool(ctx: PluginContext): ToolDefinition {
           return "goop_compact failed: a session ID is required to trigger compaction.";
         }
 
+        if (ctx.pendingCompactions.has(sessionID)) {
+          return `Compaction is already pending or in flight for session ${sessionID}; no additional compaction was requested.`;
+        }
+
         const messagesResult = fieldsResponse<SessionMessage[]>(
           await ctx.sdk.client.session.messages({ path: { id: sessionID } }),
         );
         if (messagesResult.error !== undefined) {
-          ctx.compactionHandoff.delete(sessionID);
+          if (!ctx.pendingCompactions.has(sessionID)) ctx.compactionHandoff.delete(sessionID);
           const detail = errorDetail(messagesResult.error);
           logError("goop_compact failed to resolve the session model", messagesResult.error);
           return `goop_compact failed: unable to resolve the current session model: ${detail}`;
@@ -132,26 +167,25 @@ export function createGoopCompactTool(ctx: PluginContext): ToolDefinition {
 
         const model = currentModel(messagesResult.data ?? []);
         if (!model) {
-          ctx.compactionHandoff.delete(sessionID);
+          if (!ctx.pendingCompactions.has(sessionID)) ctx.compactionHandoff.delete(sessionID);
           return "goop_compact failed: unable to resolve the current session model.";
         }
 
-        ctx.compactionHandoff.set(sessionID, args.next_step);
-        // `auto: true` makes the host the sole owner of the post-compaction
-        // continuation. The dispatch is fire-and-forget because awaiting from
-        // the same session runner would deadlock; observeCompaction handles
-        // best-effort error cleanup and handoff maintenance.
-        const body: SummarizeBody = { ...model, auto: true };
-        const request = ctx.sdk.client.session.summarize({
-          path: { id: sessionID },
-          body,
-        });
-        observeCompaction(request, ctx, sessionID);
+        if (ctx.pendingCompactions.has(sessionID)) {
+          return `Compaction is already pending or in flight for session ${sessionID}; no additional compaction was requested.`;
+        }
 
-        return `Compaction requested for session ${sessionID}; it will apply after this turn completes. The host will continue automatically with: ${args.next_step}`;
+        ctx.compactionHandoff.set(sessionID, args.next_step);
+        ctx.pendingCompactions.set(sessionID, {
+          model,
+          nextStep: args.next_step,
+          status: "pending",
+        });
+
+        return `Compaction requested for session ${sessionID}; it will apply once the current turn completes. The host will continue automatically with: ${args.next_step}`;
       } catch (error) {
         if (sessionID) {
-          ctx.compactionHandoff.delete(sessionID);
+          clearFailedCompaction(ctx, sessionID);
         }
         logError("goop_compact failed", error);
         return "goop_compact failed: unable to trigger session compaction.";

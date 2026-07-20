@@ -1,5 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, mock, spyOn } from "bun:test";
 
+import type { SdkEvent } from "../../core/sdk-compat.js";
+import { createEventHandlerHook } from "../../hooks/event-handler.js";
+import type { Hooks } from "../../hooks/types.js";
 import {
   createMockPluginContext,
   createMockToolContext,
@@ -30,6 +33,13 @@ function setCompactionClient(ctx: PluginContext, client: CompactionClient): void
   Object.assign(ctx.sdk.client, client);
 }
 
+async function emitSessionIdle(ctx: PluginContext, sessionID: string): Promise<void> {
+  const handler = createEventHandlerHook(ctx).event as NonNullable<Hooks["event"]>;
+  await handler({
+    event: { type: "session.idle", properties: { sessionID } } as SdkEvent,
+  });
+}
+
 describe("createGoopCompactTool", () => {
   let ctx: PluginContext;
   let cleanup: () => void;
@@ -42,7 +52,7 @@ describe("createGoopCompactTool", () => {
 
   afterEach(() => cleanup());
 
-  it("triggers compaction for the current session and records the handoff", async () => {
+  it("defers compaction until the current session becomes idle", async () => {
     const messages = mock(async () => ({
       data: [
         {
@@ -68,6 +78,8 @@ describe("createGoopCompactTool", () => {
       ),
       new Promise<string>((resolve) => setTimeout(() => resolve("timed out"), 20)),
     ]);
+    expect(summarize).not.toHaveBeenCalled();
+    await emitSessionIdle(ctx, sessionID);
     await new Promise((resolve) => setTimeout(resolve, 0));
 
     expect(summarize).toHaveBeenCalledWith({
@@ -77,12 +89,12 @@ describe("createGoopCompactTool", () => {
     expect(ctx.compactionHandoff.get(sessionID)).toBe(nextStep);
     expect(result).not.toBe("timed out");
     expect(result).toContain(`Compaction requested for session ${sessionID}`);
-    expect(result).toContain("it will apply after this turn completes");
+    expect(result).toContain("it will apply once the current turn completes");
     expect(result).toContain("The host will continue automatically");
     expect(promptAsync).not.toHaveBeenCalled();
   });
 
-  it("returns promptly when the compaction request remains pending", async () => {
+  it("returns promptly while compaction remains queued for session idle", async () => {
     const messages = mock(async () => ({
       data: [
         {
@@ -107,6 +119,8 @@ describe("createGoopCompactTool", () => {
     ]);
 
     expect(result).not.toBe("timed out");
+    expect(summarize).not.toHaveBeenCalled();
+    await emitSessionIdle(ctx, sessionID);
     expect(summarize).toHaveBeenCalledWith({
       path: { id: sessionID },
       body: { providerID: "opencode", modelID: "deepseek-v4", auto: true },
@@ -149,6 +163,8 @@ describe("createGoopCompactTool", () => {
       { next_step: "Resume after the compaction attempt." },
       createMockToolContext({ sessionID }),
     );
+    expect(summarize).not.toHaveBeenCalled();
+    await emitSessionIdle(ctx, sessionID);
     await new Promise((resolve) => setTimeout(resolve, 0));
 
     expect(result).toContain("Compaction requested");
@@ -158,7 +174,7 @@ describe("createGoopCompactTool", () => {
     consoleSpy.mockRestore();
   });
 
-  it("returns a failure status and clears the handoff when dispatch throws synchronously", async () => {
+  it("clears the handoff when deferred dispatch throws synchronously", async () => {
     const messages = mock(async () => ({
       data: [
         {
@@ -181,8 +197,10 @@ describe("createGoopCompactTool", () => {
       { next_step: "Resume after the compaction attempt." },
       createMockToolContext({ sessionID }),
     );
+    expect(summarize).not.toHaveBeenCalled();
+    await emitSessionIdle(ctx, sessionID);
 
-    expect(result).toBe("goop_compact failed: unable to trigger session compaction.");
+    expect(result).toContain("Compaction requested");
     expect(consoleSpy).toHaveBeenCalled();
     expect(ctx.compactionHandoff.has(sessionID)).toBeFalse();
     consoleSpy.mockRestore();
@@ -213,6 +231,8 @@ describe("createGoopCompactTool", () => {
       { next_step: "Resume only after accepted compaction." },
       createMockToolContext({ sessionID }),
     );
+    expect(summarize).not.toHaveBeenCalled();
+    await emitSessionIdle(ctx, sessionID);
     await new Promise((resolve) => setTimeout(resolve, 0));
 
     expect(result).toContain("Compaction requested");
@@ -243,6 +263,8 @@ describe("createGoopCompactTool", () => {
       { next_step: "Resume after successful compaction." },
       createMockToolContext({ sessionID }),
     );
+    expect(summarize).not.toHaveBeenCalled();
+    await emitSessionIdle(ctx, sessionID);
     await new Promise((resolve) => setTimeout(resolve, 0));
 
     expect(result).toContain("Compaction requested");
@@ -262,5 +284,42 @@ describe("createGoopCompactTool", () => {
 
     expect(result).toBe("goop_compact failed: a session ID is required to trigger compaction.");
     expect(summarize).not.toHaveBeenCalled();
+  });
+
+  it("does not admit a second compaction while one is pending or in flight", async () => {
+    const messages = mock(async () => ({
+      data: [
+        {
+          info: {
+            role: "user",
+            model: { providerID: "opencode", modelID: "deepseek-v4" },
+          },
+          parts: [],
+        },
+      ],
+    }));
+    const summarize = mock(() => new Promise<unknown>(() => {}));
+    setCompactionClient(ctx, { session: { messages, summarize } });
+    const sessionID = "session-compact-duplicate";
+    const compact = createGoopCompactTool(ctx);
+
+    const first = await compact.execute(
+      { next_step: "Continue the first requested task." },
+      createMockToolContext({ sessionID }),
+    );
+    const duplicate = await compact.execute(
+      { next_step: "This must not create another compaction." },
+      createMockToolContext({ sessionID }),
+    );
+
+    expect(first).toContain("Compaction requested");
+    expect(duplicate).toContain("already pending or in flight");
+    expect(summarize).not.toHaveBeenCalled();
+    expect(ctx.compactionHandoff.get(sessionID)).toBe("Continue the first requested task.");
+
+    await emitSessionIdle(ctx, sessionID);
+    await emitSessionIdle(ctx, sessionID);
+
+    expect(summarize).toHaveBeenCalledTimes(1);
   });
 });
