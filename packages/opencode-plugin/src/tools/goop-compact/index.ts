@@ -108,8 +108,8 @@ export function dispatchPendingCompaction(ctx: PluginContext, sessionID: string)
   const pending = ctx.pendingCompactions.get(sessionID);
   if (!pending || pending.status !== "queued") return;
 
-  const summarize = ctx.sdk.client?.session?.summarize;
-  if (typeof summarize !== "function") {
+  const session = ctx.sdk.client?.session;
+  if (typeof session?.summarize !== "function") {
     clearFailedCompaction(ctx, sessionID);
     logError("goop_compact unavailable while dispatching the pending compaction");
     return;
@@ -120,7 +120,7 @@ export function dispatchPendingCompaction(ctx: PluginContext, sessionID: string)
 
   try {
     const body: SummarizeBody = { ...pending.model, auto: true };
-    const request = summarize({ path: { id: sessionID }, body: body as SummarizeBody });
+    const request = session.summarize({ path: { id: sessionID }, body: body as SummarizeBody });
     observeCompaction(Promise.resolve(request), ctx, sessionID);
   } catch (error) {
     clearFailedCompaction(ctx, sessionID);

@@ -136,9 +136,24 @@ describe("createGoopCompactTool", () => {
   });
 
   it("dispatches queued compaction once with auto and clears it on success", async () => {
-    const summarize = mock(async () => ({ data: true }));
     const sessionID = "session-dispatch";
-    setCompactionClient(ctx, { session: { summarize } });
+    const calls: Array<{
+      path: { id: string };
+      body?: { providerID: string; modelID: string; auto?: boolean };
+    }> = [];
+    const session = {
+      messages: modelMessages,
+      _client: {},
+      summarize(input: {
+        path: { id: string };
+        body?: { providerID: string; modelID: string; auto?: boolean };
+      }): Promise<unknown> {
+        if (this._client === undefined) throw new TypeError("detached this");
+        calls.push(input);
+        return Promise.resolve({ data: true });
+      },
+    };
+    setCompactionClient(ctx, { session });
     ctx.compactionHandoff.set(sessionID, "Resume after compaction.");
     ctx.pendingCompactions.set(sessionID, {
       model: { providerID: "opencode", modelID: "deepseek-v4" },
@@ -148,11 +163,12 @@ describe("createGoopCompactTool", () => {
     dispatchPendingCompaction(ctx, sessionID);
     await flushPromises();
 
-    expect(summarize).toHaveBeenCalledTimes(1);
-    expect(summarize).toHaveBeenCalledWith({
-      path: { id: sessionID },
-      body: { providerID: "opencode", modelID: "deepseek-v4", auto: true },
-    });
+    expect(calls).toEqual([
+      {
+        path: { id: sessionID },
+        body: { providerID: "opencode", modelID: "deepseek-v4", auto: true },
+      },
+    ]);
     expect(ctx.pendingCompactions.has(sessionID)).toBeFalse();
   });
 
