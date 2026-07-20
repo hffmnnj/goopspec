@@ -67,7 +67,8 @@ export function createGoopBootTool(ctx: PluginContext): ToolDefinition {
   return tool({
     description:
       "Load workflow state, documents, Field Notes, memory, and references in one call. " +
-      "Wave/task context is loaded separately via goop_read_wave; blueprint is loaded here for its non-wave planning narrative.",
+      "Documents load only when doc_types is explicitly provided; otherwise, use goop_read_db or goop_read_section for explicit reads. " +
+      "Wave/task context is loaded separately via goop_read_wave.",
     args: {
       workflow_id: tool.schema.string().optional(),
       doc_types: tool.schema.array(tool.schema.string()).optional(),
@@ -120,23 +121,25 @@ export function createGoopBootTool(ctx: PluginContext): ToolDefinition {
         }
       }
 
-      const docTypes = args.doc_types ?? ["spec", "blueprint"];
-      const invalidDocTypes = docTypes.filter((docType) => !DOC_TYPES.includes(docType as DocType));
-      if (invalidDocTypes.length > 0) {
-        sections.push(
-          `## Documents\n\nUnknown doc_type(s): ${invalidDocTypes.join(", ")}. Valid types: ${DOC_TYPES.join(", ")}`,
-        );
-      } else {
-        try {
-          const documents = docTypes.map((docType) => {
-            const content = ctx.db.resolveDocumentContent(workflowId, docType as DocType);
-            return `### ${docType}\n\n${content ?? `_(No ${docType} document found. Use goop_write_db to create it.)_`}`;
-          });
-          sections.push(`## Documents\n\n${documents.join("\n\n---\n\n")}`);
-        } catch (error: unknown) {
+      if (args.doc_types !== undefined) {
+        const docTypes = args.doc_types;
+        const invalidDocTypes = docTypes.filter((docType) => !DOC_TYPES.includes(docType as DocType));
+        if (invalidDocTypes.length > 0) {
           sections.push(
-            `## Documents\n\nError loading documents: ${error instanceof Error ? error.message : String(error)}`,
+            `## Documents\n\nUnknown doc_type(s): ${invalidDocTypes.join(", ")}. Valid types: ${DOC_TYPES.join(", ")}`,
           );
+        } else {
+          try {
+            const documents = docTypes.map((docType) => {
+              const content = ctx.db.resolveDocumentContent(workflowId, docType as DocType);
+              return `### ${docType}\n\n${content ?? `_(No ${docType} document found. Use goop_write_db to create it.)_`}`;
+            });
+            sections.push(`## Documents\n\n${documents.join("\n\n---\n\n")}`);
+          } catch (error: unknown) {
+            sections.push(
+              `## Documents\n\nError loading documents: ${error instanceof Error ? error.message : String(error)}`,
+            );
+          }
         }
       }
 
