@@ -200,6 +200,14 @@ describe("goop_state tool", () => {
       expect(ctx.stateManager.getActiveWorkflow().specLocked).toBe(true);
     });
 
+    it("includes a compact reminder in the lock-spec response", async () => {
+      const tool = createGoopStateTool(ctx);
+      const result = await tool.execute({ action: "lock-spec" }, createMockToolContext());
+      expect(result).toContain("locked");
+      expect(result).toContain("goop_compact");
+      expect(result).toContain("next_step");
+    });
+
     it("unlocks the spec", async () => {
       ctx.stateManager.lockSpec();
       const tool = createGoopStateTool(ctx);
