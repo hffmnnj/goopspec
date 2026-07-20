@@ -15,6 +15,7 @@ import { createCommandProcessorHook } from "./command-processor.js";
 import { commentCheckerFactory } from "./comment-checker.js";
 import { createCompactionHook } from "./compaction-hook.js";
 import { createEventHandlerHook } from "./event-handler.js";
+import { loopDetectionHookFactory } from "./loop-detection/index.js";
 import { orchestratorEnforcementFactory } from "./orchestrator-enforcement.js";
 import { systemTransformFactory } from "./system-transform.js";
 import { toolLifecycleHookFactory } from "./tool-lifecycle.js";
@@ -70,6 +71,7 @@ export const DEFAULT_HOOK_FACTORIES: readonly HookFactory[] = [
   createCommandProcessorHook,
   orchestratorEnforcementFactory,
   toolLifecycleHookFactory,
+  loopDetectionHookFactory,
   createAutoProgressionHook,
   createEventHandlerHook,
   createCompactionHook,
