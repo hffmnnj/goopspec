@@ -60,20 +60,32 @@ describe("goop_boot tool", () => {
 
   afterEach(() => cleanup());
 
-  it("loads spec and blueprint by default", async () => {
+  it("omits Documents section entirely when doc_types is not provided", async () => {
     const result = await createGoopBootTool(ctx).execute({}, toolCtx);
 
-    expect(result).toContain("## Documents");
-    expect(result).toContain("### spec\n\n# Test Spec");
-    expect(result).toContain("### blueprint\n\n# Test Blueprint");
+    expect(result).not.toContain("## Documents");
+    expect(result).not.toContain("### spec");
+    expect(result).not.toContain("### blueprint");
   });
 
-  it("uses explicit document types instead of the defaults", async () => {
+  it("returns exactly the requested document types via explicit doc_types", async () => {
     ctx.db.upsertDocument("default", "chronicle", "# Test Chronicle");
     const result = await createGoopBootTool(ctx).execute({ doc_types: ["chronicle"] }, toolCtx);
 
     expect(result).toContain("### chronicle\n\n# Test Chronicle");
     expect(result).not.toContain("### spec");
+    expect(result).not.toContain("### blueprint");
+  });
+
+  it("returns multiple requested document types when doc_types lists them", async () => {
+    ctx.db.upsertDocument("default", "chronicle", "# Test Chronicle");
+    const result = await createGoopBootTool(ctx).execute(
+      { doc_types: ["spec", "chronicle"] },
+      toolCtx,
+    );
+
+    expect(result).toContain("### spec\n\n# Test Spec");
+    expect(result).toContain("### chronicle\n\n# Test Chronicle");
     expect(result).not.toContain("### blueprint");
   });
 
