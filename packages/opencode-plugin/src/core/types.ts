@@ -67,18 +67,17 @@ export interface PluginContext {
   readonly sessionManager: SessionManager;
   /** Session-scoped ephemeral tool→hook handoff for compaction `next_step`; the hook reads then deletes entries. */
   readonly compactionHandoff: Map<string, string>;
-  /** Session-scoped compaction requests awaiting an idle event or host acknowledgement. */
+  /** Session-scoped compaction requests currently executing against the host. */
   readonly pendingCompactions: Map<string, PendingCompactionRequest>;
 }
 
-/** A validated compaction request deferred until its session becomes idle. */
+/** A validated compaction request executing its abort-then-summarize sequence. */
 export interface PendingCompactionRequest {
   readonly model: {
     providerID: string;
     modelID: string;
   };
-  readonly nextStep: string;
-  status: "pending" | "in-flight";
+  status: "in-flight";
 }
 
 // ---------------------------------------------------------------------------
