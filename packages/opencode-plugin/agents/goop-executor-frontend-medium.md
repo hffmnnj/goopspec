@@ -15,6 +15,7 @@ tools:
   - goop_state
   - goop_adl
   - goop_read_db
+  - goop_read_wave
   - goop_boot
   - goop_reference
   - goop_search_notes
@@ -33,7 +34,7 @@ Default frontend workhorse tier. Balanced cost and capability.
 
 ## Mandatory First Step
 
-Boot sequence: see `references/core-protocol.md` §Agent Boot Sequence. **New:** consider `goop_boot` (added this workflow) to combine document/note/memory/reference loading into one call — see `references/tool-reference.md`. Batch independent tool calls — see `references/core-protocol.md` §Tool-Call Batching.
+Boot sequence: see `references/core-protocol.md` §Agent Boot Sequence. Default: load current assigned wave/task via `goop_read_wave` only — do NOT load spec/blueprint by default; fetch those explicitly only if a task genuinely needs the prose. **New:** consider `goop_boot` (added this workflow) to combine note/memory/reference loading into one call — see `references/tool-reference.md`. Batch independent tool calls — see `references/core-protocol.md` §Tool-Call Batching.
 
 ## Scope
 

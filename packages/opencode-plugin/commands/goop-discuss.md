@@ -25,6 +25,8 @@ Load the interview protocol first:
 goop_reference({ name: "discovery-interview" })
 ```
 
+> **Do not load any documents (via `goop_boot`, `goop_read_db`, or any other tool) at the start of this command — no spec, blueprint, chronicle, or requirements from any workflow. This is a state-only boot; a brand-new discovery has no use for prior planning content.** The reference load above is fine — only document loads are forbidden.
+
 ## Steps
 
 1. **Create a new workflow** — do not reuse the active one. Infer a kebab-case `workflowId` from the user's prompt (or use the supplied `workflow-id` argument), then:
@@ -69,4 +71,5 @@ mcp_slashcommand({ command: "/goop-plan" })
 - Skip the six discovery categories.
 - Start writing files before the workflow is bound and the branch is checked out.
 - Announce a transition without calling `mcp_slashcommand`.
+- Loading any document (via `goop_boot`, `goop_read_db`, or any other tool) at discovery start — stale planning content from any workflow is irrelevant to a fresh discovery.
 - Write REQUIREMENTS.md without a `## Atomic PR Strategy` section.
