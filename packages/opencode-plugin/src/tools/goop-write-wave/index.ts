@@ -11,6 +11,7 @@ import { tool } from "../../core/sdk-compat.js";
 import type { ToolContext, ToolDefinition } from "../../core/sdk-compat.js";
 import type { PluginContext } from "../../core/types.js";
 import { formatBatchResult, runBatch } from "../../features/db/batch.js";
+import { WAVE_COMPLETE_COMPACT_REMINDER, isWaveComplete } from "../../shared/compact-reminder.js";
 import { renderSidecars } from "../../shared/render-sidecars.js";
 
 interface InlineWaveTask {
@@ -266,7 +267,9 @@ export function createGoopWriteWaveTool(ctx: PluginContext): ToolDefinition {
             return `wrote wave ${item.wave_number}`;
           });
           renderSidecars(ctx, workflowId);
-          return formatBatchResult(result, "write-wave");
+          const response = formatBatchResult(result, "write-wave");
+          const anyComplete = args.items.some((item) => isWaveComplete(item.status));
+          return anyComplete ? `${response}${WAVE_COMPLETE_COMPACT_REMINDER}` : response;
         }
 
         if (args.task_updates !== undefined) {
@@ -359,6 +362,8 @@ export function createGoopWriteWaveTool(ctx: PluginContext): ToolDefinition {
           mainResult = `Written wave ${args.wave_number} for workflow '${workflowId}' with ${args.tasks?.length ?? 0} task(s).`;
         }
 
+        const waveComplete = args.task_update === undefined && isWaveComplete(args.status);
+
         const verificationResults: string[] = [];
         if (args.verifications !== undefined && defaultWaveId !== -1) {
           for (const item of args.verifications) {
@@ -373,23 +378,25 @@ export function createGoopWriteWaveTool(ctx: PluginContext): ToolDefinition {
           }
         }
 
+        let response: string;
         if (verificationResults.length === 0 && traceabilityResults.length === 0) {
-          return mainResult;
+          response = mainResult;
+        } else {
+          const sections = [mainResult];
+          if (verificationResults.length > 0) {
+            sections.push(
+              `Verifications:\n${verificationResults.map((line) => `- ${line}`).join("\n")}`,
+            );
+          }
+          if (traceabilityResults.length > 0) {
+            sections.push(
+              `Traceability:\n${traceabilityResults.map((line) => `- ${line}`).join("\n")}`,
+            );
+          }
+          response = sections.join("\n\n");
         }
 
-        const sections = [mainResult];
-        if (verificationResults.length > 0) {
-          sections.push(
-            `Verifications:\n${verificationResults.map((line) => `- ${line}`).join("\n")}`,
-          );
-        }
-        if (traceabilityResults.length > 0) {
-          sections.push(
-            `Traceability:\n${traceabilityResults.map((line) => `- ${line}`).join("\n")}`,
-          );
-        }
-
-        return sections.join("\n\n");
+        return waveComplete ? `${response}${WAVE_COMPLETE_COMPACT_REMINDER}` : response;
       } catch (error: unknown) {
         const msg = error instanceof Error ? error.message : String(error);
         return `Error in goop_write_wave: ${msg}`;

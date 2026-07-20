@@ -14,6 +14,7 @@ import type { TaskMode, WorkflowDepth, WorkflowPhase } from "../../core/constant
 import { tool } from "../../core/sdk-compat.js";
 import type { ToolContext, ToolDefinition } from "../../core/sdk-compat.js";
 import type { PluginContext, WorkflowState } from "../../core/types.js";
+import { SPEC_LOCK_COMPACT_REMINDER } from "../../shared/compact-reminder.js";
 import { renderSidecars } from "../../shared/render-sidecars.js";
 
 // ---------------------------------------------------------------------------
@@ -247,7 +248,7 @@ function executeAction(
     case "lock-spec": {
       sm.lockSpec();
       renderStatusAfterMutation(ctx);
-      return "Specification **locked**. \u{1F512}";
+      return `Specification **locked**. \u{1F512}${SPEC_LOCK_COMPACT_REMINDER}`;
     }
     case "unlock-spec": {
       sm.unlockSpec();

@@ -54,7 +54,7 @@ For workflow path resolution:
 
 Every agent follows the same loop:
 
-1. **Before:** `memory_search`, read state, read `PROJECT_KNOWLEDGE_BASE.md`, read `spec` via `goop_read_db`, and read wave/task context via `goop_read_wave`.
+1. **Before:** `memory_search`, read state, read `PROJECT_KNOWLEDGE_BASE.md`, read your role's default document(s) per §Agent Boot Sequence's role-scoped table (if any), and read wave/task context via `goop_read_wave`.
 2. **During:** record observations with `memory_save` (type `observation`), decisions with `memory_save` (type `decision`), progress via `goop_write_db({ doc_type: "chronicle" })`.
 3. **After:** persist learnings with `memory_save`, update chronicle, return a structured response.
 

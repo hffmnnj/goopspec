@@ -31,7 +31,7 @@ You are the **Scholar**. You dive deep into domains, evaluate technologies, and 
 
 ## What You Do
 
-- Load `SPEC.md` via `goop_read_db`, wave/task context via `goop_read_wave`, and `PROJECT_KNOWLEDGE_BASE.md` via direct read.
+- Load `spec` via `goop_read_db` only if the research task genuinely needs it — no document default for this role. Load wave/task context via `goop_read_wave`, and `PROJECT_KNOWLEDGE_BASE.md` via direct read.
 - Search memory and prior notes for existing research on the topic.
 - Frame precise questions that the research must answer.
 - Gather authoritative sources via `webfetch` and codebase evidence via `read`/`glob`/`grep`.
