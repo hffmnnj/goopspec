@@ -14,6 +14,7 @@ import type {
   MemorySearchOptions,
   MemorySearchResult,
 } from "../../core/types.js";
+import { truncateWal } from "../db/wal.js";
 import { initSchema } from "./schema.js";
 import type { FtsSearchRow, MemoryManagerOptions, MemoryRow } from "./types.js";
 
@@ -216,6 +217,7 @@ export class SqliteMemoryManager implements MemoryManager {
 
   close(): void {
     try {
+      truncateWal(this.db);
       this.db.close();
     } catch {
       // Already closed or never opened — safe to ignore.

@@ -1,5 +1,6 @@
-import { afterEach, beforeEach, describe, expect, it } from "bun:test";
+import { afterEach, beforeEach, describe, expect, it, mock, spyOn } from "bun:test";
 import type { SdkPart } from "../core/sdk-compat.js";
+import type { MemoryEntry } from "../core/types.js";
 import {
   type PluginContext,
   createMockPluginContext,
@@ -97,8 +98,9 @@ describe("createChatMessageHook", () => {
     expect(typeof hooks["chat.message"]).toBe("function");
   });
 
-  it("clears checkpoint on activity", async () => {
+  it("clears checkpoint on activity when one exists", async () => {
     ctx.stateManager.updateWorkflow({ checkpoint: "old-checkpoint" });
+    const updateSpy = spyOn(ctx.stateManager, "updateWorkflow");
 
     const hooks = createChatMessageHook(ctx);
     await hooks["chat.message"]?.(
@@ -111,6 +113,22 @@ describe("createChatMessageHook", () => {
 
     const wf = ctx.stateManager.getActiveWorkflow();
     expect(wf.checkpoint).toBeUndefined();
+    expect(updateSpy).toHaveBeenCalledWith({ checkpoint: undefined });
+  });
+
+  it("does not update workflow when no checkpoint exists", async () => {
+    const updateSpy = spyOn(ctx.stateManager, "updateWorkflow");
+    const hooks = createChatMessageHook(ctx);
+
+    await hooks["chat.message"]?.(
+      { sessionID: "s1" },
+      {
+        message: { role: "user", content: "ok" } as never,
+        parts: [{ type: "text", text: "ok" }] as SdkPart[],
+      },
+    );
+
+    expect(updateSpy).not.toHaveBeenCalled();
   });
 
   it("captures significant messages to memory", async () => {
@@ -127,6 +145,46 @@ describe("createChatMessageHook", () => {
     expect(results.length).toBeGreaterThan(0);
     expect(results[0].memory.type).toBe("note");
     expect(results[0].memory.importance).toBe(6);
+  });
+
+  it("saves significant messages without awaiting the memory write", async () => {
+    let resolveSave: (() => void) | undefined;
+    const save = mock(
+      () =>
+        new Promise<MemoryEntry>((resolve) => {
+          resolveSave = () =>
+            resolve({
+              id: 1,
+              type: "note",
+              title: "test",
+              content: "test",
+              importance: 5,
+              createdAt: Date.now(),
+            });
+        }),
+    );
+    ctx.memory.save = save;
+    const hooks = createChatMessageHook(ctx);
+
+    const invocation = hooks["chat.message"]?.(
+      { sessionID: "s1" },
+      {
+        message: { role: "user", content: "" } as never,
+        parts: [{ type: "text", text: "How do I implement authentication?" }] as SdkPart[],
+      },
+    );
+
+    await Promise.resolve();
+    expect(save).toHaveBeenCalledTimes(1);
+
+    let completed = false;
+    void invocation?.then(() => {
+      completed = true;
+    });
+    await Promise.resolve();
+    expect(completed).toBe(true);
+
+    resolveSave?.();
   });
 
   it("does not capture short non-significant messages", async () => {
