@@ -20,6 +20,7 @@ import {
   normalizeConfig,
   readConfig,
   reset,
+  resolveLoopDetectionConfig,
   updateConfig,
   verify,
   writeConfig,
@@ -894,6 +895,67 @@ describe("setup feature", () => {
       expect(result.agentThinkingLevels?.orchestrator).toBe("high");
       expect(result.agentThinkingLevels?.["executor-low"]).toBe("low");
     });
+
+    it("passes through valid loopDetection fields", () => {
+      const result = normalizeConfig({
+        loopDetection: {
+          enabled: false,
+          tier1Threshold: 5,
+          windowSize: 8,
+          tier2Threshold: 6,
+        },
+      });
+      expect(result.loopDetection).toEqual({
+        enabled: false,
+        tier1Threshold: 5,
+        windowSize: 8,
+        tier2Threshold: 6,
+      });
+    });
+
+    it("skips malformed loopDetection fields while keeping valid ones", () => {
+      const errors: string[] = [];
+      const origError = console.error;
+      console.error = (...args: unknown[]) => {
+        errors.push(args.map(String).join(" "));
+      };
+      try {
+        const result = normalizeConfig({
+          loopDetection: {
+            enabled: true,
+            tier1Threshold: "three" as unknown as number,
+            windowSize: -2,
+            tier2Threshold: 4,
+          },
+        });
+        expect(result.loopDetection?.enabled).toBe(true);
+        expect(result.loopDetection?.tier1Threshold).toBeUndefined();
+        expect(result.loopDetection?.windowSize).toBeUndefined();
+        expect(result.loopDetection?.tier2Threshold).toBe(4);
+        expect(errors.some((e) => e.includes("loopDetection.tier1Threshold"))).toBe(true);
+        expect(errors.some((e) => e.includes("loopDetection.windowSize"))).toBe(true);
+      } finally {
+        console.error = origError;
+      }
+    });
+
+    it("ignores non-boolean loopDetection.enabled", () => {
+      const errors: string[] = [];
+      const origError = console.error;
+      console.error = (...args: unknown[]) => {
+        errors.push(args.map(String).join(" "));
+      };
+      try {
+        const result = normalizeConfig({
+          loopDetection: { enabled: "false" as unknown as boolean, tier1Threshold: 2 },
+        });
+        expect(result.loopDetection?.enabled).toBeUndefined();
+        expect(result.loopDetection?.tier1Threshold).toBe(2);
+        expect(errors.some((e) => e.includes("loopDetection.enabled"))).toBe(true);
+      } finally {
+        console.error = origError;
+      }
+    });
   });
 
   // =========================================================================
@@ -1171,6 +1233,105 @@ describe("setup feature", () => {
       } finally {
         console.error = origError;
       }
+    });
+
+    it("deep-merges loopDetection across sources — project field overrides global field", () => {
+      const freshDir = join(testDir, "merge-loop-detection");
+      mkdirSync(join(freshDir, ".goopspec"), { recursive: true });
+      const globalPath = join(freshDir, "global-goopspec.json");
+      process.env.GOOPSPEC_GLOBAL_CONFIG_PATH = globalPath;
+
+      writeFileSync(
+        globalPath,
+        JSON.stringify({
+          loopDetection: { enabled: true, tier1Threshold: 2, windowSize: 4, tier2Threshold: 3 },
+        }),
+      );
+      writeFileSync(
+        join(freshDir, ".goopspec", "config.json"),
+        JSON.stringify({ loopDetection: { windowSize: 6 } }),
+      );
+      writeFileSync(
+        join(freshDir, "goopspec.json"),
+        JSON.stringify({ loopDetection: { tier1Threshold: 5 } }),
+      );
+
+      const result = loadMergedConfig(freshDir);
+      expect(result.loopDetection?.enabled).toBe(true);
+      expect(result.loopDetection?.tier1Threshold).toBe(5); // project wins
+      expect(result.loopDetection?.windowSize).toBe(6); // internal wins over global
+      expect(result.loopDetection?.tier2Threshold).toBe(3); // global, no override
+    });
+
+    it("preserves loopDetection.enabled:false through merge and resolution", () => {
+      const freshDir = join(testDir, "loop-detection-disabled");
+      mkdirSync(join(freshDir, ".goopspec"), { recursive: true });
+      process.env.GOOPSPEC_GLOBAL_CONFIG_PATH = join(freshDir, "nonexistent-global.json");
+
+      writeFileSync(
+        join(freshDir, "goopspec.json"),
+        JSON.stringify({ loopDetection: { enabled: false } }),
+      );
+
+      const merged = loadMergedConfig(freshDir);
+      expect(merged.loopDetection?.enabled).toBe(false);
+      const resolved = resolveLoopDetectionConfig(merged);
+      expect(resolved.enabled).toBe(false);
+      expect(resolved.tier1Threshold).toBe(3);
+      expect(resolved.windowSize).toBe(5);
+      expect(resolved.tier2Threshold).toBe(4);
+    });
+
+    it("skips malformed loopDetection fields and fills defaults via resolveLoopDetectionConfig", () => {
+      const freshDir = join(testDir, "loop-detection-malformed");
+      mkdirSync(join(freshDir, ".goopspec"), { recursive: true });
+      process.env.GOOPSPEC_GLOBAL_CONFIG_PATH = join(freshDir, "nonexistent-global.json");
+
+      // Bypass normalization to simulate a corrupted config file
+      writeFileSync(
+        join(freshDir, "goopspec.json"),
+        JSON.stringify({
+          loopDetection: {
+            enabled: false,
+            tier1Threshold: "three",
+            windowSize: -1,
+            tier2Threshold: 4,
+          },
+        }),
+      );
+
+      const errors: string[] = [];
+      const origError = console.error;
+      console.error = (...args: unknown[]) => {
+        errors.push(args.map(String).join(" "));
+      };
+      try {
+        const merged = loadMergedConfig(freshDir);
+        expect(merged.loopDetection?.enabled).toBe(false);
+        expect(merged.loopDetection?.tier1Threshold).toBeUndefined();
+        expect(merged.loopDetection?.windowSize).toBeUndefined();
+        expect(merged.loopDetection?.tier2Threshold).toBe(4);
+
+        const resolved = resolveLoopDetectionConfig(merged);
+        expect(resolved.enabled).toBe(false);
+        expect(resolved.tier1Threshold).toBe(3);
+        expect(resolved.windowSize).toBe(5);
+        expect(resolved.tier2Threshold).toBe(4);
+        expect(errors.some((e) => e.includes("loopDetection.tier1Threshold"))).toBe(true);
+        expect(errors.some((e) => e.includes("loopDetection.windowSize"))).toBe(true);
+      } finally {
+        console.error = origError;
+      }
+    });
+
+    it("resolveLoopDetectionConfig returns all defaults when key is absent", () => {
+      const resolved = resolveLoopDetectionConfig({});
+      expect(resolved).toEqual({
+        enabled: true,
+        tier1Threshold: 3,
+        windowSize: 5,
+        tier2Threshold: 4,
+      });
     });
   });
 });
