@@ -6,7 +6,7 @@ import type { SdkPermission } from "../../core/sdk-compat.js";
 import type { PluginContext } from "../../core/types.js";
 import { createMockPluginContext, setupTestEnvironment } from "../../test-utils.js";
 import type { HookHandler } from "../types.js";
-import { createLoopDetectionHook, loopDetectionState } from "./index.js";
+import { __clearLoopConfigCache, createLoopDetectionHook, loopDetectionState } from "./index.js";
 import { canonicalArgsHash } from "./normalize.js";
 
 type AfterInput = Parameters<HookHandler<"tool.execute.after">>[0];
@@ -62,6 +62,7 @@ describe("loop-detection tool.execute.after hook", () => {
   });
 
   afterEach(() => {
+    __clearLoopConfigCache();
     if (originalGlobalConfigPath === undefined) {
       process.env.GOOPSPEC_GLOBAL_CONFIG_PATH = undefined;
     } else {
@@ -278,6 +279,7 @@ describe("loop-detection permission.ask hook", () => {
   });
 
   afterEach(() => {
+    __clearLoopConfigCache();
     if (originalGlobalConfigPath === undefined) {
       process.env.GOOPSPEC_GLOBAL_CONFIG_PATH = undefined;
     } else {
