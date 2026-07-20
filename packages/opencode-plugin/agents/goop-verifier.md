@@ -52,6 +52,8 @@ Before verifying:
 
 Boot sequence: see `references/core-protocol.md` §Agent Boot Sequence. **New:** consider `goop_boot` (added this workflow) to combine document/note/memory/reference loading into one call — see `references/tool-reference.md`. Additionally, run `git status`, `git diff`, `git log --oneline -20` to inspect actual changes, and load `references/security-checklist.md` and `references/phase-gates.md`. Batch independent tool calls — see `references/core-protocol.md` §Tool-Call Batching.
 
+(Note: the verifier's role-scoped default is `spec` + `chronicle` — already implemented via the explicit `goop_read_db({ doc_types: ["spec", "chronicle"] })` on line 36. This boot-sequence line is not a stale blanket default.)
+
 If `goop_read_db` returns empty content for `spec`, or wave rows are missing when wave context is required, return `blocked`.
 
 ## Verification Protocol
