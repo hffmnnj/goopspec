@@ -212,6 +212,118 @@ describe("goop_write_wave batch mode", () => {
     const result = await tool.execute({ wave_number: 1, title: "Single Wave" }, toolCtx);
     expect(result).toContain("wave 1");
   });
+
+  it("appends compact reminder when single wave is written with terminal status", async () => {
+    const tool = createGoopWriteWaveTool(ctx);
+    const result = await tool.execute(
+      { wave_number: 1, title: "Done wave", status: "done" },
+      toolCtx,
+    );
+    expect(result).toContain("Written wave 1");
+    expect(result).toContain("goop_compact");
+    expect(result).toContain("next_step");
+  });
+
+  it("does not append compact reminder when single wave status is non-terminal", async () => {
+    const tool = createGoopWriteWaveTool(ctx);
+    const pendingResult = await tool.execute(
+      { wave_number: 1, title: "Pending wave", status: "pending" },
+      toolCtx,
+    );
+    expect(pendingResult).toContain("Written wave 1");
+    expect(pendingResult).not.toContain("goop_compact");
+
+    const inProgressResult = await tool.execute(
+      { wave_number: 2, title: "In progress wave", status: "in_progress" },
+      toolCtx,
+    );
+    expect(inProgressResult).toContain("Written wave 2");
+    expect(inProgressResult).not.toContain("goop_compact");
+
+    const noStatusResult = await tool.execute({ wave_number: 3, title: "No status wave" }, toolCtx);
+    expect(noStatusResult).toContain("Written wave 3");
+    expect(noStatusResult).not.toContain("goop_compact");
+  });
+
+  it("does not append compact reminder for task_update path", async () => {
+    const tool = createGoopWriteWaveTool(ctx);
+    await tool.execute(
+      {
+        wave_number: 1,
+        title: "Wave One",
+        tasks: [{ task_index: 1, description: "Task 1", status: "pending" }],
+      },
+      toolCtx,
+    );
+
+    const result = await tool.execute(
+      { wave_number: 1, task_update: { task_index: 1, status: "done" } },
+      toolCtx,
+    );
+    expect(result).toContain("Updated task 1");
+    expect(result).not.toContain("goop_compact");
+  });
+
+  it("appends compact reminder when items batch contains a terminal wave", async () => {
+    const tool = createGoopWriteWaveTool(ctx);
+    const result = await tool.execute(
+      {
+        wave_number: 1,
+        items: [
+          { wave_number: 1, title: "Pending batch wave", status: "pending" },
+          { wave_number: 2, title: "Completed batch wave", status: "completed" },
+        ],
+      },
+      toolCtx,
+    );
+    expect(result).toContain("2/2 succeeded");
+    expect(result).toContain("goop_compact");
+    expect(result).toContain("next_step");
+  });
+
+  it("does not append compact reminder when items batch has only non-terminal waves", async () => {
+    const tool = createGoopWriteWaveTool(ctx);
+    const result = await tool.execute(
+      {
+        wave_number: 1,
+        items: [
+          { wave_number: 1, title: "Pending batch wave", status: "pending" },
+          { wave_number: 2, title: "In progress batch wave", status: "in_progress" },
+        ],
+      },
+      toolCtx,
+    );
+    expect(result).toContain("2/2 succeeded");
+    expect(result).not.toContain("goop_compact");
+  });
+
+  it("does not append compact reminder for task_updates batch path", async () => {
+    const tool = createGoopWriteWaveTool(ctx);
+    await tool.execute(
+      {
+        wave_number: 1,
+        title: "Wave One",
+        tasks: [
+          { task_index: 1, description: "Task 1", status: "pending" },
+          { task_index: 2, description: "Task 2", status: "pending" },
+        ],
+      },
+      toolCtx,
+    );
+
+    const result = await tool.execute(
+      {
+        wave_number: 1,
+        task_updates: [
+          { task_index: 1, status: "completed" },
+          { task_index: 2, status: "completed" },
+        ],
+      },
+      toolCtx,
+    );
+    expect(result).toContain("2/2 succeeded");
+    expect(result).not.toContain("goop_compact");
+  });
 });
 
 describe("goop_write_wave combinator mode", () => {
