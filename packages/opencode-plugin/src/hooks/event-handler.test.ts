@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, mock, spyOn } from "bun:test";
 import type { SdkEvent } from "../core/sdk-compat.js";
 import { createMockPluginContext, setupTestEnvironment } from "../test-utils.js";
-import { createEventHandlerHook } from "./event-handler.js";
+import { IDLE_COMPACTION_DEFER_MS, createEventHandlerHook } from "./event-handler.js";
 import type { Hooks } from "./types.js";
 
 type EventInput = { event: SdkEvent };
@@ -20,6 +20,10 @@ function makeSdkSession(id: string) {
 
 function idleEvent(sessionID: string): EventInput {
   return { event: { type: "session.idle", properties: { sessionID } } as SdkEvent };
+}
+
+function flushIdleCompactionDispatch(): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, IDLE_COMPACTION_DEFER_MS));
 }
 
 describe("event-handler hook", () => {
@@ -76,6 +80,8 @@ describe("event-handler hook", () => {
     await handler(idleEvent("sess-compact"));
 
     expect(ctx.sessionManager.get("sess-compact")?.meta.idleSince).not.toBeNull();
+    expect(summarize).not.toHaveBeenCalled();
+    await flushIdleCompactionDispatch();
     expect(summarize).toHaveBeenCalledWith({
       path: { id: "sess-compact" },
       body: { providerID: "opencode", modelID: "deepseek-v4", auto: true },
@@ -95,10 +101,30 @@ describe("event-handler hook", () => {
     await handler(idleEvent("unknown-sess"));
 
     expect(ctx.sessionManager.size()).toBe(0);
+    expect(summarize).not.toHaveBeenCalled();
+    await flushIdleCompactionDispatch();
     expect(summarize).toHaveBeenCalledWith({
       path: { id: "unknown-sess" },
       body: { providerID: "opencode", modelID: "deepseek-v4", auto: true },
     });
+  });
+
+  it("dispatches exactly one summarize when duplicate idle events are deferred", async () => {
+    const ctx = createMockPluginContext({ testDir });
+    const summarize = mock(async () => ({ data: true }));
+    Object.assign(ctx.sdk.client, { session: { summarize } });
+    ctx.pendingCompactions.set("sess-deduped", {
+      model: { providerID: "opencode", modelID: "deepseek-v4" },
+      status: "queued",
+    });
+    const handler = createEventHandlerHook(ctx).event as NonNullable<Hooks["event"]>;
+
+    await handler(idleEvent("sess-deduped"));
+    await handler(idleEvent("sess-deduped"));
+
+    expect(summarize).not.toHaveBeenCalled();
+    await flushIdleCompactionDispatch();
+    expect(summarize).toHaveBeenCalledTimes(1);
   });
 
   it("removes a session on session.deleted", async () => {

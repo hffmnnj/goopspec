@@ -7,7 +7,7 @@
 import { tool } from "../../core/sdk-compat.js";
 import type { ToolContext, ToolDefinition } from "../../core/sdk-compat.js";
 import type { PluginContext } from "../../core/types.js";
-import { logError } from "../../shared/logger.js";
+import { log, logError } from "../../shared/logger.js";
 
 interface ModelRef {
   providerID: string;
@@ -92,6 +92,7 @@ function observeCompaction(request: Promise<unknown>, ctx: PluginContext, sessio
         return;
       }
       ctx.pendingCompactions.delete(sessionID);
+      log("goop_compact summarize settled", { sessionID });
     })
     .catch((error: unknown) => {
       clearFailedCompaction(ctx, sessionID);
@@ -115,6 +116,7 @@ export function dispatchPendingCompaction(ctx: PluginContext, sessionID: string)
   }
 
   pending.status = "in-flight";
+  log("goop_compact dispatching summarize", { sessionID, auto: true });
 
   try {
     const body: SummarizeBody = { ...pending.model, auto: true };
@@ -179,6 +181,7 @@ export function createGoopCompactTool(ctx: PluginContext): ToolDefinition {
           model,
           status: "queued",
         });
+        log("goop_compact queued compaction", { sessionID, model });
 
         return `Compaction requested for session ${sessionID}; it will apply once the current turn completes. The host will continue automatically with: ${args.next_step}`;
       } catch (error) {

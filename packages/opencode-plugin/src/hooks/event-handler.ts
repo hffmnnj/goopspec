@@ -18,6 +18,8 @@ import { dispatchPendingCompaction } from "../tools/goop-compact/index.js";
 import type { HookFactory, Hooks } from "./types.js";
 import { safeHandler } from "./utils.js";
 
+export const IDLE_COMPACTION_DEFER_MS = 0;
+
 // ---------------------------------------------------------------------------
 // Narrow SDK Event union to the session lifecycle members we handle
 // ---------------------------------------------------------------------------
@@ -58,7 +60,12 @@ export const createEventHandlerHook: HookFactory = (ctx: PluginContext): Partial
       if (ctx.sessionManager.get(sessionId)) {
         ctx.sessionManager.markIdle(sessionId);
       }
-      dispatchPendingCompaction(ctx, sessionId);
+      // Defer to a fresh macrotask: OpenCode 1.15.3 fires event handlers without
+      // awaiting them and the SDK client is an in-process fetch. Calling summarize
+      // synchronously here causes in-process fetch reentrancy that stalls the
+      // request before it reaches the summarize route. Returning from the callback
+      // first, then dispatching on a fresh macrotask, avoids the reentrancy.
+      setTimeout(() => dispatchPendingCompaction(ctx, sessionId), IDLE_COMPACTION_DEFER_MS);
       return;
     }
 
