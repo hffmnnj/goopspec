@@ -1,6 +1,10 @@
 import type { SdkPermission } from "../../core/sdk-compat.js";
 import type { PluginContext } from "../../core/types.js";
-import { loadMergedConfig, resolveLoopDetectionConfig } from "../../features/setup/index.js";
+import {
+  type LoopDetectionConfig,
+  loadMergedConfig,
+  resolveLoopDetectionConfig,
+} from "../../features/setup/index.js";
 import { logError } from "../../shared/logger.js";
 import type { HookFactory, Hooks } from "../types.js";
 import { safeHandler } from "../utils.js";
@@ -16,6 +20,24 @@ import { type LoopTracker, createLoopTracker } from "./tracker.js";
  */
 const loopTracker = createLoopTracker();
 const tier1FlaggedSignatures = new Map<string, Set<string>>();
+
+// ---------------------------------------------------------------------------
+// Loop-detection config cache — project-level, short TTL to avoid re-reading
+// goopspec.json on every single tool.execute.after call.
+// ---------------------------------------------------------------------------
+
+interface LoopConfigCacheEntry {
+  config: Required<LoopDetectionConfig>;
+  timestamp: number;
+}
+
+const LOOP_CONFIG_CACHE_TTL_MS = 10_000;
+const _loopConfigCache = new Map<string, LoopConfigCacheEntry>();
+
+/** Exported for testing — clears the module-level loop-detection config cache. */
+export function __clearLoopConfigCache(): void {
+  _loopConfigCache.clear();
+}
 
 function signatureKey(tool: string, argsSignature: string): string {
   return `${tool}:${argsSignature}`;
@@ -77,7 +99,18 @@ export function createLoopDetectionHook(ctx: PluginContext): Partial<Hooks> {
     "loop-detection:after",
     async (input, output): Promise<void> => {
       try {
-        const config = resolveLoopDetectionConfig(loadMergedConfig(ctx.sdk.directory));
+        const projectDir = ctx.sdk.directory;
+        const now = Date.now();
+        const cached = _loopConfigCache.get(projectDir);
+
+        let config: Required<LoopDetectionConfig>;
+        if (cached && now - cached.timestamp < LOOP_CONFIG_CACHE_TTL_MS) {
+          config = cached.config;
+        } else {
+          config = resolveLoopDetectionConfig(loadMergedConfig(projectDir));
+          _loopConfigCache.set(projectDir, { config, timestamp: now });
+        }
+
         if (!config.enabled) return;
 
         const normalizedArgsHash = canonicalArgsHash(input.tool, input.args);

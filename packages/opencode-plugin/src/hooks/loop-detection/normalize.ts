@@ -4,6 +4,9 @@ import type { Entry } from "./types.js";
 
 const LONG_VALUE_THRESHOLD = 40;
 const MAX_OUTPUT_LENGTH = 200;
+const MAX_ARGS_HASH_LENGTH = 4_000;
+const MAX_SHELL_COMMAND_NORMALIZATION_LENGTH = 8_000;
+const MAX_ARGS_HASH_SCAN_NODES = 1_000;
 
 function collapseWhitespace(input: string): string {
   return input.replace(/\s+/g, " ").trim();
@@ -70,6 +73,27 @@ function sha256(input: string): string {
   return createHash("sha256").update(input, "utf-8").digest("hex");
 }
 
+function findOversizedString(
+  value: unknown,
+  seen = new WeakSet<object>(),
+  remaining = { nodes: MAX_ARGS_HASH_SCAN_NODES },
+): string | undefined {
+  if (typeof value === "string") {
+    return value.length > MAX_ARGS_HASH_LENGTH ? value : undefined;
+  }
+  if (value == null || typeof value !== "object") return undefined;
+  if (seen.has(value)) return undefined;
+  if (remaining.nodes <= 0) return "";
+
+  seen.add(value);
+  remaining.nodes -= 1;
+  for (const child of Object.values(value)) {
+    const oversized = findOversizedString(child, seen, remaining);
+    if (oversized !== undefined) return oversized;
+  }
+  return undefined;
+}
+
 function extractBashCommand(args: unknown): string | undefined {
   if (typeof args !== "object" || args == null) return undefined;
   const record = args as Record<string, unknown>;
@@ -85,8 +109,34 @@ export function canonicalArgsHash(tool: string, args: unknown): string {
   if (tool === "bash") {
     const command = extractBashCommand(args);
     if (command != null) {
-      return sha256(normalizeShellCommand(command));
+      const boundedCommand =
+        command.length > MAX_SHELL_COMMAND_NORMALIZATION_LENGTH
+          ? command.slice(0, MAX_SHELL_COMMAND_NORMALIZATION_LENGTH)
+          : command;
+      return sha256(normalizeShellCommand(boundedCommand));
     }
+  }
+
+  try {
+    const oversizedString = findOversizedString(args);
+    if (oversizedString !== undefined) {
+      return sha256(
+        `${tool}:${oversizedString.length}:${oversizedString.slice(0, MAX_ARGS_HASH_LENGTH)}`,
+      );
+    }
+  } catch {
+    return sha256(`${tool}:[unserializable]`);
+  }
+
+  let rawArgs: string;
+  try {
+    rawArgs = JSON.stringify(args);
+  } catch {
+    return sha256(`${tool}:[unserializable]`);
+  }
+
+  if (rawArgs.length > MAX_ARGS_HASH_LENGTH) {
+    return sha256(`${tool}:${rawArgs.length}:${rawArgs.slice(0, MAX_ARGS_HASH_LENGTH)}`);
   }
 
   const canonical = canonicalize(args);

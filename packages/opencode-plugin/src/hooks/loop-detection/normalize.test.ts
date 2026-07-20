@@ -61,6 +61,32 @@ describe("canonicalArgsHash", () => {
     const b = canonicalArgsHash("goop_status", { b: 2, a: 1 });
     expect(a).toBe(b);
   });
+
+  it("hashes identical large args identically", () => {
+    const args = { prompt: `early context ${"x".repeat(200_000)}` };
+    expect(canonicalArgsHash("task", args)).toBe(canonicalArgsHash("task", args));
+  });
+
+  it("distinguishes large args that differ within the bounded prefix", () => {
+    const a = { prompt: `first ${"x".repeat(200_000)}` };
+    const b = { prompt: `second ${"x".repeat(200_000)}` };
+    expect(canonicalArgsHash("task", a)).not.toBe(canonicalArgsHash("task", b));
+  });
+
+  it("bounds large-args hashing work", () => {
+    const args = { prompt: "x".repeat(200_000), files: Array.from({ length: 2_000 }, (_, i) => i) };
+    const start = performance.now();
+    for (let i = 0; i < 1_000; i += 1) {
+      canonicalArgsHash("task", args);
+    }
+    expect(performance.now() - start).toBeLessThan(1_000);
+  });
+
+  it("does not throw for circular args", () => {
+    const args: { self?: unknown } = {};
+    args.self = args;
+    expect(() => canonicalArgsHash("task", args)).not.toThrow();
+  });
 });
 
 describe("normalizeOutput / outputHash", () => {
