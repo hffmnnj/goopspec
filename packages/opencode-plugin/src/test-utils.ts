@@ -455,6 +455,7 @@ export function createMockPluginContext(opts: MockPluginContextOptions = {}): Pl
     session,
     sessionManager: createSessionManager(),
     compactionHandoff: new Map<string, string>(),
+    pendingCompactions: new Map(),
   };
 }
 

@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, spyOn } from "bun:test";
+import { afterEach, beforeEach, describe, expect, it, mock, spyOn } from "bun:test";
 import type { SdkEvent } from "../core/sdk-compat.js";
 import { createMockPluginContext, setupTestEnvironment } from "../test-utils.js";
 import { createEventHandlerHook } from "./event-handler.js";
@@ -95,6 +95,33 @@ describe("event-handler hook", () => {
 
     const session = ctx.sessionManager.get("sess-idle");
     expect(session?.meta.idleSince).not.toBeNull();
+  });
+
+  it("dispatches a queued compaction when its session becomes idle", async () => {
+    const ctx = createMockPluginContext({ testDir });
+    const summarize = mock(async () => ({ data: true }));
+    Object.assign(ctx.sdk.client, { session: { summarize } });
+    ctx.compactionHandoff.set("sess-compact", "Resume after compaction.");
+    ctx.pendingCompactions.set("sess-compact", {
+      model: { providerID: "opencode", modelID: "deepseek-v4" },
+      nextStep: "Resume after compaction.",
+      status: "pending",
+    });
+    const hooks = createEventHandlerHook(ctx);
+    const handler = hooks.event as NonNullable<Hooks["event"]>;
+
+    await handler({
+      event: {
+        type: "session.idle",
+        properties: { sessionID: "sess-compact" },
+      } as SdkEvent,
+    });
+
+    expect(summarize).toHaveBeenCalledWith({
+      path: { id: "sess-compact" },
+      body: { providerID: "opencode", modelID: "deepseek-v4", auto: true },
+    });
+    expect(ctx.pendingCompactions.has("sess-compact")).toBeFalse();
   });
 
   it("ignores session.idle for untracked sessions", async () => {
