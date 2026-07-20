@@ -118,7 +118,23 @@ async function runCompactionSequence(ctx: PluginContext, sessionID: string): Pro
   }
 
   try {
-    await abort({ path: { id: sessionID } });
+    const abortResponse = fieldsResponse<boolean>(await abort({ path: { id: sessionID } }));
+    if (abortResponse.error !== undefined) {
+      clearFailedCompaction(ctx, sessionID);
+      logError(
+        `goop_compact abort request rejected: ${errorDetail(abortResponse.error)}`,
+        abortResponse.error,
+      );
+      return;
+    }
+    if (abortResponse.data !== true) {
+      clearFailedCompaction(ctx, sessionID);
+      logError(
+        "goop_compact abort was not confirmed by the host",
+        new Error(`Unexpected abort response: ${String(abortResponse.data)}`),
+      );
+      return;
+    }
     await waitForCompactionSettle();
     const request = summarize({ path: { id: sessionID }, body: pending.model });
     observeCompaction(Promise.resolve(request), ctx, sessionID);

@@ -51,6 +51,13 @@ describe("createGoopCompactTool", () => {
     await Promise.resolve();
   }
 
+  async function advanceFakeTimers(): Promise<void> {
+    await Promise.resolve();
+    settleCallback?.();
+    await Promise.resolve();
+    await Promise.resolve();
+  }
+
   beforeEach(() => {
     const env = setupTestEnvironment("goop-compact");
     cleanup = env.cleanup;
@@ -192,6 +199,46 @@ describe("createGoopCompactTool", () => {
     expect(ctx.compactionHandoff.has(sessionID)).toBeFalse();
     expect(ctx.pendingCompactions.has(sessionID)).toBeFalse();
     expect(summarize).not.toHaveBeenCalled();
+    consoleSpy.mockRestore();
+  });
+
+  it("fails closed when abort returns false", async () => {
+    const abort = mock(async () => false);
+    const summarize = mock(async () => ({ data: true }));
+    setCompactionClient(ctx, { session: { messages: modelMessages, abort, summarize } });
+    const sessionID = "session-compact-abort-false";
+    const consoleSpy = spyOn(console, "error").mockImplementation(() => {});
+
+    await createGoopCompactTool(ctx).execute(
+      { next_step: "Resume only after an abort." },
+      createMockToolContext({ sessionID }),
+    );
+    await advanceFakeTimers();
+
+    expect(settleCallback).toBeUndefined();
+    expect(summarize).not.toHaveBeenCalled();
+    expect(ctx.pendingCompactions.has(sessionID)).toBeFalse();
+    expect(ctx.compactionHandoff.has(sessionID)).toBeFalse();
+    consoleSpy.mockRestore();
+  });
+
+  it("fails closed when abort returns an error response", async () => {
+    const abort = mock(async () => ({ error: { data: { message: "session still active" } } }));
+    const summarize = mock(async () => ({ data: true }));
+    setCompactionClient(ctx, { session: { messages: modelMessages, abort, summarize } });
+    const sessionID = "session-compact-abort-error";
+    const consoleSpy = spyOn(console, "error").mockImplementation(() => {});
+
+    await createGoopCompactTool(ctx).execute(
+      { next_step: "Resume only after an abort." },
+      createMockToolContext({ sessionID }),
+    );
+    await advanceFakeTimers();
+
+    expect(settleCallback).toBeUndefined();
+    expect(summarize).not.toHaveBeenCalled();
+    expect(ctx.pendingCompactions.has(sessionID)).toBeFalse();
+    expect(ctx.compactionHandoff.has(sessionID)).toBeFalse();
     consoleSpy.mockRestore();
   });
 
