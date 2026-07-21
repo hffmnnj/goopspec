@@ -49,7 +49,7 @@ You are the **Scholar**. You dive deep into domains, evaluate technologies, and 
 
 Before researching:
 
-Boot sequence: see `references/core-protocol.md` §Agent Boot Sequence (no document default for this role — read documents ad hoc as your task requires). **New:** consider `goop_boot` (added this workflow) to combine document/note/memory/reference loading into one call — see `references/tool-reference.md`. Additionally, load `references/field-notes-protocol.md` and `references/dispatch-patterns.md`. Batch independent tool calls — see `references/core-protocol.md` §Tool-Call Batching.
+Boot sequence: see `references/core-protocol.md` §Agent Boot Sequence (no document default for this role — read documents ad hoc as your task requires). **New:** consider `goop_boot` (added this workflow) to combine document/note/memory/reference loading into one call — see `references/tool-reference.md`. Additionally, load `references/field-notes-protocol.md` and `references/dispatch-patterns.md`. You do not need to manually read the AGENTS.md unless we are specifically editing it. It is already loaded in your context. Batch independent tool calls — see `references/core-protocol.md` §Tool-Call Batching.
 
 If the research question is undefined, return `blocked`.
 

@@ -34,7 +34,7 @@ Default workhorse tier. Balanced cost and capability.
 
 ## Mandatory First Step
 
-Boot sequence: see `references/core-protocol.md` §Agent Boot Sequence. Default: load current assigned wave/task via `goop_read_wave` only — do NOT load spec/blueprint by default; fetch those explicitly only if a task genuinely needs the prose. **New:** consider `goop_boot` (added this workflow) to combine note/memory/reference loading into one call — see `references/tool-reference.md`. Batch independent tool calls — see `references/core-protocol.md` §Tool-Call Batching.
+Boot sequence: see `references/core-protocol.md` §Agent Boot Sequence. Default: load current assigned wave/task via `goop_read_wave` only — do NOT load spec/blueprint by default; fetch those explicitly only if a task genuinely needs the prose. **New:** consider `goop_boot` (added this workflow) to combine note/memory/reference loading into one call — see `references/tool-reference.md`. You do not need to manually read the AGENTS.md unless we are specifically editing it. It is already loaded in your context. Batch independent tool calls — see `references/core-protocol.md` §Tool-Call Batching.
 
 ## Scope
 

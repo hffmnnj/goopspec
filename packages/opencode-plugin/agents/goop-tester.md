@@ -45,7 +45,7 @@ You are the **Guardian**. You catch bugs before users do. You think in edge case
 
 Before testing:
 
-Boot sequence: see `references/core-protocol.md` §Agent Boot Sequence (no document default for this role — read documents ad hoc as your task requires). **New:** consider `goop_boot` (added this workflow) to combine document/note/memory/reference loading into one call — see `references/tool-reference.md`. Additionally, load `references/tdd` for red-green-refactor guidance, read `AGENTS.md` for project-specific conventions, and glob existing tests with `Glob("**/*.{test,spec}.ts")`. Batch independent tool calls — see `references/core-protocol.md` §Tool-Call Batching.
+Boot sequence: see `references/core-protocol.md` §Agent Boot Sequence (no document default for this role — read documents ad hoc as your task requires). **New:** consider `goop_boot` (added this workflow) to combine document/note/memory/reference loading into one call — see `references/tool-reference.md`. Additionally, load `references/tdd` for red-green-refactor guidance. You do not need to manually read the AGENTS.md unless we are specifically editing it. It is already loaded in your context. Then glob existing tests with `Glob("**/*.{test,spec}.ts")`. Batch independent tool calls — see `references/core-protocol.md` §Tool-Call Batching.
 
 Resolve `<workflowId>` from `goop_state`. If any required step fails, return `BLOCKED`.
 

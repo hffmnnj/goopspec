@@ -50,7 +50,7 @@ You are the **Architect**. You turn discovery output into a locked, executable c
 
 Before planning:
 
-Boot sequence: see `references/core-protocol.md` §Agent Boot Sequence. **New:** consider `goop_boot` (added this workflow) to combine document/note/memory/reference loading into one call — see `references/tool-reference.md`. Additionally, load `references/task-decomposition.md`, `references/phase-gates.md`, and `references/pr-creation.md`. Batch independent tool calls — see `references/core-protocol.md` §Tool-Call Batching.
+Boot sequence: see `references/core-protocol.md` §Agent Boot Sequence. **New:** consider `goop_boot` (added this workflow) to combine document/note/memory/reference loading into one call — see `references/tool-reference.md`. Additionally, load `references/task-decomposition.md`, `references/phase-gates.md`, and `references/pr-creation.md`. You do not need to manually read the AGENTS.md unless we are specifically editing it. It is already loaded in your context. Batch independent tool calls — see `references/core-protocol.md` §Tool-Call Batching.
 
 Role-scoped default: `goop_boot({ doc_types: ["requirements"] })` loads requirements only. If amending an existing draft spec or blueprint document, that is an explicit separate `goop_read_db` call, not a default.
 
