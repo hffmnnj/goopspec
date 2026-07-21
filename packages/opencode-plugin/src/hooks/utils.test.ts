@@ -1,4 +1,4 @@
-import { describe, expect, it, spyOn } from "bun:test";
+import { afterEach, describe, expect, it, spyOn } from "bun:test";
 import {
   chainHandlers,
   isGoopspecFile,
@@ -12,6 +12,12 @@ import {
 // ---------------------------------------------------------------------------
 
 describe("safeHandler", () => {
+  const originalDebug = process.env.GOOPSPEC_DEBUG;
+
+  afterEach(() => {
+    process.env.GOOPSPEC_DEBUG = originalDebug;
+  });
+
   it("calls the underlying handler with correct arguments", async () => {
     const calls: unknown[] = [];
     const handler = async (input: { event: unknown }) => {
@@ -26,29 +32,67 @@ describe("safeHandler", () => {
     expect(calls[0]).toBe(input);
   });
 
-  it("catches errors and does not re-throw", async () => {
+  it.each([undefined, "true"])(
+    "catches errors without rejecting when debug is %p",
+    async (debug) => {
+      process.env.GOOPSPEC_DEBUG = debug;
+      const handler = async (_input: { event: unknown }) => {
+        throw new Error("boom");
+      };
+      const consoleSpy = spyOn(console, "error").mockImplementation(() => {});
+      const safe = safeHandler("event", handler);
+
+      await expect(safe({ event: { type: "test" } })).resolves.toBeUndefined();
+
+      expect(consoleSpy).toHaveBeenCalledTimes(1);
+      expect(consoleSpy.mock.calls[0][0]).toContain('hook "event" error');
+      consoleSpy.mockRestore();
+    },
+  );
+
+  it("awaits a non-throwing handler and resolves", async () => {
+    let completed = false;
     const handler = async (_input: { event: unknown }) => {
-      throw new Error("boom");
-    };
-
-    const consoleSpy = spyOn(console, "error").mockImplementation(() => {});
-    const safe = safeHandler("event", handler);
-
-    await safe({ event: { type: "test" } });
-
-    expect(consoleSpy).toHaveBeenCalledTimes(1);
-    const firstArg = consoleSpy.mock.calls[0][0] as string;
-    expect(firstArg).toContain("event");
-    consoleSpy.mockRestore();
-  });
-
-  it("returns void (no value leaks)", async () => {
-    const handler = async (_input: { event: unknown }) => {
-      // intentionally empty
+      await Promise.resolve();
+      completed = true;
     };
     const safe = safeHandler("event", handler);
     const result = await safe({ event: { type: "test" } });
+
+    expect(completed).toBe(true);
     expect(result).toBeUndefined();
+  });
+
+  it("skips timing and slow-hook logging outside debug mode", async () => {
+    process.env.GOOPSPEC_DEBUG = undefined;
+    const dateNowSpy = spyOn(Date, "now");
+    const consoleSpy = spyOn(console, "log").mockImplementation(() => {});
+    const safe = safeHandler("event", async (_input: { event: unknown }) => {
+      await Bun.sleep(30);
+    });
+
+    await safe({ event: { type: "test" } });
+
+    expect(dateNowSpy).not.toHaveBeenCalled();
+    expect(consoleSpy).not.toHaveBeenCalled();
+    dateNowSpy.mockRestore();
+    consoleSpy.mockRestore();
+  });
+
+  it("logs slow hooks in debug mode", async () => {
+    process.env.GOOPSPEC_DEBUG = "true";
+    const consoleSpy = spyOn(console, "log").mockImplementation(() => {});
+    const safe = safeHandler("event", async (_input: { event: unknown }) => {
+      await Bun.sleep(30);
+    });
+
+    await safe({ event: { type: "test" } });
+
+    expect(consoleSpy).toHaveBeenCalledWith(
+      "[goopspec] event: slow hook detected",
+      expect.objectContaining({ durationMs: expect.any(Number) }),
+    );
+    consoleSpy.mockRestore();
   });
 });
 

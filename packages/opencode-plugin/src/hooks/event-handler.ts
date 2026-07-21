@@ -19,6 +19,7 @@ import type { HookFactory, Hooks } from "./types.js";
 import { safeHandler } from "./utils.js";
 
 export const IDLE_COMPACTION_DEFER_MS = 0;
+const IGNORED_EVENT_RESULT: Promise<void> = Promise.resolve();
 
 // ---------------------------------------------------------------------------
 // Narrow SDK Event union to the session lifecycle members we handle
@@ -45,39 +46,55 @@ function isSessionDeleted(event: SdkEvent): event is SessionDeletedEvent {
 // ---------------------------------------------------------------------------
 
 export const createEventHandlerHook: HookFactory = (ctx: PluginContext): Partial<Hooks> => {
-  const handler: NonNullable<Hooks["event"]> = async (input) => {
-    const event = input.event;
+  const lifecycleHandler: NonNullable<Hooks["event"]> = safeHandler(
+    "event-handler",
+    async (input) => {
+      const event = input.event;
 
-    if (!event || typeof event.type !== "string") return;
+      if (!event || typeof event.type !== "string") return;
 
-    if (isSessionCreated(event)) {
-      ctx.sessionManager.create(event.properties.info.id);
-      return;
-    }
-
-    if (isSessionIdle(event)) {
-      const sessionId = event.properties.sessionID;
-      if (ctx.sessionManager.get(sessionId)) {
-        ctx.sessionManager.markIdle(sessionId);
+      if (isSessionCreated(event)) {
+        ctx.sessionManager.create(event.properties.info.id);
+        return;
       }
-      // Defer to a fresh macrotask: OpenCode 1.15.3 fires event handlers without
-      // awaiting them and the SDK client is an in-process fetch. Calling summarize
-      // synchronously here causes in-process fetch reentrancy that stalls the
-      // request before it reaches the summarize route. Returning from the callback
-      // first, then dispatching on a fresh macrotask, avoids the reentrancy.
-      setTimeout(() => dispatchPendingCompaction(ctx, sessionId), IDLE_COMPACTION_DEFER_MS);
-      return;
+
+      if (isSessionIdle(event)) {
+        const sessionId = event.properties.sessionID;
+        if (ctx.sessionManager.get(sessionId)) {
+          ctx.sessionManager.markIdle(sessionId);
+        }
+        // Defer to a fresh macrotask: OpenCode 1.15.3 fires event handlers without
+        // awaiting them and the SDK client is an in-process fetch. Calling summarize
+        // synchronously here causes in-process fetch reentrancy that stalls the
+        // request before it reaches the summarize route. Returning from the callback
+        // first, then dispatching on a fresh macrotask, avoids the reentrancy.
+        setTimeout(() => dispatchPendingCompaction(ctx, sessionId), IDLE_COMPACTION_DEFER_MS);
+        return;
+      }
+
+      if (isSessionDeleted(event)) {
+        ctx.sessionManager.delete(event.properties.info.id);
+        return;
+      }
+
+      // All other event types: silently ignored
+    },
+  );
+
+  const handler: NonNullable<Hooks["event"]> = (input) => {
+    const eventType = input.event?.type;
+    if (
+      eventType !== "session.created" &&
+      eventType !== "session.idle" &&
+      eventType !== "session.deleted"
+    ) {
+      return IGNORED_EVENT_RESULT;
     }
 
-    if (isSessionDeleted(event)) {
-      ctx.sessionManager.delete(event.properties.info.id);
-      return;
-    }
-
-    // All other event types: silently ignored
+    return lifecycleHandler(input);
   };
 
   return {
-    event: safeHandler("event-handler", handler),
+    event: handler,
   };
 };

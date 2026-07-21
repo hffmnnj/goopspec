@@ -7,6 +7,8 @@
 
 import type { Database } from "bun:sqlite";
 
+import { configureWalAutocheckpoint } from "../db/wal.js";
+
 // ---------------------------------------------------------------------------
 // FTS5 availability detection
 // ---------------------------------------------------------------------------
@@ -140,6 +142,7 @@ export function initSchema(db: Database): InitSchemaResult {
   db.run("PRAGMA synchronous = NORMAL");
   db.run("PRAGMA cache_size = -8000"); // 8 MB
   db.run("PRAGMA busy_timeout = 3000");
+  configureWalAutocheckpoint(db);
 
   createMemoriesTable(db);
 

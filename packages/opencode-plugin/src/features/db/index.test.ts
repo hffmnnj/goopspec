@@ -38,6 +38,17 @@ describe("GoopSpecDB", () => {
       db.close();
     });
 
+    it("configures a bounded WAL autocheckpoint", () => {
+      const db = new GoopSpecDB(":memory:");
+      // biome-ignore lint/complexity/useLiteralKeys: accessing private property for test
+      const row = db["db"]
+        .query<{ wal_autocheckpoint: number }, []>("PRAGMA wal_autocheckpoint")
+        .get();
+      expect(row?.wal_autocheckpoint).toBeGreaterThan(0);
+      expect(row?.wal_autocheckpoint).toBeLessThanOrEqual(1000);
+      db.close();
+    });
+
     it("records schema version 1", () => {
       const db = new GoopSpecDB(":memory:");
       // biome-ignore lint/complexity/useLiteralKeys: accessing private property for test

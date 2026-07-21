@@ -21,13 +21,19 @@ type AsyncHandler = (...args: never[]) => Promise<void>;
  * propagated. A hook error must never crash OpenCode.
  */
 export function safeHandler<H extends AsyncHandler>(label: string, handler: H): H {
+  // Capture once so high-frequency hook invocations avoid reading process.env.
+  const debug = process.env.GOOPSPEC_DEBUG === "true";
   const wrapped = async (...args: Parameters<H>): Promise<void> => {
     try {
-      const start = Date.now();
-      await (handler as unknown as (...a: unknown[]) => Promise<void>)(...args);
-      const duration = Date.now() - start;
-      if (duration > 25) {
-        log(`${label}: slow hook detected`, { durationMs: duration });
+      if (debug) {
+        const start = Date.now();
+        await (handler as unknown as (...a: unknown[]) => Promise<void>)(...args);
+        const duration = Date.now() - start;
+        if (duration > 25) {
+          log(`${label}: slow hook detected`, { durationMs: duration });
+        }
+      } else {
+        await (handler as unknown as (...a: unknown[]) => Promise<void>)(...args);
       }
     } catch (err) {
       // biome-ignore lint/suspicious/noConsole: Intentional error logging for graceful degradation

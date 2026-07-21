@@ -156,11 +156,22 @@ describe("event-handler hook", () => {
 
   it("silently ignores unknown event types", async () => {
     const ctx = createMockPluginContext({ testDir });
+    const getSpy = spyOn(ctx.sessionManager, "get");
+    const createSpy = spyOn(ctx.sessionManager, "create");
+    const markIdleSpy = spyOn(ctx.sessionManager, "markIdle");
+    const deleteSpy = spyOn(ctx.sessionManager, "delete");
+    const timerSpy = spyOn(globalThis, "setTimeout");
     const handler = createEventHandlerHook(ctx).event as NonNullable<Hooks["event"]>;
     await handler({
       event: { type: "vcs.branch.updated", properties: { branch: "main" } } as SdkEvent,
     });
     expect(ctx.sessionManager.size()).toBe(0);
+    expect(getSpy).not.toHaveBeenCalled();
+    expect(createSpy).not.toHaveBeenCalled();
+    expect(markIdleSpy).not.toHaveBeenCalled();
+    expect(deleteSpy).not.toHaveBeenCalled();
+    expect(timerSpy).not.toHaveBeenCalled();
+    timerSpy.mockRestore();
   });
 
   it("ignores malformed and null events", async () => {

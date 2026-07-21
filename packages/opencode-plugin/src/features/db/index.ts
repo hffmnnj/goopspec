@@ -30,6 +30,7 @@ import type {
   WorkflowRow,
   WorkflowSummaryRow,
 } from "./types.js";
+import { truncateWal } from "./wal.js";
 
 /** Named parameter bindings accepted by bun:sqlite. */
 type NamedBindings = Record<string, string | bigint | number | boolean | null>;
@@ -85,6 +86,7 @@ export class GoopSpecDB {
 
   close(): void {
     try {
+      truncateWal(this.db);
       this.db.close();
     } catch {
       // Already closed or never opened.

@@ -70,6 +70,13 @@ describe("SqliteMemoryManager", () => {
     it("reports FTS5 as available (Bun ships with FTS5)", () => {
       expect(mgr.hasFts5).toBe(true);
     });
+
+    it("configures a bounded WAL autocheckpoint", () => {
+      const db = (mgr as unknown as { db: Database }).db;
+      const row = db.query<{ wal_autocheckpoint: number }, []>("PRAGMA wal_autocheckpoint").get();
+      expect(row?.wal_autocheckpoint).toBeGreaterThan(0);
+      expect(row?.wal_autocheckpoint).toBeLessThanOrEqual(1000);
+    });
   });
 
   // -----------------------------------------------------------------------
