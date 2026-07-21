@@ -180,10 +180,11 @@ export function createGoopCompactTool(ctx: PluginContext): ToolDefinition {
         ctx.pendingCompactions.set(sessionID, {
           model,
           status: "queued",
+          queuedAtMs: Date.now(),
         });
         log("goop_compact queued compaction", { sessionID, model });
 
-        return `Compaction requested for session ${sessionID}; it will apply once the current turn completes. The host will continue automatically with: ${args.next_step}`;
+        return `Compaction queued. Please end your turn here so compaction can occur. Next step after compaction: ${args.next_step}`;
       } catch (error) {
         if (sessionID) {
           clearFailedCompaction(ctx, sessionID);

@@ -78,6 +78,7 @@ export interface PendingCompactionRequest {
     modelID: string;
   };
   status: "queued" | "in-flight";
+  readonly queuedAtMs: number;
 }
 
 // ---------------------------------------------------------------------------
