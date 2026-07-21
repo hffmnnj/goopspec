@@ -92,12 +92,20 @@ export interface V2ToolDraft {
 /** Event received immediately before a selected tool executes. */
 export interface V2ToolExecuteBeforeEvent {
   readonly tool: string;
+  /** Session owning this tool call when supplied by the V2 runtime. */
+  readonly sessionID?: string;
+  /** Compatibility location used by V2 hosts that wrap execution context. */
+  readonly context?: unknown;
   input: unknown;
 }
 
 /** Event received after a selected tool execution settles. */
 export interface V2ToolExecuteAfterEvent {
   readonly tool: string;
+  /** Session owning this tool call when supplied by the V2 runtime. */
+  readonly sessionID?: string;
+  /** Compatibility location used by V2 hosts that wrap execution context. */
+  readonly context?: unknown;
   result: unknown;
   output: unknown;
   outputPaths: string[];
@@ -118,6 +126,10 @@ export interface V2ToolCapability {
 
 /** Mutable model-request event received by the documented session hook. */
 export interface V2SessionRequestEvent {
+  /** Session whose model request is being assembled when exposed by the host. */
+  readonly sessionID?: string;
+  /** Compatibility location used by V2 hosts that wrap request context. */
+  readonly context?: unknown;
   system: unknown;
   messages: unknown[];
   tools: Record<string, unknown>;

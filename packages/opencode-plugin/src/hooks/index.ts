@@ -13,6 +13,7 @@ import { createAutoProgressionHook } from "./auto-progression.js";
 import { chatMessageFactory } from "./chat-message.js";
 import { createCommandProcessorHook } from "./command-processor.js";
 import { commentCheckerFactory } from "./comment-checker.js";
+import { compactionHaltHookFactory } from "./compaction-halt/index.js";
 import { createCompactionHook } from "./compaction-hook.js";
 import { createEventHandlerHook } from "./event-handler.js";
 import { loopDetectionHookFactory } from "./loop-detection/index.js";
@@ -75,6 +76,7 @@ export const DEFAULT_HOOK_FACTORIES: readonly HookFactory[] = [
   createAutoProgressionHook,
   createEventHandlerHook,
   createCompactionHook,
+  compactionHaltHookFactory,
 ];
 
 /**
