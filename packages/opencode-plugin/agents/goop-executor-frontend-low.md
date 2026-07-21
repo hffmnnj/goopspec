@@ -54,6 +54,7 @@ UI mechanical tasks (markup, simple styling, copy) where the correct approach is
 - Motion, animation, or micro-interaction design.
 - Visual polish requiring design judgment.
 - Cross-backend API or data-schema work.
+- Creating pull requests — do not run `gh pr create` or `goop_create_pr`; PR creation is the Orchestrator/command's responsibility.
 
 Escalate to `goop-executor-frontend-high` for design-sensitive work and to `goop-executor-medium/high` for backend scope.
 

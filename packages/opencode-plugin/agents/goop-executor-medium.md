@@ -53,6 +53,7 @@ Boot sequence: see `references/core-protocol.md` §Agent Boot Sequence. Default:
 - Complex algorithms or performance-critical optimization.
 - Security-sensitive design decisions.
 - UI/UX implementation.
+- Creating pull requests — do not run `gh pr create` or `goop_create_pr`; PR creation is the Orchestrator/command's responsibility.
 
 Escalate to `goop-executor-high` when any of those appear.
 

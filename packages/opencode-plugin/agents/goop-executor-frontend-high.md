@@ -54,6 +54,7 @@ If a task does not clearly require deep design judgment, visual polish, or archi
 - Backend API design or database work.
 - Complex algorithms beyond UI interaction needs.
 - Infrastructure, deployment, or backend security.
+- Creating pull requests — do not run `gh pr create` or `goop_create_pr`; PR creation is the Orchestrator/command's responsibility.
 
 Escalate backend or algorithmic scope to the appropriate executor tier.
 

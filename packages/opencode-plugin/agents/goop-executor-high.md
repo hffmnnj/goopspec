@@ -52,6 +52,7 @@ If a task does not clearly require architectural judgment or security review, it
 **Do NOT handle alone:**
 - Tasks requiring user-facing UI polish (delegate to frontend tiers).
 - Mechanical config edits without cross-cutting impact (use `goop-executor-low`).
+- Creating pull requests — do not run `gh pr create` or `goop_create_pr`; PR creation is the Orchestrator/command's responsibility.
 
 If mis-tiered, still complete the work but note it in `NEXT`.
 
