@@ -54,7 +54,7 @@ Wave branches form a stack rooted at `main`:
 main ← feat/wave-1 ← feat/wave-2 ← feat/wave-3 ← …
 ```
 
-Each PR targets the previous branch. The merge order is newest-first, cascading down: merge Wave N into Wave N-1's branch, then Wave N-1 (carrying Wave N's work) into Wave N-2, and so on, until Wave 1 — already targeting `main` — merges last. Every merge in this order targets an already-known branch, so no GitHub auto-retargeting is required. GitHub only auto-retargets a stacked PR's base when the upstream branch is *deleted* after merge, never on merge alone (see `fn_20260625_ci0wv3tu`). The accept step (`/goop-accept`) automates this cascade when the user opts in to merge.
+Each PR targets the previous branch. The merge order is newest-first, cascading down: merge Wave N into Wave N-1's branch, then Wave N-1 (carrying Wave N's work) into Wave N-2, and so on, until Wave 1 — already targeting `main` — merges last. Every merge in this order targets an already-known branch, so no GitHub auto-retargeting is required. GitHub only auto-retargets a stacked PR's base when the upstream branch is *deleted* after merge, never on merge alone (see `fn_20260625_ci0wv3tu`). The accept step (`/goop-accept`) automates this cascade when the user opts in to merge. GoopSpec's default merge method is merge-commit (`gh pr merge --merge`); squash is a manual human override only.
 
 ## Single-Branch Parallelism Rule
 

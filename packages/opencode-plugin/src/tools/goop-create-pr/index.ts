@@ -69,7 +69,8 @@ export function createGoopCreatePrTool(ctx: PluginContext): ToolDefinition {
   return tool({
     description:
       "Create a GitHub PR with a mandatory GoopSpec terminology gate. " +
-      "Scans title, body, and branch for internal terms; blocks on violations.",
+      "Scans title, body, and branch for internal terms; blocks on violations. " +
+      "Merge method is applied at merge time and defaults to merge-commit.",
     args: {
       title: tool.schema.string().describe("PR title"),
       body: tool.schema.string().describe("PR body/description"),
