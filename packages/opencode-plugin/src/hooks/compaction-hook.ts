@@ -14,6 +14,7 @@
 
 import type { PluginContext } from "../core/types.js";
 import { log } from "../shared/logger.js";
+import { clearCompactionHaltState } from "./compaction-halt/index.js";
 import type { HookFactory, Hooks } from "./types.js";
 import { safeHandler } from "./utils.js";
 
@@ -135,7 +136,11 @@ export const createCompactionHook: HookFactory = (ctx: PluginContext): Partial<H
     ): Promise<void> => {
       const sessionID = input.sessionID;
       const nextStep = sessionID ? ctx.compactionHandoff.get(sessionID) : undefined;
-      if (sessionID) ctx.compactionHandoff.delete(sessionID);
+      if (sessionID) {
+        ctx.compactionHandoff.delete(sessionID);
+        ctx.pendingCompactions.delete(sessionID);
+        clearCompactionHaltState(sessionID);
+      }
       const block = buildWorkflowSurvivalBlock(ctx, nextStep);
 
       if (block.trim().length > 0) {

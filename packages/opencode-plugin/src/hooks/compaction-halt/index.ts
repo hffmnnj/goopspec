@@ -14,6 +14,14 @@ type IdleSinceSignal = { available: true; idleSince: number | null } | { availab
 const requestTurns = new Map<string, number>();
 const fallbackPendingTurns = new Map<string, FallbackPendingTurn>();
 
+// A queued request should dispatch on the next idle event; two minutes bounds a missed host event.
+export const COMPACTION_PENDING_TTL_MS = 120_000;
+
+export function clearCompactionHaltState(sessionID: string): void {
+  requestTurns.delete(sessionID);
+  fallbackPendingTurns.delete(sessionID);
+}
+
 function getIdleSinceSignal(ctx: PluginContext, sessionID: string): IdleSinceSignal {
   const manager: unknown = ctx.sessionManager;
   if (!manager || typeof manager !== "object" || !("get" in manager)) {
@@ -77,7 +85,14 @@ export function createCompactionHaltHook(ctx: PluginContext): Partial<Hooks> {
       try {
         const pending = ctx.pendingCompactions.get(input.sessionID);
         if (!pending) {
-          fallbackPendingTurns.delete(input.sessionID);
+          clearCompactionHaltState(input.sessionID);
+          return;
+        }
+
+        if (
+          pending.status !== "queued" ||
+          Date.now() - pending.queuedAtMs > COMPACTION_PENDING_TTL_MS
+        ) {
           return;
         }
 

@@ -243,6 +243,11 @@ describe("createCompactionHook", () => {
   it("includes and clears the declared next step for its session", async () => {
     const ctx = createMockPluginContext();
     ctx.compactionHandoff.set("session-a", "Run the focused hook tests.");
+    ctx.pendingCompactions.set("session-a", {
+      model: { providerID: "openai", modelID: "gpt-5" },
+      status: "in-flight",
+      queuedAtMs: Date.now(),
+    });
 
     const hooks = createCompactionHook(ctx);
     const output: { context: string[]; prompt?: string } = { context: [] };
@@ -252,6 +257,7 @@ describe("createCompactionHook", () => {
       "IMMEDIATE NEXT STEP (declared before compaction): Run the focused hook tests.",
     );
     expect(ctx.compactionHandoff.get("session-a")).toBeUndefined();
+    expect(ctx.pendingCompactions.has("session-a")).toBeFalse();
 
     const secondOutput: { context: string[]; prompt?: string } = { context: [] };
     await hooks["experimental.session.compacting"]?.({ sessionID: "session-a" }, secondOutput);
