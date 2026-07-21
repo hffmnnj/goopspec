@@ -52,6 +52,7 @@ Boot sequence: see `references/core-protocol.md` §Agent Boot Sequence. Default:
 - Design-system architecture or token/theme decisions.
 - Complex interaction design, motion, or animation.
 - Backend API design, data schema, or infrastructure work.
+- Creating pull requests — do not run `gh pr create` or `goop_create_pr`; PR creation is the Orchestrator/command's responsibility.
 
 Escalate design-sensitive work to `goop-executor-frontend-high` and backend scope to `goop-executor-medium/high`.
 

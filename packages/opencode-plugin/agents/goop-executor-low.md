@@ -54,6 +54,7 @@ Boot sequence: see `references/core-protocol.md` §Agent Boot Sequence. Default:
 - Security-critical changes.
 - Performance-sensitive work.
 - UI/UX implementation.
+- Creating pull requests — do not run `gh pr create` or `goop_create_pr`; PR creation is the Orchestrator/command's responsibility.
 
 If a task crosses into any excluded area, return `checkpoint` and escalate.
 
