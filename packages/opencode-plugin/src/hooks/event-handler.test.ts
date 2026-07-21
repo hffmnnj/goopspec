@@ -74,6 +74,7 @@ describe("event-handler hook", () => {
     ctx.pendingCompactions.set("sess-compact", {
       model: { providerID: "opencode", modelID: "deepseek-v4" },
       status: "queued",
+      queuedAtMs: Date.now(),
     });
     const handler = createEventHandlerHook(ctx).event as NonNullable<Hooks["event"]>;
 
@@ -95,6 +96,7 @@ describe("event-handler hook", () => {
     ctx.pendingCompactions.set("unknown-sess", {
       model: { providerID: "opencode", modelID: "deepseek-v4" },
       status: "queued",
+      queuedAtMs: Date.now(),
     });
     const handler = createEventHandlerHook(ctx).event as NonNullable<Hooks["event"]>;
 
@@ -116,6 +118,7 @@ describe("event-handler hook", () => {
     ctx.pendingCompactions.set("sess-deduped", {
       model: { providerID: "opencode", modelID: "deepseek-v4" },
       status: "queued",
+      queuedAtMs: Date.now(),
     });
     const handler = createEventHandlerHook(ctx).event as NonNullable<Hooks["event"]>;
 

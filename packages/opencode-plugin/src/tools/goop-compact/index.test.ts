@@ -65,11 +65,16 @@ describe("createGoopCompactTool", () => {
       createMockToolContext({ sessionID }),
     );
 
-    expect(result).toContain(`Compaction requested for session ${sessionID}`);
+    expect(result).toContain(
+      "Compaction queued. Please end your turn here so compaction can occur.",
+    );
+    expect(result).not.toContain("will continue automatically");
+    expect(result).not.toContain("will apply once the current turn completes");
     expect(abort).not.toHaveBeenCalled();
     expect(summarize).not.toHaveBeenCalled();
     expect(ctx.compactionHandoff.get(sessionID)).toBe(nextStep);
     expect(ctx.pendingCompactions.get(sessionID)?.status).toBe("queued");
+    expect(typeof ctx.pendingCompactions.get(sessionID)?.queuedAtMs).toBe("number");
   });
 
   it("blocks duplicate requests while compaction is pending", async () => {
@@ -102,7 +107,9 @@ describe("createGoopCompactTool", () => {
       { next_step: "Resume the current work." },
       createMockToolContext(),
     );
-    expect(available).toContain("Compaction requested");
+    expect(available).toContain(
+      "Compaction queued. Please end your turn here so compaction can occur.",
+    );
 
     setCompactionClient(ctx, { session: { abort: mock(async () => ({ data: true })) } });
     const unavailable = await createGoopCompactTool(ctx).execute(
@@ -158,6 +165,7 @@ describe("createGoopCompactTool", () => {
     ctx.pendingCompactions.set(sessionID, {
       model: { providerID: "opencode", modelID: "deepseek-v4" },
       status: "queued",
+      queuedAtMs: Date.now(),
     });
 
     dispatchPendingCompaction(ctx, sessionID);
@@ -181,6 +189,7 @@ describe("createGoopCompactTool", () => {
     ctx.pendingCompactions.set(sessionID, {
       model: { providerID: "opencode", modelID: "deepseek-v4" },
       status: "queued",
+      queuedAtMs: Date.now(),
     });
     dispatchPendingCompaction(ctx, sessionID);
     dispatchPendingCompaction(ctx, sessionID);
@@ -200,6 +209,7 @@ describe("createGoopCompactTool", () => {
     ctx.pendingCompactions.set(sessionID, {
       model: { providerID: "opencode", modelID: "deepseek-v4" },
       status: "queued",
+      queuedAtMs: Date.now(),
     });
 
     dispatchPendingCompaction(ctx, sessionID);

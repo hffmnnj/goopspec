@@ -64,6 +64,15 @@ function asSystemMessages(event: V2SessionRequestEvent): string[] | null {
   return event.system as string[];
 }
 
+function getV2SessionID(event: {
+  readonly sessionID?: string;
+  readonly context?: unknown;
+}): string {
+  if (typeof event.sessionID === "string") return event.sessionID;
+  if (!isRecord(event.context) || typeof event.context.sessionID !== "string") return "";
+  return event.context.sessionID;
+}
+
 function createToolCallQueue(): {
   before(
     event: V2ToolExecuteBeforeEvent,
@@ -86,7 +95,7 @@ function createToolCallQueue(): {
 
       const input: V1ToolInput = {
         tool: event.tool,
-        sessionID: "",
+        sessionID: getV2SessionID(event),
         callID: `v2-${++nextCallId}`,
         args: event.input,
       };
@@ -251,7 +260,7 @@ export async function registerHooksV2(
         await sessionCapability.hook("request", async (event) => {
           const system = asSystemMessages(event);
           if (!system) return;
-          await handler({ model: {} as never }, { system });
+          await handler({ sessionID: getV2SessionID(event), model: {} as never }, { system });
         });
       } catch (error) {
         logError("V2 system hook registration failed", error);
