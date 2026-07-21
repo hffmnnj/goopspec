@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "bun:test";
+import { afterEach, describe, expect, it, spyOn } from "bun:test";
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 
@@ -170,6 +170,55 @@ describe("registerHooksV2()", () => {
     expect(v1Output.output).toContain("Comment Quality Notice");
     expect(output.output).toEqual(v1Output.output);
     expect(output.metadata.durationMs).toEqual(expect.any(Number));
+  });
+
+  it("preserves V2 session IDs for compaction-halt across request turns", async () => {
+    const ctx = createMockPluginContext();
+    contexts.push(ctx);
+    Object.defineProperty(ctx, "sessionManager", { configurable: true, value: {} });
+    const sessionID = "v2-compaction-session";
+    ctx.pendingCompactions.set(sessionID, {
+      model: { providerID: "openai", modelID: "gpt-5" },
+      status: "queued",
+      queuedAtMs: 1_000,
+    });
+    const pendingGet = spyOn(ctx.pendingCompactions, "get");
+    const registrations: Registrations = {
+      agentTransforms: 0,
+      catalogTransforms: 0,
+      agentReloads: 0,
+      catalogReloads: 0,
+    };
+
+    await registerHooksV2(createRuntimeContext(registrations), ctx);
+
+    await registrations.request?.({ sessionID, system: [], messages: [], tools: {} });
+    const sameTurnOutput = { title: "result", output: "same turn", metadata: {} };
+    await registrations.before?.({ tool: "bash", sessionID, input: { command: "pwd" } });
+    await registrations.after?.({
+      tool: "bash",
+      sessionID,
+      result: undefined,
+      output: sameTurnOutput,
+      outputPaths: [],
+    });
+
+    expect(pendingGet).toHaveBeenLastCalledWith(sessionID);
+    expect(sameTurnOutput.output).toBe("same turn");
+
+    await registrations.request?.({ sessionID, system: [], messages: [], tools: {} });
+    const laterTurnOutput = { title: "result", output: "later turn", metadata: {} };
+    await registrations.before?.({ tool: "bash", sessionID, input: { command: "pwd" } });
+    await registrations.after?.({
+      tool: "bash",
+      sessionID,
+      result: undefined,
+      output: laterTurnOutput,
+      outputPaths: [],
+    });
+
+    expect(pendingGet).toHaveBeenLastCalledWith(sessionID);
+    expect(laterTurnOutput.output).toContain("COMPACTION PENDING — END YOUR TURN");
   });
 
   it("does not throw when runtime hook capabilities are absent", async () => {
