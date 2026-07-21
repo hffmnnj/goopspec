@@ -180,7 +180,7 @@ describe("registerHooksV2()", () => {
     ctx.pendingCompactions.set(sessionID, {
       model: { providerID: "openai", modelID: "gpt-5" },
       status: "queued",
-      queuedAtMs: 1_000,
+      queuedAtMs: Date.now(),
     });
     const pendingGet = spyOn(ctx.pendingCompactions, "get");
     const registrations: Registrations = {
