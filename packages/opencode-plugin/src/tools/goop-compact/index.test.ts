@@ -65,7 +65,9 @@ describe("createGoopCompactTool", () => {
       createMockToolContext({ sessionID }),
     );
 
-    expect(result).toContain("Compaction queued. Please end your turn here so compaction can occur.");
+    expect(result).toContain(
+      "Compaction queued. Please end your turn here so compaction can occur.",
+    );
     expect(result).not.toContain("will continue automatically");
     expect(result).not.toContain("will apply once the current turn completes");
     expect(abort).not.toHaveBeenCalled();
@@ -105,7 +107,9 @@ describe("createGoopCompactTool", () => {
       { next_step: "Resume the current work." },
       createMockToolContext(),
     );
-    expect(available).toContain("Compaction queued. Please end your turn here so compaction can occur.");
+    expect(available).toContain(
+      "Compaction queued. Please end your turn here so compaction can occur.",
+    );
 
     setCompactionClient(ctx, { session: { abort: mock(async () => ({ data: true })) } });
     const unavailable = await createGoopCompactTool(ctx).execute(
