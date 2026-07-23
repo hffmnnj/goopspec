@@ -1,4 +1,3 @@
-import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 
 import { tool } from "../../core/sdk-compat.js";
@@ -74,7 +73,7 @@ export function createScipTool(ctx: PluginContext): ToolDefinition {
     ): Promise<string> {
       try {
         if (args.action === "index") {
-          return "SCIP index generation is not available yet. Generate an index first with `scip-typescript index`.";
+          return generateIndex(ctx);
         }
 
         if (!args.symbol) {
@@ -82,8 +81,8 @@ export function createScipTool(ctx: PluginContext): ToolDefinition {
         }
 
         const indexPath = resolve(ctx.sdk.directory, args.index_path ?? "index.scip");
-        if (!existsSync(indexPath)) {
-          return `No SCIP index found at ${indexPath}. Generate one first with \`scip-typescript index\`.`;
+        if (!(await Bun.file(indexPath).exists())) {
+          return noIndexGuidance(indexPath);
         }
 
         const configuredPath = loadMergedConfig(ctx.sdk.directory).binaryPaths?.scip;
@@ -117,6 +116,43 @@ export function createScipTool(ctx: PluginContext): ToolDefinition {
       }
     },
   });
+}
+
+async function generateIndex(ctx: PluginContext): Promise<string> {
+  const projectDir = ctx.sdk.directory;
+  const configuredPath = loadMergedConfig(projectDir).binaryPaths?.["scip-typescript"];
+  const resolved = await resolveBinary("scip-typescript", {
+    projectDir,
+    configuredPath,
+  });
+  if (!("path" in resolved)) {
+    return installHint("scip-typescript");
+  }
+
+  const result = await executeCommand([resolved.path, "index"], projectDir);
+  if (result.exitCode !== 0) {
+    const stderr = result.stderr.trim();
+    const failure = `scip-typescript index failed (exit ${result.exitCode}):${
+      stderr ? `\n\n${stderr}` : ""
+    }`;
+    return isMissingBinaryFailure(result.exitCode, stderr)
+      ? `${failure}\n\n${installHint("scip-typescript")}`
+      : failure;
+  }
+
+  const indexPath = resolve(projectDir, "index.scip");
+  return `Generated SCIP index at ${indexPath}.`;
+}
+
+function noIndexGuidance(indexPath: string): string {
+  return [
+    `No SCIP index found at ${indexPath}.`,
+    "Run the SCIP tool with action `index` first (equivalent to `scip-typescript index` from the project root).",
+  ].join("\n\n");
+}
+
+function isMissingBinaryFailure(exitCode: number, stderr: string): boolean {
+  return exitCode === -1 || /\b(?:enoent|not found|no such file)\b/i.test(stderr);
 }
 
 function parseScipIndex(stdout: string): { index: ScipIndex } | { error: string } {
