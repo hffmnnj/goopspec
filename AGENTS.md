@@ -350,6 +350,24 @@ The config watcher (`src/features/setup/config-watcher.ts`) watches the project-
 - Project views: `goop_timeline`, `goop_dashboard`
 - Field Notes: `goop_save_note`, `goop_search_notes`
 
+## Structural Code Tools
+
+Three MCP tools wrapping external CLIs for AST-aware code analysis and transformation. Each resolves its binary via `PATH` or the optional `binaryPaths` config in `goopspec.json` (keys: `ast-grep`, `difft`, `scip`, `scip-typescript`). When a binary is missing, the tool degrades gracefully with an install hint.
+
+### `ast_grep` — structural code search and rewrite
+- **Args:** `pattern` (required), `language`/`lang` (required), `paths` (optional, default `["."]`), `rewrite` (optional replacement → rewrite mode), `apply` (optional bool, default false; dry-run unless true)
+- **When to use:** Finding or refactoring code by AST pattern rather than fragile regex. Use for renaming, restructuring, or bulk edits where line-level patterns are unreliable.
+
+### `difftastic` — AST-aware structural diff
+- **Args:** `old`/`oldPath` (required), `new`/`newPath` (required), `checkOnly` (optional bool)
+- **Returns:** Structural diff summary + `meaningfully_changed` boolean (from `--exit-code`)
+- **When to use:** Deciding whether a change is substantive vs. pure formatting/whitespace. Use in verification gates to skip re-review of cosmetic-only diffs.
+
+### `scip` — code intelligence over a SCIP index
+- **Args:** `action` (`index | definitions | references | implementations`), `symbol` (for queries), `index_path` (optional, default `index.scip`)
+- **Generates** an index via `scip-typescript` and answers defs/refs/impls for a symbol.
+- **When to use:** Navigating code semantically — who calls a function, where is a type defined/implemented. Use for cross-file impact analysis and refactoring discovery.
+
 ## Gotchas (Auto)
 
 <!-- Last verified: 2026-06-18 — GoopSpec 1.0.0 plugin-only structure -->
