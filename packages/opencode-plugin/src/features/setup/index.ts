@@ -73,6 +73,7 @@ export interface GoopConfig {
   agentModels?: Partial<Record<string, string>>;
   agentThinkingLevels?: Partial<Record<string, ThinkingLevel>>;
   agentThinkingBudgets?: Partial<Record<string, number>>;
+  binaryPaths?: Record<string, string>;
   loopDetection?: LoopDetectionConfig;
   memoryEnabled?: boolean;
   gitignoreGoopspec?: boolean;
@@ -344,6 +345,11 @@ export function updateConfig(projectDir: string, updates: Partial<GoopConfig>): 
       updates.agentModels !== undefined
         ? { ...(existing.agentModels ?? {}), ...updates.agentModels }
         : existing.agentModels,
+    // Deep-merge binaryPaths
+    binaryPaths:
+      updates.binaryPaths !== undefined
+        ? { ...(existing.binaryPaths ?? {}), ...updates.binaryPaths }
+        : existing.binaryPaths,
   };
   writeConfig(projectDir, merged);
   return merged;
@@ -433,6 +439,18 @@ export function normalizeConfig(raw: Record<string, unknown>): GoopConfig {
         config.loopDetection[key] = value;
       } else if (key in incoming) {
         logError(`normalizeConfig: loopDetection.${key} must be a positive integer — skipping.`);
+      }
+    }
+  }
+
+  // New format: binaryPaths (binary key → absolute path)
+  if (raw.binaryPaths && typeof raw.binaryPaths === "object") {
+    config.binaryPaths = {};
+    for (const [key, value] of Object.entries(raw.binaryPaths as Record<string, unknown>)) {
+      if (typeof value === "string" && value.trim().length > 0) {
+        config.binaryPaths[key] = value;
+      } else {
+        logError(`normalizeConfig: binaryPaths["${key}"] must be a non-empty string — skipping.`);
       }
     }
   }
@@ -535,6 +553,10 @@ export function loadMergedConfig(projectDir: string): GoopConfig {
           normalized.agentThinkingBudgets !== undefined
             ? { ...(merged.agentThinkingBudgets ?? {}), ...normalized.agentThinkingBudgets }
             : merged.agentThinkingBudgets,
+        binaryPaths:
+          normalized.binaryPaths !== undefined
+            ? { ...(merged.binaryPaths ?? {}), ...normalized.binaryPaths }
+            : merged.binaryPaths,
         loopDetection:
           normalized.loopDetection !== undefined
             ? { ...(merged.loopDetection ?? {}), ...normalized.loopDetection }
