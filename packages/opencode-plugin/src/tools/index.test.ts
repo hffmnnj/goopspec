@@ -37,6 +37,7 @@ const EXPECTED_TOOL_KEYS = [
   "memory_forget",
   "slashcommand",
   "ast_grep",
+  "difftastic",
 ] as const;
 
 describe("createTools registry", () => {
@@ -51,9 +52,9 @@ describe("createTools registry", () => {
 
   afterEach(() => cleanup());
 
-  it("returns exactly 32 tools", () => {
+  it("returns exactly 33 tools", () => {
     const tools = createTools(ctx);
-    expect(Object.keys(tools)).toHaveLength(32);
+    expect(Object.keys(tools)).toHaveLength(33);
   });
 
   it("registers all canonical MCP tool keys", () => {
