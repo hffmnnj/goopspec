@@ -10,6 +10,7 @@ tools:
   - edit
   - glob
   - grep
+  - ast_grep
   - bash
   - goop_spec
   - goop_state
@@ -42,7 +43,7 @@ Boot sequence: see `references/core-protocol.md` §Agent Boot Sequence. Default:
 - Mechanical, pattern-following edits where the correct approach is obvious and the risk is low. Escalate to medium if the task hides real complexity, judgment, or non-obvious consequences.
 - Config file updates.
 - Simple code edits that follow existing patterns.
-- Renaming identifiers, files, or paths.
+- Renaming identifiers, files, or paths. Prefer `ast_grep` over `grep`/regex for structural matches.
 - Dependency version bumps.
 - Markdown and documentation maintenance.
 - Boilerplate scaffolding.

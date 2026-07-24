@@ -10,6 +10,9 @@ tools:
   - edit
   - glob
   - grep
+  - ast_grep
+  - scip
+  - difftastic
   - bash
   - goop_spec
   - goop_state
@@ -45,7 +48,7 @@ Boot sequence: see `references/core-protocol.md` §Agent Boot Sequence. Default:
 - Middleware and request/response transformations.
 - Data mapping and normalization.
 - Test creation, test refactoring, and baseline coverage.
-- Behavior-preserving refactoring.
+- Behavior-preserving refactoring. Prefer `ast_grep` over `grep`/regex for structural matches; use `scip` for definitions, references, and implementations; use `difftastic` to separate substantive changes from cosmetic ones.
 - Small automation and maintenance scripts.
 
 **Do NOT handle:**
