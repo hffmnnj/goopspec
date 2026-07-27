@@ -10,6 +10,8 @@ tools:
   - edit
   - glob
   - grep
+  - ast_grep
+  - scip
   - bash
   - goop_spec
   - goop_state
@@ -40,7 +42,7 @@ Boot sequence: see `references/core-protocol.md` §Agent Boot Sequence. Default:
 
 **Handle:**
 - Deep design judgment and UX pattern invention.
-- Component architecture and reusable design patterns.
+- Component architecture and reusable design patterns. Prefer `ast_grep` over `grep`/regex for structural pattern search; use `scip` for cross-file component usage, definitions, references, and implementations.
 - Design systems, tokens, theming, and visual consistency.
 - Nonstandard accessibility and complex interaction design.
 - Responsive layout design across breakpoints when it requires new breakpoint systems, grid systems, or visual hierarchy decisions.

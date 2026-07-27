@@ -10,6 +10,8 @@ tools:
   - edit
   - glob
   - grep
+  - scip
+  - ast_grep
   - bash
   - goop_spec
   - goop_state
@@ -39,7 +41,7 @@ Boot sequence: see `references/core-protocol.md` §Agent Boot Sequence. Default:
 ## Scope
 
 **Handle:**
-- Architecture design and major module boundaries.
+- Architecture design and major module boundaries. Prefer `scip` for cross-file definitions, references, and implementations; use `ast_grep` for structural search over `grep`/regex.
 - Complex algorithms and correctness-critical logic.
 - Security-sensitive systems and threat-exposed surfaces.
 - High blast-radius changes spanning multiple subsystems.
