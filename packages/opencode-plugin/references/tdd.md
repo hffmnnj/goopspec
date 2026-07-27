@@ -21,7 +21,7 @@ Bound every run: `--bail=3 --timeout=10000`.
 
 **Run rung 4 when:** preparing a PR, after merging or rebasing onto `main`, after resolving conflicts, when changing test infrastructure (`test-utils.ts`, `bunfig.toml`), or at the acceptance gate.
 
-`--changed` requires `=` syntax: `--changed=main`; `--changed main` silently degrades to a path filter. `bun test` has no `--filter` flag: use `-t <regex>` for test-name matching. `--filter` is a `bun run`/`bun pm` workspace flag; with `bun test`, it silently ignores the flag, runs zero tests, and exits 0: a false pass.
+`--changed` requires `=` syntax: `--changed=main`; `--changed main` silently degrades to a path filter. `bun test` has no `--filter` flag: use `-t "<regex>"` for test-name matching. `--filter` is a `bun run`/`bun pm` workspace flag; with `bun test`, it silently ignores the flag, runs zero tests, and exits 0: a false pass.
 
 ## Core Cycle
 
