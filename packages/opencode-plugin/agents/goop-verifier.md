@@ -78,7 +78,7 @@ Load `references/security-checklist.md`. Evaluate every applicable control with 
 
 ## Regression Check
 
-Run baseline tests and confirm existing behavior still works. Note any broken tests, type errors, or critical workflow regressions.
+Start with the narrowest covering rung; escalate only when a lower rung cannot cover the change. Broad runs are correct before a PR, after merging/rebasing `main`, resolving conflicts, changing test infrastructure, or at the acceptance gate. See `references/tdd.md` §Test Execution Discipline: file → directory → `--changed=main` → package, `--bail=3 --timeout=10000`, plus typecheck; scoped is not skipped.
 
 ## Wiring Check
 

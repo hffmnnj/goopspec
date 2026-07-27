@@ -16,7 +16,7 @@ Debugging is hypothesis-driven. Follow observe → hypothesize → test → repe
 2. **Isolate the minimal repro** — strip unrelated code until only the failing behavior remains; write it as a failing test if possible.
 3. **Form a hypothesis** — state what is wrong and why; rank hypotheses by likelihood.
 4. **Test the hypothesis** — add targeted logging or assertions; run the narrowest test that exercises the suspect code; record what you learn.
-5. **Fix + verify** — apply the smallest change that addresses the root cause; re-run the repro and the full suite.
+5. **Fix + verify** — apply the smallest change that addresses the root cause; re-run the repro and the narrowest test rung that covers the fix.
 6. **Add a regression test** — encode the repro as a permanent test named after the bug; commit it with the fix.
 
 ## Logging Strategies
@@ -76,7 +76,7 @@ Fix the cause, not the symptom. Ask "why" repeatedly (5-Whys) until you reach th
 ## Debugging Tools
 
 - **TypeScript compiler errors** — read them fully; they often point directly at the root cause.
-- **Test narrowing** — run only the failing test (`bun test --filter "test name"`) to reduce noise.
+- **Test narrowing** — run only the failing test (`bun test -t "test name"`) to reduce noise.
 - **`console.log` / structured logging** — fast tracing; remove before committing.
 - **Bun debugger** — attach with `bun --inspect` for breakpoint-based inspection.
 - **Browser DevTools** — network, console, and sources panel for frontend issues.

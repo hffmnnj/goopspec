@@ -19,6 +19,7 @@ tools:
   - goop_read_db
   - goop_read_wave
   - goop_boot
+  - goop_blocker
   - goop_reference
   - goop_search_notes
   - memory_save
@@ -96,6 +97,10 @@ Memory-first flow: see `references/core-protocol.md` §Memory-First Protocol.
 ## Commit Discipline
 
 Commit discipline: see `references/core-protocol.md` §Atomic Commit Protocol and `references/git-workflow.md`.
+
+## Verification
+
+Run the narrowest command that covers the change; escalate one rung only when the one below cannot cover it. Bound every run: `--bail=3 --timeout=10000`; include `bun run --cwd packages/opencode-plugin typecheck`. See `references/tdd.md` §Test Execution Discipline for the full ladder. Scoped is not skipped. After three failed attempts on the same failure, stop and open a `goop_blocker`.
 
 ## Completion Standard
 
