@@ -6,6 +6,35 @@ import type { Hooks } from "./types.js";
 
 type EventInput = { event: SdkEvent };
 
+async function readEventHandlerSource(): Promise<string> {
+  const file = Bun.file(new URL("./event-handler.ts", import.meta.url));
+  return file.text();
+}
+
+function extractHandledEventTypes(source: string): Set<string> {
+  const guards = new Set<string>();
+  // Each type alias is: type SessionCreatedEvent = Extract<SdkEvent, { type: "session.created" }>
+  const aliasPattern = /type Session(\w+)Event = Extract<SdkEvent, \{ type: "([^"]+)" \}>/g;
+  let match: RegExpExecArray | null;
+  // biome-ignore lint/suspicious/noAssignInExpressions: sequential regex.exec is the idiomatic loop
+  while ((match = aliasPattern.exec(source)) != null) {
+    if (match[2]) guards.add(match[2]);
+  }
+  return guards;
+}
+
+function extractAllowList(source: string): Set<string> {
+  const list = new Set<string>();
+  // The allow-list is a chain of `eventType !== "..."` conditions.
+  const blockPattern = /eventType !== "([^"]+)"/g;
+  let match: RegExpExecArray | null;
+  // biome-ignore lint/suspicious/noAssignInExpressions: sequential regex.exec is the idiomatic loop
+  while ((match = blockPattern.exec(source)) != null) {
+    list.add(match[1]);
+  }
+  return list;
+}
+
 function makeSdkSession(id: string) {
   return {
     id,
@@ -348,5 +377,136 @@ describe("event-handler hook", () => {
 
     expect(consoleSpy).toHaveBeenCalled();
     consoleSpy.mockRestore();
+  });
+
+  describe("wiring reachability", () => {
+    function makeHandler(ctx: ReturnType<typeof createMockPluginContext>) {
+      return createEventHandlerHook(ctx).event as NonNullable<Hooks["event"]>;
+    }
+
+    it("session.created reaches the handler through the exported hook", async () => {
+      const ctx = createMockPluginContext({ testDir });
+      const handler = makeHandler(ctx);
+      const result = handler({
+        event: {
+          type: "session.created",
+          properties: { info: makeSdkSession("wired-create") },
+        } as SdkEvent,
+      });
+      expect(result).not.toBeUndefined();
+      await result;
+      expect(ctx.sessionManager.get("wired-create")?.info.id).toBe("wired-create");
+    });
+
+    it("session.idle reaches the handler through the exported hook", async () => {
+      const ctx = createMockPluginContext({ testDir });
+      ctx.sessionManager.create("wired-idle");
+      ctx.pendingCompactions.set("wired-idle", {
+        model: { providerID: "opencode", modelID: "deepseek-v4" },
+        status: "queued",
+        queuedAtMs: Date.now(),
+      });
+      const summarize = mock(async () => ({ data: true }));
+      Object.assign(ctx.sdk.client, { session: { summarize } });
+      const handler = makeHandler(ctx);
+      const result = handler(idleEvent("wired-idle"));
+      expect(result).not.toBeUndefined();
+      await result;
+      await flushIdleCompactionDispatch();
+      expect(summarize).toHaveBeenCalled();
+    });
+
+    it("session.compacted reaches the handler through the exported hook", async () => {
+      const ctx = createMockPluginContext({ testDir });
+      ctx.pendingCompactions.set("wired-compacted", {
+        model: { providerID: "opencode", modelID: "deepseek-v4" },
+        status: "queued",
+        queuedAtMs: Date.now(),
+      });
+      ctx.compactionHandoff.set("wired-compacted", "handoff");
+      const handler = makeHandler(ctx);
+      const result = handler({
+        event: {
+          type: "session.compacted",
+          properties: { sessionID: "wired-compacted" },
+        } as SdkEvent,
+      });
+      expect(result).not.toBeUndefined();
+      await result;
+      expect(ctx.pendingCompactions.has("wired-compacted")).toBe(false);
+      expect(ctx.compactionHandoff.has("wired-compacted")).toBe(false);
+    });
+
+    it("session.error reaches the handler through the exported hook", async () => {
+      const ctx = createMockPluginContext({ testDir });
+      ctx.pendingCompactions.set("wired-error", {
+        model: { providerID: "opencode", modelID: "deepseek-v4" },
+        status: "queued",
+        queuedAtMs: Date.now(),
+      });
+      ctx.compactionHandoff.set("wired-error", "handoff");
+      const handler = makeHandler(ctx);
+      const result = handler({
+        event: { type: "session.error", properties: { sessionID: "wired-error" } } as SdkEvent,
+      });
+      expect(result).not.toBeUndefined();
+      await result;
+      expect(ctx.pendingCompactions.has("wired-error")).toBe(false);
+      expect(ctx.compactionHandoff.has("wired-error")).toBe(false);
+    });
+
+    it("session.deleted reaches the handler through the exported hook", async () => {
+      const ctx = createMockPluginContext({ testDir });
+      ctx.sessionManager.create("wired-delete");
+      ctx.pendingCompactions.set("wired-delete", {
+        model: { providerID: "opencode", modelID: "deepseek-v4" },
+        status: "queued",
+        queuedAtMs: Date.now(),
+      });
+      ctx.compactionHandoff.set("wired-delete", "handoff");
+      const handler = makeHandler(ctx);
+      const result = handler({
+        event: {
+          type: "session.deleted",
+          properties: { info: makeSdkSession("wired-delete") },
+        } as SdkEvent,
+      });
+      expect(result).not.toBeUndefined();
+      await result;
+      expect(ctx.sessionManager.get("wired-delete")).toBeUndefined();
+      expect(ctx.pendingCompactions.has("wired-delete")).toBe(false);
+      expect(ctx.compactionHandoff.has("wired-delete")).toBe(false);
+    });
+
+    it("returns the ignored-event short-circuit for unhandled types", async () => {
+      const ctx = createMockPluginContext({ testDir });
+      const handler = makeHandler(ctx);
+      const result = handler({
+        event: { type: "vcs.branch.updated", properties: { branch: "main" } } as SdkEvent,
+      });
+      // IGNORED_EVENT_RESULT is a resolved promise, not undefined; the lifecycle
+      // handler is bypassed entirely.
+      expect(result).toBeDefined();
+      await expect(result).resolves.toBeUndefined();
+    });
+
+    it("allow-list membership agrees with implemented type guards", async () => {
+      // Structural drift guard: parses the module source to compare the set
+      // of `isSession*` type guards against the `handler` allow-list. Adding
+      // a guard without adding the type to the allow-list fails the test.
+      const source = await readEventHandlerSource();
+      const guarded = extractHandledEventTypes(source);
+      const allowed = extractAllowList(source);
+      expect(guarded).toEqual(allowed);
+      expect(allowed).toEqual(
+        new Set([
+          "session.created",
+          "session.idle",
+          "session.compacted",
+          "session.error",
+          "session.deleted",
+        ]),
+      );
+    });
   });
 });

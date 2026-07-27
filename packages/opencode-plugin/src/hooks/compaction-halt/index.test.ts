@@ -202,6 +202,26 @@ describe("compaction-halt hook", () => {
     expect(output.output).toBe("original tool output");
   });
 
+  it("clears both maps when halting an expired queued request", async () => {
+    const sessionID = "expired-queued-clears-maps";
+    const record = ctx.sessionManager.create(sessionID);
+    const queuedAtMs = Date.now() - PENDING_COMPACTION_TTL_MS - 1;
+    record.meta.idleSince = Date.now();
+    ctx.pendingCompactions.set(sessionID, {
+      model: { providerID: "openai", modelID: "gpt-5" },
+      status: "queued",
+      queuedAtMs,
+    });
+    ctx.compactionHandoff.set(sessionID, "resume here");
+    const output = makeAfterOutput();
+
+    await createCompactionHaltHook(ctx)["tool.execute.after"]?.(makeAfterInput(sessionID), output);
+
+    expect(output.output).toBe("original tool output");
+    expect(ctx.pendingCompactions.has(sessionID)).toBeFalse();
+    expect(ctx.compactionHandoff.has(sessionID)).toBeFalse();
+  });
+
   it("resets V2 fallback turn tracking for a session", async () => {
     const sessionID = "clear-halt-state";
     const queuedAtMs = Date.now();
