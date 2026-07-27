@@ -138,6 +138,37 @@ describe("goop_blocker tool", () => {
   // Batch items[]
   // -----------------------------------------------------------------------
 
+  it("empty items array falls through to single-action path", async () => {
+    const blockerTool = createGoopBlockerTool(ctx);
+
+    const result = await blockerTool.execute(
+      {
+        items: [],
+        action: "open",
+        description: "Fallback blocker",
+        severity: "low",
+        wave_id: 1,
+      },
+      toolCtx,
+    );
+
+    expect(result).toContain("Opened blocker #");
+
+    const openBlockers = ctx.db.getBlockers("default", "open");
+    expect(openBlockers.length).toBe(1);
+    expect(openBlockers[0].description).toBe("Fallback blocker");
+  });
+
+  it("returns error when items array is empty and no action is provided", async () => {
+    const blockerTool = createGoopBlockerTool(ctx);
+
+    const result = await blockerTool.execute({ items: [] }, toolCtx);
+
+    expect(result).toContain("Error in goop_blocker");
+    expect(result).toContain("items[] array is empty");
+    expect(result).not.toContain("succeeded");
+  });
+
   it("opens and resolves multiple blockers in a single items batch", async () => {
     const blockerTool = createGoopBlockerTool(ctx);
 

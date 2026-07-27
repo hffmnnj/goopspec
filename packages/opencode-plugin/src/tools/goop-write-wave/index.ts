@@ -223,7 +223,7 @@ export function createGoopWriteWaveTool(ctx: PluginContext): ToolDefinition {
       try {
         const workflowId = args.workflow_id ?? ctx.stateManager.getState().activeWorkflowId;
 
-        if (args.items !== undefined) {
+        if (Array.isArray(args.items) && args.items.length > 0) {
           if (args.verifications !== undefined || args.traceability !== undefined) {
             return (
               "Error in goop_write_wave: verifications and traceability side-payloads are " +
@@ -304,6 +304,20 @@ export function createGoopWriteWaveTool(ctx: PluginContext): ToolDefinition {
 
         let mainResult = "";
         let defaultWaveId = -1;
+
+        if (
+          args.items?.length === 0 &&
+          args.task_update === undefined &&
+          args.task_updates === undefined &&
+          args.title === undefined &&
+          args.status === undefined &&
+          args.pr_branch === undefined &&
+          args.pr_url === undefined &&
+          args.verifications === undefined &&
+          args.traceability === undefined
+        ) {
+          return "Error in goop_write_wave: items[] array is empty and no wave fields were provided";
+        }
 
         if (args.task_update !== undefined) {
           const wave = ctx.db.getWave(workflowId, args.wave_number);

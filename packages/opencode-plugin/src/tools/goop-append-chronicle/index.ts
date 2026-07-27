@@ -245,11 +245,15 @@ export function createGoopAppendChronicleTool(ctx: PluginContext): ToolDefinitio
         const workflowId = args.workflow_id ?? ctx.stateManager.getState().activeWorkflowId;
 
         // Auxiliary payloads are only meaningful alongside a single chronicle entry.
-        if (args.entries !== undefined && (args.alsoLogAdl || args.alsoSaveMemory)) {
+        if (
+          Array.isArray(args.entries) &&
+          args.entries.length > 0 &&
+          (args.alsoLogAdl || args.alsoSaveMemory)
+        ) {
           return "Error: alsoLogAdl and alsoSaveMemory cannot be used with entries batch.";
         }
 
-        if (args.entries !== undefined) {
+        if (Array.isArray(args.entries) && args.entries.length > 0) {
           const result = runBatch(ctx.db, args.entries, (entry) =>
             appendChronicleEntry(ctx, workflowId, entry),
           );
@@ -258,7 +262,7 @@ export function createGoopAppendChronicleTool(ctx: PluginContext): ToolDefinitio
         }
 
         if (args.entry === undefined) {
-          return "Error: 'entry' is required when no entries batch is provided.";
+          return "Error in goop_append_chronicle: entries[] array is empty and no entry was provided";
         }
 
         const chronicleDetail = appendChronicleEntry(ctx, workflowId, args.entry);

@@ -28,27 +28,99 @@ function extractBody(raw: string): string {
   return bodyMatch ? bodyMatch[1] : raw;
 }
 
+// Detection rule for required tool grants:
+//
+// The agent body is broken into small, independent clauses so that a
+// prohibition in one clause cannot suppress a genuine instruction in another:
+//   - prose lines are split into clauses at . ! ? ; and em-dashes
+//   - markdown list items are stripped of their leading "-"/"*" marker and
+//     split the same way; a whole list item is never treated as one unit
+//
+// A clause is treated as prohibitive for a given tool token only when a
+// negation cue appears *before* that token inside the same clause. Cues:
+//   "do not", "don't", "never", "not permitted", "must not", "should not",
+//   "cannot", "can't", "prohibited", "forbidden", and phrases that assign
+//   responsibility elsewhere such as "is the Orchestrator's responsibility" or
+//   "is the Orchestrator/command's responsibility".
+//
+// If a clause is prohibitive for a tool token, that token is skipped in that
+// clause; otherwise it counts as a required grant.
+const NEGATION_CUES = [
+  "do not",
+  "don't",
+  "never",
+  "not permitted",
+  "is the Orchestrator's responsibility",
+  "is the Orchestrator/command's responsibility",
+  "forbidden",
+  "must not",
+  "should not",
+  "cannot",
+  "can't",
+  "prohibited",
+];
+
+function splitIntoClauses(text: string): string[] {
+  return text
+    .split(/(?<=[.!?;])\s+|\s+—\s+/)
+    .map((clause) => clause.trim())
+    .filter((clause) => clause.length > 0);
+}
+
+function segmentBody(body: string): string[] {
+  const segments: string[] = [];
+  const lines = body.split(/\r?\n/);
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+
+    const listContent = trimmed.replace(/^[-*]\s+/, "");
+    const clauses = splitIntoClauses(listContent);
+    for (const clause of clauses) {
+      segments.push(clause);
+    }
+  }
+
+  return segments;
+}
+
+function findCueBeforeToken(segment: string, tokenStart: number): boolean {
+  const before = segment.slice(0, tokenStart).toLowerCase();
+  return NEGATION_CUES.some((cue) => before.includes(cue));
+}
+
+function collectTokens(segment: string, regex: RegExp, tools: Set<string>): void {
+  for (const match of segment.matchAll(regex)) {
+    if (!findCueBeforeToken(segment, match.index ?? 0)) {
+      tools.add(match[0]);
+    }
+  }
+}
+
 function referencedTools(body: string): string[] {
   const tools = new Set<string>();
+  const goopRegex = /\bgoop_[a-z0-9_]+\b/g;
+  const memoryRegex = /\bmemory_[a-z0-9_]+\b/g;
 
-  for (const match of body.matchAll(/\bgoop_[a-z0-9_]+\b/g)) {
-    tools.add(match[0]);
-  }
-  for (const match of body.matchAll(/\bmemory_[a-z0-9_]+\b/g)) {
-    tools.add(match[0]);
-  }
+  for (const segment of segmentBody(body)) {
+    collectTokens(segment, goopRegex, tools);
+    collectTokens(segment, memoryRegex, tools);
 
-  const questionPatterns = /(?:^|\s)the `question` tool|\b`question`(?:\s+tool)?/gi;
-  if (questionPatterns.test(body)) {
-    tools.add("question");
-  }
+    const questionMatch = segment.match(/(?:^|\s)the `question` tool|\b`question`(?:\s+tool)?/i);
+    if (questionMatch && !findCueBeforeToken(segment, questionMatch.index ?? 0)) {
+      tools.add("question");
+    }
 
-  if (body.matchAll(/\btask\(/g).next().value !== undefined) {
-    tools.add("task");
-  }
-  const taskBacktick = /\b`task`(?:\s+tool)?/;
-  if (taskBacktick.test(body)) {
-    tools.add("task");
+    const taskCallMatch = segment.match(/\btask\(/);
+    if (taskCallMatch && !findCueBeforeToken(segment, taskCallMatch.index ?? 0)) {
+      tools.add("task");
+    }
+
+    const taskBacktickMatch = segment.match(/\b`task`(?:\s+tool)?/);
+    if (taskBacktickMatch && !findCueBeforeToken(segment, taskBacktickMatch.index ?? 0)) {
+      tools.add("task");
+    }
   }
 
   return [...tools].sort();
@@ -115,5 +187,53 @@ describe("agent tool-grant drift regression", () => {
     console.log("FAIL:", driftSummary);
 
     expect(passing.length + failing.length).toBe(agentFiles.length);
+  });
+});
+
+describe("referencedTools negation awareness", () => {
+  it("does not require a tool that is only mentioned in a prohibition", () => {
+    const body =
+      "- Creating pull requests — do not run `gh pr create` or `goop_create_pr`; PR creation is the Orchestrator/command's responsibility.";
+    expect(referencedTools(body)).toEqual([]);
+  });
+
+  it("still requires a tool that is genuinely instructed for use", () => {
+    const body = "Use `goop_write_db` to persist the document.";
+    expect(referencedTools(body)).toEqual(["goop_write_db"]);
+  });
+
+  it("separates prohibitions from genuine instructions in the same body", () => {
+    const body = "Use `goop_write_db` to persist. Do not use `goop_create_pr`.";
+    expect(referencedTools(body)).toEqual(["goop_write_db"]);
+  });
+
+  it("does not let a distant negation suppress an earlier positive instruction", () => {
+    const body = "Call `goop_read_wave` first — do NOT load the spec file.";
+    expect(referencedTools(body)).toEqual(["goop_read_wave"]);
+  });
+
+  it("still fails when a genuinely required tool is missing a grant", () => {
+    const raw = [
+      "---",
+      "name: fixture-missing-grant",
+      "tools:",
+      "  - read",
+      "---",
+      "",
+      "Use `goop_write_db` to persist the document.",
+    ].join("\n");
+    const parsed = parseAgentMarkdown(raw);
+    expect(parsed).not.toBeNull();
+    const body = extractBody(raw);
+    const referenced = referencedTools(body);
+    const missing = referenced.filter((tool) => !isGranted(tool, parsed!.config.tools ?? {}, parsed!.config.permission ?? {}));
+    expect(referenced).toEqual(["goop_write_db"]);
+    expect(missing).toEqual(["goop_write_db"]);
+  });
+
+  it("splits list items into clauses so a prohibition cannot suppress a genuine instruction", () => {
+    const body =
+      "- Do not write to planning documents. read `spec` via `goop_read_db` only if genuinely needed — no document default. Read wave/task context via `goop_read_wave` — never edit files directly.";
+    expect(referencedTools(body)).toEqual(["goop_read_db", "goop_read_wave"]);
   });
 });

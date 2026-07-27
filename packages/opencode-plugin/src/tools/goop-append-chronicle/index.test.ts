@@ -145,6 +145,24 @@ describe("goop_append_chronicle tool", () => {
   // 7. Batch entries[]
   // -----------------------------------------------------------------------
 
+  it("empty entries array falls through to single-entry path", async () => {
+    const tool = createGoopAppendChronicleTool(ctx);
+    const result = await tool.execute({ entry: "Fallback entry.", entries: [] }, toolCtx);
+
+    expect(result).toBe("[OK] Chronicle entry appended (15 chars)");
+    expect(ctx.db.getChronicleEvents("default").length).toBe(1);
+    expect(ctx.db.getChronicleEvents("default")[0].entry).toBe("Fallback entry.");
+  });
+
+  it("returns error when entries array is empty and no entry is provided", async () => {
+    const tool = createGoopAppendChronicleTool(ctx);
+    const result = await tool.execute({ entries: [] }, toolCtx);
+
+    expect(result).toContain("Error in goop_append_chronicle");
+    expect(result).toContain("entries[] array is empty");
+    expect(result).not.toContain("succeeded");
+  });
+
   it("appends multiple chronicle entries in a single entries batch", async () => {
     const tool = createGoopAppendChronicleTool(ctx);
 
