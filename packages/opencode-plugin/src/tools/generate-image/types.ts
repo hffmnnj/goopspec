@@ -23,8 +23,12 @@ export type AuthSource =
 export interface NormalizedCredential {
   accessToken: string;
   refreshToken?: string;
-  /** Epoch milliseconds at which the access token expires. */
-  expiresAtMs: number;
+  /**
+   * Epoch milliseconds at which the access token expires. Undefined when the
+   * credential source does not record an expiry; callers then rely on server
+   * rejection rather than parsing token material.
+   */
+  expiresAtMs?: number;
   accountId?: string;
   source: AuthSource;
 }
