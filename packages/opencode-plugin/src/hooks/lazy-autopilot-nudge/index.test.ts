@@ -140,4 +140,14 @@ describe("lazy autopilot nudge", () => {
     expect(promptAsync).not.toHaveBeenCalled();
     expect(ctx.pendingLazyAutopilotNudges.has("sess-off")).toBe(false);
   });
+
+  it("does not throw when both promptAsync and messages are absent", async () => {
+    const ctx = makeExecuteContext(testDir);
+    const errorSpy = spyOn(console, "error").mockImplementation(() => {});
+    Object.assign(ctx.sdk.client, { session: {} });
+
+    await expect(dispatchLazyAutopilotNudge(ctx, "sess-no-sdk")).resolves.toBeUndefined();
+    expect(ctx.pendingLazyAutopilotNudges.get("sess-no-sdk")?.source).toBe("system-transform");
+    errorSpy.mockRestore();
+  });
 });
