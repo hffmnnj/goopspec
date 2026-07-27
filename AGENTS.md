@@ -16,7 +16,9 @@ bun run --cwd packages/opencode-plugin format        # Format src with Biome
 # Testing
 bun test packages/opencode-plugin/                   # Test plugin package
 bun test packages/opencode-plugin/src/tools/goop-status/index.test.ts  # Single file
-bun test --filter "goop_status"                       # Tests matching pattern
+bun test -t "goop_status"                             # Tests matching name (regex)
+bun test --changed=main                               # Only tests affected by git diff vs main (traces imports)
+bun test --bail=3 --timeout=10000                     # Bounded run
 bun test --watch                                      # Watch mode
 ```
 

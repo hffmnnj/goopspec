@@ -41,10 +41,10 @@ If no files changed: `- none`.
 
 ### `## VERIFICATION`
 
-One line stating what was checked and the result. Prefer exact commands:
+One line per check stating what was checked and the result. Every test-verification line must state the scope rung used (for example, `rung 2, directory-scoped`). Prefer exact commands:
 
 ```markdown
-bun test packages/core/src/auth/ — 12 passed, 0 failed
+bun test packages/core/src/auth/ --bail=3 --timeout=10000 — 12 passed, 0 failed (rung 2, directory-scoped)
 bun run typecheck — no errors
 ```
 
@@ -95,7 +95,7 @@ Implemented the in-process memory manager using `bun:sqlite` with FTS5. Saves, s
 - src/features/memory/index.test.ts — manager unit tests
 
 ## VERIFICATION
-bun test packages/opencode-plugin/src/features/memory/ — 9 passed, 0 failed
+bun test packages/opencode-plugin/src/features/memory/ --bail=3 --timeout=10000 — 9 passed, 0 failed (rung 2, directory-scoped)
 
 ## NEXT
 Continue to Wave 4 Task 4.5: build memory_search and memory_save tools using this manager.
