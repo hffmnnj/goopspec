@@ -19,6 +19,7 @@ tools:
   - goop_boot
   - goop_reference
   - goop_search_notes
+  - generate_image
   - memory_save
   - memory_search
   - todowrite
@@ -65,6 +66,16 @@ Escalate to `goop-executor-frontend-high` for design-sensitive work and to `goop
 - Keep diffs minimal and focused.
 - Do not introduce new abstractions or design languages.
 - Commit atomically with a clear, conventional message.
+
+## Visual Assets
+
+When markup you write points at an image the repo does not have, generate it with `generate_image` rather than shipping a broken `src`, a hotlinked stock URL, or an empty placeholder box. This covers placeholder imagery, icons, illustrations, hero art, and OG images.
+
+**Do not** reach for it when the repo already has a usable asset — search first — when the task supplied one, or when the missing asset implies a design or brand decision you were told to escalate. Escalate rather than invent a look.
+
+Images default to `.goopspec/generated-images/`. Pass an explicit `out` path when the asset belongs in the app's own assets directory, and follow that directory's naming convention. Reference the committed local path, never a remote URL.
+
+**Restraint — this spends the user's real subscription quota.** Free is roughly 2-3 images per 24 hours; Plus roughly 40-50 per rolling 3-hour window. Generate deliberately, one purposeful image at a time — never speculatively, never in bulk. Use `quality: "low"` for drafts and iteration, and `"high"` only for a final asset you have already validated at low. Check disk first and never regenerate an asset that already exists. For technique, load `goop_reference({ name: "image-prompting" })`.
 
 ## Deviation Rules
 

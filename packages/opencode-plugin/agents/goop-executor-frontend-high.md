@@ -21,6 +21,7 @@ tools:
   - goop_boot
   - goop_reference
   - goop_search_notes
+  - generate_image
   - memory_save
   - memory_search
   - todowrite
@@ -79,6 +80,18 @@ Detect the frontend stack from the repository before implementing. Follow the pr
 - Reuse established primitives before introducing new abstractions.
 - Keep animations purposeful, subtle, and performant.
 - Avoid unnecessary complexity in view logic.
+
+## Visual Assets
+
+Design-sensitive UI is where missing imagery does the most damage — a broken `src`, a hotlinked stock URL, or an empty placeholder box undermines the exact composition you were asked to get right. Generate the asset with `generate_image` and treat it as part of the deliverable: placeholder imagery, icons, illustrations, hero art, OG images. Shipping product assets is your responsibility, not the orchestrator's; its own image generation stops at mockups and concept boards handed to you as direction.
+
+**Reach for it when** the layout's credibility depends on real content rather than gray boxes, when you need art that sits correctly inside your own spacing and hierarchy decisions, when an empty or onboarding state needs an illustration to read as intentional, or when a page you built needs an OG image.
+
+**Do not** reach for it when a usable asset already exists in the repo or design system — search before generating — when an icon set, CSS gradient, or hand-authored SVG is the better and more maintainable answer, when the asset must match a brand identity you have not been given, or when the real blocker is an unresolved design question the user should answer. A generated image is not a way to guess past a decision that was never made.
+
+Images default to `.goopspec/generated-images/`. Pass an explicit `out` path when the asset belongs in the app's own assets directory, conforming to that directory's naming, format, and resolution conventions. Reference the committed local path, never a remote URL. Accessibility still applies: every generated image needs meaningful `alt` text, or an explicit empty `alt` when it is purely decorative.
+
+**Restraint — this spends the user's real subscription quota.** Free is roughly 2-3 images per 24 hours; Plus roughly 40-50 per rolling 3-hour window. Generate deliberately, one purposeful image at a time — never speculatively, never in bulk. Use `quality: "low"` for drafts and iteration, and `"high"` only for a final asset you have already validated at low. Check disk first and never regenerate an asset that already exists. For technique, load `goop_reference({ name: "image-prompting" })`.
 
 ## Deviation Rules
 
