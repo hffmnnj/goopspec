@@ -68,15 +68,7 @@ Escalate design-sensitive work to `goop-executor-frontend-high` and backend scop
 
 ## Visual Assets
 
-Wiring a component that points at an image the repo does not have is a broken deliverable. Generate the asset with `generate_image` instead of shipping a broken `src`, a hotlinked stock URL, or an empty placeholder box — this covers placeholder imagery, icons, illustrations, hero art, and OG images. Shipping product assets is your job, not the orchestrator's; its own image generation stops at mockups and concept boards handed to you as direction.
-
-**Reach for it when** the component you are integrating needs an asset that does not exist yet, when a demo or example page needs representative imagery, or when a real image is the difference between a reviewable feature and a gray rectangle.
-
-**Do not** reach for it when the repo already has a usable asset — search first — when the task supplied one, when an existing icon set or a CSS gradient answers it more cheaply and more maintainably, or when the asset carries brand or design-system weight. That last case escalates to `goop-executor-frontend-high`.
-
-Images default to `.goopspec/generated-images/`. Pass an explicit `out` path when the asset belongs in the app's own assets directory, and follow that directory's naming and format conventions. Reference the committed local path, never a remote URL, and give every image meaningful `alt` text.
-
-**Restraint — this spends the user's real subscription quota.** Free is roughly 2-3 images per 24 hours; Plus roughly 40-50 per rolling 3-hour window. Generate deliberately, one purposeful image at a time — never speculatively, never in bulk. Use `quality: "low"` for drafts and iteration, and `"high"` only for a final asset you have already validated at low. Check disk first and never regenerate an asset that already exists. For technique, load `goop_reference({ name: "image-prompting" })`.
+Generate missing imagery with `generate_image` when no usable asset exists. Default to `.goopspec/generated-images/` or pass an explicit `out` path. Reference committed local paths, never remote URLs. Use `quality: "low"` for drafts, `"high"` for validated finals; check disk first; never regenerate, speculate, or bulk. Load `goop_reference({ name: "image-prompting" }).`
 
 ## Deviation Rules
 
