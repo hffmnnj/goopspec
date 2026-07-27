@@ -130,17 +130,40 @@ describe("event-handler hook", () => {
     expect(summarize).toHaveBeenCalledTimes(1);
   });
 
-  it("removes a session on session.deleted", async () => {
+  it("removes a session and clears compaction state on session.deleted", async () => {
     const ctx = createMockPluginContext({ testDir });
     ctx.sessionManager.create("sess-del");
+    ctx.pendingCompactions.set("sess-del", {
+      model: { providerID: "opencode", modelID: "deepseek-v4" },
+      status: "queued",
+      queuedAtMs: Date.now(),
+    });
+    ctx.compactionHandoff.set("sess-del", "handoff-token");
+    ctx.sessionManager.create("sess-live");
+    ctx.pendingCompactions.set("sess-live", {
+      model: { providerID: "opencode", modelID: "deepseek-v4" },
+      status: "queued",
+      queuedAtMs: Date.now(),
+    });
+    ctx.compactionHandoff.set("sess-live", "handoff-token-live");
+    const deleteSpy = spyOn(ctx.sessionManager, "delete");
     const handler = createEventHandlerHook(ctx).event as NonNullable<Hooks["event"]>;
+
     await handler({
       event: {
         type: "session.deleted",
         properties: { info: makeSdkSession("sess-del") },
       } as SdkEvent,
     });
+
+    expect(deleteSpy).toHaveBeenCalledWith("sess-del");
     expect(ctx.sessionManager.get("sess-del")).toBeUndefined();
+    expect(ctx.pendingCompactions.has("sess-del")).toBe(false);
+    expect(ctx.compactionHandoff.has("sess-del")).toBe(false);
+    expect(ctx.sessionManager.get("sess-live")?.info.id).toBe("sess-live");
+    expect(ctx.pendingCompactions.has("sess-live")).toBe(true);
+    expect(ctx.compactionHandoff.has("sess-live")).toBe(true);
+    deleteSpy.mockRestore();
   });
 
   it("does not throw when deleting an untracked session", async () => {
@@ -193,6 +216,61 @@ describe("event-handler hook", () => {
     expect(ctx.compactionHandoff.has("sess-live")).toBe(true);
   });
 
+  it("clears pending compaction state on session.error through the exported hook", async () => {
+    const ctx = createMockPluginContext({ testDir });
+    ctx.pendingCompactions.set("sess-error", {
+      model: { providerID: "opencode", modelID: "deepseek-v4" },
+      status: "queued",
+      queuedAtMs: Date.now(),
+    });
+    ctx.compactionHandoff.set("sess-error", "handoff-token");
+    ctx.pendingCompactions.set("sess-live", {
+      model: { providerID: "opencode", modelID: "deepseek-v4" },
+      status: "queued",
+      queuedAtMs: Date.now(),
+    });
+    ctx.compactionHandoff.set("sess-live", "handoff-token-live");
+    const handler = createEventHandlerHook(ctx).event as NonNullable<Hooks["event"]>;
+
+    await handler({
+      event: { type: "session.error", properties: { sessionID: "sess-error" } } as SdkEvent,
+    });
+
+    expect(ctx.pendingCompactions.has("sess-error")).toBe(false);
+    expect(ctx.compactionHandoff.has("sess-error")).toBe(false);
+    expect(ctx.pendingCompactions.has("sess-live")).toBe(true);
+    expect(ctx.compactionHandoff.has("sess-live")).toBe(true);
+  });
+
+  it("does not clear any compaction state when session.error has no sessionID", async () => {
+    const ctx = createMockPluginContext({ testDir });
+    ctx.pendingCompactions.set("sess-1", {
+      model: { providerID: "opencode", modelID: "deepseek-v4" },
+      status: "queued",
+      queuedAtMs: Date.now(),
+    });
+    ctx.compactionHandoff.set("sess-1", "handoff-token-1");
+    ctx.pendingCompactions.set("sess-2", {
+      model: { providerID: "opencode", modelID: "deepseek-v4" },
+      status: "queued",
+      queuedAtMs: Date.now(),
+    });
+    ctx.compactionHandoff.set("sess-2", "handoff-token-2");
+    const handler = createEventHandlerHook(ctx).event as NonNullable<Hooks["event"]>;
+
+    await handler({
+      event: {
+        type: "session.error",
+        properties: { error: { name: "UnknownError", data: { message: "boom" } } },
+      } as SdkEvent,
+    });
+
+    expect(ctx.pendingCompactions.has("sess-1")).toBe(true);
+    expect(ctx.compactionHandoff.has("sess-1")).toBe(true);
+    expect(ctx.pendingCompactions.has("sess-2")).toBe(true);
+    expect(ctx.compactionHandoff.has("sess-2")).toBe(true);
+  });
+
   it("does not short-circuit session.compacted through the allow-list", async () => {
     const ctx = createMockPluginContext({ testDir });
     const handler = createEventHandlerHook(ctx).event as NonNullable<Hooks["event"]>;
@@ -203,6 +281,18 @@ describe("event-handler hook", () => {
 
     expect(result).not.toBeUndefined();
     // Awaiting to prove lifecycleHandler ran rather than returning the ignored-event promise
+    await result;
+  });
+
+  it("does not short-circuit session.error through the allow-list", async () => {
+    const ctx = createMockPluginContext({ testDir });
+    const handler = createEventHandlerHook(ctx).event as NonNullable<Hooks["event"]>;
+
+    const result = handler({
+      event: { type: "session.error", properties: { sessionID: "sess-allow" } } as SdkEvent,
+    });
+
+    expect(result).not.toBeUndefined();
     await result;
   });
 
