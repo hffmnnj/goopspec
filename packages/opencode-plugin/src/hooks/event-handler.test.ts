@@ -157,6 +157,55 @@ describe("event-handler hook", () => {
     expect(ctx.sessionManager.size()).toBe(0);
   });
 
+  it("clears pending compaction state on session.compacted through the exported hook", async () => {
+    const ctx = createMockPluginContext({ testDir });
+    ctx.pendingCompactions.set("sess-compacted", {
+      model: { providerID: "opencode", modelID: "deepseek-v4" },
+      status: "queued",
+      queuedAtMs: Date.now(),
+    });
+    ctx.compactionHandoff.set("sess-compacted", "handoff-token");
+    const handler = createEventHandlerHook(ctx).event as NonNullable<Hooks["event"]>;
+
+    await handler({
+      event: { type: "session.compacted", properties: { sessionID: "sess-compacted" } } as SdkEvent,
+    });
+
+    expect(ctx.pendingCompactions.has("sess-compacted")).toBe(false);
+    expect(ctx.compactionHandoff.has("sess-compacted")).toBe(false);
+  });
+
+  it("leaves a second live session untouched on session.compacted", async () => {
+    const ctx = createMockPluginContext({ testDir });
+    ctx.pendingCompactions.set("sess-live", {
+      model: { providerID: "opencode", modelID: "deepseek-v4" },
+      status: "queued",
+      queuedAtMs: Date.now(),
+    });
+    ctx.compactionHandoff.set("sess-live", "handoff-token");
+    const handler = createEventHandlerHook(ctx).event as NonNullable<Hooks["event"]>;
+
+    await handler({
+      event: { type: "session.compacted", properties: { sessionID: "sess-other" } } as SdkEvent,
+    });
+
+    expect(ctx.pendingCompactions.has("sess-live")).toBe(true);
+    expect(ctx.compactionHandoff.has("sess-live")).toBe(true);
+  });
+
+  it("does not short-circuit session.compacted through the allow-list", async () => {
+    const ctx = createMockPluginContext({ testDir });
+    const handler = createEventHandlerHook(ctx).event as NonNullable<Hooks["event"]>;
+
+    const result = handler({
+      event: { type: "session.compacted", properties: { sessionID: "sess-allow" } } as SdkEvent,
+    });
+
+    expect(result).not.toBeUndefined();
+    // Awaiting to prove lifecycleHandler ran rather than returning the ignored-event promise
+    await result;
+  });
+
   it("silently ignores unknown event types", async () => {
     const ctx = createMockPluginContext({ testDir });
     const getSpy = spyOn(ctx.sessionManager, "get");
