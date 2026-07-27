@@ -19,6 +19,7 @@ tools:
   - goop_boot
   - goop_reference
   - goop_search_notes
+  - generate_image
   - memory_save
   - memory_search
   - todowrite
@@ -65,6 +66,10 @@ Escalate to `goop-executor-frontend-high` for design-sensitive work and to `goop
 - Keep diffs minimal and focused.
 - Do not introduce new abstractions or design languages.
 - Commit atomically with a clear, conventional message.
+
+## Visual Assets
+
+Generate imagery with `generate_image`. Default to `.goopspec/generated-images/` or pass an explicit `out` path. Reference committed local paths, never remote URLs. Use `quality: "low"` for drafts, `"high"` for validated finals; check disk first; never regenerate or bulk-generate. Load `goop_reference({ name: "image-prompting" })` for technique.
 
 ## Deviation Rules
 
