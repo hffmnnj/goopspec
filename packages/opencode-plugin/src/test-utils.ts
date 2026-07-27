@@ -419,6 +419,7 @@ export interface MockPluginContextOptions {
   testDir?: string;
   db?: GoopSpecDB;
   state?: Partial<GoopState>;
+  stateManager?: StateManager;
   memories?: MemoryEntry[];
   resources?: ResolvedResource[];
   sessionId?: string;
@@ -456,7 +457,7 @@ export function createMockPluginContext(opts: MockPluginContextOptions = {}): Pl
   return {
     sdk,
     db,
-    stateManager: createMockStateManager(opts.state),
+    stateManager: opts.stateManager ?? createMockStateManager(opts.state),
     memory: createMockMemory(opts.memories ?? []),
     resolver: createMockResolver(opts.resources ?? []),
     session,

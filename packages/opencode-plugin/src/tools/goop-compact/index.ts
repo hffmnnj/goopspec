@@ -10,7 +10,8 @@ import {
 } from "../../core/pending-compaction.js";
 import { tool } from "../../core/sdk-compat.js";
 import type { ToolContext, ToolDefinition } from "../../core/sdk-compat.js";
-import type { CompactionHandoffSnapshot, PluginContext } from "../../core/types.js";
+import type { CompactionHandoffSnapshot, GoopState, PluginContext } from "../../core/types.js";
+import { COMPACT_RECONCILIATION_DIRECTIVE } from "../../shared/compact-reminder.js";
 import { log, logError } from "../../shared/logger.js";
 
 interface ModelRef {
@@ -135,6 +136,33 @@ async function resolveCurrentBranch(worktree: string): Promise<string | undefine
   }
 }
 
+interface DivergenceCheck {
+  readonly divergentFields: string[];
+  readonly persistedState: GoopState;
+}
+
+function detectDivergence(cached: GoopState, persisted: GoopState): DivergenceCheck {
+  const divergentFields: string[] = [];
+
+  if (cached.activeWorkflowId !== persisted.activeWorkflowId) {
+    divergentFields.push("activeWorkflowId");
+  }
+
+  const cachedWorkflow = cached.workflows[cached.activeWorkflowId];
+  const persistedWorkflow = persisted.workflows[persisted.activeWorkflowId];
+
+  if (cachedWorkflow && persistedWorkflow) {
+    const keys = Object.keys(cachedWorkflow) as (keyof typeof cachedWorkflow)[];
+    for (const key of keys) {
+      if (cachedWorkflow[key] !== persistedWorkflow[key]) {
+        divergentFields.push(key);
+      }
+    }
+  }
+
+  return { divergentFields, persistedState: persisted };
+}
+
 async function captureCompactionHandoff(
   ctx: PluginContext,
   nextStep: string,
@@ -243,6 +271,24 @@ export function createGoopCompactTool(ctx: PluginContext): ToolDefinition {
         }
 
         log("goop_compact queuing compaction", { sessionID });
+
+        let divergenceWarning = "";
+        try {
+          const cachedBeforeFlush = ctx.stateManager.getState();
+          ctx.stateManager.setState(cachedBeforeFlush);
+          const persistedAfterFlush = ctx.stateManager.getState();
+          const divergence = detectDivergence(cachedBeforeFlush, persistedAfterFlush);
+          if (divergence.divergentFields.length > 0) {
+            divergenceWarning = ` WARNING: in-memory state diverged from persisted state after flush; fields: ${divergence.divergentFields.join(", ")}.`;
+            logError("goop_compact detected stale in-memory state before compaction", {
+              sessionID,
+              fields: divergence.divergentFields,
+            });
+          }
+        } catch (flushError) {
+          logError("goop_compact failed to flush state before queuing", flushError);
+        }
+
         const handoff = await captureCompactionHandoff(ctx, args.next_step);
         if (handoff) ctx.compactionHandoff.set(sessionID, handoff);
         ctx.pendingCompactions.set(sessionID, {
@@ -252,7 +298,7 @@ export function createGoopCompactTool(ctx: PluginContext): ToolDefinition {
         });
         log("goop_compact queued compaction", { sessionID, model });
 
-        return `Compaction queued. Please end your turn here so compaction can occur. Next step after compaction: ${args.next_step}`;
+        return `Compaction queued. Please end your turn here so compaction can occur. Next step after compaction: ${args.next_step}${divergenceWarning}${COMPACT_RECONCILIATION_DIRECTIVE}`;
       } catch (error) {
         if (sessionID) {
           clearFailedCompaction(ctx, sessionID);

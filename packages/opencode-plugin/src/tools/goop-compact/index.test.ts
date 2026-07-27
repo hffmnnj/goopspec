@@ -3,12 +3,13 @@ import { afterEach, beforeEach, describe, expect, it, mock, spyOn } from "bun:te
 import { PENDING_COMPACTION_TTL_MS } from "../../core/constants.js";
 import { createCompactionHook } from "../../hooks/compaction-hook.js";
 import {
+  createDefaultWorkflowState,
   createMockCompactionHandoff,
   createMockPluginContext,
   createMockToolContext,
   setupTestEnvironment,
 } from "../../test-utils.js";
-import type { PluginContext } from "../../test-utils.js";
+import type { PluginContext, WorkflowState } from "../../test-utils.js";
 import { createGoopCompactTool, dispatchPendingCompaction } from "./index.js";
 
 interface CompactionClient {
@@ -78,6 +79,133 @@ describe("createGoopCompactTool", () => {
     expect(ctx.compactionHandoff.get(sessionID)?.nextStep).toBe(nextStep);
     expect(ctx.pendingCompactions.get(sessionID)?.status).toBe("queued");
     expect(typeof ctx.pendingCompactions.get(sessionID)?.queuedAtMs).toBe("number");
+  });
+
+  it("persists state to the DB before writing the pending compaction entry", async () => {
+    const summarize = mock(async () => ({ data: true }));
+    const sessionID = "session-persist-before-queue";
+    const nextStep = "Persist, then queue.";
+
+    // Use a real StateManager so we can inspect the DB row.
+    const env = setupTestEnvironment("goop-compact-persist");
+    const { createStateManager } = await import("../../features/state-manager/index.js");
+    const realStateManager = createStateManager({ projectDir: env.testDir, db: env.db });
+    realStateManager.updateWorkflow({
+      phase: "execute",
+      mode: "comprehensive",
+      depth: "deep",
+      interviewComplete: true,
+      specLocked: true,
+      acceptanceConfirmed: true,
+      currentWave: 2,
+      totalWaves: 4,
+      autopilot: true,
+      lazyAutopilot: true,
+    });
+    const realCtx = createMockPluginContext({
+      testDir: env.testDir,
+      db: env.db,
+      stateManager: realStateManager,
+    });
+    setCompactionClient(realCtx, { session: { messages: modelMessages, summarize } });
+
+    await createGoopCompactTool(realCtx).execute(
+      { next_step: nextStep },
+      createMockToolContext({ sessionID }),
+    );
+
+    const row = env.db.getWorkflow("default");
+    expect(row).toBeDefined();
+    const persisted = JSON.parse(row?.state ?? "{}") as WorkflowState;
+    expect(persisted.phase).toBe("execute");
+    expect(persisted.currentWave).toBe(2);
+    expect(persisted.specLocked).toBe(true);
+    expect(realCtx.pendingCompactions.get(sessionID)?.status).toBe("queued");
+    env.cleanup();
+  });
+
+  it("returns a staleness WARNING naming divergent fields when in-memory state is stale", async () => {
+    const summarize = mock(async () => ({ data: true }));
+    const sessionID = "session-divergence-warning";
+    const nextStep = "Reconcile before compacting.";
+
+    // Use a real StateManager and simulate an out-of-band DB advance.
+    const env = setupTestEnvironment("goop-compact-divergence");
+    const { createStateManager } = await import("../../features/state-manager/index.js");
+    const realStateManager = createStateManager({ projectDir: env.testDir, db: env.db });
+    realStateManager.updateWorkflow({
+      phase: "plan",
+      currentWave: 1,
+      totalWaves: 3,
+      interviewComplete: true,
+    });
+    realStateManager.getState();
+    env.db.upsertWorkflow(
+      "default",
+      createDefaultWorkflowState({
+        phase: "execute",
+        currentWave: 2,
+        interviewComplete: true,
+        specLocked: true,
+      }),
+    );
+    const realCtx = createMockPluginContext({
+      testDir: env.testDir,
+      db: env.db,
+      stateManager: realStateManager,
+    });
+    setCompactionClient(realCtx, { session: { messages: modelMessages, summarize } });
+
+    const result = await createGoopCompactTool(realCtx).execute(
+      { next_step: nextStep },
+      createMockToolContext({ sessionID }),
+    );
+
+    expect(result).toContain("WARNING:");
+    expect(result).toContain("phase");
+    expect(result).toContain("currentWave");
+    expect(result).toContain("specLocked");
+    expect(result).toContain("totalWaves");
+    expect(realCtx.pendingCompactions.get(sessionID)?.status).toBe("queued");
+    env.cleanup();
+  });
+
+  it("does not return a divergence warning when state is clean", async () => {
+    const summarize = mock(async () => ({ data: true }));
+    const sessionID = "session-clean-state";
+    const nextStep = "No divergence expected.";
+
+    const env = setupTestEnvironment("goop-compact-clean");
+    const { createStateManager } = await import("../../features/state-manager/index.js");
+    const realStateManager = createStateManager({ projectDir: env.testDir, db: env.db });
+    realStateManager.updateWorkflow({
+      phase: "execute",
+      mode: "standard",
+      depth: "standard",
+      interviewComplete: true,
+      specLocked: true,
+      acceptanceConfirmed: false,
+      currentWave: 2,
+      totalWaves: 4,
+      autopilot: true,
+      lazyAutopilot: false,
+    });
+    const realCtx = createMockPluginContext({
+      testDir: env.testDir,
+      db: env.db,
+      stateManager: realStateManager,
+    });
+    setCompactionClient(realCtx, { session: { messages: modelMessages, summarize } });
+
+    const result = await createGoopCompactTool(realCtx).execute(
+      { next_step: nextStep },
+      createMockToolContext({ sessionID }),
+    );
+
+    expect(result).not.toContain("WARNING:");
+    expect(result).toContain("Compaction queued.");
+    expect(realCtx.pendingCompactions.get(sessionID)?.status).toBe("queued");
+    env.cleanup();
   });
 
   it("round-trips every structured handoff field through the compacting handler", async () => {
@@ -222,6 +350,25 @@ describe("createGoopCompactTool", () => {
     );
     expect(ctx.compactionHandoff.has(sessionID)).toBeFalse();
     expect(ctx.compactionHandoff.get(otherSessionID)?.nextStep).toBe("Other handoff.");
+  });
+
+  it("PR #210 regression: execute never calls summarize and idle dispatch calls it exactly once", async () => {
+    const sessionID = "session-pr210-tripwire";
+    const summarize = mock(async () => ({ data: true }));
+    setCompactionClient(ctx, { session: { messages: modelMessages, summarize } });
+
+    await createGoopCompactTool(ctx).execute(
+      { next_step: "Resume after compaction." },
+      createMockToolContext({ sessionID }),
+    );
+
+    expect(summarize).not.toHaveBeenCalled();
+
+    dispatchPendingCompaction(ctx, sessionID);
+    await flushPromises();
+
+    expect(summarize).toHaveBeenCalledTimes(1);
+    expect(ctx.pendingCompactions.has(sessionID)).toBeFalse();
   });
 
   it("dispatches queued compaction once with auto and clears it on success", async () => {
