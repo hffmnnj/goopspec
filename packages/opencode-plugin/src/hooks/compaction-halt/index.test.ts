@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { PENDING_COMPACTION_TTL_MS } from "../../core/constants.js";
 import type { PluginContext } from "../../core/types.js";
 import {
+  createMockCompactionHandoff,
   createMockPluginContext,
   createMockToolContext,
   setupTestEnvironment,
@@ -59,7 +60,7 @@ describe("compaction-halt hook", () => {
       status: "queued",
       queuedAtMs,
     });
-    ctx.compactionHandoff.set(sessionID, "Resume after compaction");
+    ctx.compactionHandoff.set(sessionID, createMockCompactionHandoff("Resume after compaction"));
     const output = makeAfterOutput();
 
     await createCompactionHaltHook(ctx)["tool.execute.after"]?.(makeAfterInput(sessionID), output);
@@ -212,7 +213,7 @@ describe("compaction-halt hook", () => {
       status: "queued",
       queuedAtMs,
     });
-    ctx.compactionHandoff.set(sessionID, "resume here");
+    ctx.compactionHandoff.set(sessionID, createMockCompactionHandoff("resume here"));
     const output = makeAfterOutput();
 
     await createCompactionHaltHook(ctx)["tool.execute.after"]?.(makeAfterInput(sessionID), output);

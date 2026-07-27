@@ -1,6 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, mock, spyOn } from "bun:test";
 import type { SdkEvent } from "../core/sdk-compat.js";
-import { createMockPluginContext, setupTestEnvironment } from "../test-utils.js";
+import {
+  createMockCompactionHandoff,
+  createMockPluginContext,
+  setupTestEnvironment,
+} from "../test-utils.js";
 import { IDLE_COMPACTION_DEFER_MS, createEventHandlerHook } from "./event-handler.js";
 import type { Hooks } from "./types.js";
 
@@ -159,6 +163,55 @@ describe("event-handler hook", () => {
     expect(summarize).toHaveBeenCalledTimes(1);
   });
 
+  it("dispatches one lazy autopilot nudge when duplicate idle events are deferred", async () => {
+    const ctx = createMockPluginContext({
+      testDir,
+      state: {
+        activeWorkflowId: "default",
+        workflows: {
+          default: {
+            phase: "execute",
+            mode: "standard",
+            depth: "standard",
+            interviewComplete: false,
+            specLocked: false,
+            acceptanceConfirmed: true,
+            currentWave: 1,
+            totalWaves: 3,
+            autopilot: false,
+            lazyAutopilot: true,
+          },
+        },
+      },
+    });
+    const promptAsync = mock(async () => undefined);
+    Object.assign(ctx.sdk.client, {
+      session: {
+        messages: mock(async () => [{ info: { role: "assistant" } }]),
+        promptAsync,
+      },
+    });
+    const handler = createEventHandlerHook(ctx).event as NonNullable<Hooks["event"]>;
+
+    await handler(idleEvent("sess-lazy-deduped"));
+    await handler(idleEvent("sess-lazy-deduped"));
+    await flushIdleCompactionDispatch();
+    await Promise.resolve();
+
+    expect(promptAsync).toHaveBeenCalledTimes(1);
+    expect(promptAsync).toHaveBeenCalledWith({
+      path: { id: "sess-lazy-deduped" },
+      body: {
+        parts: [
+          {
+            type: "text",
+            text: "LAZY AUTOPILOT ENGAGED - Do not pause unless you 100% cannot move forward without something from the user. Use your best judgement and continue.",
+          },
+        ],
+      },
+    });
+  });
+
   it("removes a session and clears compaction state on session.deleted", async () => {
     const ctx = createMockPluginContext({ testDir });
     ctx.sessionManager.create("sess-del");
@@ -167,14 +220,14 @@ describe("event-handler hook", () => {
       status: "queued",
       queuedAtMs: Date.now(),
     });
-    ctx.compactionHandoff.set("sess-del", "handoff-token");
+    ctx.compactionHandoff.set("sess-del", createMockCompactionHandoff("handoff-token"));
     ctx.sessionManager.create("sess-live");
     ctx.pendingCompactions.set("sess-live", {
       model: { providerID: "opencode", modelID: "deepseek-v4" },
       status: "queued",
       queuedAtMs: Date.now(),
     });
-    ctx.compactionHandoff.set("sess-live", "handoff-token-live");
+    ctx.compactionHandoff.set("sess-live", createMockCompactionHandoff("handoff-token-live"));
     const deleteSpy = spyOn(ctx.sessionManager, "delete");
     const handler = createEventHandlerHook(ctx).event as NonNullable<Hooks["event"]>;
 
@@ -217,7 +270,7 @@ describe("event-handler hook", () => {
       status: "queued",
       queuedAtMs: Date.now(),
     });
-    ctx.compactionHandoff.set("sess-compacted", "handoff-token");
+    ctx.compactionHandoff.set("sess-compacted", createMockCompactionHandoff("handoff-token"));
     const handler = createEventHandlerHook(ctx).event as NonNullable<Hooks["event"]>;
 
     await handler({
@@ -237,7 +290,7 @@ describe("event-handler hook", () => {
       status: "queued",
       queuedAtMs: Date.now(),
     });
-    ctx.compactionHandoff.set("sess-live", "handoff-token");
+    ctx.compactionHandoff.set("sess-live", createMockCompactionHandoff("handoff-token"));
     const handler = createEventHandlerHook(ctx).event as NonNullable<Hooks["event"]>;
 
     await handler({
@@ -255,13 +308,13 @@ describe("event-handler hook", () => {
       status: "queued",
       queuedAtMs: Date.now(),
     });
-    ctx.compactionHandoff.set("sess-error", "handoff-token");
+    ctx.compactionHandoff.set("sess-error", createMockCompactionHandoff("handoff-token"));
     ctx.pendingCompactions.set("sess-live", {
       model: { providerID: "opencode", modelID: "deepseek-v4" },
       status: "queued",
       queuedAtMs: Date.now(),
     });
-    ctx.compactionHandoff.set("sess-live", "handoff-token-live");
+    ctx.compactionHandoff.set("sess-live", createMockCompactionHandoff("handoff-token-live"));
     const handler = createEventHandlerHook(ctx).event as NonNullable<Hooks["event"]>;
 
     await handler({
@@ -281,13 +334,13 @@ describe("event-handler hook", () => {
       status: "queued",
       queuedAtMs: Date.now(),
     });
-    ctx.compactionHandoff.set("sess-1", "handoff-token-1");
+    ctx.compactionHandoff.set("sess-1", createMockCompactionHandoff("handoff-token-1"));
     ctx.pendingCompactions.set("sess-2", {
       model: { providerID: "opencode", modelID: "deepseek-v4" },
       status: "queued",
       queuedAtMs: Date.now(),
     });
-    ctx.compactionHandoff.set("sess-2", "handoff-token-2");
+    ctx.compactionHandoff.set("sess-2", createMockCompactionHandoff("handoff-token-2"));
     const handler = createEventHandlerHook(ctx).event as NonNullable<Hooks["event"]>;
 
     await handler({
@@ -426,7 +479,7 @@ describe("event-handler hook", () => {
         status: "queued",
         queuedAtMs: Date.now(),
       });
-      ctx.compactionHandoff.set("wired-compacted", "handoff");
+      ctx.compactionHandoff.set("wired-compacted", createMockCompactionHandoff("handoff"));
       const handler = makeHandler(ctx);
       const result = handler({
         event: {
@@ -447,7 +500,7 @@ describe("event-handler hook", () => {
         status: "queued",
         queuedAtMs: Date.now(),
       });
-      ctx.compactionHandoff.set("wired-error", "handoff");
+      ctx.compactionHandoff.set("wired-error", createMockCompactionHandoff("handoff"));
       const handler = makeHandler(ctx);
       const result = handler({
         event: { type: "session.error", properties: { sessionID: "wired-error" } } as SdkEvent,
@@ -466,7 +519,7 @@ describe("event-handler hook", () => {
         status: "queued",
         queuedAtMs: Date.now(),
       });
-      ctx.compactionHandoff.set("wired-delete", "handoff");
+      ctx.compactionHandoff.set("wired-delete", createMockCompactionHandoff("handoff"));
       const handler = makeHandler(ctx);
       const result = handler({
         event: {

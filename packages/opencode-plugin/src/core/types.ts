@@ -65,10 +65,12 @@ export interface PluginContext {
   readonly resolver: ResourceResolver;
   readonly session: SessionInfo;
   readonly sessionManager: SessionManager;
-  /** Session-scoped ephemeral tool→hook handoff for compaction `next_step`; the hook reads then deletes entries. */
-  readonly compactionHandoff: Map<string, string>;
+  /** Session-scoped ephemeral tool→hook handoff; the hook reads then deletes entries. */
+  readonly compactionHandoff: Map<string, CompactionHandoffSnapshot>;
   /** Session-scoped compaction requests queued by tools and dispatched when their session becomes idle. */
   readonly pendingCompactions: Map<string, PendingCompactionRequest>;
+  /** Session-scoped lazy-autopilot nudges awaiting dispatch or system-transform fallback. */
+  readonly pendingLazyAutopilotNudges: Map<string, PendingLazyAutopilotNudge>;
 }
 
 /** A validated compaction request queued at request time and dispatched in-flight on session.idle. */
@@ -79,6 +81,34 @@ export interface PendingCompactionRequest {
   };
   status: "queued" | "in-flight";
   readonly queuedAtMs: number;
+}
+
+/** An ephemeral lazy-autopilot nudge, deduplicated for one session. */
+export interface PendingLazyAutopilotNudge {
+  status: "queued" | "in-flight";
+  source: "prompt-async" | "system-transform";
+}
+
+/**
+ * Durable-in-memory workflow context captured when a compaction is queued.
+ * `nextStep` remains directly consumable by the compaction hook rather than
+ * requiring consumers to decode an opaque serialized payload.
+ */
+export interface CompactionHandoffSnapshot {
+  readonly workflowId: string;
+  readonly phase: WorkflowPhase;
+  readonly mode: TaskMode;
+  readonly depth: WorkflowDepth;
+  readonly specLocked: boolean;
+  readonly interviewComplete: boolean;
+  readonly acceptanceConfirmed: boolean;
+  readonly currentWave: number;
+  readonly totalWaves: number;
+  readonly autopilot: boolean;
+  readonly lazyAutopilot: boolean;
+  readonly branch: string | undefined;
+  readonly nextStep: string;
+  readonly capturedAtMs: number;
 }
 
 // ---------------------------------------------------------------------------

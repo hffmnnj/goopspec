@@ -20,6 +20,13 @@ export const WAVE_COMPLETE_COMPACT_REMINDER =
   "\n\n💡 Wave complete. Consider calling goop_compact every 3-5 waves (sooner after heavy waves) with a next_step description, and always before /goop-accept.";
 
 /**
+ * Directive shown after a successful goop_compact queueing to remind the
+ * calling agent to reconcile the resumed state before ending its turn.
+ */
+export const COMPACT_RECONCILIATION_DIRECTIVE =
+  " Before ending your turn, reconcile the active workflow, phase, current wave, and task statuses against the durable state shown above.";
+
+/**
  * Returns true only when the provided status is a terminal wave status.
  *
  * Terminal statuses are "done" and "completed" (case-insensitive).
