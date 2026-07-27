@@ -30,20 +30,21 @@ function extractBody(raw: string): string {
 
 // Detection rule for required tool grants:
 //
-// The agent body is broken into small, independent units so that a prohibition
-// in one clause cannot suppress a genuine instruction in another:
-//   - each markdown list item (line starting with "-" or "*") is one unit
-//   - prose is split into clauses at . ! ? ; and em-dashes
+// The agent body is broken into small, independent clauses so that a
+// prohibition in one clause cannot suppress a genuine instruction in another:
+//   - prose lines are split into clauses at . ! ? ; and em-dashes
+//   - markdown list items are stripped of their leading "-"/"*" marker and
+//     split the same way; a whole list item is never treated as one unit
 //
-// A unit is treated as prohibitive for a given tool token only when a negation
-// cue appears *before* that token inside the same unit. Cues:
+// A clause is treated as prohibitive for a given tool token only when a
+// negation cue appears *before* that token inside the same clause. Cues:
 //   "do not", "don't", "never", "not permitted", "must not", "should not",
 //   "cannot", "can't", "prohibited", "forbidden", and phrases that assign
 //   responsibility elsewhere such as "is the Orchestrator's responsibility" or
 //   "is the Orchestrator/command's responsibility".
 //
-// If a unit is prohibitive for a tool token, that token is skipped in that
-// unit; otherwise it counts as a required grant.
+// If a clause is prohibitive for a tool token, that token is skipped in that
+// clause; otherwise it counts as a required grant.
 const NEGATION_CUES = [
   "do not",
   "don't",
@@ -59,6 +60,13 @@ const NEGATION_CUES = [
   "prohibited",
 ];
 
+function splitIntoClauses(text: string): string[] {
+  return text
+    .split(/(?<=[.!?;])\s+|\s+—\s+/)
+    .map((clause) => clause.trim())
+    .filter((clause) => clause.length > 0);
+}
+
 function segmentBody(body: string): string[] {
   const segments: string[] = [];
   const lines = body.split(/\r?\n/);
@@ -67,13 +75,10 @@ function segmentBody(body: string): string[] {
     const trimmed = line.trim();
     if (!trimmed) continue;
 
-    if (/^[-*]\s+/.test(trimmed)) {
-      segments.push(trimmed);
-    } else {
-      const clauses = trimmed.split(/(?<=[.!?;])\s+|\s+—\s+/);
-      for (const clause of clauses) {
-        if (clause.trim()) segments.push(clause.trim());
-      }
+    const listContent = trimmed.replace(/^[-*]\s+/, "");
+    const clauses = splitIntoClauses(listContent);
+    for (const clause of clauses) {
+      segments.push(clause);
     }
   }
 
@@ -221,8 +226,14 @@ describe("referencedTools negation awareness", () => {
     expect(parsed).not.toBeNull();
     const body = extractBody(raw);
     const referenced = referencedTools(body);
-    const missing = referenced.filter((tool) => !(parsed!.config.tools ?? {})[tool]);
+    const missing = referenced.filter((tool) => !isGranted(tool, parsed!.config.tools ?? {}, parsed!.config.permission ?? {}));
     expect(referenced).toEqual(["goop_write_db"]);
     expect(missing).toEqual(["goop_write_db"]);
+  });
+
+  it("splits list items into clauses so a prohibition cannot suppress a genuine instruction", () => {
+    const body =
+      "- Do not write to planning documents. read `spec` via `goop_read_db` only if genuinely needed — no document default. Read wave/task context via `goop_read_wave` — never edit files directly.";
+    expect(referencedTools(body)).toEqual(["goop_read_db", "goop_read_wave"]);
   });
 });
