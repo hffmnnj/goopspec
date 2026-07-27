@@ -142,7 +142,7 @@ export function createGoopWriteSectionTool(ctx: PluginContext): ToolDefinition {
         const workflowId = args.workflow_id ?? ctx.stateManager.getState().activeWorkflowId;
 
         if (action === "delete") {
-          if (args.items !== undefined) {
+          if (Array.isArray(args.items) && args.items.length > 0) {
             return "Error in goop_write_section: action 'delete' does not support items";
           }
           if (!args.section_key) {
@@ -163,7 +163,7 @@ export function createGoopWriteSectionTool(ctx: PluginContext): ToolDefinition {
             : `No section '${args.section_key}' found for ${args.doc_type} in workflow '${workflowId}'.`;
         }
 
-        if (args.items !== undefined) {
+        if (Array.isArray(args.items) && args.items.length > 0) {
           const checkedDocTypes = new Set<DocType>();
           const result = runBatch(ctx.db, args.items, (item) => {
             const shouldCheckForLegacyContent = !checkedDocTypes.has(item.doc_type);
@@ -175,6 +175,10 @@ export function createGoopWriteSectionTool(ctx: PluginContext): ToolDefinition {
 
           renderSidecars(ctx, workflowId);
           return formatBatchResult(result, "write-section");
+        }
+
+        if (args.items?.length === 0 && args.section_key === undefined) {
+          return "Error in goop_write_section: items[] array is empty and no section_key was provided";
         }
 
         if (args.section_key === undefined) {

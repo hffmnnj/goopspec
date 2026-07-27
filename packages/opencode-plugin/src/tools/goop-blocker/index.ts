@@ -184,7 +184,7 @@ export function createGoopBlockerTool(ctx: PluginContext): ToolDefinition {
       try {
         const workflowId = args.workflow_id ?? ctx.stateManager.getState().activeWorkflowId;
 
-        if (args.items !== undefined) {
+        if (Array.isArray(args.items) && args.items.length > 0) {
           const touchedWorkflows = new Set<string>();
           const result = runBatch(ctx.db, args.items, (item) => {
             const itemWorkflowId = item.workflow_id ?? workflowId;
@@ -201,7 +201,7 @@ export function createGoopBlockerTool(ctx: PluginContext): ToolDefinition {
         }
 
         if (args.action === undefined) {
-          return "Error: 'action' is required when no items batch is provided.";
+          return "Error in goop_blocker: items[] array is empty and no action was provided";
         }
 
         const detail = processBlockerItem(ctx, workflowId, {

@@ -132,10 +132,22 @@ describe("goop_write_wave batch mode", () => {
 
   afterEach(() => cleanup());
 
-  it("returns empty result for empty items array", async () => {
+  it("empty items array falls through to single-wave path", async () => {
+    const tool = createGoopWriteWaveTool(ctx);
+    const result = await tool.execute(
+      { wave_number: 1, title: "Fallback Wave", items: [] },
+      toolCtx,
+    );
+    expect(result).toContain("Written wave 1");
+    expect(ctx.db.getWave("default", 1)?.title).toBe("Fallback Wave");
+  });
+
+  it("returns error when items array is empty and no wave fields are provided", async () => {
     const tool = createGoopWriteWaveTool(ctx);
     const result = await tool.execute({ wave_number: 1, items: [] }, toolCtx);
-    expect(result).toContain("0/0 succeeded");
+    expect(result).toContain("Error in goop_write_wave");
+    expect(result).toContain("items[] array is empty");
+    expect(result).not.toContain("succeeded");
   });
 
   it("writes single-element items array", async () => {
