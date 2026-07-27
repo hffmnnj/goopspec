@@ -43,6 +43,37 @@ For workflow path resolution:
 - Write workflow docs via `goop_write_db({ doc_type: "...", content: "..." })`; the tool renders the sidecar automatically.
 - `config.json` and `memory.db` are always global files.
 
+## DB-as-State Durability Guarantees
+
+State is persisted to GoopSpecDB (`.goopspec/goopspec.db`) through a transactional persist path. Every mutation in the StateManager calls `persistStateToDb()`, which runs a `db.runTransaction()` that atomically writes all workflow rows and the `_meta` row.
+
+### Refresh-Before-Mutate
+
+The `mutateActive()` method in the StateManager reads the current DB row before applying in-memory changes, then applies cached workflow changes on top. This prevents stale in-memory state from overwriting concurrent DB writes.
+
+### Regressive-Snapshot Rejection
+
+`setState()` calls `wouldRegressPersistedState()` to reject snapshots that would erase durable progress. A snapshot is rejected if it would: change the active workflow ID, regress a workflow's phase, unset `interviewComplete`, `specLocked`, or `acceptanceConfirmed`, or decrease `currentWave`/`totalWaves`.
+
+### Compaction Handoff Snapshot
+
+When `goop_compact` queues a compaction, it captures a `CompactionHandoffSnapshot` via `captureCompactionHandoff()`:
+
+- Workflow identity: workflowId, phase, mode, depth, specLocked, interviewComplete, acceptanceConfirmed, currentWave, totalWaves, autopilot, lazyAutopilot.
+- Git branch resolved at capture time.
+- The `next_step` string provided by the caller.
+- A `capturedAtMs` timestamp.
+
+This snapshot is stored in the in-process `compactionHandoff` map keyed by session ID. When the compaction survival hook fires (`experimental.session.compacting`), it reads the snapshot, reconciles the active workflow binding (rebinding to the snapshot's workflow if the live binding has drifted), and builds a survival block that is pushed into `output.context`. The snapshot is consumed once and deleted.
+
+### Pre-Flush Before Compaction
+
+Before queuing, `goop_compact` performs a pre-flush: it calls `stateManager.setState(stateManager.getState())` to persist any in-memory changes, then compares the cached state against the persisted state via `detectDivergence()`. If fields diverge, a warning is emitted listing the divergent fields. This is diagnostic only — compaction proceeds regardless.
+
+### V1-Only Limitation
+
+The compaction survival hook (`experimental.session.compacting`) and the lazy autopilot nudge (`event` hook) are **V1-only**. V2 does not expose these hooks (see `src/core/hooks-v2.ts` — both are in the skipped hooks array). Under V2, compaction survival and the nudge are inert and log the limitation once at startup.
+
 ## DB Tool Surface
 
 - Documents: `goop_read_db`, `goop_write_db`, `goop_append_chronicle`, `goop_read_section`, `goop_write_section`, `goop_search_docs`.
