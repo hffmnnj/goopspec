@@ -12,13 +12,34 @@
  * @module hooks/compaction-hook
  */
 
-import type { PluginContext } from "../core/types.js";
-import { log } from "../shared/logger.js";
+import type { CompactionHandoffSnapshot, PluginContext } from "../core/types.js";
+import { log, logError } from "../shared/logger.js";
 import { clearCompactionHaltState } from "./compaction-halt/index.js";
 import type { HookFactory, Hooks } from "./types.js";
 import { safeHandler } from "./utils.js";
 
 export const MAX_NEXT_STEP_CHARS = 200;
+
+function isCompactionHandoffSnapshot(value: unknown): value is CompactionHandoffSnapshot {
+  if (value === null || typeof value !== "object") return false;
+  const handoff = value as Partial<CompactionHandoffSnapshot>;
+  return (
+    typeof handoff.workflowId === "string" &&
+    typeof handoff.phase === "string" &&
+    typeof handoff.mode === "string" &&
+    typeof handoff.depth === "string" &&
+    typeof handoff.specLocked === "boolean" &&
+    typeof handoff.interviewComplete === "boolean" &&
+    typeof handoff.acceptanceConfirmed === "boolean" &&
+    typeof handoff.currentWave === "number" &&
+    typeof handoff.totalWaves === "number" &&
+    typeof handoff.autopilot === "boolean" &&
+    typeof handoff.lazyAutopilot === "boolean" &&
+    (typeof handoff.branch === "string" || handoff.branch === undefined) &&
+    typeof handoff.nextStep === "string" &&
+    typeof handoff.capturedAtMs === "number"
+  );
+}
 
 function sanitizeNextStep(nextStep?: string): string | undefined {
   const sanitized = nextStep?.replace(/\s+/g, " ").trim();
@@ -27,22 +48,123 @@ function sanitizeNextStep(nextStep?: string): string | undefined {
   return `${sanitized.slice(0, MAX_NEXT_STEP_CHARS - 1).trimEnd()}…`;
 }
 
+/** Minimal workflow state needed to render the survival block. */
+interface WorkflowStateLike {
+  phase: string;
+  mode: string;
+  depth: string;
+  specLocked: boolean;
+  interviewComplete: boolean;
+  acceptanceConfirmed: boolean;
+  currentWave: number;
+  totalWaves: number;
+  autopilot: boolean;
+  lazyAutopilot: boolean;
+  branch: string | undefined;
+}
+
+/** Resolve the effective workflow state, preferring the handoff snapshot when present and valid. */
+function resolveSurvivalState(
+  ctx: PluginContext,
+  handoff: CompactionHandoffSnapshot | undefined,
+): { workflowId: string; workflow: WorkflowStateLike; fromSnapshot: boolean } | undefined {
+  if (handoff !== undefined) {
+    return {
+      workflowId: handoff.workflowId,
+      workflow: {
+        phase: handoff.phase,
+        mode: handoff.mode,
+        depth: handoff.depth,
+        specLocked: handoff.specLocked,
+        interviewComplete: handoff.interviewComplete,
+        acceptanceConfirmed: handoff.acceptanceConfirmed,
+        currentWave: handoff.currentWave,
+        totalWaves: handoff.totalWaves,
+        autopilot: handoff.autopilot,
+        lazyAutopilot: handoff.lazyAutopilot,
+        branch: handoff.branch,
+      },
+      fromSnapshot: true,
+    };
+  }
+
+  const live = ctx.stateManager.getState();
+  const workflowId = live.activeWorkflowId;
+  const workflow = live.workflows[workflowId];
+  if (!workflow) {
+    return undefined;
+  }
+  return {
+    workflowId,
+    workflow: { ...workflow, branch: undefined },
+    fromSnapshot: false,
+  };
+}
+
+/**
+ * Rebind the live active-workflow binding to the snapshot workflow when they differ.
+ * Returns the workflowId that should be reported in the survival block.
+ */
+function reconcileActiveWorkflowBinding(
+  ctx: PluginContext,
+  snapshotWorkflowId: string,
+): { workflowId: string; rebound: boolean } {
+  const liveActiveId = ctx.stateManager.getActiveWorkflowId();
+  if (liveActiveId === snapshotWorkflowId) {
+    return { workflowId: snapshotWorkflowId, rebound: false };
+  }
+
+  log("compaction survival: rebinding active workflow to snapshot workflow", {
+    from: liveActiveId,
+    to: snapshotWorkflowId,
+  });
+
+  const restored = ctx.stateManager.restoreActiveWorkflowBinding(snapshotWorkflowId);
+  if (restored) {
+    return { workflowId: snapshotWorkflowId, rebound: true };
+  }
+
+  logError(
+    "compaction survival: snapshot workflow does not exist in live state; falling back to live binding",
+    { snapshotWorkflowId, liveActiveId },
+  );
+
+  return { workflowId: liveActiveId, rebound: false };
+}
+
 // ---------------------------------------------------------------------------
 // Survival block builder
 // ---------------------------------------------------------------------------
 
 /**
  * Build the workflow-state survival block that gets injected into compaction
- * context. Includes phase, wave progress, spec lock, autopilot directives,
+ * context. Includes phase, workflow progress, spec lock, autopilot directives,
  * and pointers to key documents.
  */
-export function buildWorkflowSurvivalBlock(ctx: PluginContext, nextStep?: string): string {
-  const state = ctx.stateManager.getState();
-  const workflowId = state.activeWorkflowId;
-  const workflow = state.workflows[workflowId];
-
-  if (!workflow) {
+export function buildWorkflowSurvivalBlock(
+  ctx: PluginContext,
+  handoff?: CompactionHandoffSnapshot,
+  nextStep?: string,
+): string {
+  const resolved = resolveSurvivalState(ctx, handoff);
+  if (!resolved) {
     return "";
+  }
+
+  let { workflowId, workflow, fromSnapshot } = resolved;
+
+  if (fromSnapshot) {
+    const reconciliation = reconcileActiveWorkflowBinding(ctx, workflowId);
+    if (reconciliation.workflowId !== workflowId) {
+      // Snapshot workflow did not exist in live state; fall back to live binding and its workflow.
+      const live = ctx.stateManager.getState();
+      const liveWorkflow = live.workflows[reconciliation.workflowId];
+      if (!liveWorkflow) {
+        return "";
+      }
+      workflowId = reconciliation.workflowId;
+      workflow = { ...liveWorkflow, branch: undefined };
+    }
   }
 
   const docPrefix = workflowId === "default" ? ".goopspec/" : `.goopspec/${workflowId}/`;
@@ -63,6 +185,15 @@ export function buildWorkflowSurvivalBlock(ctx: PluginContext, nextStep?: string
   lines.push(`- Mode: ${workflow.mode}`);
   lines.push(`- Depth: ${workflow.depth}`);
   lines.push(`- Spec Locked: ${workflow.specLocked ? "yes" : "no"}`);
+  lines.push(`- Interview Complete: ${workflow.interviewComplete ? "yes" : "no"}`);
+  lines.push(`- Acceptance Confirmed: ${workflow.acceptanceConfirmed ? "yes" : "no"}`);
+
+  if (workflow.branch) {
+    lines.push(`- Git Branch: ${workflow.branch}`);
+  }
+
+  // Expose the raw lazyAutopilot boolean so later runtime hooks can gate behavior directly.
+  lines.push(`- Lazy Autopilot: ${workflow.lazyAutopilot ? "true" : "false"}`);
 
   if (workflow.currentWave !== 0 || workflow.totalWaves !== 0) {
     lines.push(`- Wave: ${workflow.currentWave} of ${workflow.totalWaves}`);
@@ -135,13 +266,32 @@ export const createCompactionHook: HookFactory = (ctx: PluginContext): Partial<H
       output: { context: string[]; prompt?: string },
     ): Promise<void> => {
       const sessionID = input.sessionID;
-      const nextStep = sessionID ? ctx.compactionHandoff.get(sessionID) : undefined;
+      const rawHandoff = sessionID ? ctx.compactionHandoff.get(sessionID) : undefined;
+      const snapshot = isCompactionHandoffSnapshot(rawHandoff) ? rawHandoff : undefined;
+      const nextStep = snapshot?.nextStep;
+
+      if (rawHandoff === undefined) {
+        logError(
+          "compaction handoff snapshot was unavailable; continuing without it",
+          new Error("No handoff snapshot for compacting session"),
+        );
+      } else if (snapshot === undefined) {
+        logError("compaction handoff snapshot was malformed; continuing without it", rawHandoff);
+      }
+
       if (sessionID) {
         ctx.compactionHandoff.delete(sessionID);
         ctx.pendingCompactions.delete(sessionID);
         clearCompactionHaltState(sessionID);
       }
-      const block = buildWorkflowSurvivalBlock(ctx, nextStep);
+
+      let block: string;
+      try {
+        block = buildWorkflowSurvivalBlock(ctx, snapshot, nextStep);
+      } catch (error) {
+        logError("compaction survival block failed; continuing without it", error);
+        return;
+      }
 
       if (block.trim().length > 0) {
         if (!Array.isArray(output.context)) {

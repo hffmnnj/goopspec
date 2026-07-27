@@ -18,6 +18,7 @@ import type { ToolContext } from "./core/sdk-compat.js";
 import type {
   ADLEntry,
   CheckpointData,
+  CompactionHandoffSnapshot,
   GoopState,
   MemoryEntry,
   MemoryManager,
@@ -171,6 +172,7 @@ export function createMockStateManager(initialState?: Partial<GoopState>): State
     setState: (next: GoopState) => {
       state = next;
     },
+    invalidate: () => {},
 
     // Workflow CRUD
     getWorkflow: (id: string) => state.workflows[id],
@@ -181,6 +183,11 @@ export function createMockStateManager(initialState?: Partial<GoopState>): State
         throw new Error(`Workflow "${id}" does not exist`);
       }
       state.activeWorkflowId = id;
+    },
+    restoreActiveWorkflowBinding: (id: string) => {
+      if (!state.workflows[id]) return false;
+      state.activeWorkflowId = id;
+      return true;
     },
     createWorkflow: (id: string) => {
       if (state.workflows[id]) {
@@ -412,6 +419,7 @@ export interface MockPluginContextOptions {
   testDir?: string;
   db?: GoopSpecDB;
   state?: Partial<GoopState>;
+  stateManager?: StateManager;
   memories?: MemoryEntry[];
   resources?: ResolvedResource[];
   sessionId?: string;
@@ -449,13 +457,33 @@ export function createMockPluginContext(opts: MockPluginContextOptions = {}): Pl
   return {
     sdk,
     db,
-    stateManager: createMockStateManager(opts.state),
+    stateManager: opts.stateManager ?? createMockStateManager(opts.state),
     memory: createMockMemory(opts.memories ?? []),
     resolver: createMockResolver(opts.resources ?? []),
     session,
     sessionManager: createSessionManager(),
-    compactionHandoff: new Map<string, string>(),
+    compactionHandoff: new Map(),
     pendingCompactions: new Map(),
+    pendingLazyAutopilotNudges: new Map(),
+  };
+}
+
+export function createMockCompactionHandoff(nextStep: string): CompactionHandoffSnapshot {
+  return {
+    workflowId: "default",
+    phase: "idle",
+    mode: "standard",
+    depth: "standard",
+    specLocked: false,
+    interviewComplete: false,
+    acceptanceConfirmed: false,
+    currentWave: 0,
+    totalWaves: 0,
+    autopilot: false,
+    lazyAutopilot: false,
+    branch: undefined,
+    nextStep,
+    capturedAtMs: Date.now(),
   };
 }
 

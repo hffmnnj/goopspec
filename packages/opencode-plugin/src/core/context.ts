@@ -105,8 +105,9 @@ export async function createPluginSubsystems(
     resolver,
     session,
     sessionManager,
-    compactionHandoff: new Map<string, string>(),
+    compactionHandoff: new Map(),
     pendingCompactions: new Map(),
+    pendingLazyAutopilotNudges: new Map(),
   };
 }
 

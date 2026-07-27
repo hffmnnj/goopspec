@@ -75,6 +75,7 @@ function sanitiseFtsQuery(raw: string): string {
 
 export class GoopSpecDB {
   private readonly db: Database;
+  private lastWorkflowTimestamp = 0;
   public readonly fts5Enabled: boolean;
 
   constructor(dbPath: string) {
@@ -125,7 +126,8 @@ export class GoopSpecDB {
   }
 
   upsertWorkflow(id: string, state: object): void {
-    const now = Math.floor(Date.now() / 1000);
+    const now = Math.max(Date.now(), this.lastWorkflowTimestamp + 1);
+    this.lastWorkflowTimestamp = now;
     this.db
       .query<WorkflowRow, NamedBindings>(
         `INSERT INTO workflows (id, state, created_at, updated_at)
