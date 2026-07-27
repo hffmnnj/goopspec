@@ -55,3 +55,25 @@ export interface ExtractedImage {
   base64: string;
   revisedPrompt?: string;
 }
+
+export interface GenerateImageArgs {
+  prompt: string;
+  out?: string;
+  images?: string[];
+  model?: string;
+  size?: string;
+  quality?: string;
+  outputFormat?: string;
+  background?: string;
+  count?: number;
+  inputFidelity?: string;
+  timeout?: number;
+  dryRun?: boolean;
+  authFile?: string;
+  action?: string;
+  moderation?: string;
+  outputCompression?: number;
+  detail?: string;
+  mask?: string;
+  allowRefresh?: boolean;
+}
