@@ -22,8 +22,8 @@ import {
 import { createGenerateImageTool } from "./index.js";
 import type { GenerateImageArgs } from "./types.js";
 
-const ACCESS_TOKEN = "sk-test-generate-image-access-token";
-const REFRESH_TOKEN = "sk-test-generate-image-refresh-token";
+const ACCESS_TOKEN = "fake-access-token-value";
+const REFRESH_TOKEN = "fake-refresh-token-value";
 
 async function run(tool: ToolDefinition, args: GenerateImageArgs): Promise<string> {
   return (await tool.execute(
@@ -107,7 +107,7 @@ describe("createGenerateImageTool", () => {
     cleanup();
   });
 
-  it("dry-run returns the request shape with a redacted bearer token", async () => {
+  it("dry-run returns the request shape with a redacted bearer token and writes nothing", async () => {
     const authPath = join(testDir, "auth.json");
     writeAuthFile(authPath, ACCESS_TOKEN);
 
@@ -121,13 +121,14 @@ describe("createGenerateImageTool", () => {
     expect(result.length).toBeGreaterThan(0);
     expect(result).not.toContain(ACCESS_TOKEN);
     expect(result).not.toContain(REFRESH_TOKEN);
-    expect(result).toContain("token[length=42,shape=opaque]");
+    expect(result).toContain("token[length=30,shape=opaque]");
     expect(result).toContain('"Authorization": "token[');
     expect(result).toContain("POST https://chatgpt.com/backend-api/codex/responses");
     expect(result).toContain('"size": "1024x1024"');
+    expect(result).toContain("Dry run: request not sent.");
 
-    const artifact = result.split("\n")[0].replace("Dry run: request shape written to ", "");
-    expect(existsSync(artifact)).toBe(true);
+    expect(result).not.toMatch(/written to/i);
+    expect(existsSync(join(testDir, ".goopspec", "generated-images"))).toBe(false);
   });
 
   it("returns a validation error for unsupported options without throwing", async () => {

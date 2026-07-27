@@ -5,9 +5,6 @@
  * generate.ts in the standard `tool({ description, args, execute })` contract.
  */
 
-import { mkdirSync, writeFileSync } from "node:fs";
-import { dirname } from "node:path";
-
 import { tool } from "../../core/sdk-compat.js";
 import type { ToolContext, ToolDefinition } from "../../core/sdk-compat.js";
 import type { PluginContext } from "../../core/types.js";
@@ -134,11 +131,6 @@ function shapeDryRunOutput(
     headers: { ...headers, Authorization: redact(headers.Authorization) },
     body,
   };
-}
-
-function writeDryRunArtifact(path: string, content: string): void {
-  mkdirSync(dirname(path), { recursive: true });
-  writeFileSync(path, content);
 }
 
 /**
@@ -293,9 +285,7 @@ export function createGenerateImageTool(ctx: PluginContext): ToolDefinition {
           const headers = buildHeaders(credential.accessToken);
           const body = await buildBody(validated);
           const dryRunContent = JSON.stringify(shapeDryRunOutput(headers, body), null, 2);
-          const artifactPath = `${projectDir}/.goopspec/generated-images/dry-run-${Date.now()}.json`;
-          writeDryRunArtifact(artifactPath, dryRunContent);
-          return `Dry run: request shape written to ${artifactPath}\n\n${dryRunContent}`;
+          return `Dry run: request not sent. Constructed request shape:\n\n${dryRunContent}`;
         }
 
         const { generateImages } = await import("./generate.js");
