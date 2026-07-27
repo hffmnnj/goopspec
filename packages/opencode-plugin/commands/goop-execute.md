@@ -54,6 +54,29 @@ When all waves are complete, immediately call:
 mcp_slashcommand({ command: "/goop-accept" })
 ```
 
+## Lazy Autopilot Nudge
+
+When lazy autopilot is active during the execute phase, a runtime nudge fires after each `session.idle` event to prevent the agent from pausing unnecessarily. The nudge injects a prompt-async message reminding the agent to continue autonomously.
+
+### Suppression Guards
+
+The nudge is suppressed by nine guards (see `src/hooks/lazy-autopilot-nudge/guards.ts`): lazy autopilot disabled, wrong phase, pending compaction, awaiting acceptance, high-severity blocker, hard-stop question (credentials/destructive), mid-work (last message not from assistant), rate-limited, and kill-switch off.
+
+### Rate Limit
+
+- **Cap**: 5 consecutive nudges without progress (configurable via `lazyAutopilotNudge.cap`).
+- **Cooldown**: 30,000ms between nudges (configurable via `lazyAutopilotNudge.cooldownMs`).
+- **Progress fingerprint**: `<phase>|<currentWave>|<task-status-digest>`. The consecutive counter resets only when this fingerprint changes.
+- **Abandonment**: after the cap with no progress, the nudge stops and surfaces a user-visible message. The loop is broken deliberately to avoid repeated interruptions.
+
+### Config Kill Switch
+
+Set `lazyAutopilotNudge.enabled: false` in `goopspec.json` to disable the nudge entirely.
+
+### V1-Only Limitation
+
+The lazy autopilot nudge is **V1-only**. V2 does not expose the `event` hook that the nudge dispatcher depends on. Under V2, the nudge is inert and logs the limitation once at startup.
+
 ## Anti-patterns
 
 - Skip the spec lock gate.
