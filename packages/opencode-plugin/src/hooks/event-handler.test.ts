@@ -163,6 +163,36 @@ describe("event-handler hook", () => {
     expect(summarize).toHaveBeenCalledTimes(1);
   });
 
+  it("dispatches one lazy autopilot nudge when duplicate idle events are deferred", async () => {
+    const ctx = createMockPluginContext({ testDir });
+    const promptAsync = mock(async () => undefined);
+    Object.assign(ctx.sdk.client, {
+      session: {
+        messages: mock(async () => [{ info: { role: "assistant" } }]),
+        promptAsync,
+      },
+    });
+    const handler = createEventHandlerHook(ctx).event as NonNullable<Hooks["event"]>;
+
+    await handler(idleEvent("sess-lazy-deduped"));
+    await handler(idleEvent("sess-lazy-deduped"));
+    await flushIdleCompactionDispatch();
+    await Promise.resolve();
+
+    expect(promptAsync).toHaveBeenCalledTimes(1);
+    expect(promptAsync).toHaveBeenCalledWith({
+      path: { id: "sess-lazy-deduped" },
+      body: {
+        parts: [
+          {
+            type: "text",
+            text: "LAZY AUTOPILOT ENGAGED - Do not pause unless you 100% cannot move forward without something from the user. Use your best judgement and continue.",
+          },
+        ],
+      },
+    });
+  });
+
   it("removes a session and clears compaction state on session.deleted", async () => {
     const ctx = createMockPluginContext({ testDir });
     ctx.sessionManager.create("sess-del");

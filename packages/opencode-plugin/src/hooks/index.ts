@@ -16,6 +16,7 @@ import { commentCheckerFactory } from "./comment-checker.js";
 import { compactionHaltHookFactory } from "./compaction-halt/index.js";
 import { createCompactionHook } from "./compaction-hook.js";
 import { createEventHandlerHook } from "./event-handler.js";
+import { lazyAutopilotNudgeHookFactory } from "./lazy-autopilot-nudge/index.js";
 import { loopDetectionHookFactory } from "./loop-detection/index.js";
 import { orchestratorEnforcementFactory } from "./orchestrator-enforcement.js";
 import { systemTransformFactory } from "./system-transform.js";
@@ -73,6 +74,7 @@ export const DEFAULT_HOOK_FACTORIES: readonly HookFactory[] = [
   orchestratorEnforcementFactory,
   toolLifecycleHookFactory,
   loopDetectionHookFactory,
+  lazyAutopilotNudgeHookFactory,
   createAutoProgressionHook,
   createEventHandlerHook,
   createCompactionHook,

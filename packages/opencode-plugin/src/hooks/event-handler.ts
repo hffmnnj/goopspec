@@ -17,10 +17,12 @@
 import type { SdkEvent } from "../core/sdk-compat.js";
 import type { PluginContext } from "../core/types.js";
 import { dispatchPendingCompaction } from "../tools/goop-compact/index.js";
+import { dispatchLazyAutopilotNudge } from "./lazy-autopilot-nudge/index.js";
 import type { HookFactory, Hooks } from "./types.js";
 import { safeHandler } from "./utils.js";
 
 export const IDLE_COMPACTION_DEFER_MS = 0;
+export const IDLE_NUDGE_DEFER_MS = 0;
 const IGNORED_EVENT_RESULT: Promise<void> = Promise.resolve();
 
 // ---------------------------------------------------------------------------
@@ -90,6 +92,7 @@ export const createEventHandlerHook: HookFactory = (ctx: PluginContext): Partial
         // request before it reaches the summarize route. Returning from the callback
         // first, then dispatching on a fresh macrotask, avoids the reentrancy.
         setTimeout(() => dispatchPendingCompaction(ctx, sessionId), IDLE_COMPACTION_DEFER_MS);
+        setTimeout(() => void dispatchLazyAutopilotNudge(ctx, sessionId), IDLE_NUDGE_DEFER_MS);
         return;
       }
 
