@@ -60,9 +60,13 @@ function resolveEnv(options?: ResolveAuthOptions): Record<string, string | undef
  * The explicit and env candidates are omitted when those inputs are absent, so
  * the chain shrinks rather than yielding empty paths.
  */
+function resolveHome(options?: ResolveAuthOptions): string {
+  return options?.homeDir ?? process.env.HOME ?? homedir();
+}
+
 export function resolveAuthCandidates(options?: ResolveAuthOptions): AuthSource[] {
   const env = resolveEnv(options);
-  const homeDir = options?.homeDir ?? homedir();
+  const homeDir = resolveHome(options);
   const candidates: AuthSource[] = [];
 
   if (options?.authFile) {
