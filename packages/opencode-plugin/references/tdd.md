@@ -122,7 +122,7 @@ it("completes within 100ms", async () => {
 Every TDD task must end with:
 
 - Target tests passing.
-- Full suite passing (or a clear reason why not).
+- The scope rung required by the Test Execution Discipline passes (or a clear reason why not).
 - Commit messages that do not reference internal planning IDs.
 
 ---
