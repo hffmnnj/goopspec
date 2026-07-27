@@ -1,8 +1,10 @@
 import { describe, expect, it, spyOn } from "bun:test";
+import type { CompactionHandoffSnapshot } from "../core/types.js";
 import {
   createDefaultWorkflowState,
   createMockCompactionHandoff,
   createMockPluginContext,
+  setupTestEnvironment,
 } from "../test-utils.js";
 import {
   MAX_NEXT_STEP_CHARS,
@@ -25,6 +27,8 @@ describe("buildWorkflowSurvivalBlock", () => {
             mode: "standard",
             depth: "deep",
             specLocked: true,
+            interviewComplete: true,
+            acceptanceConfirmed: true,
             currentWave: 3,
             totalWaves: 5,
           }),
@@ -40,6 +44,9 @@ describe("buildWorkflowSurvivalBlock", () => {
     expect(block).toContain("standard");
     expect(block).toContain("deep");
     expect(block).toContain("Spec Locked: yes");
+    expect(block).toContain("Interview Complete: yes");
+    expect(block).toContain("Acceptance Confirmed: yes");
+    expect(block).toContain("Lazy Autopilot: false");
     expect(block).toContain("Wave: 3 of 5");
   });
 
@@ -122,17 +129,18 @@ describe("buildWorkflowSurvivalBlock", () => {
   it("includes a declared next step only when non-empty", () => {
     const ctx = createMockPluginContext();
 
-    expect(buildWorkflowSurvivalBlock(ctx, "Resume wave verification.")).toContain(
+    expect(buildWorkflowSurvivalBlock(ctx, undefined, "Resume wave verification.")).toContain(
       "IMMEDIATE NEXT STEP (declared before compaction): Resume wave verification.",
     );
     expect(buildWorkflowSurvivalBlock(ctx)).not.toContain("IMMEDIATE NEXT STEP");
-    expect(buildWorkflowSurvivalBlock(ctx, "  ")).not.toContain("IMMEDIATE NEXT STEP");
+    expect(buildWorkflowSurvivalBlock(ctx, undefined, "  ")).not.toContain("IMMEDIATE NEXT STEP");
   });
 
   it("collapses whitespace and bounds an oversized next step", () => {
     const ctx = createMockPluginContext();
     const block = buildWorkflowSurvivalBlock(
       ctx,
+      undefined,
       `  Review\n\n  ${"changes ".repeat(40)}then verify.  `,
     );
     const line = block.split("\n").find((value) => value.startsWith("IMMEDIATE NEXT STEP"));
@@ -189,6 +197,288 @@ describe("buildWorkflowSurvivalBlock", () => {
 
     const block = buildWorkflowSurvivalBlock(ctx);
     expect(block).toBe("");
+  });
+
+  it("includes all four newly reported identity fields", () => {
+    const ctx = createMockPluginContext({
+      state: {
+        activeWorkflowId: "feat-auth",
+        workflows: {
+          "feat-auth": createDefaultWorkflowState({
+            phase: "execute",
+            interviewComplete: true,
+            acceptanceConfirmed: true,
+            lazyAutopilot: true,
+          }),
+        },
+      },
+    });
+
+    const block = buildWorkflowSurvivalBlock(ctx);
+
+    expect(block).toContain("Interview Complete: yes");
+    expect(block).toContain("Acceptance Confirmed: yes");
+    expect(block).toContain("Lazy Autopilot: true");
+    // Branch is live-state-only here and mock context has no branch, so it is omitted.
+    expect(block).not.toContain("Git Branch:");
+  });
+
+  it("includes the git branch from a snapshot", () => {
+    const ctx = createMockPluginContext({
+      state: {
+        activeWorkflowId: "feat-auth",
+        workflows: {
+          "feat-auth": createDefaultWorkflowState({
+            phase: "execute",
+            currentWave: 2,
+            totalWaves: 4,
+          }),
+        },
+      },
+    });
+
+    const snapshot: CompactionHandoffSnapshot = {
+      workflowId: "feat-auth",
+      phase: "execute",
+      mode: "standard",
+      depth: "standard",
+      specLocked: true,
+      interviewComplete: true,
+      acceptanceConfirmed: true,
+      currentWave: 2,
+      totalWaves: 4,
+      autopilot: false,
+      lazyAutopilot: false,
+      branch: "fix/compaction-state-handoff",
+      nextStep: "Continue implementation.",
+      capturedAtMs: Date.now(),
+    };
+
+    const block = buildWorkflowSurvivalBlock(ctx, snapshot, snapshot.nextStep);
+
+    expect(block).toContain("Git Branch: fix/compaction-state-handoff");
+  });
+
+  it("prefers snapshot values over live state when a snapshot is provided", () => {
+    const ctx = createMockPluginContext({
+      state: {
+        activeWorkflowId: "feat-auth",
+        workflows: {
+          "feat-auth": createDefaultWorkflowState({
+            phase: "plan",
+            mode: "standard",
+            depth: "standard",
+            specLocked: false,
+            interviewComplete: false,
+            acceptanceConfirmed: false,
+            currentWave: 0,
+            totalWaves: 0,
+            autopilot: false,
+            lazyAutopilot: false,
+          }),
+        },
+      },
+    });
+
+    const snapshot: CompactionHandoffSnapshot = {
+      workflowId: "feat-auth",
+      phase: "execute",
+      mode: "comprehensive",
+      depth: "deep",
+      specLocked: true,
+      interviewComplete: true,
+      acceptanceConfirmed: true,
+      currentWave: 2,
+      totalWaves: 5,
+      autopilot: true,
+      lazyAutopilot: true,
+      branch: "feat/snapshot-source",
+      nextStep: "Proceed from snapshot.",
+      capturedAtMs: Date.now(),
+    };
+
+    const block = buildWorkflowSurvivalBlock(ctx, snapshot, snapshot.nextStep);
+
+    expect(block).toContain("Active Workflow: feat-auth");
+    expect(block).toContain("EXECUTE");
+    expect(block).toContain("Mode: comprehensive");
+    expect(block).toContain("Depth: deep");
+    expect(block).toContain("Spec Locked: yes");
+    expect(block).toContain("Interview Complete: yes");
+    expect(block).toContain("Acceptance Confirmed: yes");
+    expect(block).toContain("Wave: 2 of 5");
+    expect(block).toContain("Git Branch: feat/snapshot-source");
+    expect(block).toContain("Lazy Autopilot: true");
+    expect(block).toContain("LAZY AUTOPILOT ACTIVE");
+    expect(block).toContain(
+      "IMMEDIATE NEXT STEP (declared before compaction): Proceed from snapshot.",
+    );
+  });
+
+  it("falls back to live state when no snapshot is provided", () => {
+    const ctx = createMockPluginContext({
+      state: {
+        activeWorkflowId: "live-wf",
+        workflows: {
+          "live-wf": createDefaultWorkflowState({
+            phase: "execute",
+            mode: "standard",
+            depth: "deep",
+            specLocked: true,
+            interviewComplete: true,
+            acceptanceConfirmed: true,
+            currentWave: 4,
+            totalWaves: 6,
+            autopilot: true,
+            lazyAutopilot: false,
+          }),
+        },
+      },
+    });
+
+    const block = buildWorkflowSurvivalBlock(ctx);
+
+    expect(block).toContain("Active Workflow: live-wf");
+    expect(block).toContain("EXECUTE");
+    expect(block).toContain("Depth: deep");
+    expect(block).toContain("Spec Locked: yes");
+    expect(block).toContain("Interview Complete: yes");
+    expect(block).toContain("Acceptance Confirmed: yes");
+    expect(block).toContain("Wave: 4 of 6");
+    expect(block).toContain("Lazy Autopilot: false");
+  });
+
+  it("rebinds live active workflow to snapshot workflow when they diverge", () => {
+    const ctx = createMockPluginContext({
+      state: {
+        activeWorkflowId: "live-wf",
+        workflows: {
+          "live-wf": createDefaultWorkflowState({ phase: "plan" }),
+          "snapshot-wf": createDefaultWorkflowState({
+            phase: "execute",
+            currentWave: 2,
+            totalWaves: 4,
+          }),
+        },
+      },
+    });
+
+    const snapshot: CompactionHandoffSnapshot = {
+      workflowId: "snapshot-wf",
+      phase: "execute",
+      mode: "standard",
+      depth: "standard",
+      specLocked: true,
+      interviewComplete: true,
+      acceptanceConfirmed: true,
+      currentWave: 2,
+      totalWaves: 4,
+      autopilot: false,
+      lazyAutopilot: false,
+      branch: undefined,
+      nextStep: "Resume from snapshot workflow.",
+      capturedAtMs: Date.now(),
+    };
+
+    const block = buildWorkflowSurvivalBlock(ctx, snapshot, snapshot.nextStep);
+
+    expect(block).toContain("Active Workflow: snapshot-wf");
+    expect(block).toContain("EXECUTE");
+    expect(block).toContain("Wave: 2 of 4");
+    expect(ctx.stateManager.getActiveWorkflowId()).toBe("snapshot-wf");
+  });
+
+  it("falls back to live state when snapshot workflow does not exist in live state", () => {
+    const ctx = createMockPluginContext({
+      state: {
+        activeWorkflowId: "live-wf",
+        workflows: {
+          "live-wf": createDefaultWorkflowState({
+            phase: "execute",
+            currentWave: 1,
+            totalWaves: 3,
+          }),
+        },
+      },
+    });
+
+    const snapshot: CompactionHandoffSnapshot = {
+      workflowId: "missing-wf",
+      phase: "accept",
+      mode: "standard",
+      depth: "standard",
+      specLocked: true,
+      interviewComplete: true,
+      acceptanceConfirmed: true,
+      currentWave: 5,
+      totalWaves: 5,
+      autopilot: false,
+      lazyAutopilot: false,
+      branch: "feat/missing",
+      nextStep: "Should not appear for a missing workflow.",
+      capturedAtMs: Date.now(),
+    };
+
+    const consoleSpy = spyOn(console, "error").mockImplementation(() => {});
+    const block = buildWorkflowSurvivalBlock(ctx, snapshot, snapshot.nextStep);
+
+    expect(block).toContain("Active Workflow: live-wf");
+    expect(block).toContain("EXECUTE");
+    expect(block).toContain("Wave: 1 of 3");
+    expect(block).not.toContain("missing-wf");
+    expect(block).not.toContain("ACCEPT");
+    expect(ctx.stateManager.getActiveWorkflowId()).toBe("live-wf");
+    expect(consoleSpy).toHaveBeenCalled();
+    consoleSpy.mockRestore();
+  });
+
+  it("rebinds via a real StateManager and reports the restored workflow", async () => {
+    const env = setupTestEnvironment("compaction-survival-rebind");
+    const { createStateManager } = await import("../features/state-manager/index.js");
+    const stateManager = createStateManager({
+      projectDir: env.testDir,
+      db: env.db,
+    });
+    stateManager.createWorkflow("snapshot-wf");
+    stateManager.updateWorkflow({
+      phase: "execute",
+      currentWave: 2,
+      totalWaves: 3,
+    });
+
+    // Simulate drift: another workflow became active after the snapshot was captured.
+    stateManager.createWorkflow("other-wf");
+    stateManager.setActiveWorkflow("other-wf");
+
+    const ctx = createMockPluginContext({
+      testDir: env.testDir,
+      db: env.db,
+      stateManager,
+    });
+
+    const snapshot: CompactionHandoffSnapshot = {
+      workflowId: "snapshot-wf",
+      phase: "execute",
+      mode: "standard",
+      depth: "standard",
+      specLocked: true,
+      interviewComplete: true,
+      acceptanceConfirmed: true,
+      currentWave: 2,
+      totalWaves: 3,
+      autopilot: false,
+      lazyAutopilot: false,
+      branch: "fix/real-rebind",
+      nextStep: "Resume after real rebind.",
+      capturedAtMs: Date.now(),
+    };
+
+    const block = buildWorkflowSurvivalBlock(ctx, snapshot, snapshot.nextStep);
+
+    expect(block).toContain("Active Workflow: snapshot-wf");
+    expect(block).toContain("Git Branch: fix/real-rebind");
+    expect(stateManager.getActiveWorkflowId()).toBe("snapshot-wf");
+    env.cleanup();
   });
 
   it("omits wave line when both currentWave and totalWaves are 0", () => {
@@ -266,7 +556,9 @@ describe("createCompactionHook", () => {
     expect(ctx.compactionHandoff.get("session-a")).toBeUndefined();
     expect(ctx.pendingCompactions.has("session-a")).toBeFalse();
 
-    const secondOutput: { context: string[]; prompt?: string } = { context: [] };
+    const secondOutput: { context: string[]; prompt?: string } = {
+      context: [],
+    };
     await hooks["experimental.session.compacting"]?.({ sessionID: "session-a" }, secondOutput);
     expect(secondOutput.context.join("\n")).not.toContain("IMMEDIATE NEXT STEP");
   });
