@@ -171,6 +171,7 @@ export function createMockStateManager(initialState?: Partial<GoopState>): State
     setState: (next: GoopState) => {
       state = next;
     },
+    invalidate: () => {},
 
     // Workflow CRUD
     getWorkflow: (id: string) => state.workflows[id],

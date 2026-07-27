@@ -35,7 +35,7 @@ import type {
   WorkflowState,
 } from "../../core/types.js";
 import type { TaskMode, WorkflowDepth } from "../../core/types.js";
-import { log } from "../../shared/logger.js";
+import { log, logError } from "../../shared/logger.js";
 import type { GoopSpecDB } from "../db/index.js";
 import { migrateToV2, needsMigration } from "./migrations.js";
 import {
@@ -146,10 +146,61 @@ function reconstructState(db: GoopSpecDB): GoopState | null {
 }
 
 function persistStateToDb(db: GoopSpecDB, state: GoopState): void {
-  for (const [id, wf] of Object.entries(state.workflows)) {
-    db.upsertWorkflow(id, wf);
+  db.runTransaction(() => {
+    for (const [id, wf] of Object.entries(state.workflows)) {
+      db.upsertWorkflow(id, wf);
+    }
+    persistMeta(db, state.activeWorkflowId);
+  });
+}
+
+const PHASE_ORDER: Record<WorkflowPhase, number> = {
+  idle: 0,
+  discuss: 1,
+  plan: 2,
+  execute: 3,
+  accept: 4,
+};
+
+/**
+ * A setState caller has no revision token. Reject snapshots that would erase
+ * durable progress; explicit reset and transition APIs remain available for
+ * intentional reversals.
+ */
+function wouldRegressPersistedState(next: GoopState, persisted: GoopState): boolean {
+  if (next.activeWorkflowId !== persisted.activeWorkflowId) return true;
+
+  for (const [id, current] of Object.entries(persisted.workflows)) {
+    const candidate = next.workflows[id];
+    if (!candidate) return true;
+
+    if (PHASE_ORDER[candidate.phase] < PHASE_ORDER[current.phase]) return true;
+    if (
+      (current.interviewComplete && !candidate.interviewComplete) ||
+      (current.specLocked && !candidate.specLocked) ||
+      (current.acceptanceConfirmed && !candidate.acceptanceConfirmed) ||
+      candidate.currentWave < current.currentWave ||
+      candidate.totalWaves < current.totalWaves
+    ) {
+      return true;
+    }
   }
-  persistMeta(db, state.activeWorkflowId);
+
+  return false;
+}
+
+function applyCachedWorkflowChanges(
+  target: WorkflowState,
+  cached: WorkflowState | undefined,
+  baseline: WorkflowState | undefined,
+): void {
+  if (!cached || !baseline) return;
+
+  for (const key of Object.keys(cached) as (keyof WorkflowState)[]) {
+    if (cached[key] !== baseline[key]) {
+      target[key] = cached[key] as never;
+    }
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -175,6 +226,7 @@ export function createStateManager(opts: CreateStateManagerOptions): StateManage
   const statePath = join(goopspecDir, STATE_FILENAME);
 
   let cached: GoopState | null = null;
+  let cachedBaseline: GoopState | null = null;
   let migrationAttempted = false;
 
   /** Track which workflows have already had their ADL.md imported into the DB. */
@@ -228,6 +280,7 @@ export function createStateManager(opts: CreateStateManagerOptions): StateManage
     const fromDb = reconstructState(db);
     if (fromDb) {
       cached = fromDb;
+      cachedBaseline = structuredClone(fromDb);
       return cached;
     }
 
@@ -237,6 +290,7 @@ export function createStateManager(opts: CreateStateManagerOptions): StateManage
       const imported = tryImportFromStateJson();
       if (imported) {
         cached = imported;
+        cachedBaseline = structuredClone(imported);
         return cached;
       }
     }
@@ -244,12 +298,14 @@ export function createStateManager(opts: CreateStateManagerOptions): StateManage
     // No DB data and no state.json — create fresh state
     cached = createDefaultState(opts.workflowId ?? "default");
     persistStateToDb(db, cached);
+    cachedBaseline = structuredClone(cached);
     return cached;
   }
 
   function persist(state: GoopState): void {
     persistStateToDb(db, state);
     cached = state;
+    cachedBaseline = structuredClone(state);
   }
 
   // -----------------------------------------------------------------------
@@ -267,9 +323,30 @@ export function createStateManager(opts: CreateStateManagerOptions): StateManage
 
   function mutateActive(fn: (wf: WorkflowState) => void): void {
     const state = load();
-    const wf = state.workflows[state.activeWorkflowId];
+    const activeWorkflowId = state.activeWorkflowId;
+    const row = db.getWorkflow(activeWorkflowId);
+    let wf = state.workflows[activeWorkflowId];
+
+    if (row) {
+      try {
+        wf = JSON.parse(row.state) as WorkflowState;
+        applyCachedWorkflowChanges(
+          wf,
+          state.workflows[activeWorkflowId],
+          cachedBaseline?.workflows[activeWorkflowId],
+        );
+        state.workflows[activeWorkflowId] = wf;
+      } catch (error) {
+        logError("Unable to refresh active workflow before mutation", error);
+      }
+    } else {
+      logError("Unable to refresh active workflow before mutation: row not found", {
+        activeWorkflowId,
+      });
+    }
+
     if (!wf) {
-      throw new Error(`Active workflow "${state.activeWorkflowId}" not found`);
+      throw new Error(`Active workflow "${activeWorkflowId}" not found`);
     }
     fn(wf);
     persist(state);
@@ -331,7 +408,21 @@ export function createStateManager(opts: CreateStateManagerOptions): StateManage
     },
 
     setState(next: GoopState): void {
+      const persisted = reconstructState(db);
+      if (persisted && wouldRegressPersistedState(next, persisted)) {
+        logError("Rejected stale state snapshot to preserve persisted workflow progress", {
+          activeWorkflowId: persisted.activeWorkflowId,
+        });
+        cached = persisted;
+        cachedBaseline = structuredClone(persisted);
+        return;
+      }
       persist(next);
+    },
+
+    invalidate(): void {
+      cached = null;
+      cachedBaseline = null;
     },
 
     // -- Workflow CRUD ---------------------------------------------------

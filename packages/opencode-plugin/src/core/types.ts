@@ -121,6 +121,8 @@ export interface WorkflowState {
 export interface StateManager {
   getState(): GoopState;
   setState(state: GoopState): void;
+  /** Discard the cached state so the next read reconstructs it from the DB. */
+  invalidate(): void;
 
   // Workflow CRUD
   getWorkflow(id: string): WorkflowState | undefined;

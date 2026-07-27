@@ -95,6 +95,7 @@ export const createEventHandlerHook: HookFactory = (ctx: PluginContext): Partial
 
       if (isSessionCompacted(event)) {
         clearCompactionState(ctx, event.properties.sessionID);
+        ctx.stateManager.invalidate();
         return;
       }
 

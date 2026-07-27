@@ -133,6 +133,20 @@ describe("state durability regressions", () => {
     expect(persisted.interviewComplete).toBe(true);
   });
 
+  it("keeps a concurrent manager's persisted mutation when a stale cache writes another field", () => {
+    const staleManager = mgr();
+    staleManager.getState();
+
+    const concurrentManager = createStateManager({ projectDir: testDir, db });
+    concurrentManager.transitionPhase("plan");
+
+    staleManager.lockSpec();
+
+    const persisted = JSON.parse(db.getWorkflow("default")?.state ?? "{}") as WorkflowState;
+    expect(persisted.phase).toBe("plan");
+    expect(persisted.specLocked).toBe(true);
+  });
+
   it("falls back to the most recently active workflow when _meta names a deleted workflow", () => {
     db.upsertWorkflow("older", createDefaultWorkflowState({ phase: "plan" }));
     db.upsertWorkflow("newer", createDefaultWorkflowState({ phase: "execute" }));

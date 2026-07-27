@@ -211,6 +211,7 @@ describe("event-handler hook", () => {
 
   it("clears pending compaction state on session.compacted through the exported hook", async () => {
     const ctx = createMockPluginContext({ testDir });
+    const invalidateSpy = spyOn(ctx.stateManager, "invalidate");
     ctx.pendingCompactions.set("sess-compacted", {
       model: { providerID: "opencode", modelID: "deepseek-v4" },
       status: "queued",
@@ -225,6 +226,8 @@ describe("event-handler hook", () => {
 
     expect(ctx.pendingCompactions.has("sess-compacted")).toBe(false);
     expect(ctx.compactionHandoff.has("sess-compacted")).toBe(false);
+    expect(invalidateSpy).toHaveBeenCalledTimes(1);
+    invalidateSpy.mockRestore();
   });
 
   it("leaves a second live session untouched on session.compacted", async () => {
