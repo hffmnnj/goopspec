@@ -97,6 +97,10 @@ Memory-first flow: see `references/core-protocol.md` §Memory-First Protocol.
 
 Commit discipline: see `references/core-protocol.md` §Atomic Commit Protocol and `references/git-workflow.md`.
 
+## Verification
+
+Run the narrowest command that covers the change; escalate one rung only when the one below cannot cover it. Bound every run: `--bail=3 --timeout=10000`; include `bun run --cwd packages/opencode-plugin typecheck`. See `references/tdd.md` §Test Execution Discipline for the full ladder. Scoped is not skipped. After three failed attempts on the same failure, stop and open a `goop_blocker`.
+
 ## Completion Standard
 
 The solution is correct, resilient, testable, and committed atomically with a professional message. Verify with `git log --oneline -5` that each task produced its own commit. Verification includes unit and integration evidence where applicable.

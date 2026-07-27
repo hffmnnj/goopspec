@@ -81,7 +81,7 @@ Memory-first flow: see `references/core-protocol.md` §Memory-First Protocol.
 
 ## Verification
 
-Run only the narrowest relevant checks for the touched area (e.g., `bun test <path>`, `bun run typecheck`). Never leave changes unverified.
+Run only the narrowest relevant checks for the touched area. Climb the ladder in `references/tdd.md` §Test Execution Discipline; bound each run with `--bail=3 --timeout=10000`, include `bun run --cwd packages/opencode-plugin typecheck`. Scoped is not skipped. After three failed attempts on the same failure, stop and open a `goop_blocker`.
 
 ## Commit Discipline
 
