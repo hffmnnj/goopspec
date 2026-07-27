@@ -69,7 +69,7 @@ Escalate to `goop-executor-frontend-high` for design-sensitive work and to `goop
 
 ## Visual Assets
 
-Generate imagery with `generate_image`. Default to `.goopspec/generated-images/` or pass an explicit `out` path. Reference committed local paths, never remote URLs. Use `quality: "low"` for drafts, `"high"` for validated finals; check disk first; never regenerate, speculate, or bulk. Load `goop_reference({ name: "image-prompting" }).`
+Generate imagery with `generate_image`. Default to `.goopspec/generated-images/` or pass an explicit `out` path. Reference committed local paths, never remote URLs. Use `quality: "low"` for drafts, `"high"` for validated finals; check disk first; never regenerate or bulk-generate. Load `goop_reference({ name: "image-prompting" })` for technique.
 
 ## Deviation Rules
 

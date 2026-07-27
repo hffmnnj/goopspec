@@ -143,7 +143,7 @@ Split mixed frontend/backend tasks into separate subtasks.
 
 ## Visual Grounding
 
-Use `generate_image` for UI phases resisting prose. Skip settled or non-visual designs. State asset path in tasks. Use `quality: "low"` for drafts, `"high"` for validated finals; check disk; never regenerate, speculate, or bulk. Load `goop_reference({ name: "image-prompting" }).`
+Use `generate_image` for UI phases resisting prose. Skip settled or non-visual designs. State asset path in tasks. Use `quality: "low"` for drafts, `"high"` for validated finals; check disk; never regenerate, speculate, or bulk. Load `goop_reference({ name: "image-prompting" })` for technique.
 
 ## Response Format
 
