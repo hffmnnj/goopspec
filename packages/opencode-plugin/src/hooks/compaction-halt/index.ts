@@ -1,3 +1,4 @@
+import { isPendingCompactionExpired } from "../../core/pending-compaction.js";
 import type { PluginContext } from "../../core/types.js";
 import { logError } from "../../shared/logger.js";
 import type { HookFactory, Hooks } from "../types.js";
@@ -13,9 +14,6 @@ type IdleSinceSignal = { available: true; idleSince: number | null } | { availab
 
 const requestTurns = new Map<string, number>();
 const fallbackPendingTurns = new Map<string, FallbackPendingTurn>();
-
-// A queued request should dispatch on the next idle event; two minutes bounds a missed host event.
-export const COMPACTION_PENDING_TTL_MS = 120_000;
 
 export function clearCompactionHaltState(sessionID: string): void {
   requestTurns.delete(sessionID);
@@ -89,10 +87,7 @@ export function createCompactionHaltHook(ctx: PluginContext): Partial<Hooks> {
           return;
         }
 
-        if (
-          pending.status !== "queued" ||
-          Date.now() - pending.queuedAtMs > COMPACTION_PENDING_TTL_MS
-        ) {
+        if (pending.status !== "queued" || isPendingCompactionExpired(pending)) {
           return;
         }
 
