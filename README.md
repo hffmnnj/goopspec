@@ -553,7 +553,7 @@ goopspec/
 │   └── opencode-plugin/    # @goopspec/opencode-plugin
 │       ├── agents/         # 13 agent markdown definitions
 │       ├── commands/       # 9 slash command definitions
-│       ├── references/     # 13 consolidated reference documents
+│       ├── references/     # 19 consolidated reference documents
 │       ├── templates/      # File templates
 │       └── src/
 │           ├── core/       # Types, config, resolver

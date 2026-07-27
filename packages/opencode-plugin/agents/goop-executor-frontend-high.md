@@ -21,6 +21,7 @@ tools:
   - goop_boot
   - goop_reference
   - goop_search_notes
+  - generate_image
   - memory_save
   - memory_search
   - todowrite
@@ -79,6 +80,12 @@ Detect the frontend stack from the repository before implementing. Follow the pr
 - Reuse established primitives before introducing new abstractions.
 - Keep animations purposeful, subtle, and performant.
 - Avoid unnecessary complexity in view logic.
+
+## Visual Assets
+
+Generate missing imagery with `generate_image`: placeholders, icons, illustrations, hero art, OG images. Generate only when no usable asset exists. Default to `.goopspec/generated-images/`; pass an explicit `out` path when the asset belongs in the app's assets directory. Reference the committed local path, never a remote URL. Give every generated image meaningful `alt` text.
+
+Use `quality: "low"` for drafts, `"high"` only for validated finals; check disk first; never regenerate, speculate, or bulk-generate. Load `goop_reference({ name: "image-prompting" })` for technique.
 
 ## Deviation Rules
 
