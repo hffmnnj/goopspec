@@ -133,6 +133,14 @@ When `false` or absent, only `memory.db` results are returned, identical to the 
 
 **Behavioral note:** `goop_create_pr` includes a mandatory GoopSpec terminology gate — it scans the title, body, and branch for internal terms and blocks creation on violations. The title, body, and branch must contain no GoopSpec internal terms (e.g., "goop_", "MH1", "wave_number").
 
+## Image generation tools
+
+| Tool | Arguments | Example |
+|------|-----------|---------|
+| `generate_image` | `prompt` (required), `out`, `images[]`, `model`, `size`, `quality`, `outputFormat`, `background`, `count`, `inputFidelity`, `timeout`, `dryRun`, `authFile`, `action`, `moderation`, `outputCompression`, `detail`, `mask`, `allowRefresh` | `generate_image({ prompt: "A serene mountain landscape at sunset", out: "docs/hero.png", count: 2 })` |
+
+Generates images using the user's existing ChatGPT subscription OAuth credentials — no API key required. Images default to `.goopspec/generated-images/`; pass an explicit `out` path to place an asset elsewhere. For prompting technique, see `goop_reference({ name: "image-prompting" })`.
+
 ## Combinator tools (added 2026-07)
 
 The following tools and extended arguments reduce multi-call sequences to single calls. The 4 granular tools they supersede (`goop_record_verification`, `goop_write_traceability`, `goop_read_verifications`, `goop_read_waves`) have been retired — their behavior is fully absorbed into the combinators below.

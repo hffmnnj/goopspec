@@ -53,6 +53,7 @@ const EXPECTED_TOOL_KEYS = [
   "slashcommand",
   "ast_grep",
   "scip",
+  "generate_image",
 ] as const;
 
 const V2_EXPECTED_TOOL_KEYS = EXPECTED_TOOL_KEYS.filter((key) => key !== "goop_compact");
@@ -136,12 +137,12 @@ describe("plugin entrypoint", () => {
     }
   });
 
-  it("V1 path registers exactly 34 tools with the canonical key set", async () => {
+  it("V1 path registers exactly 35 tools with the canonical key set", async () => {
     const input = createMockPluginInput(testDir);
     const result = await plugin(input);
     const toolKeys = Object.keys(result.tool ?? {});
 
-    expect(toolKeys).toHaveLength(34);
+    expect(toolKeys).toHaveLength(35);
     for (const key of EXPECTED_TOOL_KEYS) {
       expect(toolKeys).toContain(key);
     }
@@ -199,7 +200,7 @@ describe("plugin entrypoint", () => {
 
     // goop_compact is the single capability-gated omission: V2 has no
     // session.summarize client capability.
-    expect(Object.keys(v2Tools)).toHaveLength(33);
+    expect(Object.keys(v2Tools)).toHaveLength(34);
     for (const key of V2_EXPECTED_TOOL_KEYS) {
       expect(v2Tools).toHaveProperty(key);
     }

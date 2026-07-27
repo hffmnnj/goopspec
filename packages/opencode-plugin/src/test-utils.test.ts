@@ -18,6 +18,7 @@ import {
   createMockStateManager,
   createMockToolContext,
   setupTestEnvironment,
+  withMockedFetch,
 } from "./test-utils.js";
 
 // ============================================================================
@@ -610,5 +611,92 @@ describe("re-exports", () => {
     expect(typeof mod.createMockPluginContext).toBe("function");
     expect(typeof mod.createDefaultWorkflowState).toBe("function");
     expect(typeof mod.delay).toBe("function");
+    expect(typeof mod.withMockedFetch).toBe("function");
+  });
+});
+
+// ============================================================================
+// withMockedFetch
+// ============================================================================
+
+describe("withMockedFetch", () => {
+  it("restores globalThis.fetch when the callback throws", async () => {
+    const original = globalThis.fetch;
+
+    await expect(
+      withMockedFetch([{ body: { ok: true } }], async () => {
+        throw new Error("callback failure");
+      }),
+    ).rejects.toThrow("callback failure");
+
+    expect(globalThis.fetch).toBe(original);
+  });
+
+  it("restores globalThis.fetch and returns the callback value on success", async () => {
+    const original = globalThis.fetch;
+
+    const text = await withMockedFetch([{ body: "scripted" }], async () => {
+      const response = await fetch("https://example.test/resource");
+      return await response.text();
+    });
+
+    expect(text).toBe("scripted");
+    expect(globalThis.fetch).toBe(original);
+  });
+
+  it("streams array bodies preserving arbitrary chunk boundaries", async () => {
+    const chunks = ['data: {"delta":1}\n', "\nda", "ta: [DONE]\n\n"];
+
+    await withMockedFetch([{ body: chunks }], async () => {
+      const response = await fetch("https://example.test/stream");
+      const reader = response.body?.getReader();
+      expect(reader).toBeDefined();
+
+      const decoder = new TextDecoder();
+      const received: string[] = [];
+      for (;;) {
+        const { done, value } = await (reader as ReadableStreamDefaultReader<Uint8Array>).read();
+        if (done) {
+          break;
+        }
+        received.push(decoder.decode(value));
+      }
+
+      expect(received).toEqual(chunks);
+    });
+  });
+
+  it("records each request and rejects calls beyond the scripted queue", async () => {
+    await withMockedFetch([{ status: 204 }], async (controls) => {
+      const response = await fetch("https://example.test/submit", {
+        method: "POST",
+        headers: { "x-marker": "1" },
+        body: "payload",
+      });
+
+      expect(response.status).toBe(204);
+      expect(await response.text()).toBe("");
+      expect(controls.requests).toHaveLength(1);
+      expect(controls.requests[0].url).toBe("https://example.test/submit");
+      expect(controls.requests[0].method).toBe("POST");
+      expect(controls.requests[0].headers["x-marker"]).toBe("1");
+      expect(controls.requests[0].body).toBe("payload");
+
+      await expect(fetch("https://example.test/extra")).rejects.toThrow("Unexpected fetch call");
+    });
+  });
+
+  it("defaults object bodies to JSON while honouring an explicit content-type", async () => {
+    await withMockedFetch(
+      [{ body: { a: 1 } }, { body: { a: 1 }, headers: { "content-type": "text/plain" } }],
+      async () => {
+        const json = await fetch("https://example.test/json");
+        expect(json.headers.get("content-type")).toBe("application/json");
+        expect(await json.json()).toEqual({ a: 1 });
+
+        const overridden = await fetch("https://example.test/override");
+        expect(overridden.headers.get("content-type")).toBe("text/plain");
+      },
+    );
   });
 });
