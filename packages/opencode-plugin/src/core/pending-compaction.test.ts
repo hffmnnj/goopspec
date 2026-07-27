@@ -4,7 +4,11 @@
 
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 
-import { createMockPluginContext, setupTestEnvironment } from "../test-utils.js";
+import {
+  createMockCompactionHandoff,
+  createMockPluginContext,
+  setupTestEnvironment,
+} from "../test-utils.js";
 import { PENDING_COMPACTION_TTL_MS } from "./constants.js";
 import {
   describePendingCompaction,
@@ -115,7 +119,7 @@ describe("pending-compaction expiry helpers", () => {
     it("clears expired entries from both maps and returns undefined", () => {
       const nowMs = 1_000_000;
       queuePending("session-a", "queued", nowMs - PENDING_COMPACTION_TTL_MS - 1);
-      ctx.compactionHandoff.set("session-a", "next step for a");
+      ctx.compactionHandoff.set("session-a", createMockCompactionHandoff("next step for a"));
 
       expect(getLivePendingCompaction(ctx, "session-a", nowMs)).toBeUndefined();
       expect(ctx.pendingCompactions.has("session-a")).toBe(false);
@@ -125,7 +129,7 @@ describe("pending-compaction expiry helpers", () => {
     it("clears in-flight expired entries from both maps", () => {
       const nowMs = 1_000_000;
       queuePending("session-a", "in-flight", nowMs - PENDING_COMPACTION_TTL_MS - 1);
-      ctx.compactionHandoff.set("session-a", "handoff for a");
+      ctx.compactionHandoff.set("session-a", createMockCompactionHandoff("handoff for a"));
 
       expect(getLivePendingCompaction(ctx, "session-a", nowMs)).toBeUndefined();
       expect(ctx.pendingCompactions.has("session-a")).toBe(false);
@@ -136,8 +140,8 @@ describe("pending-compaction expiry helpers", () => {
       const nowMs = 1_000_000;
       queuePending("session-a", "queued", nowMs - PENDING_COMPACTION_TTL_MS - 1);
       queuePending("session-b", "queued", nowMs - PENDING_COMPACTION_TTL_MS + 1);
-      ctx.compactionHandoff.set("session-a", "handoff for a");
-      ctx.compactionHandoff.set("session-b", "handoff for b");
+      ctx.compactionHandoff.set("session-a", createMockCompactionHandoff("handoff for a"));
+      ctx.compactionHandoff.set("session-b", createMockCompactionHandoff("handoff for b"));
 
       expect(getLivePendingCompaction(ctx, "session-a", nowMs)).toBeUndefined();
 
@@ -150,7 +154,7 @@ describe("pending-compaction expiry helpers", () => {
     it("reclaims a different expired session while looking up an unrelated missing session", () => {
       const nowMs = 1_000_000;
       queuePending("stale-session", "queued", nowMs - PENDING_COMPACTION_TTL_MS - 1);
-      ctx.compactionHandoff.set("stale-session", "handoff for stale");
+      ctx.compactionHandoff.set("stale-session", createMockCompactionHandoff("handoff for stale"));
 
       expect(getLivePendingCompaction(ctx, "unrelated", nowMs)).toBeUndefined();
 
@@ -164,9 +168,9 @@ describe("pending-compaction expiry helpers", () => {
       queuePending("session-a", "queued", nowMs - PENDING_COMPACTION_TTL_MS - 1);
       queuePending("session-b", "queued", nowMs - PENDING_COMPACTION_TTL_MS - 1);
       queuePending("session-c", "queued", nowMs - PENDING_COMPACTION_TTL_MS + 1);
-      ctx.compactionHandoff.set("session-a", "handoff for a");
-      ctx.compactionHandoff.set("session-b", "handoff for b");
-      ctx.compactionHandoff.set("session-c", "handoff for c");
+      ctx.compactionHandoff.set("session-a", createMockCompactionHandoff("handoff for a"));
+      ctx.compactionHandoff.set("session-b", createMockCompactionHandoff("handoff for b"));
+      ctx.compactionHandoff.set("session-c", createMockCompactionHandoff("handoff for c"));
 
       expect(getLivePendingCompaction(ctx, "session-a", nowMs)).toBeUndefined();
 
@@ -182,8 +186,8 @@ describe("pending-compaction expiry helpers", () => {
       const nowMs = 1_000_000;
       queuePending("session-a", "queued", nowMs - PENDING_COMPACTION_TTL_MS - 1);
       queuePending("session-b", "in-flight", nowMs - PENDING_COMPACTION_TTL_MS + 1);
-      ctx.compactionHandoff.set("session-a", "handoff for a");
-      ctx.compactionHandoff.set("session-b", "handoff for b");
+      ctx.compactionHandoff.set("session-a", createMockCompactionHandoff("handoff for a"));
+      ctx.compactionHandoff.set("session-b", createMockCompactionHandoff("handoff for b"));
 
       expect(getLivePendingCompaction(ctx, "session-a", nowMs)).toBeUndefined();
 
@@ -197,8 +201,8 @@ describe("pending-compaction expiry helpers", () => {
       const nowMs = 1_000_000;
       queuePending("session-a", "queued", nowMs - PENDING_COMPACTION_TTL_MS + 1);
       queuePending("session-b", "queued", nowMs - PENDING_COMPACTION_TTL_MS - 1);
-      ctx.compactionHandoff.set("session-a", "handoff for a");
-      ctx.compactionHandoff.set("session-b", "handoff for b");
+      ctx.compactionHandoff.set("session-a", createMockCompactionHandoff("handoff for a"));
+      ctx.compactionHandoff.set("session-b", createMockCompactionHandoff("handoff for b"));
 
       const live = getLivePendingCompaction(ctx, "session-a", nowMs);
       expect(live).toBeDefined();
@@ -218,7 +222,7 @@ describe("pending-compaction expiry helpers", () => {
         status: "queued",
         queuedAtMs,
       });
-      ctx.compactionHandoff.set(sessionID, `handoff ${sessionID}`);
+      ctx.compactionHandoff.set(sessionID, createMockCompactionHandoff(`handoff ${sessionID}`));
     }
 
     it("event clearing removes an entry before TTL expiry", () => {

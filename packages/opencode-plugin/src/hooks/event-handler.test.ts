@@ -1,6 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, mock, spyOn } from "bun:test";
 import type { SdkEvent } from "../core/sdk-compat.js";
-import { createMockPluginContext, setupTestEnvironment } from "../test-utils.js";
+import {
+  createMockCompactionHandoff,
+  createMockPluginContext,
+  setupTestEnvironment,
+} from "../test-utils.js";
 import { IDLE_COMPACTION_DEFER_MS, createEventHandlerHook } from "./event-handler.js";
 import type { Hooks } from "./types.js";
 
@@ -167,14 +171,14 @@ describe("event-handler hook", () => {
       status: "queued",
       queuedAtMs: Date.now(),
     });
-    ctx.compactionHandoff.set("sess-del", "handoff-token");
+    ctx.compactionHandoff.set("sess-del", createMockCompactionHandoff("handoff-token"));
     ctx.sessionManager.create("sess-live");
     ctx.pendingCompactions.set("sess-live", {
       model: { providerID: "opencode", modelID: "deepseek-v4" },
       status: "queued",
       queuedAtMs: Date.now(),
     });
-    ctx.compactionHandoff.set("sess-live", "handoff-token-live");
+    ctx.compactionHandoff.set("sess-live", createMockCompactionHandoff("handoff-token-live"));
     const deleteSpy = spyOn(ctx.sessionManager, "delete");
     const handler = createEventHandlerHook(ctx).event as NonNullable<Hooks["event"]>;
 
@@ -217,7 +221,7 @@ describe("event-handler hook", () => {
       status: "queued",
       queuedAtMs: Date.now(),
     });
-    ctx.compactionHandoff.set("sess-compacted", "handoff-token");
+    ctx.compactionHandoff.set("sess-compacted", createMockCompactionHandoff("handoff-token"));
     const handler = createEventHandlerHook(ctx).event as NonNullable<Hooks["event"]>;
 
     await handler({
@@ -237,7 +241,7 @@ describe("event-handler hook", () => {
       status: "queued",
       queuedAtMs: Date.now(),
     });
-    ctx.compactionHandoff.set("sess-live", "handoff-token");
+    ctx.compactionHandoff.set("sess-live", createMockCompactionHandoff("handoff-token"));
     const handler = createEventHandlerHook(ctx).event as NonNullable<Hooks["event"]>;
 
     await handler({
@@ -255,13 +259,13 @@ describe("event-handler hook", () => {
       status: "queued",
       queuedAtMs: Date.now(),
     });
-    ctx.compactionHandoff.set("sess-error", "handoff-token");
+    ctx.compactionHandoff.set("sess-error", createMockCompactionHandoff("handoff-token"));
     ctx.pendingCompactions.set("sess-live", {
       model: { providerID: "opencode", modelID: "deepseek-v4" },
       status: "queued",
       queuedAtMs: Date.now(),
     });
-    ctx.compactionHandoff.set("sess-live", "handoff-token-live");
+    ctx.compactionHandoff.set("sess-live", createMockCompactionHandoff("handoff-token-live"));
     const handler = createEventHandlerHook(ctx).event as NonNullable<Hooks["event"]>;
 
     await handler({
@@ -281,13 +285,13 @@ describe("event-handler hook", () => {
       status: "queued",
       queuedAtMs: Date.now(),
     });
-    ctx.compactionHandoff.set("sess-1", "handoff-token-1");
+    ctx.compactionHandoff.set("sess-1", createMockCompactionHandoff("handoff-token-1"));
     ctx.pendingCompactions.set("sess-2", {
       model: { providerID: "opencode", modelID: "deepseek-v4" },
       status: "queued",
       queuedAtMs: Date.now(),
     });
-    ctx.compactionHandoff.set("sess-2", "handoff-token-2");
+    ctx.compactionHandoff.set("sess-2", createMockCompactionHandoff("handoff-token-2"));
     const handler = createEventHandlerHook(ctx).event as NonNullable<Hooks["event"]>;
 
     await handler({
@@ -426,7 +430,7 @@ describe("event-handler hook", () => {
         status: "queued",
         queuedAtMs: Date.now(),
       });
-      ctx.compactionHandoff.set("wired-compacted", "handoff");
+      ctx.compactionHandoff.set("wired-compacted", createMockCompactionHandoff("handoff"));
       const handler = makeHandler(ctx);
       const result = handler({
         event: {
@@ -447,7 +451,7 @@ describe("event-handler hook", () => {
         status: "queued",
         queuedAtMs: Date.now(),
       });
-      ctx.compactionHandoff.set("wired-error", "handoff");
+      ctx.compactionHandoff.set("wired-error", createMockCompactionHandoff("handoff"));
       const handler = makeHandler(ctx);
       const result = handler({
         event: { type: "session.error", properties: { sessionID: "wired-error" } } as SdkEvent,
@@ -466,7 +470,7 @@ describe("event-handler hook", () => {
         status: "queued",
         queuedAtMs: Date.now(),
       });
-      ctx.compactionHandoff.set("wired-delete", "handoff");
+      ctx.compactionHandoff.set("wired-delete", createMockCompactionHandoff("handoff"));
       const handler = makeHandler(ctx);
       const result = handler({
         event: {

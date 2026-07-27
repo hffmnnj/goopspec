@@ -1,5 +1,9 @@
 import { describe, expect, it, spyOn } from "bun:test";
-import { createDefaultWorkflowState, createMockPluginContext } from "../test-utils.js";
+import {
+  createDefaultWorkflowState,
+  createMockCompactionHandoff,
+  createMockPluginContext,
+} from "../test-utils.js";
 import {
   MAX_NEXT_STEP_CHARS,
   buildWorkflowSurvivalBlock,
@@ -242,7 +246,10 @@ describe("createCompactionHook", () => {
 
   it("includes and clears the declared next step for its session", async () => {
     const ctx = createMockPluginContext();
-    ctx.compactionHandoff.set("session-a", "Run the focused hook tests.");
+    ctx.compactionHandoff.set(
+      "session-a",
+      createMockCompactionHandoff("Run the focused hook tests."),
+    );
     ctx.pendingCompactions.set("session-a", {
       model: { providerID: "openai", modelID: "gpt-5" },
       status: "in-flight",
@@ -266,14 +273,19 @@ describe("createCompactionHook", () => {
 
   it("does not use a handoff declared for another session", async () => {
     const ctx = createMockPluginContext();
-    ctx.compactionHandoff.set("session-a", "Only session A may resume this step.");
+    ctx.compactionHandoff.set(
+      "session-a",
+      createMockCompactionHandoff("Only session A may resume this step."),
+    );
 
     const hooks = createCompactionHook(ctx);
     const output: { context: string[]; prompt?: string } = { context: [] };
     await hooks["experimental.session.compacting"]?.({ sessionID: "session-b" }, output);
 
     expect(output.context.join("\n")).not.toContain("IMMEDIATE NEXT STEP");
-    expect(ctx.compactionHandoff.get("session-a")).toBe("Only session A may resume this step.");
+    expect(ctx.compactionHandoff.get("session-a")?.nextStep).toBe(
+      "Only session A may resume this step.",
+    );
   });
 
   it("omits the next step when no handoff exists for the session", async () => {
@@ -284,6 +296,25 @@ describe("createCompactionHook", () => {
     await hooks["experimental.session.compacting"]?.({ sessionID: "session-a" }, output);
 
     expect(output.context.join("\n")).not.toContain("IMMEDIATE NEXT STEP");
+  });
+
+  it("logs and degrades without throwing for a malformed handoff snapshot", async () => {
+    const ctx = createMockPluginContext();
+    const consoleSpy = spyOn(console, "error").mockImplementation(() => {});
+    ctx.compactionHandoff.set("session-a", { nextStep: "incomplete" } as never);
+    const output: { context: string[]; prompt?: string } = { context: [] };
+
+    await expect(
+      createCompactionHook(ctx)["experimental.session.compacting"]?.(
+        { sessionID: "session-a" },
+        output,
+      ),
+    ).resolves.toBeUndefined();
+
+    expect(consoleSpy).toHaveBeenCalled();
+    expect(output.context.join("\n")).not.toContain("IMMEDIATE NEXT STEP");
+    expect(ctx.compactionHandoff.has("session-a")).toBeFalse();
+    consoleSpy.mockRestore();
   });
 
   it("includes regular autopilot survival directive when autopilot is active without lazy", async () => {

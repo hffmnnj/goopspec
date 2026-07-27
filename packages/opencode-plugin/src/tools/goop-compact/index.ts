@@ -10,7 +10,7 @@ import {
 } from "../../core/pending-compaction.js";
 import { tool } from "../../core/sdk-compat.js";
 import type { ToolContext, ToolDefinition } from "../../core/sdk-compat.js";
-import type { PluginContext } from "../../core/types.js";
+import type { CompactionHandoffSnapshot, PluginContext } from "../../core/types.js";
 import { log, logError } from "../../shared/logger.js";
 
 interface ModelRef {
@@ -108,6 +108,66 @@ interface SummarizeBody extends ModelRef {
   auto?: boolean;
 }
 
+async function resolveCurrentBranch(worktree: string): Promise<string | undefined> {
+  try {
+    const result = await new Promise<{ stdout: string; stderr: string }>((resolve, reject) => {
+      const process = Bun.spawn(["git", "branch", "--show-current"], {
+        cwd: worktree,
+        stdout: "pipe",
+        stderr: "pipe",
+      });
+      process.exited
+        .then(async (exitCode) => {
+          const stdout = await new Response(process.stdout).text();
+          const stderr = await new Response(process.stderr).text();
+          if (exitCode === 0) {
+            resolve({ stdout, stderr });
+          } else {
+            reject(new Error(stderr || `git branch exited with status ${exitCode}`));
+          }
+        })
+        .catch(reject);
+    });
+    const branch = result.stdout.trim();
+    return branch || undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+async function captureCompactionHandoff(
+  ctx: PluginContext,
+  nextStep: string,
+): Promise<CompactionHandoffSnapshot | undefined> {
+  try {
+    const state = ctx.stateManager.getState();
+    const workflow = state.workflows[state.activeWorkflowId];
+    if (!workflow) {
+      throw new Error(`Active workflow ${state.activeWorkflowId} was not found`);
+    }
+
+    return {
+      workflowId: state.activeWorkflowId,
+      phase: workflow.phase,
+      mode: workflow.mode,
+      depth: workflow.depth,
+      specLocked: workflow.specLocked,
+      interviewComplete: workflow.interviewComplete,
+      acceptanceConfirmed: workflow.acceptanceConfirmed,
+      currentWave: workflow.currentWave,
+      totalWaves: workflow.totalWaves,
+      autopilot: workflow.autopilot,
+      lazyAutopilot: workflow.lazyAutopilot,
+      branch: await resolveCurrentBranch(ctx.sdk.worktree),
+      nextStep,
+      capturedAtMs: Date.now(),
+    };
+  } catch (error) {
+    logError("goop_compact could not capture the compaction handoff snapshot", error);
+    return undefined;
+  }
+}
+
 export function dispatchPendingCompaction(ctx: PluginContext, sessionID: string): void {
   const pending = getLivePendingCompaction(ctx, sessionID);
   if (!pending || pending.status !== "queued") return;
@@ -183,7 +243,8 @@ export function createGoopCompactTool(ctx: PluginContext): ToolDefinition {
         }
 
         log("goop_compact queuing compaction", { sessionID });
-        ctx.compactionHandoff.set(sessionID, args.next_step);
+        const handoff = await captureCompactionHandoff(ctx, args.next_step);
+        if (handoff) ctx.compactionHandoff.set(sessionID, handoff);
         ctx.pendingCompactions.set(sessionID, {
           model,
           status: "queued",

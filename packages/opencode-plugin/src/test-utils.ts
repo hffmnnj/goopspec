@@ -18,6 +18,7 @@ import type { ToolContext } from "./core/sdk-compat.js";
 import type {
   ADLEntry,
   CheckpointData,
+  CompactionHandoffSnapshot,
   GoopState,
   MemoryEntry,
   MemoryManager,
@@ -460,8 +461,27 @@ export function createMockPluginContext(opts: MockPluginContextOptions = {}): Pl
     resolver: createMockResolver(opts.resources ?? []),
     session,
     sessionManager: createSessionManager(),
-    compactionHandoff: new Map<string, string>(),
+    compactionHandoff: new Map(),
     pendingCompactions: new Map(),
+  };
+}
+
+export function createMockCompactionHandoff(nextStep: string): CompactionHandoffSnapshot {
+  return {
+    workflowId: "default",
+    phase: "idle",
+    mode: "standard",
+    depth: "standard",
+    specLocked: false,
+    interviewComplete: false,
+    acceptanceConfirmed: false,
+    currentWave: 0,
+    totalWaves: 0,
+    autopilot: false,
+    lazyAutopilot: false,
+    branch: undefined,
+    nextStep,
+    capturedAtMs: Date.now(),
   };
 }
 

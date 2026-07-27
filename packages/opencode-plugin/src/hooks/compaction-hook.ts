@@ -12,13 +12,34 @@
  * @module hooks/compaction-hook
  */
 
-import type { PluginContext } from "../core/types.js";
-import { log } from "../shared/logger.js";
+import type { CompactionHandoffSnapshot, PluginContext } from "../core/types.js";
+import { log, logError } from "../shared/logger.js";
 import { clearCompactionHaltState } from "./compaction-halt/index.js";
 import type { HookFactory, Hooks } from "./types.js";
 import { safeHandler } from "./utils.js";
 
 export const MAX_NEXT_STEP_CHARS = 200;
+
+function isCompactionHandoffSnapshot(value: unknown): value is CompactionHandoffSnapshot {
+  if (value === null || typeof value !== "object") return false;
+  const handoff = value as Partial<CompactionHandoffSnapshot>;
+  return (
+    typeof handoff.workflowId === "string" &&
+    typeof handoff.phase === "string" &&
+    typeof handoff.mode === "string" &&
+    typeof handoff.depth === "string" &&
+    typeof handoff.specLocked === "boolean" &&
+    typeof handoff.interviewComplete === "boolean" &&
+    typeof handoff.acceptanceConfirmed === "boolean" &&
+    typeof handoff.currentWave === "number" &&
+    typeof handoff.totalWaves === "number" &&
+    typeof handoff.autopilot === "boolean" &&
+    typeof handoff.lazyAutopilot === "boolean" &&
+    (typeof handoff.branch === "string" || handoff.branch === undefined) &&
+    typeof handoff.nextStep === "string" &&
+    typeof handoff.capturedAtMs === "number"
+  );
+}
 
 function sanitizeNextStep(nextStep?: string): string | undefined {
   const sanitized = nextStep?.replace(/\s+/g, " ").trim();
@@ -135,7 +156,16 @@ export const createCompactionHook: HookFactory = (ctx: PluginContext): Partial<H
       output: { context: string[]; prompt?: string },
     ): Promise<void> => {
       const sessionID = input.sessionID;
-      const nextStep = sessionID ? ctx.compactionHandoff.get(sessionID) : undefined;
+      const handoff = sessionID ? ctx.compactionHandoff.get(sessionID) : undefined;
+      const nextStep = isCompactionHandoffSnapshot(handoff) ? handoff.nextStep : undefined;
+      if (handoff === undefined) {
+        logError(
+          "compaction handoff snapshot was unavailable; continuing without it",
+          new Error("No handoff snapshot for compacting session"),
+        );
+      } else if (nextStep === undefined) {
+        logError("compaction handoff snapshot was malformed; continuing without it", handoff);
+      }
       if (sessionID) {
         ctx.compactionHandoff.delete(sessionID);
         ctx.pendingCompactions.delete(sessionID);
