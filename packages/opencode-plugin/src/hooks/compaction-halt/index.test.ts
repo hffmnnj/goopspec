@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 
+import { PENDING_COMPACTION_TTL_MS } from "../../core/constants.js";
 import type { PluginContext } from "../../core/types.js";
 import {
   createMockPluginContext,
@@ -8,11 +9,7 @@ import {
 } from "../../test-utils.js";
 import { createCompactionHook } from "../compaction-hook.js";
 import type { HookHandler } from "../types.js";
-import {
-  COMPACTION_PENDING_TTL_MS,
-  clearCompactionHaltState,
-  createCompactionHaltHook,
-} from "./index.js";
+import { clearCompactionHaltState, createCompactionHaltHook } from "./index.js";
 
 type AfterInput = Parameters<HookHandler<"tool.execute.after">>[0];
 type AfterOutput = Parameters<HookHandler<"tool.execute.after">>[1];
@@ -108,7 +105,7 @@ describe("compaction-halt hook", () => {
   it("does not halt a queued request that exceeds the pending TTL", async () => {
     const sessionID = "stale-queued";
     const record = ctx.sessionManager.create(sessionID);
-    const queuedAtMs = Date.now() - COMPACTION_PENDING_TTL_MS - 1;
+    const queuedAtMs = Date.now() - PENDING_COMPACTION_TTL_MS - 1;
     record.meta.idleSince = Date.now();
     ctx.pendingCompactions.set(sessionID, {
       model: { providerID: "openai", modelID: "gpt-5" },
@@ -120,6 +117,23 @@ describe("compaction-halt hook", () => {
     await createCompactionHaltHook(ctx)["tool.execute.after"]?.(makeAfterInput(sessionID), output);
 
     expect(output.output).toBe("original tool output");
+  });
+
+  it("halts a queued request that is live under the widened TTL", async () => {
+    const sessionID = "widened-window";
+    const record = ctx.sessionManager.create(sessionID);
+    const queuedAtMs = Date.now() - 3 * 60_000;
+    record.meta.idleSince = Date.now();
+    ctx.pendingCompactions.set(sessionID, {
+      model: { providerID: "openai", modelID: "gpt-5" },
+      status: "queued",
+      queuedAtMs,
+    });
+    const output = makeAfterOutput();
+
+    await createCompactionHaltHook(ctx)["tool.execute.after"]?.(makeAfterInput(sessionID), output);
+
+    expect(output.output).toContain("COMPACTION PENDING — END YOUR TURN");
   });
 
   it("leaves output unchanged after the pending request self-clears", async () => {
@@ -186,6 +200,26 @@ describe("compaction-halt hook", () => {
 
     expect(ctx.pendingCompactions.has(sessionID)).toBeFalse();
     expect(output.output).toBe("original tool output");
+  });
+
+  it("clears both maps when halting an expired queued request", async () => {
+    const sessionID = "expired-queued-clears-maps";
+    const record = ctx.sessionManager.create(sessionID);
+    const queuedAtMs = Date.now() - PENDING_COMPACTION_TTL_MS - 1;
+    record.meta.idleSince = Date.now();
+    ctx.pendingCompactions.set(sessionID, {
+      model: { providerID: "openai", modelID: "gpt-5" },
+      status: "queued",
+      queuedAtMs,
+    });
+    ctx.compactionHandoff.set(sessionID, "resume here");
+    const output = makeAfterOutput();
+
+    await createCompactionHaltHook(ctx)["tool.execute.after"]?.(makeAfterInput(sessionID), output);
+
+    expect(output.output).toBe("original tool output");
+    expect(ctx.pendingCompactions.has(sessionID)).toBeFalse();
+    expect(ctx.compactionHandoff.has(sessionID)).toBeFalse();
   });
 
   it("resets V2 fallback turn tracking for a session", async () => {

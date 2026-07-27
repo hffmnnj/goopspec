@@ -151,3 +151,14 @@ export const DEFAULT_THINKING_LEVELS: Record<AgentRole, "medium" | "high"> = Obj
 
 /** Default token budget for memory injection in the system-transform hook. */
 export const DEFAULT_MEMORY_TOKEN_BUDGET = 800;
+
+// ---------------------------------------------------------------------------
+// Compaction
+// ---------------------------------------------------------------------------
+
+/**
+ * Maximum time a pending compaction request may sit before it is considered
+ * orphaned. This bounds a lost host signal — the entry is measured from
+ * `queuedAtMs` for BOTH `queued` and `in-flight` statuses.
+ */
+export const PENDING_COMPACTION_TTL_MS = 5 * 60_000;
