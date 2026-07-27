@@ -1,4 +1,4 @@
-import { isPendingCompactionExpired } from "../../core/pending-compaction.js";
+import { getLivePendingCompaction } from "../../core/pending-compaction.js";
 import type { PluginContext } from "../../core/types.js";
 import { logError } from "../../shared/logger.js";
 import type { HookFactory, Hooks } from "../types.js";
@@ -81,13 +81,13 @@ export function createCompactionHaltHook(ctx: PluginContext): Partial<Hooks> {
     "compaction-halt:after-tool",
     async (input, output): Promise<void> => {
       try {
-        const pending = ctx.pendingCompactions.get(input.sessionID);
+        const pending = getLivePendingCompaction(ctx, input.sessionID);
         if (!pending) {
           clearCompactionHaltState(input.sessionID);
           return;
         }
 
-        if (pending.status !== "queued" || isPendingCompactionExpired(pending)) {
+        if (pending.status !== "queued") {
           return;
         }
 

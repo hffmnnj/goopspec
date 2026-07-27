@@ -4,9 +4,11 @@
  * Listens to the SDK `event` hook and dispatches session lifecycle events
  * to the SessionManager:
  *
- * - `session.created`  → registers the session
- * - `session.idle`     → marks the session idle
- * - `session.deleted`  → cleans up the session
+ * - `session.created`   → registers the session
+ * - `session.idle`      → marks the session idle and dispatches queued compaction
+ * - `session.compacted` → clears pending compaction state for the session
+ * - `session.error`     → clears pending compaction state for the failed session
+ * - `session.deleted`   → cleans up the session and its compaction state
  *
  * All other event types are silently ignored. Never throws — wrapped
  * with `safeHandler` for graceful degradation.
@@ -27,6 +29,8 @@ const IGNORED_EVENT_RESULT: Promise<void> = Promise.resolve();
 
 type SessionCreatedEvent = Extract<SdkEvent, { type: "session.created" }>;
 type SessionIdleEvent = Extract<SdkEvent, { type: "session.idle" }>;
+type SessionCompactedEvent = Extract<SdkEvent, { type: "session.compacted" }>;
+type SessionErrorEvent = Extract<SdkEvent, { type: "session.error" }>;
 type SessionDeletedEvent = Extract<SdkEvent, { type: "session.deleted" }>;
 
 function isSessionCreated(event: SdkEvent): event is SessionCreatedEvent {
@@ -37,8 +41,25 @@ function isSessionIdle(event: SdkEvent): event is SessionIdleEvent {
   return event.type === "session.idle";
 }
 
+function isSessionCompacted(event: SdkEvent): event is SessionCompactedEvent {
+  return event.type === "session.compacted";
+}
+
+function isSessionError(event: SdkEvent): event is SessionErrorEvent {
+  return event.type === "session.error";
+}
+
 function isSessionDeleted(event: SdkEvent): event is SessionDeletedEvent {
   return event.type === "session.deleted";
+}
+
+// ---------------------------------------------------------------------------
+// Compaction state cleanup
+// ---------------------------------------------------------------------------
+
+function clearCompactionState(ctx: PluginContext, sessionID: string): void {
+  ctx.pendingCompactions.delete(sessionID);
+  ctx.compactionHandoff.delete(sessionID);
 }
 
 // ---------------------------------------------------------------------------
@@ -72,8 +93,23 @@ export const createEventHandlerHook: HookFactory = (ctx: PluginContext): Partial
         return;
       }
 
+      if (isSessionCompacted(event)) {
+        clearCompactionState(ctx, event.properties.sessionID);
+        return;
+      }
+
+      if (isSessionError(event)) {
+        const sessionID = event.properties?.sessionID;
+        if (typeof sessionID === "string" && sessionID.length > 0) {
+          clearCompactionState(ctx, sessionID);
+        }
+        return;
+      }
+
       if (isSessionDeleted(event)) {
-        ctx.sessionManager.delete(event.properties.info.id);
+        const sessionID = event.properties.info.id;
+        ctx.sessionManager.delete(sessionID);
+        clearCompactionState(ctx, sessionID);
         return;
       }
 
@@ -86,6 +122,8 @@ export const createEventHandlerHook: HookFactory = (ctx: PluginContext): Partial
     if (
       eventType !== "session.created" &&
       eventType !== "session.idle" &&
+      eventType !== "session.compacted" &&
+      eventType !== "session.error" &&
       eventType !== "session.deleted"
     ) {
       return IGNORED_EVENT_RESULT;

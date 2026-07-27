@@ -146,6 +146,128 @@ describe("pending-compaction expiry helpers", () => {
       expect(ctx.pendingCompactions.has("session-b")).toBe(true);
       expect(ctx.compactionHandoff.has("session-b")).toBe(true);
     });
+
+    it("reclaims a different expired session while looking up an unrelated missing session", () => {
+      const nowMs = 1_000_000;
+      queuePending("stale-session", "queued", nowMs - PENDING_COMPACTION_TTL_MS - 1);
+      ctx.compactionHandoff.set("stale-session", "handoff for stale");
+
+      expect(getLivePendingCompaction(ctx, "unrelated", nowMs)).toBeUndefined();
+
+      expect(ctx.pendingCompactions.has("stale-session")).toBe(false);
+      expect(ctx.compactionHandoff.has("stale-session")).toBe(false);
+      expect(ctx.pendingCompactions.has("unrelated")).toBe(false);
+    });
+
+    it("reclaims session B when looking up expired session A, leaving live session C intact", () => {
+      const nowMs = 1_000_000;
+      queuePending("session-a", "queued", nowMs - PENDING_COMPACTION_TTL_MS - 1);
+      queuePending("session-b", "queued", nowMs - PENDING_COMPACTION_TTL_MS - 1);
+      queuePending("session-c", "queued", nowMs - PENDING_COMPACTION_TTL_MS + 1);
+      ctx.compactionHandoff.set("session-a", "handoff for a");
+      ctx.compactionHandoff.set("session-b", "handoff for b");
+      ctx.compactionHandoff.set("session-c", "handoff for c");
+
+      expect(getLivePendingCompaction(ctx, "session-a", nowMs)).toBeUndefined();
+
+      expect(ctx.pendingCompactions.has("session-a")).toBe(false);
+      expect(ctx.compactionHandoff.has("session-a")).toBe(false);
+      expect(ctx.pendingCompactions.has("session-b")).toBe(false);
+      expect(ctx.compactionHandoff.has("session-b")).toBe(false);
+      expect(ctx.pendingCompactions.has("session-c")).toBe(true);
+      expect(ctx.compactionHandoff.has("session-c")).toBe(true);
+    });
+
+    it("does not delete a handoff whose pending entry is still live during cross-session sweep", () => {
+      const nowMs = 1_000_000;
+      queuePending("session-a", "queued", nowMs - PENDING_COMPACTION_TTL_MS - 1);
+      queuePending("session-b", "in-flight", nowMs - PENDING_COMPACTION_TTL_MS + 1);
+      ctx.compactionHandoff.set("session-a", "handoff for a");
+      ctx.compactionHandoff.set("session-b", "handoff for b");
+
+      expect(getLivePendingCompaction(ctx, "session-a", nowMs)).toBeUndefined();
+
+      expect(ctx.pendingCompactions.has("session-a")).toBe(false);
+      expect(ctx.compactionHandoff.has("session-a")).toBe(false);
+      expect(ctx.pendingCompactions.has("session-b")).toBe(true);
+      expect(ctx.compactionHandoff.has("session-b")).toBe(true);
+    });
+
+    it("returns the live requested session while also sweeping other expired sessions", () => {
+      const nowMs = 1_000_000;
+      queuePending("session-a", "queued", nowMs - PENDING_COMPACTION_TTL_MS + 1);
+      queuePending("session-b", "queued", nowMs - PENDING_COMPACTION_TTL_MS - 1);
+      ctx.compactionHandoff.set("session-a", "handoff for a");
+      ctx.compactionHandoff.set("session-b", "handoff for b");
+
+      const live = getLivePendingCompaction(ctx, "session-a", nowMs);
+      expect(live).toBeDefined();
+      expect(live?.status).toBe("queued");
+
+      expect(ctx.pendingCompactions.has("session-a")).toBe(true);
+      expect(ctx.compactionHandoff.has("session-a")).toBe(true);
+      expect(ctx.pendingCompactions.has("session-b")).toBe(false);
+      expect(ctx.compactionHandoff.has("session-b")).toBe(false);
+    });
+  });
+
+  describe("TTL and event clearing compose", () => {
+    function queueForSession(sessionID: string, queuedAtMs: number): void {
+      ctx.pendingCompactions.set(sessionID, {
+        model: { providerID: "test-provider", modelID: "test-model" },
+        status: "queued",
+        queuedAtMs,
+      });
+      ctx.compactionHandoff.set(sessionID, `handoff ${sessionID}`);
+    }
+
+    it("event clearing removes an entry before TTL expiry", () => {
+      const sessionID = "event-cleared";
+      const nowMs = 1_000_000;
+      queueForSession(sessionID, nowMs - 1_000);
+
+      // Simulate session.compacted clearing the maps via clearCompactionState.
+      ctx.pendingCompactions.delete(sessionID);
+      ctx.compactionHandoff.delete(sessionID);
+
+      expect(getLivePendingCompaction(ctx, sessionID, nowMs)).toBeUndefined();
+      expect(ctx.compactionHandoff.has(sessionID)).toBe(false);
+    });
+
+    it("TTL reclaims an entry that never receives an event", () => {
+      const sessionID = "ttl-reclaimed";
+      const nowMs = 1_000_000;
+      queueForSession(sessionID, nowMs - PENDING_COMPACTION_TTL_MS - 1);
+
+      expect(getLivePendingCompaction(ctx, sessionID, nowMs)).toBeUndefined();
+      expect(ctx.pendingCompactions.has(sessionID)).toBe(false);
+      expect(ctx.compactionHandoff.has(sessionID)).toBe(false);
+    });
+
+    it("survives overlapping signals without throwing and leaves maps empty", () => {
+      const sessionID = "overlapping-signals";
+      const nowMs = 1_000_000;
+      queueForSession(sessionID, nowMs - 30_000);
+
+      // Compacting hook / dispatch observes the request.
+      const pending = getLivePendingCompaction(ctx, sessionID, nowMs);
+      expect(pending).toBeDefined();
+      if (pending) pending.status = "in-flight";
+
+      // Host sends session.compacted before observeCompaction settles.
+      ctx.pendingCompactions.delete(sessionID);
+      ctx.compactionHandoff.delete(sessionID);
+
+      // A late observeCompaction-style settle checks the map and finds nothing.
+      const afterEvent = ctx.pendingCompactions.get(sessionID);
+      if (afterEvent) {
+        afterEvent.status = "in-flight";
+      }
+
+      expect(() => getLivePendingCompaction(ctx, sessionID, nowMs)).not.toThrow();
+      expect(ctx.pendingCompactions.has(sessionID)).toBe(false);
+      expect(ctx.compactionHandoff.has(sessionID)).toBe(false);
+    });
   });
 
   describe("describePendingCompaction", () => {
