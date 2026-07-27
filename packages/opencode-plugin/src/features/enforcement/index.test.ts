@@ -432,6 +432,21 @@ describe("phase-context", () => {
       expect(output).toContain("SPEC.md");
     });
 
+    it("nudges execute phase toward scoped test evidence", () => {
+      const output = buildPhaseEnforcement("execute");
+      expect(output).toContain("scoped test evidence (narrowest run covering the change)");
+      expect(output).toContain(
+        "Demand a full-suite rerun when a scoped run already covers the change",
+      );
+    });
+
+    it("requires the full test suite at the acceptance gate", () => {
+      const output = buildPhaseEnforcement("accept");
+      expect(output).toContain(
+        "Run the full test suite and ensure it passes at the acceptance gate",
+      );
+    });
+
     it("includes delegation section for execute phase", () => {
       const output = buildPhaseEnforcement("execute");
       expect(output).toContain("### DELEGATION (CRITICAL):");

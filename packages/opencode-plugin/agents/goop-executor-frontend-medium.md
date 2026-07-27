@@ -84,7 +84,7 @@ Memory-first flow: see `references/core-protocol.md` §Memory-First Protocol.
 
 ## Verification
 
-Verify behavior with the relevant build/dev command (e.g., `bun run --cwd packages/web build` or `bun run typecheck`). For state-heavy changes, run the affected component's tests.
+Verify behavior with the relevant build/dev command and the narrowest test rung (file → directory → `--changed=main` → package), bounded with `--bail=3 --timeout=10000`. Run `bun run --cwd packages/opencode-plugin typecheck`. Scoped is not skipped. See `references/tdd.md` §Test Execution Discipline.
 
 ## Commit Discipline
 

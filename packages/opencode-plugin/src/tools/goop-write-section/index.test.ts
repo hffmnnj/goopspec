@@ -235,18 +235,27 @@ describe("goop_write_section tool", () => {
   });
 
   describe("goop_write_section batch mode (items[])", () => {
-    it("returns empty result for empty items array", async () => {
+    it("empty items array falls through to single-section path", async () => {
       const tool = createGoopWriteSectionTool(ctx);
       const result = await tool.execute(
         {
           doc_type: "spec",
-          section_key: "",
-          content: "",
+          section_key: "fallback",
+          content: "# Fallback Section",
           items: [],
         },
         toolCtx,
       );
-      expect(result).toContain("0/0 succeeded");
+      expect(result).toContain("Written section 'fallback'");
+      expect(ctx.db.getSection("default", "spec", "fallback")?.content).toBe("# Fallback Section");
+    });
+
+    it("returns error when items array is empty and no section_key is provided", async () => {
+      const tool = createGoopWriteSectionTool(ctx);
+      const result = await tool.execute({ doc_type: "spec", items: [] }, toolCtx);
+      expect(result).toContain("Error in goop_write_section");
+      expect(result).toContain("items[] array is empty");
+      expect(result).not.toContain("succeeded");
     });
 
     it("writes single-element items array", async () => {

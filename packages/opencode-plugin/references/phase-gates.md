@@ -87,6 +87,40 @@ Stop and wait for user input only for:
 
 On a Rule 4 trigger, decide autonomously using best judgment (do not pause to ask the user). Log the full rationale to ADL via `goop_adl` for every such call, including the rule number, the issue, the decision made, the reasoning, and the affected files.
 
+### Lazy Autopilot Nudge (Runtime Enforcement)
+
+Pausing during the execute phase under lazy autopilot is disallowed except for the enumerated hard stops (credentials/secrets, destructive operations). This is now **runtime-enforced by an injected nudge**, not prose alone.
+
+The nudge fires on the `event` hook after `session.idle` returns. It injects a prompt-async message: "LAZY AUTOPILOT ENGAGED - Do not pause unless you 100% cannot move forward without something from the user. Use your best judgement and continue."
+
+#### Suppression Guards (Nine Discriminated Reasons)
+
+The nudge is suppressed when any of these conditions are true:
+
+| # | Guard | Reason |
+|---|-------|--------|
+| G1 | `lazyAutopilot` is not `true` | Lazy autopilot disabled |
+| G2 | Phase is not `execute` | Wrong phase |
+| G3 | A compaction is queued or in-flight | Pending compaction |
+| G4 | `acceptanceConfirmed` is not `true` | Awaiting acceptance |
+| G5 | An open high-severity or critical blocker exists | High-severity blocker |
+| G6 | The last assistant text matches credentials/secrets or destructive patterns | Hard-stop question |
+| G7 | The last message role is not `assistant` | Mid-work (user is typing) |
+| G8 | Rate limit or cooldown active | Rate-limited |
+| G9 | Config kill switch is `false` | Kill-switch off |
+
+#### Rate Limit and Abandonment
+
+- **Cap**: defaults to 5 consecutive nudges without progress.
+- **Cooldown**: defaults to 30,000ms between nudges.
+- **Progress fingerprint**: `<phase>|<currentWave>|<task-status-digest>` where the digest is a comma-separated list of `task_index:status` for every task in the current wave (or `none` if no wave row exists). The consecutive counter resets only when this fingerprint changes.
+- **Abandonment**: when the cap is reached with no progress change, the nudge stops and surfaces a user-visible message: "Autonomous continuation stopped: the session received multiple lazy-autopilot nudges without making progress. The loop was broken deliberately to avoid repeated interruptions; continue manually when you are ready."
+- **Config kill switch**: set `lazyAutopilotNudge.enabled: false` in `goopspec.json` to disable the nudge entirely.
+
+#### V1-Only Limitation
+
+The lazy autopilot nudge is **V1-only**. V2 does not expose the `event` hook that the nudge dispatcher depends on (see `src/core/hooks-v2.ts` — `"event"` is in the skipped hooks array). Under V2, the nudge is inert and logs the limitation once at startup. The compaction survival hook is also V1-only for the same reason.
+
 ### Phase Transition Rule
 
 Never announce a transition in text without actually calling the tool. Announcing intent is a hard failure because the next phase never starts.
@@ -123,7 +157,7 @@ Boundaries are three-tier guardrails enforced by hooks and configuration.
 
 | Tier | Behavior | Examples |
 |------|----------|----------|
-| **Always** | Automatic, no confirmation | run tests before commit, atomic commits |
+| **Always** | Automatic, no confirmation | run tests before commit (satisfied by the scoped rung per `references/tdd.md`), atomic commits |
 | **Ask First** | Requires user confirmation | schema changes, new dependencies, auth changes |
 | **Never** | Prohibited | commit secrets, ignore failures, delete production data |
 

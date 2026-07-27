@@ -69,6 +69,8 @@ export interface PluginContext {
   readonly compactionHandoff: Map<string, CompactionHandoffSnapshot>;
   /** Session-scoped compaction requests queued by tools and dispatched when their session becomes idle. */
   readonly pendingCompactions: Map<string, PendingCompactionRequest>;
+  /** Session-scoped lazy-autopilot nudges awaiting dispatch or system-transform fallback. */
+  readonly pendingLazyAutopilotNudges: Map<string, PendingLazyAutopilotNudge>;
 }
 
 /** A validated compaction request queued at request time and dispatched in-flight on session.idle. */
@@ -79,6 +81,12 @@ export interface PendingCompactionRequest {
   };
   status: "queued" | "in-flight";
   readonly queuedAtMs: number;
+}
+
+/** An ephemeral lazy-autopilot nudge, deduplicated for one session. */
+export interface PendingLazyAutopilotNudge {
+  status: "queued" | "in-flight";
+  source: "prompt-async" | "system-transform";
 }
 
 /**

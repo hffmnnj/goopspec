@@ -132,7 +132,7 @@ export function createGoopWriteDbTool(ctx: PluginContext): ToolDefinition {
       _context: ToolContext,
     ): Promise<string> {
       try {
-        if (args.items !== undefined) {
+        if (Array.isArray(args.items) && args.items.length > 0) {
           const workflowId = args.workflow_id ?? ctx.stateManager.getState().activeWorkflowId;
           const result = runBatch(ctx.db, args.items, (item) => {
             const itemMode = item.mode ?? "replace";
@@ -189,6 +189,14 @@ export function createGoopWriteDbTool(ctx: PluginContext): ToolDefinition {
           const filename = DOC_TYPE_FILENAMES[args.doc_type];
 
           return `Patched ${args.doc_type} for workflow '${workflowId}' (${sidecarContent.length} chars, mode: patch). Sidecar: .goopspec/${workflowId}/${filename}`;
+        }
+
+        if (
+          args.items?.length === 0 &&
+          args.content === undefined &&
+          args.old_string === undefined
+        ) {
+          return "Error in goop_write_db: items[] array is empty and no document content was provided";
         }
 
         if (args.content === undefined) {

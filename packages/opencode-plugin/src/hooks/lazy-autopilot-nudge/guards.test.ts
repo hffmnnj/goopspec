@@ -1,0 +1,246 @@
+import { afterEach, beforeEach, describe, expect, it } from "bun:test";
+import { createMockPluginContext, setupTestEnvironment } from "../../test-utils.js";
+import {
+  ALLOWED,
+  type NudgeGuardInput,
+  type NudgeRateLimitCheck,
+  evaluateNudgeGuards,
+} from "./guards.js";
+
+describe("lazy autopilot nudge guards", () => {
+  let cleanup: () => void;
+  let testDir: string;
+
+  beforeEach(() => {
+    const env = setupTestEnvironment("lazy-autopilot-nudge-guards");
+    cleanup = env.cleanup;
+    testDir = env.testDir;
+  });
+
+  afterEach(() => cleanup());
+
+  function baseInput(overrides: Partial<NudgeGuardInput> = {}): NudgeGuardInput {
+    return {
+      sessionID: "sess-1",
+      workflowId: "default",
+      phase: "execute",
+      lazyAutopilot: true,
+      acceptanceConfirmed: true,
+      lastMessages: [{ info: { role: "assistant" }, text: "ready" }],
+      lastAssistantText: "ready",
+      killSwitch: true,
+      ...overrides,
+    };
+  }
+
+  it("G1: suppresses when lazyAutopilot is disabled", () => {
+    const ctx = createMockPluginContext({ testDir });
+    const result = evaluateNudgeGuards(ctx, baseInput({ lazyAutopilot: false }));
+
+    expect(result.suppressed).toBe(true);
+    expect(result.reason).toEqual({ kind: "lazy-autopilot-disabled" });
+  });
+
+  it("G2: suppresses when phase is not execute", () => {
+    const ctx = createMockPluginContext({ testDir });
+    const result = evaluateNudgeGuards(ctx, baseInput({ phase: "plan" }));
+
+    expect(result.suppressed).toBe(true);
+    expect(result.reason).toEqual({ kind: "wrong-phase", phase: "plan" });
+  });
+
+  it("G3: suppresses when a compaction is queued", () => {
+    const ctx = createMockPluginContext({ testDir });
+    ctx.pendingCompactions.set("sess-1", {
+      model: { providerID: "opencode", modelID: "deepseek-v4" },
+      status: "queued",
+      queuedAtMs: Date.now(),
+    });
+
+    const result = evaluateNudgeGuards(ctx, baseInput());
+
+    expect(result.suppressed).toBe(true);
+    expect(result.reason).toEqual({ kind: "pending-compaction", status: "queued" });
+  });
+
+  it("G3: suppresses when a compaction is in-flight", () => {
+    const ctx = createMockPluginContext({ testDir });
+    ctx.pendingCompactions.set("sess-1", {
+      model: { providerID: "opencode", modelID: "deepseek-v4" },
+      status: "in-flight",
+      queuedAtMs: Date.now(),
+    });
+
+    const result = evaluateNudgeGuards(ctx, baseInput());
+
+    expect(result.suppressed).toBe(true);
+    expect(result.reason).toEqual({ kind: "pending-compaction", status: "in-flight" });
+  });
+
+  it("G4: suppresses when acceptance is not confirmed", () => {
+    const ctx = createMockPluginContext({ testDir });
+    const result = evaluateNudgeGuards(ctx, baseInput({ acceptanceConfirmed: false }));
+
+    expect(result.suppressed).toBe(true);
+    expect(result.reason).toEqual({ kind: "awaiting-acceptance" });
+  });
+
+  it("G5: suppresses when an unresolved high-severity blocker exists", () => {
+    const ctx = createMockPluginContext({ testDir });
+    ctx.db.upsertBlocker("default", {
+      description: "need operator input",
+      severity: "high",
+      status: "open",
+    });
+
+    const result = evaluateNudgeGuards(ctx, baseInput());
+
+    expect(result.suppressed).toBe(true);
+    const reason = result.reason as { kind: "high-severity-blocker"; blockerId: number };
+    expect(reason.kind).toBe("high-severity-blocker");
+    expect(typeof reason.blockerId).toBe("number");
+    expect(reason.blockerId).toBeGreaterThan(0);
+  });
+
+  it("G5: ignores low-severity blockers", () => {
+    const ctx = createMockPluginContext({ testDir });
+    ctx.db.upsertBlocker("default", {
+      description: "low priority",
+      severity: "low",
+      status: "open",
+    });
+
+    const result = evaluateNudgeGuards(ctx, baseInput());
+
+    expect(result.suppressed).toBe(false);
+  });
+
+  it("G6: suppresses on credentials hard-stop question", () => {
+    const ctx = createMockPluginContext({ testDir });
+    const result = evaluateNudgeGuards(
+      ctx,
+      baseInput({
+        lastAssistantText: "Please provide your API key so I can continue.",
+      }),
+    );
+
+    expect(result.suppressed).toBe(true);
+    expect(result.reason).toEqual({ kind: "hard-stop-question", category: "credentials" });
+  });
+
+  it("G6: suppresses on destructive hard-stop question", () => {
+    const ctx = createMockPluginContext({ testDir });
+    const result = evaluateNudgeGuards(
+      ctx,
+      baseInput({
+        lastAssistantText: "Shall I delete the production database? This is irreversible.",
+      }),
+    );
+
+    expect(result.suppressed).toBe(true);
+    expect(result.reason).toEqual({ kind: "hard-stop-question", category: "destructive" });
+  });
+
+  it("G6: destructive takes precedence when both patterns match", () => {
+    const ctx = createMockPluginContext({ testDir });
+    const result = evaluateNudgeGuards(
+      ctx,
+      baseInput({
+        lastAssistantText: "Delete the production database and remove the API key?",
+      }),
+    );
+
+    expect(result.suppressed).toBe(true);
+    expect(result.reason).toEqual({ kind: "hard-stop-question", category: "destructive" });
+  });
+
+  it("G7: suppresses when the last message is not from the assistant", () => {
+    const ctx = createMockPluginContext({ testDir });
+    const result = evaluateNudgeGuards(
+      ctx,
+      baseInput({ lastMessages: [{ info: { role: "user" }, text: "hello" }] }),
+    );
+
+    expect(result.suppressed).toBe(true);
+    expect(result.reason).toEqual({ kind: "mid-work", lastRole: "user" });
+  });
+
+  it("G7: handles unknown last role from an empty messages array", () => {
+    const ctx = createMockPluginContext({ testDir });
+    const result = evaluateNudgeGuards(ctx, baseInput({ lastMessages: [] }));
+
+    expect(result.suppressed).toBe(true);
+    expect(result.reason).toEqual({ kind: "mid-work", lastRole: "unknown" });
+  });
+
+  it("G8: suppresses when rate-limit check denies the nudge", () => {
+    const ctx = createMockPluginContext({ testDir });
+    const rateLimitCheck: NudgeRateLimitCheck = {
+      check: () => ({ allowed: false, reason: "cooldown active" }),
+    };
+
+    const result = evaluateNudgeGuards(ctx, baseInput({ rateLimitCheck }));
+
+    expect(result.suppressed).toBe(true);
+    expect(result.reason).toEqual({ kind: "rate-limited", detail: "cooldown active" });
+  });
+
+  it("G8: default rate-limit check allows the nudge", () => {
+    const ctx = createMockPluginContext({ testDir });
+    const result = evaluateNudgeGuards(ctx, baseInput());
+
+    expect(result.suppressed).toBe(false);
+  });
+
+  it("G9: suppresses when the kill switch is off", () => {
+    const ctx = createMockPluginContext({ testDir });
+    const result = evaluateNudgeGuards(ctx, baseInput({ killSwitch: false }));
+
+    expect(result.suppressed).toBe(true);
+    expect(result.reason).toEqual({ kind: "kill-switch-off" });
+  });
+
+  it("positive path: allows the nudge when all nine guards pass", () => {
+    const ctx = createMockPluginContext({ testDir });
+    const result = evaluateNudgeGuards(ctx, baseInput());
+
+    expect(result.suppressed).toBe(false);
+    expect(result.reason).toBeNull();
+    expect(result).toEqual(ALLOWED);
+  });
+
+  it("biases toward over-suppression when blocker state is ambiguous", () => {
+    const ctx = createMockPluginContext({ testDir });
+    ctx.db.upsertBlocker("default", {
+      description: "critical infra",
+      severity: "critical",
+      status: "open",
+    });
+
+    const result = evaluateNudgeGuards(ctx, baseInput());
+
+    expect(result.suppressed).toBe(true);
+    expect(result.reason?.kind).toBe("high-severity-blocker");
+  });
+
+  it("returns the first suppression reason when multiple guards would fail", () => {
+    const ctx = createMockPluginContext({ testDir });
+    ctx.pendingCompactions.set("sess-1", {
+      model: { providerID: "opencode", modelID: "deepseek-v4" },
+      status: "queued",
+      queuedAtMs: Date.now(),
+    });
+
+    const result = evaluateNudgeGuards(
+      ctx,
+      baseInput({
+        lazyAutopilot: false,
+        phase: "plan",
+        acceptanceConfirmed: false,
+      }),
+    );
+
+    expect(result.suppressed).toBe(true);
+    expect(result.reason).toEqual({ kind: "lazy-autopilot-disabled" });
+  });
+});

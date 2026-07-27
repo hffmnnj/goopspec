@@ -141,7 +141,7 @@ export function createGoopSaveNoteTool(ctx: PluginContext): ToolDefinition {
     },
     async execute(args: SaveNoteArgs, _context: ToolContext): Promise<string> {
       try {
-        if (args.items !== undefined) {
+        if (Array.isArray(args.items) && args.items.length > 0) {
           const batchItems: BatchItemResult[] = [];
           let succeeded = 0;
           let failed = 0;
@@ -224,6 +224,15 @@ export function createGoopSaveNoteTool(ctx: PluginContext): ToolDefinition {
           }
 
           return `Field Note patched: ${args.note_id}`;
+        }
+
+        if (
+          args.items?.length === 0 &&
+          args.note_id === undefined &&
+          args.title === undefined &&
+          args.body === undefined
+        ) {
+          return "Error in goop_save_note: items[] array is empty and no note fields were provided";
         }
 
         const validation = validateCreateFields(args);

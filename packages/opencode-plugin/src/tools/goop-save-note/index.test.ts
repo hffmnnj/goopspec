@@ -248,19 +248,32 @@ describe("goop_save_note tool", () => {
   });
 
   describe("goop_save_note batch mode (items[])", () => {
-    it("returns empty result for empty items array", async () => {
+    it("empty items array falls through to single-note path", async () => {
       const tool = createGoopSaveNoteTool(ctx);
-      const result = await tool.execute(
-        {
-          title: "",
-          body: "",
-          tags: [],
-          source_agent: "test",
-          items: [],
-        },
-        toolCtx,
+      const result = String(
+        await tool.execute(
+          {
+            title: "Single fallback note",
+            body: "Fallback body",
+            tags: ["fallback"],
+            source_agent: "test",
+            items: [],
+          },
+          toolCtx,
+        ),
       );
-      expect(result).toContain("0/0 succeeded");
+      expect(result).toContain("Field Note saved:");
+      expect(result).toContain("Single fallback note");
+      const note = ctx.db.searchNotes("Fallback body")[0];
+      expect(note?.title).toBe("Single fallback note");
+    });
+
+    it("returns error when items array is empty and no note fields are provided", async () => {
+      const tool = createGoopSaveNoteTool(ctx);
+      const result = await tool.execute({ items: [] }, toolCtx);
+      expect(result).toContain("Error in goop_save_note");
+      expect(result).toContain("items[] array is empty");
+      expect(result).not.toContain("succeeded");
     });
 
     it("saves single-element items array", async () => {

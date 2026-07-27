@@ -72,7 +72,7 @@ For exact commit-message style, see `git-workflow.md`.
 
 ## Before You Open a PR
 
-- [ ] All tests pass locally (`bun test packages/opencode-plugin/`)
+- [ ] All tests pass locally (`bun test packages/opencode-plugin/` — deliberate top-rung run; day-to-day work uses scoped runs per `references/tdd.md`)
 - [ ] No TypeScript errors (`bun run --cwd packages/opencode-plugin typecheck`)
 - [ ] No debug statements or commented-out code left behind
 - [ ] Branch is up to date with main/base branch

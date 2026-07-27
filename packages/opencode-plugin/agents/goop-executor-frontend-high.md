@@ -103,6 +103,10 @@ Memory-first flow: see `references/core-protocol.md` §Memory-First Protocol.
 
 Commit discipline: see `references/core-protocol.md` §Atomic Commit Protocol and `references/git-workflow.md`.
 
+## Verification
+
+Verify behavior with the relevant build/dev command and the narrowest test rung (file → directory → `--changed=main` → package), bounded with `--bail=3 --timeout=10000`. Run `bun run --cwd packages/opencode-plugin typecheck`. Scoped is not skipped. See `references/tdd.md` §Test Execution Discipline. For a11y changes, run available checks.
+
 ## Completion Standard
 
 The interface is polished, accessible, responsive, and aligned with project conventions. Verify with `git log --oneline -5` that each task produced its own commit. Verification includes meaningful evidence for visual behavior and accessibility-sensitive interactions.

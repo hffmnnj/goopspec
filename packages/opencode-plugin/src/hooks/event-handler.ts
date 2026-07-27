@@ -17,10 +17,15 @@
 import type { SdkEvent } from "../core/sdk-compat.js";
 import type { PluginContext } from "../core/types.js";
 import { dispatchPendingCompaction } from "../tools/goop-compact/index.js";
+import {
+  clearNudgeRateLimitState,
+  dispatchLazyAutopilotNudge,
+} from "./lazy-autopilot-nudge/index.js";
 import type { HookFactory, Hooks } from "./types.js";
 import { safeHandler } from "./utils.js";
 
 export const IDLE_COMPACTION_DEFER_MS = 0;
+export const IDLE_NUDGE_DEFER_MS = 0;
 const IGNORED_EVENT_RESULT: Promise<void> = Promise.resolve();
 
 // ---------------------------------------------------------------------------
@@ -60,6 +65,8 @@ function isSessionDeleted(event: SdkEvent): event is SessionDeletedEvent {
 function clearCompactionState(ctx: PluginContext, sessionID: string): void {
   ctx.pendingCompactions.delete(sessionID);
   ctx.compactionHandoff.delete(sessionID);
+  clearNudgeRateLimitState(sessionID);
+  ctx.pendingLazyAutopilotNudges.delete(sessionID);
 }
 
 // ---------------------------------------------------------------------------
@@ -90,6 +97,7 @@ export const createEventHandlerHook: HookFactory = (ctx: PluginContext): Partial
         // request before it reaches the summarize route. Returning from the callback
         // first, then dispatching on a fresh macrotask, avoids the reentrancy.
         setTimeout(() => dispatchPendingCompaction(ctx, sessionId), IDLE_COMPACTION_DEFER_MS);
+        setTimeout(() => void dispatchLazyAutopilotNudge(ctx, sessionId), IDLE_NUDGE_DEFER_MS);
         return;
       }
 

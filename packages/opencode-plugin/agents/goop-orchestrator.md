@@ -51,7 +51,7 @@ Acknowledge current phase, spec lock status, active wave, and workflowId.
 - **Enforce gates**: discovery, spec, execution, acceptance.
 - **Track**: keep chronicle, todos, and memory current. Use `goop_write_wave`'s batch `tasks[]`/`items[]` form to update wave/task status — do NOT restate status as a running log inside blueprint or chronicle prose. Wave tool calls are the source of truth for progress tracking; blueprint prose describes intent/deliverables/verification, not status.
 - **Preserve context**: generate `HANDOFF.md` at phase and wave boundaries.
-- **NEVER write code**: no `write`/`edit`/`bash` that touches source files. Verification commands (`bun test`, `bun run typecheck`) are permitted. One narrow exception exists, for image generation only — see §Image Generation directly below. It does not relax this rule.
+- **NEVER write code**: no `write`/`edit`/`bash` that touches source files. Accept scoped test evidence at task and wave boundaries; do not demand the full suite every time. Run broadly before a PR, after merging/rebasing `main` or resolving conflicts, and at the acceptance gate. See `references/tdd.md` §Test Execution Discipline: narrowest covering rung (file → directory → `--changed=main` → package), `--bail=3 --timeout=10000`, plus typecheck; scoped is not skipped. One narrow exception exists, for image generation only — see §Image Generation directly below. It does not relax this rule.
 - **Exclusive identity**: you are the Conductor and only the Conductor. Never dispatch a subagent with framing that could cause it to believe it is the orchestrator; every `task()` delegation prompt must make clear the recipient is a dispatched subagent, not the Conductor.
 
 ### Image Generation
@@ -188,11 +188,23 @@ Memory-first flow: see `references/core-protocol.md` §Memory-First Protocol. Pe
 
 Provide a **REQUIRED** `next_step` argument: a short 1-2 sentence description of the exact action you will take immediately after compaction. This is threaded into the post-compaction survival block, so always make it concrete (e.g., "Dispatch Wave 3 Task 3.1 to goop-executor-high on branch feat/x").
 
-Call `goop_compact` at these points:
+### State Reconciliation Before Compaction
+
+Before calling `goop_compact`, ensure the active workflow state is reconciled to the DB. The tool performs a pre-flush (`stateManager.setState(stateManager.getState())`) and then compares the cached state against the persisted state. If they diverge, `goop_compact` emits a warning listing the divergent fields. This is diagnostic only — compaction proceeds regardless, but the warning signals that in-memory changes were not yet durable. Always resolve divergence warnings before ending your turn.
+
+### Compaction Handoff Snapshot
+
+When `goop_compact` queues successfully, it captures a `CompactionHandoffSnapshot` containing the full workflow identity (workflowId, phase, mode, depth, specLocked, interviewComplete, acceptanceConfirmed, currentWave, totalWaves, autopilot, lazyAutopilot, git branch, and the `next_step` string). This snapshot survives the compaction and is used by the compaction survival hook to rebuild the post-compaction context. The snapshot is consumed once and deleted.
+
+### Call Points
 
 1. **After planning completes** — spec is locked, before dispatching the first execute wave.
 2. **Before acceptance/verification** — right before `/goop-accept` verification work begins.
 3. **Between waves** — roughly every 3-5 waves, adjusted by your judgment of wave heaviness. Compact sooner after heavy waves (large diffs, many files touched, long-running executor tasks); compact later after light waves. Use judgment, not a fixed counter or scoring algorithm.
+
+### V1-Only Limitation
+
+`goop_compact` and the compaction survival hook are V1-only. V2 does not expose the `experimental.session.compacting` hook (see `src/core/hooks-v2.ts` — it is listed in the skipped hooks array). Under V2, calling `goop_compact` returns an error because `session.summarize` is absent. The lazy autopilot nudge is also V1-only for the same reason: V2 does not expose the `event` hook that the nudge dispatcher depends on. When running under V2, both features are inert and log the limitation once at startup.
 
 ## References You Must Load
 

@@ -12,12 +12,12 @@
  * @module integration.test
  */
 
-import { afterEach, beforeEach, describe, expect, it } from "bun:test";
+import { afterEach, beforeEach, describe, expect, it, mock } from "bun:test";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 
 import { createPluginContext } from "./core/context.js";
-import type { PluginInput } from "./core/sdk-compat.js";
+import type { PluginInput, SdkEvent } from "./core/sdk-compat.js";
 import {
   type SpecContract,
   canStartExecution,
@@ -30,9 +30,11 @@ import {
   validateSpecContract,
 } from "./features/enforcement/index.js";
 import { detectAutoDelegation } from "./features/routing/index.js";
+import { IDLE_COMPACTION_DEFER_MS, createEventHandlerHook } from "./hooks/event-handler.js";
 import { createHooks } from "./hooks/index.js";
 import {
   createDefaultWorkflowState,
+  createMockCompactionHandoff,
   createMockPluginContext,
   createMockStateManager,
   setupTestEnvironment,
@@ -611,6 +613,109 @@ describe("GoopSpec 5-phase integration", () => {
       expect(wf.specLocked).toBe(false);
       expect(wf.mode).toBe("standard");
       expect(wf.depth).toBe("standard");
+    });
+  });
+
+  // ========================================================================
+  // 9. Lazy autopilot nudge composes with compaction (MH11)
+  // ========================================================================
+
+  describe("lazy autopilot nudge and compaction composition", () => {
+    function idleEvent(sessionID: string): { event: SdkEvent } {
+      return { event: { type: "session.idle", properties: { sessionID } } as SdkEvent };
+    }
+
+    async function flushIdleDispatch(): Promise<void> {
+      await new Promise((resolve) => setTimeout(resolve, IDLE_COMPACTION_DEFER_MS + 1));
+    }
+
+    function createLazyContext() {
+      return createMockPluginContext({
+        testDir,
+        state: {
+          activeWorkflowId: "default",
+          workflows: {
+            default: createDefaultWorkflowState({
+              phase: "execute",
+              mode: "standard",
+              depth: "standard",
+              interviewComplete: false,
+              specLocked: false,
+              acceptanceConfirmed: true,
+              currentWave: 1,
+              totalWaves: 3,
+              autopilot: false,
+              lazyAutopilot: true,
+            }),
+          },
+        },
+      });
+    }
+
+    it("emits exactly one nudge on session.idle in execute with assistant last message", async () => {
+      const ctx = createLazyContext();
+      const promptAsync = mock(async () => undefined);
+      Object.assign(ctx.sdk.client, {
+        session: {
+          messages: mock(async () => [{ info: { role: "assistant" } }]),
+          promptAsync,
+        },
+      });
+      const hook = createEventHandlerHook(ctx);
+      const handler = hook.event as NonNullable<typeof hook.event>;
+
+      await handler(idleEvent("sess-nudge-once"));
+      await flushIdleDispatch();
+      await Promise.resolve();
+
+      expect(promptAsync).toHaveBeenCalledTimes(1);
+      expect(promptAsync).toHaveBeenCalledWith({
+        path: { id: "sess-nudge-once" },
+        body: {
+          parts: [
+            {
+              type: "text",
+              text: "LAZY AUTOPILOT ENGAGED - Do not pause unless you 100% cannot move forward without something from the user. Use your best judgement and continue.",
+            },
+          ],
+        },
+      });
+    });
+
+    it("emits zero nudges when a compaction is queued for the same idle event", async () => {
+      const ctx = createLazyContext();
+      // Defer summarize resolution so the nudge dispatch observes the in-flight
+      // compaction before it is cleared. This matches real SDK timing where the
+      // network round-trip outlasts the deferred macrotask that starts it.
+      const summarize = mock(
+        () => new Promise((resolve) => setTimeout(() => resolve({ data: true }), 2)),
+      );
+      const promptAsync = mock(async () => undefined);
+      Object.assign(ctx.sdk.client, {
+        session: {
+          messages: mock(async () => [{ info: { role: "assistant" } }]),
+          summarize,
+          promptAsync,
+        },
+      });
+      ctx.pendingCompactions.set("sess-no-nudge-compaction", {
+        model: { providerID: "opencode", modelID: "deepseek-v4" },
+        status: "queued",
+        queuedAtMs: Date.now(),
+      });
+      ctx.compactionHandoff.set(
+        "sess-no-nudge-compaction",
+        createMockCompactionHandoff("Resume after compaction."),
+      );
+      const hook = createEventHandlerHook(ctx);
+      const handler = hook.event as NonNullable<typeof hook.event>;
+
+      await handler(idleEvent("sess-no-nudge-compaction"));
+      await flushIdleDispatch();
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      expect(summarize).toHaveBeenCalledTimes(1);
+      expect(promptAsync).toHaveBeenCalledTimes(0);
     });
   });
 });

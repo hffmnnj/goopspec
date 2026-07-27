@@ -85,7 +85,7 @@ Memory-first flow: see `references/core-protocol.md` §Memory-First Protocol.
 
 ## Verification
 
-Verify visual behavior with the relevant build/dev command (e.g., `bun run --cwd packages/web build` or `bun run typecheck`). For accessibility fixes, run any available a11y check.
+Verify visual behavior with the relevant build/dev command and the narrowest test rung (file → directory → `--changed=main` → package), bounded with `--bail=3 --timeout=10000`. Run `bun run --cwd packages/opencode-plugin typecheck`. Scoped is not skipped. See `references/tdd.md` §Test Execution Discipline. For accessibility fixes, run any available a11y check.
 
 ## Commit Discipline
 

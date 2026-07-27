@@ -233,10 +233,22 @@ describe("goop_write_db tool", () => {
   });
 
   describe("goop_write_db batch mode (items[])", () => {
-    it("returns empty result for empty items array", async () => {
+    it("empty items array falls through to single-doc path", async () => {
       const tool = createGoopWriteDbTool(ctx);
-      const result = await tool.execute({ doc_type: "spec", content: "", items: [] }, toolCtx);
-      expect(result).toContain("0/0 succeeded");
+      const result = await tool.execute(
+        { doc_type: "spec", content: "# Fallback Spec", items: [] },
+        toolCtx,
+      );
+      expect(result).toContain("Written spec");
+      expect(ctx.db.getDocument("default", "spec")?.content).toBe("# Fallback Spec");
+    });
+
+    it("returns error when items array is empty and no document content is provided", async () => {
+      const tool = createGoopWriteDbTool(ctx);
+      const result = await tool.execute({ doc_type: "spec", items: [] }, toolCtx);
+      expect(result).toContain("Error in goop_write_db");
+      expect(result).toContain("items[] array is empty");
+      expect(result).not.toContain("succeeded");
     });
 
     it("writes single-element items array", async () => {

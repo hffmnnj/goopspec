@@ -90,12 +90,14 @@ const PHASE_RULES: Record<WorkflowPhase, Omit<PhaseRules, "phase">> = {
       "Verify each task completion before moving on",
       "Save checkpoints at wave boundaries",
       "Log deviations in ADL.md",
+      "Accept scoped test evidence (narrowest run covering the change) at wave boundaries",
     ],
     mustNotDo: [
       "Write code directly — ALWAYS delegate to subagents",
       "Skip verification steps",
       "Ignore test failures",
       "Modify files outside the plan's scope",
+      "Demand a full-suite rerun when a scoped run already covers the change",
     ],
     requiredDocuments: ["SPEC.md", "CHRONICLE.md"],
     delegationNote: DELEGATION_NOTE,
@@ -105,7 +107,7 @@ const PHASE_RULES: Record<WorkflowPhase, Omit<PhaseRules, "phase">> = {
     label: "ACCEPT",
     mustDo: [
       "Verify ALL must-haves from SPEC.md are complete",
-      "Run all tests and ensure they pass",
+      "Run the full test suite and ensure it passes at the acceptance gate",
       "Check for any deviations in ADL.md",
       "Get explicit user acceptance",
     ],
