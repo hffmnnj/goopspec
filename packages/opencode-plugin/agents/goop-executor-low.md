@@ -18,6 +18,7 @@ tools:
   - goop_read_db
   - goop_read_wave
   - goop_boot
+  - goop_blocker
   - goop_reference
   - goop_search_notes
   - memory_save
