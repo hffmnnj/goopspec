@@ -4,6 +4,10 @@
  * @module tools/goop-compact
  */
 
+import {
+  describePendingCompaction,
+  getLivePendingCompaction,
+} from "../../core/pending-compaction.js";
 import { tool } from "../../core/sdk-compat.js";
 import type { ToolContext, ToolDefinition } from "../../core/sdk-compat.js";
 import type { PluginContext } from "../../core/types.js";
@@ -105,7 +109,7 @@ interface SummarizeBody extends ModelRef {
 }
 
 export function dispatchPendingCompaction(ctx: PluginContext, sessionID: string): void {
-  const pending = ctx.pendingCompactions.get(sessionID);
+  const pending = getLivePendingCompaction(ctx, sessionID);
   if (!pending || pending.status !== "queued") return;
 
   const session = ctx.sdk.client?.session;
@@ -152,15 +156,16 @@ export function createGoopCompactTool(ctx: PluginContext): ToolDefinition {
           return "goop_compact failed: a session ID is required to trigger compaction.";
         }
 
-        if (ctx.pendingCompactions.has(sessionID)) {
-          return `Compaction is already pending or in flight for session ${sessionID}; no additional compaction was requested.`;
+        const existingPending = getLivePendingCompaction(ctx, sessionID);
+        if (existingPending) {
+          return `Compaction is already ${describePendingCompaction(existingPending)} for session ${sessionID}; no additional compaction was requested.`;
         }
 
         const messagesResult = fieldsResponse<SessionMessage[]>(
           await session.messages({ path: { id: sessionID } }),
         );
         if (messagesResult.error !== undefined) {
-          if (!ctx.pendingCompactions.has(sessionID)) ctx.compactionHandoff.delete(sessionID);
+          if (!getLivePendingCompaction(ctx, sessionID)) ctx.compactionHandoff.delete(sessionID);
           const detail = errorDetail(messagesResult.error);
           logError("goop_compact failed to resolve the session model", messagesResult.error);
           return `goop_compact failed: unable to resolve the current session model: ${detail}`;
@@ -168,14 +173,16 @@ export function createGoopCompactTool(ctx: PluginContext): ToolDefinition {
 
         const model = currentModel(messagesResult.data ?? []);
         if (!model) {
-          if (!ctx.pendingCompactions.has(sessionID)) ctx.compactionHandoff.delete(sessionID);
+          if (!getLivePendingCompaction(ctx, sessionID)) ctx.compactionHandoff.delete(sessionID);
           return "goop_compact failed: unable to resolve the current session model.";
         }
 
-        if (ctx.pendingCompactions.has(sessionID)) {
-          return `Compaction is already pending or in flight for session ${sessionID}; no additional compaction was requested.`;
+        const pendingAfterModelResolution = getLivePendingCompaction(ctx, sessionID);
+        if (pendingAfterModelResolution) {
+          return `Compaction is already ${describePendingCompaction(pendingAfterModelResolution)} for session ${sessionID}; no additional compaction was requested.`;
         }
 
+        log("goop_compact queuing compaction", { sessionID });
         ctx.compactionHandoff.set(sessionID, args.next_step);
         ctx.pendingCompactions.set(sessionID, {
           model,
