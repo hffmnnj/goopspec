@@ -2,6 +2,7 @@ import type { PluginContext } from "../../core/types.js";
 import { logError } from "../../shared/logger.js";
 import type { HookFactory, Hooks } from "../types.js";
 import { safeHandler } from "../utils.js";
+import { lastMessageRole } from "./guards.js";
 
 export const LAZY_AUTOPILOT_NUDGE_TEXT =
   "LAZY AUTOPILOT ENGAGED - Do not pause unless you 100% cannot move forward without something from the user. Use your best judgement and continue.";
@@ -12,24 +13,6 @@ function logPromptAsyncUnavailable(): void {
   if (didLogPromptAsyncUnavailable) return;
   didLogPromptAsyncUnavailable = true;
   logError("Lazy autopilot nudge is best-effort: session.promptAsync is unavailable on this host");
-}
-
-function lastMessageRole(messages: unknown): string | undefined {
-  const response =
-    messages !== null && typeof messages === "object"
-      ? (messages as { data?: unknown })
-      : undefined;
-  const entries = Array.isArray(messages)
-    ? messages
-    : Array.isArray(response?.data)
-      ? response.data
-      : undefined;
-  const last = entries?.at(-1);
-  if (last === null || typeof last !== "object") return undefined;
-
-  const message = last as { role?: unknown; info?: { role?: unknown } };
-  const role = message.info?.role ?? message.role;
-  return typeof role === "string" ? role : undefined;
 }
 
 function clearNudge(ctx: PluginContext, sessionID: string): void {
