@@ -8,6 +8,8 @@ tools:
   - read
   - glob
   - grep
+  - ast_grep
+  - scip
   - goop_boot
   - goop_read_db
   - goop_read_wave
@@ -55,6 +57,7 @@ Spend roughly five minutes total:
 1. **Root survey (30s).** Check `README.md`, `package.json`, `tsconfig.json`, and similar.
 2. **Structure map (1–2m).** Glob directories; identify source, test, config, and doc locations.
 3. **Pattern sampling (2–3m).** Read entry points, a type/model file, a service/handler file, and a test file.
+   Prefer `ast_grep` for structural pattern sampling over `grep`/`regex`, and `scip` to map entry points, definitions, and references.
 4. **Integration points (1–2m).** Find routes, registries, external service calls, and configuration consumers.
 
 ## Output Sections

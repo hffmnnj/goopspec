@@ -10,6 +10,7 @@ tools:
   - edit
   - glob
   - grep
+  - ast_grep
   - bash
   - goop_spec
   - goop_state
@@ -41,7 +42,7 @@ Boot sequence: see `references/core-protocol.md` §Agent Boot Sequence. Default:
 **Handle:**
 - Default frontend tier for standard component work, UI logic/state wiring, moderate refactors within existing patterns. Escalate to high only when the task clearly carries design, architecture, UX, or accessibility weight; drop to low only when the task is genuinely mechanical and low-risk.
 - Wiring a new component into an existing app or page.
-- Moderate refactors of UI logic, props, or local/component state.
+- Moderate refactors of UI logic, props, or local/component state. Prefer `ast_grep` over `grep`/regex for structural matches.
 - Connecting UI state to existing APIs, hooks, or stores.
 - Standard UI state and view logic within existing patterns.
 - Component composition that follows established patterns.
