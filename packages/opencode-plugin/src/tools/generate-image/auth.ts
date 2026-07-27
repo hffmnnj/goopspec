@@ -39,14 +39,29 @@ function getXdgDataAuthPath(homeDir: string, xdgDataHome?: string): string {
 }
 
 /**
+ * A caller-supplied `env` always wins. `process.env` is consulted only when no
+ * `homeDir` was injected, because an injected home means resolution is being
+ * sandboxed and an ambient XDG_DATA_HOME would redirect the chain back at the
+ * real user home. An explicit `xdgDataHome` still applies either way.
+ */
+function resolveEnv(options?: ResolveAuthOptions): Record<string, string | undefined> {
+  if (options?.env) {
+    return options.env;
+  }
+  return options?.homeDir === undefined ? process.env : {};
+}
+
+/**
  * Return the ordered candidate chain for locating a credential file.
  * Priority order: explicit arg, GOOPSPEC_IMAGE_AUTH_FILE env var,
  * $XDG_DATA_HOME/opencode/auth.json (or ~/.local/share fallback),
  * ~/.codex/auth.json, ~/.gpt-image/auth.json.
  * Inject homeDir/xdgDataHome to keep tests away from the real home directory.
+ * The explicit and env candidates are omitted when those inputs are absent, so
+ * the chain shrinks rather than yielding empty paths.
  */
 export function resolveAuthCandidates(options?: ResolveAuthOptions): AuthSource[] {
-  const env = options?.env ?? process.env;
+  const env = resolveEnv(options);
   const homeDir = options?.homeDir ?? homedir();
   const candidates: AuthSource[] = [];
 

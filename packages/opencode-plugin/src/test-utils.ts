@@ -487,6 +487,121 @@ export function createMockCompactionHandoff(nextStep: string): CompactionHandoff
 }
 
 // ============================================================================
+// Fetch mocking harness
+// ============================================================================
+
+export interface MockFetchResponse {
+  status?: number;
+  statusText?: string;
+  headers?: Record<string, string>;
+  /**
+   * A string is sent verbatim, an array of strings is streamed one chunk per
+   * element, any other value is JSON-encoded, and omitting it sends no body.
+   */
+  body?: string | string[] | Record<string, unknown>;
+}
+
+export interface RecordedFetchRequest {
+  url: string;
+  method: string;
+  headers: Record<string, string>;
+  body: string;
+}
+
+export interface MockFetchControls {
+  requests: RecordedFetchRequest[];
+}
+
+// `lib` is ES2022 only, so the DOM aliases (BodyInit, RequestInfo) are absent.
+type ResponseBody = ConstructorParameters<typeof Response>[0];
+type FetchInput = ConstructorParameters<typeof Request>[0];
+
+function buildMockResponseBody(body: MockFetchResponse["body"]): ResponseBody {
+  if (body === undefined) {
+    return null;
+  }
+
+  if (typeof body === "string") {
+    return body;
+  }
+
+  // Chunk boundaries are preserved exactly as given so SSE parsers can be
+  // tested against frames split at arbitrary points.
+  if (Array.isArray(body)) {
+    const encoder = new TextEncoder();
+    return new ReadableStream<Uint8Array>({
+      start(controller) {
+        for (const chunk of body) {
+          controller.enqueue(encoder.encode(chunk));
+        }
+        controller.close();
+      },
+    });
+  }
+
+  return JSON.stringify(body);
+}
+
+function mockResponseHeaders(response: MockFetchResponse): Record<string, string> {
+  const isJson =
+    response.body !== undefined &&
+    typeof response.body !== "string" &&
+    !Array.isArray(response.body);
+  return isJson
+    ? { "content-type": "application/json", ...response.headers }
+    : (response.headers ?? {});
+}
+
+/**
+ * Temporarily replace `globalThis.fetch` with a scripted mock.
+ *
+ * Responses are consumed from the queue in order, an exhausted queue throws so
+ * unexpected calls surface loudly, every request is recorded for assertion, and
+ * the original `fetch` is restored even if the callback throws.
+ *
+ * Never reach for `mock.module()` here: it replaces the module globally and
+ * breaks sibling test files in the same run.
+ */
+export async function withMockedFetch<T>(
+  responses: MockFetchResponse[],
+  fn: (controls: MockFetchControls) => Promise<T>,
+): Promise<T> {
+  const originalFetch = globalThis.fetch;
+  const queue = [...responses];
+  const requests: RecordedFetchRequest[] = [];
+
+  const mockFetch = async (input: FetchInput, init?: RequestInit): Promise<Response> => {
+    const request = new Request(input, init);
+
+    requests.push({
+      url: request.url,
+      method: request.method,
+      headers: Object.fromEntries(request.headers),
+      body: await request.text(),
+    });
+
+    const next = queue.shift();
+    if (!next) {
+      throw new Error(`Unexpected fetch call to ${request.method} ${request.url}`);
+    }
+
+    return new Response(buildMockResponseBody(next.body), {
+      status: next.status ?? 200,
+      statusText: next.statusText,
+      headers: mockResponseHeaders(next),
+    });
+  };
+
+  globalThis.fetch = mockFetch as typeof globalThis.fetch;
+
+  try {
+    return await fn({ requests });
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+}
+
+// ============================================================================
 // Async helpers
 // ============================================================================
 
