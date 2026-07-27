@@ -41,6 +41,7 @@ import { createGoopWriteWaveTool } from "./goop-write-wave/index.js";
 
 import { createAstGrepTool } from "./ast-grep/index.js";
 import { createDifftasticTool } from "./difftastic/index.js";
+import { createGenerateImageTool } from "./generate-image/index.js";
 import { createMemoryForgetTool } from "./memory-forget/index.js";
 import { createMemorySaveTool } from "./memory-save/index.js";
 import { createMemorySearchTool } from "./memory-search/index.js";
@@ -81,6 +82,7 @@ export {
   createMemoryForgetTool,
   createMemorySaveTool,
   createMemorySearchTool,
+  createGenerateImageTool,
   createSlashcommandTool,
 };
 
@@ -123,5 +125,6 @@ export function createTools(ctx: PluginContext): Record<string, ToolDefinition> 
     ast_grep: createAstGrepTool(ctx),
     difftastic: createDifftasticTool(ctx),
     scip: createScipTool(ctx),
+    generate_image: createGenerateImageTool(ctx),
   };
 }
