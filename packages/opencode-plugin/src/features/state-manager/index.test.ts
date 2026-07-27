@@ -3,7 +3,7 @@ import { existsSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { STATE_SCHEMA_VERSION } from "../../core/constants.js";
-import type { GoopState } from "../../core/types.js";
+import type { GoopState, WorkflowState } from "../../core/types.js";
 import { setupTestEnvironment } from "../../test-utils.js";
 import type { GoopSpecDB } from "../db/index.js";
 import { createStateManager } from "./index.js";
@@ -104,6 +104,66 @@ describe("get and set state", () => {
 
     const m2 = createStateManager({ projectDir: testDir, db });
     expect(m2.getActiveWorkflow().specLocked).toBe(true);
+  });
+});
+
+// ===========================================================================
+// Durability regressions (diagnostic — intentionally failing until repaired)
+// ===========================================================================
+
+describe("state durability regressions", () => {
+  it("preserves a newer DB phase when a cached manager mutates the active workflow", () => {
+    const m = mgr();
+    m.getState(); // Populate the manager cache before an out-of-band DB write.
+
+    db.upsertWorkflow(
+      "default",
+      createDefaultWorkflowState({
+        phase: "execute",
+        interviewComplete: true,
+        specLocked: false,
+      }),
+    );
+
+    m.lockSpec();
+
+    const persisted = JSON.parse(db.getWorkflow("default")?.state ?? "{}") as WorkflowState;
+    expect(persisted.phase).toBe("execute");
+    expect(persisted.specLocked).toBe(true);
+    expect(persisted.interviewComplete).toBe(true);
+  });
+
+  it("falls back to the most recently active workflow when _meta names a deleted workflow", () => {
+    db.upsertWorkflow("older", createDefaultWorkflowState({ phase: "plan" }));
+    db.upsertWorkflow("newer", createDefaultWorkflowState({ phase: "execute" }));
+    db.upsertWorkflow("_meta", { activeWorkflowId: "deleted-workflow" });
+
+    const m = mgr();
+
+    expect(m.getActiveWorkflowId()).toBe("newer");
+  });
+
+  it("does not persist mutations made through a previously returned active workflow reference", () => {
+    const m = mgr();
+    const leaked = m.getActiveWorkflow();
+    leaked.phase = "execute";
+
+    m.lockSpec();
+
+    const persisted = JSON.parse(db.getWorkflow("default")?.state ?? "{}") as WorkflowState;
+    expect(persisted.phase).toBe("idle");
+    expect(persisted.specLocked).toBe(true);
+  });
+
+  it("does not overwrite an intervening mutation when setState receives an old snapshot", () => {
+    const m = mgr();
+    const oldSnapshot = structuredClone(m.getState());
+
+    m.transitionPhase("plan");
+    m.setState(oldSnapshot);
+
+    const persisted = JSON.parse(db.getWorkflow("default")?.state ?? "{}") as WorkflowState;
+    expect(persisted.phase).toBe("plan");
   });
 });
 
