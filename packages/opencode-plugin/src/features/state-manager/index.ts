@@ -37,6 +37,7 @@ import type {
 import type { TaskMode, WorkflowDepth } from "../../core/types.js";
 import { log, logError } from "../../shared/logger.js";
 import type { GoopSpecDB } from "../db/index.js";
+import type { WorkflowRow } from "../db/types.js";
 import { migrateToV2, needsMigration } from "./migrations.js";
 import {
   allowedTransitions,
@@ -119,6 +120,41 @@ function persistMeta(db: GoopSpecDB, activeWorkflowId: string): void {
   db.upsertWorkflow(META_ROW_ID, { activeWorkflowId });
 }
 
+function resolveActiveWorkflowId(
+  metaActiveWorkflowId: string | undefined,
+  workflows: Record<string, WorkflowState>,
+  workflowRows: readonly WorkflowRow[],
+): string {
+  if (metaActiveWorkflowId && workflows[metaActiveWorkflowId]) {
+    return metaActiveWorkflowId;
+  }
+
+  const fallbackId = Object.keys(workflows)[0] ?? "default";
+  const reason = metaActiveWorkflowId
+    ? "metadata names a missing workflow"
+    : "metadata is missing or invalid";
+  const timestampedRows = workflowRows.filter(
+    (row) => Number.isFinite(row.updated_at) && workflows[row.id] !== undefined,
+  );
+
+  if (timestampedRows.length > 0) {
+    const mostRecent = timestampedRows.reduce((latest, row) =>
+      row.updated_at > latest.updated_at ? row : latest,
+    );
+    logError("Rebound active workflow without an exact metadata hit", {
+      reason,
+      activeWorkflowId: mostRecent.id,
+    });
+    return mostRecent.id;
+  }
+
+  logError("Rebound active workflow without persisted timestamps", {
+    reason,
+    activeWorkflowId: fallbackId,
+  });
+  return fallbackId;
+}
+
 function reconstructState(db: GoopSpecDB): GoopState | null {
   const rows = db.getAllWorkflows();
   const workflowRows = rows.filter((r) => r.id !== META_ROW_ID);
@@ -136,7 +172,7 @@ function reconstructState(db: GoopSpecDB): GoopState | null {
     }
   }
 
-  const activeWorkflowId = meta?.activeWorkflowId ?? Object.keys(workflows)[0] ?? "default";
+  const activeWorkflowId = resolveActiveWorkflowId(meta?.activeWorkflowId, workflows, workflowRows);
 
   return {
     version: 2,
@@ -318,7 +354,7 @@ export function createStateManager(opts: CreateStateManagerOptions): StateManage
     if (!wf) {
       throw new Error(`Active workflow "${state.activeWorkflowId}" not found`);
     }
-    return wf;
+    return structuredClone(wf);
   }
 
   function mutateActive(fn: (wf: WorkflowState) => void): void {
@@ -428,7 +464,8 @@ export function createStateManager(opts: CreateStateManagerOptions): StateManage
     // -- Workflow CRUD ---------------------------------------------------
 
     getWorkflow(id: string): WorkflowState | undefined {
-      return load().workflows[id];
+      const workflow = load().workflows[id];
+      return workflow ? structuredClone(workflow) : undefined;
     },
 
     getActiveWorkflow(): WorkflowState {
@@ -446,6 +483,19 @@ export function createStateManager(opts: CreateStateManagerOptions): StateManage
       }
       state.activeWorkflowId = id;
       persist(state);
+    },
+
+    restoreActiveWorkflowBinding(workflowId: string): boolean {
+      const state = load();
+      if (!state.workflows[workflowId]) {
+        logError("Rejected external active workflow binding for an unknown workflow", {
+          workflowId,
+        });
+        return false;
+      }
+      state.activeWorkflowId = workflowId;
+      persist(state);
+      return true;
     },
 
     createWorkflow(id: string): WorkflowState {
@@ -474,7 +524,15 @@ export function createStateManager(opts: CreateStateManagerOptions): StateManage
       db.deleteWorkflow(id);
 
       if (state.activeWorkflowId === id) {
-        state.activeWorkflowId = Object.keys(state.workflows)[0] ?? "default";
+        const meta = loadMetaFromDb(db);
+        const remainingRows = db
+          .getAllWorkflows()
+          .filter((row) => row.id !== META_ROW_ID && row.id !== id);
+        state.activeWorkflowId = resolveActiveWorkflowId(
+          meta?.activeWorkflowId,
+          state.workflows,
+          remainingRows,
+        );
       }
       persist(state);
     },

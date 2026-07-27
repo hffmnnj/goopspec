@@ -157,6 +157,25 @@ describe("state durability regressions", () => {
     expect(m.getActiveWorkflowId()).toBe("newer");
   });
 
+  it("falls back to the most recently active workflow when _meta is missing", () => {
+    db.upsertWorkflow("older", createDefaultWorkflowState({ phase: "plan" }));
+    db.upsertWorkflow("newer", createDefaultWorkflowState({ phase: "execute" }));
+
+    const m = mgr();
+
+    expect(m.getActiveWorkflowId()).toBe("newer");
+  });
+
+  it("orders multiple fallback workflows by their persisted update timestamps", () => {
+    db.upsertWorkflow("first", createDefaultWorkflowState({ phase: "plan" }));
+    db.upsertWorkflow("second", createDefaultWorkflowState({ phase: "execute" }));
+    db.upsertWorkflow("first", createDefaultWorkflowState({ phase: "accept" }));
+
+    const m = mgr();
+
+    expect(m.getActiveWorkflowId()).toBe("first");
+  });
+
   it("does not persist mutations made through a previously returned active workflow reference", () => {
     const m = mgr();
     const leaked = m.getActiveWorkflow();
@@ -225,6 +244,24 @@ describe("workflow CRUD", () => {
     m.setActiveWorkflow("feat-auth");
     m.removeWorkflow("feat-auth");
 
+    expect(m.getActiveWorkflowId()).toBe("default");
+  });
+
+  it("uses the shared timestamp fallback when removing the active workflow", () => {
+    const m = mgr();
+    m.createWorkflow("older");
+    m.createWorkflow("newer");
+    m.setActiveWorkflow("older");
+
+    m.removeWorkflow("older");
+
+    expect(m.getActiveWorkflowId()).toBe("newer");
+  });
+
+  it("rejects restoring an external binding for an unknown workflow", () => {
+    const m = mgr();
+
+    expect(m.restoreActiveWorkflowBinding("missing")).toBe(false);
     expect(m.getActiveWorkflowId()).toBe("default");
   });
 

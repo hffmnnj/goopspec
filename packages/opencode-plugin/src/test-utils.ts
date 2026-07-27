@@ -183,6 +183,11 @@ export function createMockStateManager(initialState?: Partial<GoopState>): State
       }
       state.activeWorkflowId = id;
     },
+    restoreActiveWorkflowBinding: (id: string) => {
+      if (!state.workflows[id]) return false;
+      state.activeWorkflowId = id;
+      return true;
+    },
     createWorkflow: (id: string) => {
       if (state.workflows[id]) {
         return state.workflows[id];

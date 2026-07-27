@@ -129,6 +129,8 @@ export interface StateManager {
   getActiveWorkflow(): WorkflowState;
   getActiveWorkflowId(): string;
   setActiveWorkflow(id: string): void;
+  /** Rebind from durable external context without creating a workflow. */
+  restoreActiveWorkflowBinding(workflowId: string): boolean;
   createWorkflow(id: string): WorkflowState;
   removeWorkflow(id: string): void;
   listWorkflowIds(): string[];
