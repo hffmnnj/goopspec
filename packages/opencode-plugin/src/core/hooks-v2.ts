@@ -48,6 +48,8 @@ export interface V2HooksRegistration {
   dispose(): Promise<void>;
 }
 
+let didLogLazyAutopilotV2Limitation = false;
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -245,6 +247,10 @@ export async function registerHooksV2(
   runtimeCtx: V2RuntimeContext,
   ctx: PluginContext,
 ): Promise<V2HooksRegistration> {
+  if (!didLogLazyAutopilotV2Limitation) {
+    didLogLazyAutopilotV2Limitation = true;
+    logError("Lazy autopilot nudge is unavailable in V2: the runtime does not expose event hooks");
+  }
   const hooks = createHooks(ctx, [...DEFAULT_HOOK_FACTORIES]);
   const sessionCapability = runtimeCtx.session;
   const toolCapability = runtimeCtx.tool;

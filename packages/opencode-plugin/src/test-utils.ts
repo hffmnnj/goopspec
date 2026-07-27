@@ -464,6 +464,7 @@ export function createMockPluginContext(opts: MockPluginContextOptions = {}): Pl
     sessionManager: createSessionManager(),
     compactionHandoff: new Map(),
     pendingCompactions: new Map(),
+    pendingLazyAutopilotNudges: new Map(),
   };
 }
 

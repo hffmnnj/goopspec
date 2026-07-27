@@ -64,6 +64,13 @@ export interface LoopDetectionConfig {
   tier2Threshold?: number;
 }
 
+/** Lazy-autopilot nudge configuration (MH8). */
+export interface LazyAutopilotNudgeConfig {
+  enabled?: boolean;
+  cap?: number;
+  cooldownMs?: number;
+}
+
 /** Persisted project-level config stored in `.goopspec/config.json`. */
 export interface GoopConfig {
   projectName?: string;
@@ -75,6 +82,7 @@ export interface GoopConfig {
   agentThinkingBudgets?: Partial<Record<string, number>>;
   binaryPaths?: Record<string, string>;
   loopDetection?: LoopDetectionConfig;
+  lazyAutopilotNudge?: LazyAutopilotNudgeConfig;
   memoryEnabled?: boolean;
   gitignoreGoopspec?: boolean;
 }
@@ -443,6 +451,36 @@ export function normalizeConfig(raw: Record<string, unknown>): GoopConfig {
     }
   }
 
+  // Lazy-autopilot nudge config (MH8)
+  if (raw.lazyAutopilotNudge && typeof raw.lazyAutopilotNudge === "object") {
+    config.lazyAutopilotNudge = {};
+    const incoming = raw.lazyAutopilotNudge as Record<string, unknown>;
+
+    if (typeof incoming.enabled === "boolean") {
+      config.lazyAutopilotNudge.enabled = incoming.enabled;
+    } else if ("enabled" in incoming) {
+      logError("normalizeConfig: lazyAutopilotNudge.enabled must be a boolean — skipping.");
+    }
+
+    if (typeof incoming.cap === "number" && Number.isFinite(incoming.cap) && incoming.cap > 0) {
+      config.lazyAutopilotNudge.cap = Math.floor(incoming.cap);
+    } else if ("cap" in incoming) {
+      logError("normalizeConfig: lazyAutopilotNudge.cap must be a positive number — skipping.");
+    }
+
+    if (
+      typeof incoming.cooldownMs === "number" &&
+      Number.isFinite(incoming.cooldownMs) &&
+      incoming.cooldownMs >= 0
+    ) {
+      config.lazyAutopilotNudge.cooldownMs = Math.floor(incoming.cooldownMs);
+    } else if ("cooldownMs" in incoming) {
+      logError(
+        "normalizeConfig: lazyAutopilotNudge.cooldownMs must be a non-negative number — skipping.",
+      );
+    }
+  }
+
   // New format: binaryPaths (binary key → absolute path)
   if (raw.binaryPaths && typeof raw.binaryPaths === "object") {
     config.binaryPaths = {};
@@ -561,6 +599,10 @@ export function loadMergedConfig(projectDir: string): GoopConfig {
           normalized.loopDetection !== undefined
             ? { ...(merged.loopDetection ?? {}), ...normalized.loopDetection }
             : merged.loopDetection,
+        lazyAutopilotNudge:
+          normalized.lazyAutopilotNudge !== undefined
+            ? { ...(merged.lazyAutopilotNudge ?? {}), ...normalized.lazyAutopilotNudge }
+            : merged.lazyAutopilotNudge,
       };
     } catch {
       log(`loadMergedConfig: skipping unreadable file ${filePath}`);
