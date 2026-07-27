@@ -99,7 +99,7 @@ Order multiple commits from independent to dependent.
 
 ## Pre-Commit Checklist
 
-- [ ] All tests pass.
+- [ ] All relevant tests pass (use the narrowest scoped rung per `references/tdd.md`).
 - [ ] No TypeScript/linting errors.
 - [ ] No debug statements left behind.
 - [ ] Commit message is specific and explains why, not just what.
@@ -161,7 +161,7 @@ Same format as commits: `type(scope): descriptive summary`.
 
 ### Always
 
-- Run tests before committing.
+- Run the scoped test rung before committing (pre-PR still requires the full suite).
 - Preserve GPG signing configuration.
 - Check for sensitive files before staging.
 - Use atomic commits.

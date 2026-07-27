@@ -32,7 +32,7 @@ goop_reference({ name: "security-checklist" })
 
 1. Read `goop_read_db({ doc_types: ["spec", "blueprint", "chronicle"] })` for non-wave planning context and progress log; read wave/task/verification context via `goop_acceptance_audit` (which wraps `goop_read_wave`).
 2. Spawn `goop-verifier` to check must-have coverage, artifacts, key links, and quality.
-3. Spawn `goop-tester` for test and build verification.
+3. Spawn `goop-tester` for full test and build verification (top-rung, full-suite context).
 4. Present a verification matrix. Require explicit user acceptance.
 5. **PR summary and merge offer** — enumerate all open PRs for this workflow. Run `gh pr list --json number,title,url,baseRefName` filtered to the workflow's wave branches. Present them as a numbered list in merge order, newest-first (highest-numbered wave first, cascading down to Wave 1): PR number, title, URL, and target base branch. Then ask in plain text (NOT the `question` tool):
 
