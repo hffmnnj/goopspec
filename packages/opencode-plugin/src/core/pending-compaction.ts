@@ -23,15 +23,32 @@ export function isPendingCompactionExpired(
 /**
  * Return a live pending compaction request, or clear an expired one.
  *
- * If the entry is expired it is removed from both `pendingCompactions` and
- * `compactionHandoff` for the given session. This is the only clearing path
- * other than successful completion.
+ * If the requested entry is expired it is removed from both
+ * `pendingCompactions` and `compactionHandoff` for that session. In addition,
+ * every access opportunistically reclaims other sessions' expired entries so
+ * map growth stays bounded when `session.compacted` / `session.error` /
+ * `session.deleted` signals are lost. Reclamation is purely access-driven — no
+ * timers, no background sweep.
  */
 export function getLivePendingCompaction(
   ctx: PluginContext,
   sessionID: string,
   nowMs = Date.now(),
 ): PendingCompactionRequest | undefined {
+  // Opportunistic cross-session reclamation: every access drops other
+  // sessions' expired entries, keeping growth bounded without timers.
+  const expiredSessionIDs: string[] = [];
+  for (const [id, pending] of ctx.pendingCompactions) {
+    if (isPendingCompactionExpired(pending, nowMs)) {
+      expiredSessionIDs.push(id);
+    }
+  }
+
+  for (const id of expiredSessionIDs) {
+    ctx.pendingCompactions.delete(id);
+    ctx.compactionHandoff.delete(id);
+  }
+
   const pending = ctx.pendingCompactions.get(sessionID);
   if (pending == null) return undefined;
 
