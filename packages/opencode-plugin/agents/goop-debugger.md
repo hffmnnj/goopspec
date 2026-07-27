@@ -93,7 +93,7 @@ Only act when:
 
 - Apply the smallest change that addresses the root cause.
 - Re-run reproduction steps.
-- Run targeted tests, then the relevant package suite.
+- Run the narrowest covering rung (file → directory → `--changed=main` → package), bounded with `--bail=3 --timeout=10000`, then typecheck. See `references/tdd.md` §Test Execution Discipline; scoped is not skipped.
 - Check for regressions in adjacent behavior.
 - Persist the bug pattern to memory.
 
