@@ -21,6 +21,10 @@ import type { PluginContext } from "../../core/types.js";
 export interface NudgeRateLimitResult {
   readonly allowed: boolean;
   readonly reason?: string;
+  /** Set when the cap is reached and the wave's nudges are abandoned. */
+  readonly abandoned?: boolean;
+  /** User-visible message to surface on abandonment. */
+  readonly message?: string;
 }
 
 export interface NudgeRateLimitCheck {

@@ -5,6 +5,30 @@ import {
   dispatchLazyAutopilotNudge,
   lazyAutopilotNudgeHookFactory,
 } from "./index.js";
+import { __clearNudgeRateLimitState } from "./rate-limit.js";
+
+import type { GoopState } from "../../test-utils.js";
+
+const EXECUTE_CTX_OVERRIDES: Partial<GoopState> = {
+  workflows: {
+    default: {
+      phase: "execute",
+      mode: "standard",
+      depth: "standard",
+      interviewComplete: false,
+      specLocked: false,
+      acceptanceConfirmed: true,
+      currentWave: 1,
+      totalWaves: 3,
+      autopilot: false,
+      lazyAutopilot: true,
+    },
+  },
+};
+
+function makeExecuteContext(testDir: string) {
+  return createMockPluginContext({ testDir, state: EXECUTE_CTX_OVERRIDES });
+}
 
 describe("lazy autopilot nudge", () => {
   let cleanup: () => void;
@@ -14,12 +38,13 @@ describe("lazy autopilot nudge", () => {
     const env = setupTestEnvironment("lazy-autopilot-nudge");
     cleanup = env.cleanup;
     testDir = env.testDir;
+    __clearNudgeRateLimitState();
   });
 
   afterEach(() => cleanup());
 
   it("dispatches exactly one method-bound promptAsync with the canonical text", async () => {
-    const ctx = createMockPluginContext({ testDir });
+    const ctx = makeExecuteContext(testDir);
     const calls: unknown[] = [];
     const session = {
       _client: {},
@@ -44,7 +69,7 @@ describe("lazy autopilot nudge", () => {
   });
 
   it("does not nudge when the last message is from the user", async () => {
-    const ctx = createMockPluginContext({ testDir });
+    const ctx = makeExecuteContext(testDir);
     const promptAsync = mock(async () => undefined);
     Object.assign(ctx.sdk.client, {
       session: {
@@ -60,7 +85,7 @@ describe("lazy autopilot nudge", () => {
   });
 
   it("does not throw without promptAsync and queues the system-transform fallback", async () => {
-    const ctx = createMockPluginContext({ testDir });
+    const ctx = makeExecuteContext(testDir);
     const errorSpy = spyOn(console, "error").mockImplementation(() => {});
     Object.assign(ctx.sdk.client, { session: { messages: mock(async () => []) } });
 
@@ -78,7 +103,7 @@ describe("lazy autopilot nudge", () => {
   });
 
   it("deduplicates simultaneous idle dispatches before promptAsync", async () => {
-    const ctx = createMockPluginContext({ testDir });
+    const ctx = makeExecuteContext(testDir);
     const promptAsync = mock(async () => undefined);
     Object.assign(ctx.sdk.client, {
       session: {
@@ -94,5 +119,25 @@ describe("lazy autopilot nudge", () => {
     await Promise.resolve();
 
     expect(promptAsync).toHaveBeenCalledTimes(1);
+  });
+
+  it("is fully inert when the kill switch is off and makes zero SDK calls", async () => {
+    const ctx = makeExecuteContext(testDir);
+    // Write a project-root config that disables the nudge.
+    const projectConfig = {
+      lazyAutopilotNudge: { enabled: false },
+    };
+    await Bun.write(`${testDir}/goopspec.json`, JSON.stringify(projectConfig));
+
+    const messages = mock(async () => [{ info: { role: "assistant" } }]);
+    const promptAsync = mock(async () => undefined);
+    Object.assign(ctx.sdk.client, { session: { messages, promptAsync } });
+
+    await dispatchLazyAutopilotNudge(ctx, "sess-off");
+    await Promise.resolve();
+
+    expect(messages).not.toHaveBeenCalled();
+    expect(promptAsync).not.toHaveBeenCalled();
+    expect(ctx.pendingLazyAutopilotNudges.has("sess-off")).toBe(false);
   });
 });

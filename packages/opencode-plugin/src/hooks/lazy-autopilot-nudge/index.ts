@@ -1,8 +1,15 @@
 import type { PluginContext } from "../../core/types.js";
-import { logError } from "../../shared/logger.js";
+import { loadMergedConfig } from "../../features/setup/index.js";
+import { log, logError } from "../../shared/logger.js";
 import type { HookFactory, Hooks } from "../types.js";
 import { safeHandler } from "../utils.js";
-import { lastMessageRole } from "./guards.js";
+import { type NudgeGuardInput, evaluateNudgeGuards, lastMessageRole } from "./guards.js";
+import {
+  clearNudgeRateLimitState,
+  createNudgeRateLimitCheck,
+  recordNudge,
+  resolveLazyAutopilotNudgeConfig,
+} from "./rate-limit.js";
 
 export const LAZY_AUTOPILOT_NUDGE_TEXT =
   "LAZY AUTOPILOT ENGAGED - Do not pause unless you 100% cannot move forward without something from the user. Use your best judgement and continue.";
@@ -28,6 +35,10 @@ export async function dispatchLazyAutopilotNudge(
   sessionID: string,
 ): Promise<void> {
   if (!sessionID || ctx.pendingLazyAutopilotNudges.has(sessionID)) return;
+
+  const nudgeConfig = resolveLazyAutopilotNudgeConfig(loadMergedConfig(ctx.sdk.directory));
+  if (!nudgeConfig.enabled) return;
+
   ctx.pendingLazyAutopilotNudges.set(sessionID, { status: "queued", source: "prompt-async" });
   const pending = ctx.pendingLazyAutopilotNudges.get(sessionID);
   if (!pending) return;
@@ -52,6 +63,29 @@ export async function dispatchLazyAutopilotNudge(
       return;
     }
 
+    const workflow = ctx.stateManager.getActiveWorkflow();
+    const guardInput: NudgeGuardInput = {
+      sessionID,
+      workflowId: ctx.stateManager.getActiveWorkflowId(),
+      phase: workflow.phase,
+      lazyAutopilot: workflow.lazyAutopilot,
+      acceptanceConfirmed: workflow.acceptanceConfirmed,
+      lastMessages: response,
+      lastAssistantText: undefined,
+      rateLimitCheck: createNudgeRateLimitCheck(ctx, nudgeConfig),
+      killSwitch: true,
+    };
+
+    const guardResult = evaluateNudgeGuards(ctx, guardInput);
+    if (guardResult.suppressed) {
+      log("Lazy autopilot nudge suppressed", {
+        sessionID,
+        reason: guardResult.reason,
+      });
+      clearNudge(ctx, sessionID);
+      return;
+    }
+
     const livePending = ctx.pendingLazyAutopilotNudges.get(sessionID);
     if (!livePending || livePending.status !== "queued" || livePending.source !== "prompt-async") {
       return;
@@ -59,6 +93,9 @@ export async function dispatchLazyAutopilotNudge(
 
     // Transition before promptAsync: concurrent idle events cannot both send.
     livePending.status = "in-flight";
+    const workflowId = ctx.stateManager.getActiveWorkflowId();
+    recordNudge(ctx, sessionID, workflowId);
+
     const request = session.promptAsync({
       path: { id: sessionID },
       body: { parts: [{ type: "text", text: LAZY_AUTOPILOT_NUDGE_TEXT }] },
@@ -89,3 +126,6 @@ export const lazyAutopilotNudgeHookFactory: HookFactory = (ctx: PluginContext): 
     },
   ),
 });
+
+/** Exported for event-handler lifecycle cleanup (MH8). */
+export { clearNudgeRateLimitState };

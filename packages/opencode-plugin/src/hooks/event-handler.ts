@@ -17,7 +17,10 @@
 import type { SdkEvent } from "../core/sdk-compat.js";
 import type { PluginContext } from "../core/types.js";
 import { dispatchPendingCompaction } from "../tools/goop-compact/index.js";
-import { dispatchLazyAutopilotNudge } from "./lazy-autopilot-nudge/index.js";
+import {
+  clearNudgeRateLimitState,
+  dispatchLazyAutopilotNudge,
+} from "./lazy-autopilot-nudge/index.js";
 import type { HookFactory, Hooks } from "./types.js";
 import { safeHandler } from "./utils.js";
 
@@ -62,6 +65,8 @@ function isSessionDeleted(event: SdkEvent): event is SessionDeletedEvent {
 function clearCompactionState(ctx: PluginContext, sessionID: string): void {
   ctx.pendingCompactions.delete(sessionID);
   ctx.compactionHandoff.delete(sessionID);
+  clearNudgeRateLimitState(sessionID);
+  ctx.pendingLazyAutopilotNudges.delete(sessionID);
 }
 
 // ---------------------------------------------------------------------------

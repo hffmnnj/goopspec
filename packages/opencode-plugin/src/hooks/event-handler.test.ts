@@ -164,7 +164,26 @@ describe("event-handler hook", () => {
   });
 
   it("dispatches one lazy autopilot nudge when duplicate idle events are deferred", async () => {
-    const ctx = createMockPluginContext({ testDir });
+    const ctx = createMockPluginContext({
+      testDir,
+      state: {
+        activeWorkflowId: "default",
+        workflows: {
+          default: {
+            phase: "execute",
+            mode: "standard",
+            depth: "standard",
+            interviewComplete: false,
+            specLocked: false,
+            acceptanceConfirmed: true,
+            currentWave: 1,
+            totalWaves: 3,
+            autopilot: false,
+            lazyAutopilot: true,
+          },
+        },
+      },
+    });
     const promptAsync = mock(async () => undefined);
     Object.assign(ctx.sdk.client, {
       session: {
