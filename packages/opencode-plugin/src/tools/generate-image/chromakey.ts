@@ -71,7 +71,6 @@ export function keyGreenScreen(image: RgbaImage, options: KeyGreenScreenOptions 
     }
 
     if (distanceSquared >= outerSquared || outerTolerance === innerTolerance) {
-      image.data[offset + 1] = despill(green, red, blue, 1);
       continue;
     }
 
