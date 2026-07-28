@@ -48,6 +48,18 @@ describe("buildBody", () => {
     expect(body.tool_choice).toEqual({ type: "image_generation" });
   });
 
+  it("pairs the image tool model with the responses model in the same body", async () => {
+    const body = await buildBody(await validated({ prompt: "a red circle", model: "gpt-image-2" }));
+
+    // The image tool must carry gpt-image-2 so the Responses API does not
+    // silently default image generation to gpt-image-1.
+    expect(body.tools[0].model).toBe("gpt-image-2");
+
+    // The top-level model must remain the responses/text model and must not
+    // be overwritten by the image model, otherwise text generation breaks.
+    expect(body.model).toBe("gpt-5.5");
+  });
+
   it("includes only specified tool fields", async () => {
     const body = await buildBody(
       await validated({
