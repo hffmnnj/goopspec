@@ -21,7 +21,7 @@ export const MAX_COUNT = 4;
 
 export const EXPIRY_MARGIN_MS = 60000;
 
-export const IMAGE_MODELS = ["gpt-image-2", "gpt-image-1.5"] as const;
+export const IMAGE_MODELS = ["gpt-image-2"] as const;
 
 export type ImageModel = (typeof IMAGE_MODELS)[number];
 
@@ -44,10 +44,6 @@ export type Detail = (typeof DETAIL_LEVELS)[number];
 export const IMAGE_ACTIONS = ["generate", "edit", "auto"] as const;
 
 export type ImageAction = (typeof IMAGE_ACTIONS)[number];
-
-export const INPUT_FIDELITIES = ["low", "high"] as const;
-
-export type InputFidelity = (typeof INPUT_FIDELITIES)[number];
 
 export const MODERATION_LEVELS = ["auto", "low"] as const;
 

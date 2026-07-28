@@ -14,9 +14,7 @@ import {
   BACKGROUNDS,
   DETAIL_LEVELS,
   IMAGE_ACTIONS,
-  IMAGE_MODELS,
   IMAGE_QUALITIES,
-  INPUT_FIDELITIES,
   MAX_COUNT,
   MAX_INPUT_IMAGES,
   MODERATION_LEVELS,
@@ -36,25 +34,14 @@ function isPartialFailure(result: {
   return result.partial === true && result.error !== undefined;
 }
 
-function formatModelUsed(
-  model: string,
-  substitution?: { from: string; to: string; reason: string },
-): string {
-  if (substitution === undefined) {
-    return model;
-  }
-  return `${model} (substituted from ${substitution.from} because ${substitution.reason})`;
-}
-
 function formatSuccessResult(
   result: { paths: string[]; revisedPrompt?: string; partial?: true; error?: Error },
   model: string,
-  substitution?: { from: string; to: string; reason: string },
 ): string {
   const lines: string[] = [];
   const header = isPartialFailure(result) ? "Partial success" : "Success";
   lines.push(
-    `${header}: generated ${result.paths.length} image${result.paths.length === 1 ? "" : "s"} using ${formatModelUsed(model, substitution)}.`,
+    `${header}: generated ${result.paths.length} image${result.paths.length === 1 ? "" : "s"} using ${model}.`,
   );
 
   if (result.paths.length > 0) {
@@ -162,16 +149,11 @@ export function createGenerateImageTool(ctx: PluginContext): ToolDefinition {
         .max(MAX_INPUT_IMAGES)
         .optional()
         .describe("Up to 5 reference image paths to condition or edit generation on"),
-      model: tool.schema
-        .string()
-        .optional()
-        .describe(`Image model to use. Allowed: ${IMAGE_MODELS.join(", ")}`),
       size: tool.schema
         .string()
         .optional()
         .describe(
-          "Image dimensions. For gpt-image-1.5 use 1024x1024, 1536x1024, 1024x1536, or auto. " +
-            "For gpt-image-2 use a custom <width>x<height> with both edges divisible by 16, " +
+          "Image dimensions. Use a custom <width>x<height> with both edges divisible by 16, " +
             "max edge 3840, and total pixels between 655,360 and 8,294,400.",
         ),
       quality: tool.schema
@@ -193,10 +175,6 @@ export function createGenerateImageTool(ctx: PluginContext): ToolDefinition {
         .max(MAX_COUNT)
         .optional()
         .describe(`Number of images to generate (1-${MAX_COUNT})`),
-      inputFidelity: tool.schema
-        .string()
-        .optional()
-        .describe(`Input image fidelity. Allowed: ${INPUT_FIDELITIES.join(", ")}`),
       timeout: tool.schema
         .number()
         .positive()
@@ -256,13 +234,11 @@ export function createGenerateImageTool(ctx: PluginContext): ToolDefinition {
 
         const rawOptions: GenerateOptions = {
           prompt: args.prompt,
-          model: (args.model ?? "gpt-image-1.5") as GenerateOptions["model"],
           size: args.size,
           quality: args.quality as GenerateOptions["quality"],
           outputFormat: args.outputFormat as GenerateOptions["outputFormat"],
           background: args.background as GenerateOptions["background"],
           count: args.count,
-          inputFidelity: args.inputFidelity as GenerateOptions["inputFidelity"],
           timeoutSeconds: args.timeout,
           inputImages: args.images,
           authFile: args.authFile,
@@ -299,7 +275,7 @@ export function createGenerateImageTool(ctx: PluginContext): ToolDefinition {
           return formatFailureResult(result.error);
         }
 
-        return formatSuccessResult(result, validated.model, validation.modelSubstitution);
+        return formatSuccessResult(result, validated.model);
       } catch (error: unknown) {
         logError("generate_image tool failed", error);
 

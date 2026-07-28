@@ -1,8 +1,7 @@
 /**
- * Input validation and model gating for generate_image.
+ * Input validation for generate_image.
  *
- * Fails fast before any credential or network work, and reports model
- * substitutions so the tool layer can surface them honestly.
+ * Fails fast before any credential or network work.
  */
 
 import { stat } from "node:fs/promises";
@@ -14,13 +13,10 @@ import {
   DETAIL_LEVELS,
   type Detail,
   IMAGE_ACTIONS,
-  IMAGE_MODELS,
   IMAGE_QUALITIES,
-  INPUT_FIDELITIES,
   type ImageAction,
   type ImageModel,
   type ImageQuality,
-  type InputFidelity,
   MAX_COUNT,
   MAX_INPUT_IMAGES,
   MAX_INPUT_IMAGE_BYTES,
@@ -40,22 +36,14 @@ export interface ValidatedGenerateOptions {
   background?: Background;
   detail?: Detail;
   action?: ImageAction;
-  inputFidelity?: InputFidelity;
   moderation?: Moderation;
   count: number;
   inputImages: string[];
   timeoutSeconds: number;
 }
 
-export interface ModelSubstitution {
-  from: ImageModel;
-  to: ImageModel;
-  reason: string;
-}
-
 export interface ValidationResult {
   options: ValidatedGenerateOptions;
-  modelSubstitution?: ModelSubstitution;
 }
 
 export class ValidationError extends Error {
@@ -116,45 +104,37 @@ function parseDimensions(size: string): [number, number] {
   return [Number.parseInt(match[1], 10), Number.parseInt(match[2], 10)];
 }
 
-function validateSize(model: ImageModel, size: string | undefined): string | undefined {
+function validateSize(size: string | undefined): string | undefined {
   if (size === undefined) {
     return undefined;
   }
 
-  if (model !== "gpt-image-2") {
-    const allowed = new Set(["1024x1024", "1536x1024", "1024x1536", "auto"]);
-    if (!allowed.has(size)) {
-      throw new ValidationError(
-        `Size "${size}" is not supported for ${model}. Allowed: 1024x1024, 1536x1024, 1024x1536, auto.`,
-      );
-    }
-    return size;
-  }
-
   if (size === "auto") {
-    throw new ValidationError(`Size "auto" is not supported for ${model}.`);
+    throw new ValidationError('Size "auto" is not supported for gpt-image-2.');
   }
 
   const [width, height] = parseDimensions(size);
 
   if (width % 16 !== 0 || height % 16 !== 0) {
-    throw new ValidationError(`Size "${size}" must have both edges divisible by 16 for ${model}.`);
+    throw new ValidationError(
+      `Size "${size}" must have both edges divisible by 16 for gpt-image-2.`,
+    );
   }
 
   const maxEdge = Math.max(width, height);
   if (maxEdge > 3840) {
-    throw new ValidationError(`Size "${size}" exceeds the 3840px maximum edge for ${model}.`);
+    throw new ValidationError(`Size "${size}" exceeds the 3840px maximum edge for gpt-image-2.`);
   }
 
   const minEdge = Math.min(width, height);
   if (maxEdge / minEdge > 3) {
-    throw new ValidationError(`Size "${size}" exceeds the 3:1 aspect ratio limit for ${model}.`);
+    throw new ValidationError(`Size "${size}" exceeds the 3:1 aspect ratio limit for gpt-image-2.`);
   }
 
   const pixels = width * height;
   if (pixels < 655360 || pixels > 8294400) {
     throw new ValidationError(
-      `Size "${size}" has ${pixels.toLocaleString()} pixels, but ${model} requires between 655,360 and 8,294,400 pixels.`,
+      `Size "${size}" has ${pixels.toLocaleString()} pixels, but gpt-image-2 requires between 655,360 and 8,294,400 pixels.`,
     );
   }
 
@@ -192,37 +172,13 @@ async function validateInputImages(paths: string[] | undefined): Promise<string[
   return images;
 }
 
-function applyModelGating(
-  model: ImageModel,
-  background: Background | undefined,
-): { model: ImageModel; substitution?: ModelSubstitution } {
-  if (model === "gpt-image-2" && background === "transparent") {
-    return {
-      model: "gpt-image-1.5",
-      substitution: {
-        from: "gpt-image-2",
-        to: "gpt-image-1.5",
-        reason:
-          'background="transparent" is not supported by gpt-image-2; the model has been switched to gpt-image-1.5.',
-      },
-    };
-  }
-
-  return { model };
-}
-
 export async function validateGenerateOptions(raw: GenerateOptions): Promise<ValidationResult> {
   if (!raw.prompt || typeof raw.prompt !== "string" || raw.prompt.trim().length === 0) {
     throw new ValidationError("A non-empty prompt is required.");
   }
 
-  const model = validateEnum(raw.model, IMAGE_MODELS, "Model");
-  if (!model) {
-    throw new ValidationError("Model is required.");
-  }
-
-  const validatedSize = validateSize(model, raw.size);
-  const validatedOutputFormat = validateEnum(
+  const validatedSize = validateSize(raw.size);
+  const requestedOutputFormat = validateEnum(
     raw.outputFormat,
     OUTPUT_FORMATS,
     "Output format",
@@ -230,19 +186,18 @@ export async function validateGenerateOptions(raw: GenerateOptions): Promise<Val
   );
   const validatedQuality = validateEnum(raw.quality, IMAGE_QUALITIES, "Quality");
   const validatedBackground = validateEnum(raw.background, BACKGROUNDS, "Background");
+  if (validatedBackground === "transparent" && requestedOutputFormat === "jpeg") {
+    throw new ValidationError(
+      "Transparent background cannot be encoded as jpeg. Use png or webp for alpha-capable output.",
+    );
+  }
+  const validatedOutputFormat =
+    validatedBackground === "transparent" && requestedOutputFormat === undefined
+      ? "png"
+      : requestedOutputFormat;
   const validatedDetail = validateEnum(raw.detail, DETAIL_LEVELS, "Detail");
   const validatedAction = validateEnum(raw.action, IMAGE_ACTIONS, "Action");
-  const validatedInputFidelity = validateEnum(
-    raw.inputFidelity,
-    INPUT_FIDELITIES,
-    "Input fidelity",
-  );
   const validatedModeration = validateEnum(raw.moderation, MODERATION_LEVELS, "Moderation");
-
-  const { model: finalModel, substitution } = applyModelGating(model, validatedBackground);
-
-  // input_fidelity is invalid for gpt-image-2; drop it rather than sending null/undefined.
-  const finalInputFidelity = finalModel === "gpt-image-2" ? undefined : validatedInputFidelity;
 
   const inputImages = await validateInputImages(raw.inputImages);
 
@@ -255,22 +210,18 @@ export async function validateGenerateOptions(raw: GenerateOptions): Promise<Val
 
   const options: ValidatedGenerateOptions = {
     prompt: raw.prompt,
-    model: finalModel,
+    model: "gpt-image-2",
     size: validatedSize,
     quality: validatedQuality,
     outputFormat: validatedOutputFormat,
     background: validatedBackground,
     detail: validatedDetail,
     action: validatedAction,
-    ...(finalInputFidelity !== undefined && { inputFidelity: finalInputFidelity }),
     moderation: validatedModeration,
     count: clampCount(raw.count),
     inputImages,
     timeoutSeconds,
   };
 
-  return {
-    options,
-    modelSubstitution: substitution,
-  };
+  return { options };
 }
