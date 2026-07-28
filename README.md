@@ -19,10 +19,11 @@ You ask for a feature. The model starts editing files within ten seconds, guesse
 GoopSpec is an [OpenCode](https://opencode.ai) plugin that puts a contract in front of that. You describe what you want. It interviews you, researches the codebase, writes a specification, and shows it to you. Nothing gets built until you say yes. Nothing gets marked done until you say yes again.
 
 ```
-discuss  →  plan  →  execute  →  accept
-   ↑          ↑                     ↑
-interview  you lock            you sign off
-           the spec
+discuss  -->  plan  -->  execute  -->  accept
+   |           |                        |
+   |           |                        |
+interview   you lock                you sign off
+            the spec
 ```
 
 Underneath that loop sits a SQLite state engine, 14 specialised agents, 35 tools, a memory system that compounds across projects, and a set of runtime hooks that stop the orchestrator from writing code even when it wants to.
@@ -141,16 +142,16 @@ When you accept a milestone, the archive pipeline moves the workflow documents a
 ### Contract gate (end of plan)
 
 ```
-┌───────────────────────────────────────────────────────┐
-│  CONTRACT GATE                                        │
-├──────────────────────────┬────────────────────────────┤
-│  MUST-HAVES              │  OUT OF SCOPE              │
-│  • Login with email      │  • OAuth                   │
-│  • Session persistence   │  • Password reset          │
-│  • Inline error messages │                            │
-├──────────────────────────┴────────────────────────────┤
-│  Type "confirm" to lock. Changes require /goop-amend. │
-└───────────────────────────────────────────────────────┘
++-------------------------------------------------------+
+|  CONTRACT GATE                                        |
++--------------------------+----------------------------+
+|  MUST-HAVES              |  OUT OF SCOPE              |
+|  - Login with email      |  - OAuth                   |
+|  - Session persistence   |  - Password reset          |
+|  - Inline error messages |                            |
++--------------------------+----------------------------+
+|  Type "confirm" to lock. Changes require /goop-amend. |
++-------------------------------------------------------+
 ```
 
 In `strict` enforcement, the spec has to carry all five sections before it can lock: vision, must-haves, out of scope, risks, and constraints. An empty section blocks the lock.
@@ -160,17 +161,17 @@ Once locked, the spec is read-only to every executor. Changing it takes `/goop-a
 ### Acceptance gate (end of execute)
 
 ```
-┌───────────────────────────────────────────────────────┐
-│  ACCEPTANCE GATE                                      │
-├───────────────────────────────────────────────────────┤
-│  ✓ Login with email        auth.test.ts:15            │
-│  ✓ Session persistence     session.test.ts:42         │
-│  ✓ Inline error messages   manual check               │
-│                                                       │
-│  Tests: 24/24   Typecheck: clean   Blockers: 0        │
-├───────────────────────────────────────────────────────┤
-│  Type "accept" to confirm completion.                 │
-└───────────────────────────────────────────────────────┘
++-------------------------------------------------------+
+|  ACCEPTANCE GATE                                      |
++-------------------------------------------------------+
+|  [x] Login with email        auth.test.ts:15          |
+|  [x] Session persistence     session.test.ts:42       |
+|  [x] Inline error messages   manual check             |
+|                                                       |
+|  Tests: 24/24   Typecheck: clean   Blockers: 0        |
++-------------------------------------------------------+
+|  Type "accept" to confirm completion.                 |
++-------------------------------------------------------+
 ```
 
 Neither gate can be bypassed. Autopilot doesn't relax them. There is no config flag that turns them off.
@@ -234,18 +235,18 @@ Every subagent returns the same five sections: `STATUS`, `SUMMARY`, `ARTIFACTS`,
 A blueprint decomposes into ordered waves. Waves run sequentially; tasks inside a wave can run in parallel when they don't overlap.
 
 ```
-Wave 1  Foundation
-  1.1  notifications table + migration        executor-high     ✓
-  1.2  TypeScript interfaces                  executor-low      ✓
+Wave 1  Foundation                                    [done]
+  1.1  notifications table + migration     executor-high    [x]
+  1.2  TypeScript interfaces               executor-low     [x]
 
-Wave 2  Core
-  2.1  notification service                   executor-medium   ✓
-  2.2  mark-as-read endpoint                  executor-medium   ✓
+Wave 2  Core                                          [done]
+  2.1  notification service                executor-medium  [x]
+  2.2  mark-as-read endpoint               executor-medium  [x]
 
-Wave 3  Interface
-  3.1  NotificationBadge                      frontend-medium   ▸
-  3.2  NotificationDropdown                   frontend-high     ·
-  3.3  preferences page                       frontend-medium   ·
+Wave 3  Interface                                  [running]
+  3.1  NotificationBadge                   frontend-medium  [~]
+  3.2  NotificationDropdown                frontend-high    [ ]
+  3.3  preferences page                    frontend-medium  [ ]
 ```
 
 Commit rules are strict. One commit per task minimum, conventional format, and no reference to GoopSpec internals in the message. Reviewers reading your history should see clean engineering, not workflow metadata.
