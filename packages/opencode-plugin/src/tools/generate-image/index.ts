@@ -25,18 +25,26 @@ import { StreamError, describeStreamError } from "./sse.js";
 import type { GenerateImageArgs, GenerateOptions } from "./types.js";
 import { ValidationError, validateGenerateOptions } from "./validate.js";
 
-function isPartialFailure(result: {
+type PromptAugmentation = { original: string; appended: string; final: string };
+
+type GenerationResultView = {
   paths: string[];
   revisedPrompt?: string;
+  warnings?: string[];
   partial?: true;
   error?: Error;
-}): result is { paths: string[]; revisedPrompt?: string; partial: true; error: Error } {
+};
+
+function isPartialFailure(
+  result: GenerationResultView,
+): result is GenerationResultView & { partial: true; error: Error } {
   return result.partial === true && result.error !== undefined;
 }
 
 function formatSuccessResult(
-  result: { paths: string[]; revisedPrompt?: string; partial?: true; error?: Error },
+  result: GenerationResultView,
   model: string,
+  promptAugmentation?: PromptAugmentation,
 ): string {
   const lines: string[] = [];
   const header = isPartialFailure(result) ? "Partial success" : "Success";
@@ -53,6 +61,23 @@ function formatSuccessResult(
 
   if (result.revisedPrompt !== undefined) {
     lines.push(`Revised prompt: ${result.revisedPrompt}`);
+  }
+
+  if (promptAugmentation !== undefined) {
+    lines.push(
+      "Transparency: gpt-image-2 has no native transparent background. The image was " +
+        "rendered on a green screen and keyed to alpha locally. The following instruction " +
+        "was appended to your prompt:",
+    );
+    lines.push("");
+    lines.push(promptAugmentation.appended.trim());
+  }
+
+  if (result.warnings !== undefined && result.warnings.length > 0) {
+    lines.push("Warnings:");
+    for (const warning of result.warnings) {
+      lines.push(`  ${warning}`);
+    }
   }
 
   if (isPartialFailure(result)) {
@@ -250,6 +275,7 @@ export function createGenerateImageTool(ctx: PluginContext): ToolDefinition {
 
         const validation = await validateGenerateOptions(rawOptions);
         const validated = validation.options;
+        const promptAugmentation = validation.promptAugmentation;
 
         log("generate_image tool validated options", {
           model: validated.model,
@@ -275,7 +301,7 @@ export function createGenerateImageTool(ctx: PluginContext): ToolDefinition {
           return formatFailureResult(result.error);
         }
 
-        return formatSuccessResult(result, validated.model);
+        return formatSuccessResult(result, validated.model, promptAugmentation);
       } catch (error: unknown) {
         logError("generate_image tool failed", error);
 
