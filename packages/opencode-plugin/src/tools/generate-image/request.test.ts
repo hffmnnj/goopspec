@@ -157,6 +157,35 @@ describe("buildBody", () => {
     const images = body.input[0].content.slice(1) as { type: "input_image"; image_url: string }[];
     expect(images[0].image_url).toMatch(/^data:image\/jpeg;base64,/);
   });
+
+  describe("background wire translation", () => {
+    it("translates transparent to opaque on the wire", async () => {
+      const body = await buildBody(await validated({ prompt: "x", background: "transparent" }));
+      expect(body.tools[0].background).toBe("opaque");
+    });
+
+    it("passes opaque through unchanged", async () => {
+      const body = await buildBody(await validated({ prompt: "x", background: "opaque" }));
+      expect(body.tools[0].background).toBe("opaque");
+    });
+
+    it("passes auto through unchanged", async () => {
+      const body = await buildBody(await validated({ prompt: "x", background: "auto" }));
+      expect(body.tools[0].background).toBe("auto");
+    });
+
+    it("omits the background key entirely when undefined", async () => {
+      const body = await buildBody(await validated({ prompt: "x" }));
+      expect(body.tools[0].background).toBeUndefined();
+      expect(Object.keys(body.tools[0])).not.toContain("background");
+    });
+
+    it("preserves tool model gpt-image-2 and top-level model gpt-5.5 for transparent", async () => {
+      const body = await buildBody(await validated({ prompt: "x", background: "transparent" }));
+      expect(body.tools[0].model).toBe("gpt-image-2");
+      expect(body.model).toBe("gpt-5.5");
+    });
+  });
 });
 
 describe("sendRequest", () => {

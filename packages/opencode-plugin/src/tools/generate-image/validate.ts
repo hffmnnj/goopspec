@@ -44,6 +44,7 @@ export interface ValidatedGenerateOptions {
 
 export interface ValidationResult {
   options: ValidatedGenerateOptions;
+  promptAugmentation?: { original: string; appended: string; final: string };
 }
 
 export class ValidationError extends Error {
@@ -52,6 +53,12 @@ export class ValidationError extends Error {
     this.name = "ValidationError";
   }
 }
+
+/** Appended for transparent backgrounds: model renders on green, local chromakey keys to alpha. Separator is part of `appended` so `final === original + appended`. */
+const GREEN_SCREEN_SUFFIX =
+  "\n\nRender the subject on a uniform, fully saturated green background. " +
+  "Produce no shadows, no contact shadows, and no reflections. " +
+  "Avoid green spill or green light bouncing onto the subject.";
 
 function isInArray<T>(value: unknown, allowed: readonly T[]): value is T {
   return allowed.includes(value as T);
@@ -186,9 +193,12 @@ export async function validateGenerateOptions(raw: GenerateOptions): Promise<Val
   );
   const validatedQuality = validateEnum(raw.quality, IMAGE_QUALITIES, "Quality");
   const validatedBackground = validateEnum(raw.background, BACKGROUNDS, "Background");
-  if (validatedBackground === "transparent" && requestedOutputFormat === "jpeg") {
+  if (
+    validatedBackground === "transparent" &&
+    (requestedOutputFormat === "jpeg" || requestedOutputFormat === "webp")
+  ) {
     throw new ValidationError(
-      "Transparent background cannot be encoded as jpeg. Use png or webp for alpha-capable output.",
+      "Transparent background requires png output. Transparency is produced by a local chromakey step that encodes png only; jpeg carries no alpha channel and webp is not supported by the keyer. Use png.",
     );
   }
   const validatedOutputFormat =
@@ -208,8 +218,11 @@ export async function validateGenerateOptions(raw: GenerateOptions): Promise<Val
       ? raw.timeoutSeconds
       : DEFAULT_TIMEOUT_SECONDS;
 
+  const augmentedPrompt =
+    validatedBackground === "transparent" ? raw.prompt + GREEN_SCREEN_SUFFIX : raw.prompt;
+
   const options: ValidatedGenerateOptions = {
-    prompt: raw.prompt,
+    prompt: augmentedPrompt,
     model: "gpt-image-2",
     size: validatedSize,
     quality: validatedQuality,
@@ -223,5 +236,10 @@ export async function validateGenerateOptions(raw: GenerateOptions): Promise<Val
     timeoutSeconds,
   };
 
-  return { options };
+  const promptAugmentation =
+    validatedBackground === "transparent"
+      ? { original: raw.prompt, appended: GREEN_SCREEN_SUFFIX, final: augmentedPrompt }
+      : undefined;
+
+  return { options, promptAugmentation };
 }

@@ -117,7 +117,9 @@ export async function buildBody(options: ValidatedGenerateOptions): Promise<Requ
   if (options.size) tool.size = options.size;
   if (options.quality) tool.quality = options.quality;
   if (options.outputFormat) tool.output_format = options.outputFormat;
-  if (options.background) tool.background = options.background;
+  if (options.background) {
+    tool.background = options.background === "transparent" ? "opaque" : options.background;
+  }
   if (options.detail) tool.detail = options.detail;
   if (options.action) tool.action = options.action;
   if (options.moderation) tool.moderation = options.moderation;

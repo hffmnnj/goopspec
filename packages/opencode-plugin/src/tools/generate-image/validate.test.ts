@@ -217,22 +217,77 @@ describe("validateGenerateOptions", () => {
     });
   });
 
-  describe("background and output format interaction (SPEC D3/MH6)", () => {
-    it("rejects transparent background with jpeg output and names png and webp alternatives", async () => {
+  describe("transparent background: green-screen augmentation and png requirement", () => {
+    it("returns promptAugmentation with final === original + appended", async () => {
+      const result = await validateGenerateOptions({ ...base, background: "transparent" });
+      const aug = result.promptAugmentation;
+      expect(aug).toBeDefined();
+      expect(aug?.final).toBe((aug?.original ?? "") + (aug?.appended ?? ""));
+    });
+
+    it("augmented prompt mentions green background and no shadows", async () => {
+      const result = await validateGenerateOptions({ ...base, background: "transparent" });
+      const final = result.promptAugmentation?.final ?? "";
+      expect(final).toContain("green background");
+      expect(final.toLowerCase()).toContain("no shadows");
+    });
+
+    it("sets options.prompt to the augmented final prompt", async () => {
+      const result = await validateGenerateOptions({ ...base, background: "transparent" });
+      const aug = result.promptAugmentation;
+      expect(aug).toBeDefined();
+      if (!aug) return;
+      expect(result.options.prompt).toBe(aug.final);
+    });
+
+    it("leaves options.background as transparent (internal intent survives validation)", async () => {
+      const result = await validateGenerateOptions({ ...base, background: "transparent" });
+      expect(result.options.background).toBe("transparent");
+    });
+
+    it("defaults output format to png when no format is specified", async () => {
+      const result = await validateGenerateOptions({ ...base, background: "transparent" });
+      expect(result.options.outputFormat).toBe("png");
+    });
+
+    it("rejects transparent background with jpeg output and mentions png", async () => {
       const error = await validateGenerateOptions({
         ...base,
         background: "transparent",
         outputFormat: "jpeg",
       }).catch((e: unknown) => e);
       expect(error).toBeInstanceOf(ValidationError);
-      expect((error as Error).message).toMatch(/Transparent background cannot be encoded as jpeg/);
       expect((error as Error).message).toContain("png");
-      expect((error as Error).message).toContain("webp");
     });
 
-    it("defaults output format to png when background is transparent and no format is specified", async () => {
-      const result = await validateGenerateOptions({ ...base, background: "transparent" });
-      expect(result.options.outputFormat).toBe("png");
+    it("rejects transparent background with webp output and mentions png", async () => {
+      const error = await validateGenerateOptions({
+        ...base,
+        background: "transparent",
+        outputFormat: "webp",
+      }).catch((e: unknown) => e);
+      expect(error).toBeInstanceOf(ValidationError);
+      expect((error as Error).message).toContain("png");
+    });
+  });
+
+  describe("non-transparent background: no augmentation", () => {
+    it("returns promptAugmentation undefined and unmodified prompt for opaque", async () => {
+      const result = await validateGenerateOptions({ ...base, background: "opaque" });
+      expect(result.promptAugmentation).toBeUndefined();
+      expect(result.options.prompt).toBe(base.prompt);
+    });
+
+    it("returns promptAugmentation undefined and unmodified prompt for auto", async () => {
+      const result = await validateGenerateOptions({ ...base, background: "auto" });
+      expect(result.promptAugmentation).toBeUndefined();
+      expect(result.options.prompt).toBe(base.prompt);
+    });
+
+    it("returns promptAugmentation undefined and unmodified prompt when background is omitted", async () => {
+      const result = await validateGenerateOptions({ ...base });
+      expect(result.promptAugmentation).toBeUndefined();
+      expect(result.options.prompt).toBe(base.prompt);
     });
   });
 });
