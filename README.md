@@ -182,22 +182,22 @@ Neither gate can be bypassed. Autopilot doesn't relax them. There is no config f
 
 One orchestrator, thirteen specialists. The orchestrator coordinates and never implements.
 
-| Agent | Alias | What it does | Default model |
-|-------|-------|--------------|---------------|
-| `goop-orchestrator` | The Conductor | Coordinates, enforces gates, tracks progress | `claude-opus-4-6` |
-| `goop-planner` | The Architect | Spec, blueprint, wave decomposition, traceability | `claude-opus-4-6` |
-| `goop-executor-high` | Senior Architect | Architecture, complex algorithms, security, API design | `claude-opus-4-6` |
-| `goop-executor-medium` | Craftsman | Business logic, utilities, tests, refactors, bug fixes | `claude-sonnet-4-6` |
-| `goop-executor-low` | Precision Operator | Config, renaming, scaffolding, markdown, boilerplate | `claude-sonnet-4-6` |
-| `goop-executor-frontend-high` | UI Artisan | Design systems, accessibility, animation, visual polish | `claude-opus-4-6` |
-| `goop-executor-frontend-medium` | UI Integrator | Component work, state wiring, moderate UI refactors | `claude-sonnet-4-6` |
-| `goop-executor-frontend-low` | UI Precision Operator | Markup, tokens, copy, simple styling | `claude-sonnet-4-6` |
-| `goop-researcher` | The Scholar | Domain research, technology evaluation, synthesis | `claude-sonnet-4-6` |
-| `goop-explorer` | The Scout | Codebase mapping, pattern detection, reconnaissance | `claude-sonnet-4-6` |
-| `goop-verifier` | The Auditor | Verification against spec, security audit, trusts nothing | `claude-sonnet-4-6` |
-| `goop-tester` | The Guardian | Test authoring, coverage, edge cases | `claude-sonnet-4-6` |
-| `goop-debugger` | The Detective | Hypothesis-driven root cause analysis | `claude-sonnet-4-6` |
-| `goop-writer` | The Scribe | Documentation and technical writing | `claude-sonnet-4-6` |
+| Agent | What it does | Default model |
+|-------|--------------|---------------|
+| `goop-orchestrator` | Coordinates every task, enforces the gates, tracks progress | `claude-opus-4-6` |
+| `goop-planner` | Spec, blueprint, wave decomposition, traceability matrix | `claude-opus-4-6` |
+| `goop-executor-high` | Architecture, complex algorithms, security, API design | `claude-opus-4-6` |
+| `goop-executor-medium` | Business logic, utilities, tests, refactors, bug fixes | `claude-sonnet-4-6` |
+| `goop-executor-low` | Config, renaming, scaffolding, markdown, boilerplate | `claude-sonnet-4-6` |
+| `goop-executor-frontend-high` | Design systems, accessibility, animation, visual polish | `claude-opus-4-6` |
+| `goop-executor-frontend-medium` | Component work, state wiring, moderate UI refactors | `claude-sonnet-4-6` |
+| `goop-executor-frontend-low` | Markup, design tokens, copy, simple styling | `claude-sonnet-4-6` |
+| `goop-researcher` | Domain research, technology evaluation, synthesis | `claude-sonnet-4-6` |
+| `goop-explorer` | Codebase mapping, pattern detection, reconnaissance | `claude-sonnet-4-6` |
+| `goop-verifier` | Verification against the spec, security audit, trusts nothing | `claude-sonnet-4-6` |
+| `goop-tester` | Test authoring, coverage, edge cases | `claude-sonnet-4-6` |
+| `goop-debugger` | Hypothesis-driven root cause analysis | `claude-sonnet-4-6` |
+| `goop-writer` | Documentation and technical writing | `claude-sonnet-4-6` |
 
 ### Six executor tiers
 
