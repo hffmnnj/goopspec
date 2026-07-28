@@ -430,4 +430,98 @@ describe("createGenerateImageTool", () => {
     expect(result).toMatch(/transparent background requires png/i);
     expect(result).toContain("png");
   });
+
+  it("rejects a transparent request with a .webp out path before any network call", async () => {
+    const authPath = join(testDir, "auth.json");
+    writeAuthFile(authPath, ACCESS_TOKEN);
+
+    const result = await withMockedFetch([], async (controls) => {
+      const r = await run(createGenerateImageTool(ctx), {
+        ...baseArgs(authPath),
+        background: "transparent",
+        out: "logo.webp",
+      });
+      expect(controls.requests.length).toBe(0);
+      return r;
+    });
+
+    expect(result).toMatch(/validation error/i);
+    expect(result).toContain("png");
+    expect(result).toContain(".webp");
+  });
+
+  it("rejects a transparent request with a .jpg out path before any network call", async () => {
+    const authPath = join(testDir, "auth.json");
+    writeAuthFile(authPath, ACCESS_TOKEN);
+
+    const result = await withMockedFetch([], async (controls) => {
+      const r = await run(createGenerateImageTool(ctx), {
+        ...baseArgs(authPath),
+        background: "transparent",
+        out: "logo.jpg",
+      });
+      expect(controls.requests.length).toBe(0);
+      return r;
+    });
+
+    expect(result).toMatch(/validation error/i);
+    expect(result).toContain("png");
+  });
+
+  it("accepts a transparent request with a .png out path", async () => {
+    const authPath = join(testDir, "auth.json");
+    writeAuthFile(authPath, ACCESS_TOKEN);
+
+    const result = await withMockedFetch([], async (controls) => {
+      const r = await run(createGenerateImageTool(ctx), {
+        ...baseArgs(authPath),
+        background: "transparent",
+        out: "logo.png",
+        dryRun: true,
+      });
+      expect(controls.requests.length).toBe(0);
+      return r;
+    });
+
+    expect(result).toContain("Dry run");
+    expect(result).not.toMatch(/validation error/i);
+  });
+
+  it("accepts a transparent request with an extensionless out path", async () => {
+    const authPath = join(testDir, "auth.json");
+    writeAuthFile(authPath, ACCESS_TOKEN);
+
+    const result = await withMockedFetch([], async (controls) => {
+      const r = await run(createGenerateImageTool(ctx), {
+        ...baseArgs(authPath),
+        background: "transparent",
+        out: "logo",
+        dryRun: true,
+      });
+      expect(controls.requests.length).toBe(0);
+      return r;
+    });
+
+    expect(result).toContain("Dry run");
+    expect(result).not.toMatch(/validation error/i);
+  });
+
+  it("accepts a non-transparent request with a .webp out path (fix does not leak)", async () => {
+    const authPath = join(testDir, "auth.json");
+    writeAuthFile(authPath, ACCESS_TOKEN);
+
+    const result = await withMockedFetch([], async (controls) => {
+      const r = await run(createGenerateImageTool(ctx), {
+        ...baseArgs(authPath),
+        background: "opaque",
+        out: "logo.webp",
+        dryRun: true,
+      });
+      expect(controls.requests.length).toBe(0);
+      return r;
+    });
+
+    expect(result).toContain("Dry run");
+    expect(result).not.toMatch(/validation error/i);
+  });
 });

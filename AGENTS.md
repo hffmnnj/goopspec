@@ -376,6 +376,7 @@ Three MCP tools wrapping external CLIs for AST-aware code analysis and transform
 
 - **Args:** `prompt` (required), `out`, `images[]`, `size`, `quality`, `outputFormat`, `background`, `count`, `timeout`, `dryRun`, `authFile`, `action`, `moderation`, `outputCompression`, `detail`, `mask`, `allowRefresh`
 - **When to use:** Generating images using the user's existing ChatGPT subscription OAuth credentials — no API key required. Uses `gpt-image-2`. Images default to `.goopspec/generated-images/`; pass an explicit `out` path to place an asset elsewhere. For prompting technique, see `goop_reference({ name: "image-prompting" })`.
+- **Transparency:** `background: "transparent"` is delivered via green-screen prompt injection plus a local chromakey step that always encodes PNG — transparent output is therefore PNG only, and a non-`.png` `out` extension is rejected at validation. The chromakey codec is `pngjs`, a runtime dependency isolated behind `png-codec.ts`.
 
 ## Gotchas (Auto)
 

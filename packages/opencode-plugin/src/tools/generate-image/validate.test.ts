@@ -271,6 +271,61 @@ describe("validateGenerateOptions", () => {
     });
   });
 
+  describe("transparent background: out path extension validation", () => {
+    it("rejects a .webp out path and mentions png in the error", async () => {
+      const error = await validateGenerateOptions(
+        { ...base, background: "transparent" },
+        "logo.webp",
+      ).catch((e: unknown) => e);
+      expect(error).toBeInstanceOf(ValidationError);
+      expect((error as Error).message).toContain("png");
+      expect((error as Error).message).toContain(".webp");
+    });
+
+    it("rejects a .jpg out path and mentions png in the error", async () => {
+      const error = await validateGenerateOptions(
+        { ...base, background: "transparent" },
+        "logo.jpg",
+      ).catch((e: unknown) => e);
+      expect(error).toBeInstanceOf(ValidationError);
+      expect((error as Error).message).toContain("png");
+    });
+
+    it("accepts a .png out path", async () => {
+      const result = await validateGenerateOptions(
+        { ...base, background: "transparent" },
+        "logo.png",
+      );
+      expect(result.options.background).toBe("transparent");
+    });
+
+    it("accepts a .PNG out path (case-insensitive)", async () => {
+      const result = await validateGenerateOptions(
+        { ...base, background: "transparent" },
+        "logo.PNG",
+      );
+      expect(result.options.background).toBe("transparent");
+    });
+
+    it("accepts an extensionless out path", async () => {
+      const result = await validateGenerateOptions({ ...base, background: "transparent" }, "logo");
+      expect(result.options.background).toBe("transparent");
+    });
+
+    it("does not check the out path when background is not transparent", async () => {
+      const result = await validateGenerateOptions({ ...base, background: "opaque" }, "logo.webp");
+      expect(result.options.background).toBe("opaque");
+    });
+
+    it("does not check the out path when out is omitted", async () => {
+      const result = await validateGenerateOptions({
+        ...base,
+        background: "transparent",
+      });
+      expect(result.options.background).toBe("transparent");
+    });
+  });
+
   describe("non-transparent background: no augmentation", () => {
     it("returns promptAugmentation undefined and unmodified prompt for opaque", async () => {
       const result = await validateGenerateOptions({ ...base, background: "opaque" });

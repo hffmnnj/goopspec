@@ -250,13 +250,6 @@ export function createGenerateImageTool(ctx: PluginContext): ToolDefinition {
       try {
         const projectDir = ctx.sdk.directory;
 
-        const credentialOptions: ReadCredentialOptions = {
-          authFile: args.authFile,
-          allowRefresh: args.allowRefresh,
-        };
-
-        const credential = await readCredential(credentialOptions);
-
         const rawOptions: GenerateOptions = {
           prompt: args.prompt,
           size: args.size,
@@ -273,7 +266,8 @@ export function createGenerateImageTool(ctx: PluginContext): ToolDefinition {
           moderation: args.moderation as GenerateOptions["moderation"],
         };
 
-        const validation = await validateGenerateOptions(rawOptions);
+        // Validate before any credential or network work.
+        const validation = await validateGenerateOptions(rawOptions, args.out);
         const validated = validation.options;
         const promptAugmentation = validation.promptAugmentation;
 
@@ -282,6 +276,13 @@ export function createGenerateImageTool(ctx: PluginContext): ToolDefinition {
           size: validated.size,
           count: validated.count,
         });
+
+        const credentialOptions: ReadCredentialOptions = {
+          authFile: args.authFile,
+          allowRefresh: args.allowRefresh,
+        };
+
+        const credential = await readCredential(credentialOptions);
 
         if (args.dryRun) {
           const headers = buildHeaders(credential.accessToken);

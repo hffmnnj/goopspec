@@ -5,6 +5,7 @@
  */
 
 import { stat } from "node:fs/promises";
+import { extname } from "node:path";
 
 import {
   BACKGROUNDS,
@@ -179,7 +180,25 @@ async function validateInputImages(paths: string[] | undefined): Promise<string[
   return images;
 }
 
-export async function validateGenerateOptions(raw: GenerateOptions): Promise<ValidationResult> {
+/**
+ * When background is transparent, the chromakey step always encodes png. A
+ * caller-supplied `out` path whose extension claims otherwise (e.g. `.webp`)
+ * would write png bytes to a misnamed file. Reject before any network work.
+ * An extensionless path makes no format claim, so it is allowed.
+ */
+function validateTransparentOutputPath(out: string): void {
+  const ext = extname(out).toLowerCase();
+  if (ext.length > 0 && ext !== ".png") {
+    throw new ValidationError(
+      `Transparent background requires a .png output path. Transparency is produced by a local chromakey step that always encodes png, so a path ending in "${ext}" would write png bytes to a non-png file. Use a .png path.`,
+    );
+  }
+}
+
+export async function validateGenerateOptions(
+  raw: GenerateOptions,
+  out?: string,
+): Promise<ValidationResult> {
   if (!raw.prompt || typeof raw.prompt !== "string" || raw.prompt.trim().length === 0) {
     throw new ValidationError("A non-empty prompt is required.");
   }
@@ -205,6 +224,9 @@ export async function validateGenerateOptions(raw: GenerateOptions): Promise<Val
     validatedBackground === "transparent" && requestedOutputFormat === undefined
       ? "png"
       : requestedOutputFormat;
+  if (validatedBackground === "transparent" && out !== undefined) {
+    validateTransparentOutputPath(out);
+  }
   const validatedDetail = validateEnum(raw.detail, DETAIL_LEVELS, "Detail");
   const validatedAction = validateEnum(raw.action, IMAGE_ACTIONS, "Action");
   const validatedModeration = validateEnum(raw.moderation, MODERATION_LEVELS, "Moderation");
