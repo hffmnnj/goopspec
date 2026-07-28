@@ -44,7 +44,6 @@ interface ImageGenerationTool {
   background?: string;
   detail?: string;
   action?: string;
-  input_fidelity?: string;
   moderation?: string;
 }
 
@@ -121,7 +120,6 @@ export async function buildBody(options: ValidatedGenerateOptions): Promise<Requ
   if (options.background) tool.background = options.background;
   if (options.detail) tool.detail = options.detail;
   if (options.action) tool.action = options.action;
-  if (options.inputFidelity) tool.input_fidelity = options.inputFidelity;
   if (options.moderation) tool.moderation = options.moderation;
 
   return {

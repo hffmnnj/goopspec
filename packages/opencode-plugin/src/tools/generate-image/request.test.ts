@@ -40,7 +40,7 @@ describe("buildBody", () => {
   }
 
   it("produces the default responses model and stream/store flags", async () => {
-    const body = await buildBody(await validated({ prompt: "a red circle", model: "gpt-image-2" }));
+    const body = await buildBody(await validated({ prompt: "a red circle" }));
     expect(body.model).toBe("gpt-5.5");
     expect(body.stream).toBe(true);
     expect(body.store).toBe(false);
@@ -49,7 +49,7 @@ describe("buildBody", () => {
   });
 
   it("pairs the image tool model with the responses model in the same body", async () => {
-    const body = await buildBody(await validated({ prompt: "a red circle", model: "gpt-image-2" }));
+    const body = await buildBody(await validated({ prompt: "a red circle" }));
 
     // The image tool must carry gpt-image-2 so the Responses API does not
     // silently default image generation to gpt-image-1.
@@ -64,14 +64,12 @@ describe("buildBody", () => {
     const body = await buildBody(
       await validated({
         prompt: "a red circle",
-        model: "gpt-image-1.5",
         size: "1024x1024",
         quality: "high",
         outputFormat: "png",
         background: "opaque",
         detail: "high",
         action: "generate",
-        inputFidelity: "high",
         moderation: "auto",
       }),
     );
@@ -84,7 +82,6 @@ describe("buildBody", () => {
     expect(tool.background).toBe("opaque");
     expect(tool.detail).toBe("high");
     expect(tool.action).toBe("generate");
-    expect(tool.input_fidelity).toBe("high");
     expect(tool.moderation).toBe("auto");
 
     expect(Object.keys(tool)).toEqual([
@@ -96,25 +93,13 @@ describe("buildBody", () => {
       "background",
       "detail",
       "action",
-      "input_fidelity",
       "moderation",
     ]);
   });
 
   it("does not emit undefined tool keys", async () => {
-    const body = await buildBody(await validated({ prompt: "a red circle", model: "gpt-image-2" }));
+    const body = await buildBody(await validated({ prompt: "a red circle" }));
     expect(Object.keys(body.tools[0])).toEqual(["type", "model"]);
-  });
-
-  it("omits input_fidelity for gpt-image-2", async () => {
-    const body = await buildBody(
-      await validated({
-        prompt: "a red circle",
-        model: "gpt-image-2",
-        inputFidelity: "high",
-      }),
-    );
-    expect(body.tools[0]).not.toHaveProperty("input_fidelity");
   });
 
   it("wraps input images as data URLs", async () => {
@@ -124,7 +109,6 @@ describe("buildBody", () => {
     const body = await buildBody(
       await validated({
         prompt: "edit this",
-        model: "gpt-image-2",
         inputImages: [path],
         detail: "high",
       }),
@@ -150,7 +134,6 @@ describe("buildBody", () => {
     const body = await buildBody(
       await validated({
         prompt: "edit these",
-        model: "gpt-image-2",
         inputImages: [jpegPath, webpPath],
       }),
     );
@@ -167,7 +150,6 @@ describe("buildBody", () => {
     const body = await buildBody(
       await validated({
         prompt: "edit this",
-        model: "gpt-image-2",
         inputImages: [path],
       }),
     );
@@ -190,7 +172,6 @@ describe("sendRequest", () => {
   async function minimalBody() {
     const { options } = await validateGenerateOptions({
       prompt: "a red circle",
-      model: "gpt-image-2",
     });
     return buildBody(options);
   }

@@ -55,13 +55,11 @@ function primaryStream(result: string, revisedPrompt?: string): string {
 
 function baseArgs(authFile?: string): {
   prompt: string;
-  model: string;
   size: string;
   authFile?: string;
 } {
   return {
     prompt: "a red circle on a white background",
-    model: "gpt-image-1.5",
     size: "1024x1024",
     authFile,
   };
@@ -129,20 +127,6 @@ describe("createGenerateImageTool", () => {
 
     expect(result).not.toMatch(/written to/i);
     expect(existsSync(join(testDir, ".goopspec", "generated-images"))).toBe(false);
-  });
-
-  it("returns a validation error for unsupported options without throwing", async () => {
-    const authPath = join(testDir, "auth.json");
-    writeAuthFile(authPath, ACCESS_TOKEN);
-
-    const result = await run(createGenerateImageTool(ctx), {
-      ...baseArgs(authPath),
-      model: "not-a-model",
-    });
-
-    expect(result.length).toBeGreaterThan(0);
-    expect(result).toMatch(/validation error/i);
-    expect(result).toContain("not-a-model");
   });
 
   it("returns an auth error when no credential is found without throwing", async () => {
@@ -307,30 +291,7 @@ describe("createGenerateImageTool", () => {
     expect(readFileSync(expectedPath).toString()).toBe("final image");
 
     expect(result).toContain(expectedPath);
-    expect(result).toContain("gpt-image-1.5");
+    expect(result).toContain("gpt-image-2");
     expect(result).toContain("Revised prompt: a red circle, centered");
-  });
-
-  it("notes a model substitution in the result", async () => {
-    const authPath = join(testDir, "auth.json");
-    writeAuthFile(authPath, ACCESS_TOKEN);
-
-    const payload = Buffer.from("substituted image").toString("base64");
-
-    const result = await withMockedFetch(
-      [{ status: 200, body: primaryStream(payload, "a transparent overlay") }],
-      async () =>
-        run(createGenerateImageTool(ctx), {
-          ...baseArgs(authPath),
-          out: "out/substituted.png",
-          model: "gpt-image-2",
-          background: "transparent",
-        }),
-    );
-
-    expect(result.length).toBeGreaterThan(0);
-    expect(result).toContain("substituted from gpt-image-2");
-    expect(result).toContain("gpt-image-1.5");
-    expect(result).toContain(join(testDir, "out", "substituted.png"));
   });
 });
