@@ -37,6 +37,7 @@ interface InputImageContent {
 
 interface ImageGenerationTool {
   type: "image_generation";
+  model?: string;
   size?: string;
   quality?: string;
   output_format?: string;
@@ -112,7 +113,7 @@ export async function buildBody(options: ValidatedGenerateOptions): Promise<Requ
     });
   }
 
-  const tool: ImageGenerationTool = { type: "image_generation" };
+  const tool: ImageGenerationTool = { type: "image_generation", model: "gpt-image-2" };
 
   if (options.size) tool.size = options.size;
   if (options.quality) tool.quality = options.quality;
