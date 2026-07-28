@@ -89,6 +89,7 @@ describe("buildBody", () => {
 
     expect(Object.keys(tool)).toEqual([
       "type",
+      "model",
       "size",
       "quality",
       "output_format",
@@ -102,7 +103,7 @@ describe("buildBody", () => {
 
   it("does not emit undefined tool keys", async () => {
     const body = await buildBody(await validated({ prompt: "a red circle", model: "gpt-image-2" }));
-    expect(Object.keys(body.tools[0])).toEqual(["type"]);
+    expect(Object.keys(body.tools[0])).toEqual(["type", "model"]);
   });
 
   it("omits input_fidelity for gpt-image-2", async () => {
