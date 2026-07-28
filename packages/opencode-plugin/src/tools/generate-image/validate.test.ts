@@ -21,32 +21,15 @@ describe("validateGenerateOptions", () => {
 
   const base: GenerateOptions = {
     prompt: "a red circle",
-    model: "gpt-image-2",
   };
 
   it("rejects an empty prompt", async () => {
-    await expect(validateGenerateOptions({ prompt: "", model: "gpt-image-2" })).rejects.toThrow(
-      ValidationError,
-    );
+    await expect(validateGenerateOptions({ prompt: "" })).rejects.toThrow(ValidationError);
   });
 
-  it("rejects a missing model", async () => {
-    await expect(validateGenerateOptions({ prompt: "hi" } as GenerateOptions)).rejects.toThrow(
-      ValidationError,
-    );
-  });
-
-  it("rejects an unsupported model", async () => {
-    await expect(
-      validateGenerateOptions({ ...base, model: "dall-e-3" as "gpt-image-2" }),
-    ).rejects.toThrow(/not supported/);
-  });
-
-  it("accepts the supported models", async () => {
-    for (const model of ["gpt-image-2", "gpt-image-1.5"] as const) {
-      const result = await validateGenerateOptions({ ...base, model });
-      expect(result.options.model).toBe(model);
-    }
+  it("accepts the supported model", async () => {
+    const result = await validateGenerateOptions({ ...base });
+    expect(result.options.model).toBe("gpt-image-2");
   });
 
   it("normalizes jpg to jpeg", async () => {
@@ -84,12 +67,6 @@ describe("validateGenerateOptions", () => {
     ).rejects.toThrow(/not supported/);
   });
 
-  it("rejects an unsupported input fidelity", async () => {
-    await expect(
-      validateGenerateOptions({ ...base, inputFidelity: "medium" as "high" }),
-    ).rejects.toThrow(/not supported/);
-  });
-
   it("rejects an unsupported moderation level", async () => {
     await expect(
       validateGenerateOptions({ ...base, moderation: "strict" as "auto" }),
@@ -123,9 +100,9 @@ describe("validateGenerateOptions", () => {
   it("rejects an input image over 64 MiB", async () => {
     const path = join(testDir, "big.png");
     writeFileSync(path, Buffer.alloc(MAX_INPUT_IMAGE_BYTES + 1));
-    await expect(
-      validateGenerateOptions({ ...base, model: "gpt-image-1.5", inputImages: [path] }),
-    ).rejects.toThrow(/exceeds 64 MiB/);
+    await expect(validateGenerateOptions({ ...base, inputImages: [path] })).rejects.toThrow(
+      /exceeds 64 MiB/,
+    );
   });
 
   it("accepts a valid input image", async () => {
@@ -133,139 +110,239 @@ describe("validateGenerateOptions", () => {
     writeFileSync(path, Buffer.from([0, 1, 2, 3]));
     const result = await validateGenerateOptions({
       ...base,
-      model: "gpt-image-1.5",
       inputImages: [path],
     });
     expect(result.options.inputImages).toEqual([path]);
   });
 
-  describe("size rules for gpt-image-1 / 1.5", () => {
-    const model = "gpt-image-1.5" as const;
-
-    it.each(["1024x1024", "1536x1024", "1024x1536", "auto"])(
-      "accepts fixed size %s",
-      async (size) => {
-        const result = await validateGenerateOptions({ prompt: "x", model, size });
-        expect(result.options.size).toBe(size);
-      },
-    );
-
-    it("rejects a custom size on gpt-image-1.5", async () => {
-      await expect(
-        validateGenerateOptions({ prompt: "x", model, size: "1280x720" }),
-      ).rejects.toThrow(/not supported/);
-    });
-  });
-
   describe("size rules for gpt-image-2", () => {
-    const model = "gpt-image-2" as const;
-
     it("rejects auto size", async () => {
-      await expect(validateGenerateOptions({ prompt: "x", model, size: "auto" })).rejects.toThrow(
+      await expect(validateGenerateOptions({ prompt: "x", size: "auto" })).rejects.toThrow(
         /not supported/,
       );
     });
 
     it("accepts both edges divisible by 16", async () => {
-      const result = await validateGenerateOptions({ prompt: "x", model, size: "1280x720" });
+      const result = await validateGenerateOptions({ prompt: "x", size: "1280x720" });
       expect(result.options.size).toBe("1280x720");
     });
 
     it("rejects an edge not divisible by 16", async () => {
-      await expect(
-        validateGenerateOptions({ prompt: "x", model, size: "1281x720" }),
-      ).rejects.toThrow(/divisible by 16/);
+      await expect(validateGenerateOptions({ prompt: "x", size: "1281x720" })).rejects.toThrow(
+        /divisible by 16/,
+      );
     });
 
     it("accepts a 3840px edge", async () => {
-      const result = await validateGenerateOptions({ prompt: "x", model, size: "3840x1280" });
+      const result = await validateGenerateOptions({ prompt: "x", size: "3840x1280" });
       expect(result.options.size).toBe("3840x1280");
     });
 
     it("rejects an edge above 3840px", async () => {
-      await expect(
-        validateGenerateOptions({ prompt: "x", model, size: "3856x1280" }),
-      ).rejects.toThrow(/exceeds the 3840px/);
+      await expect(validateGenerateOptions({ prompt: "x", size: "3856x1280" })).rejects.toThrow(
+        /exceeds the 3840px/,
+      );
     });
 
     it("accepts a 3:1 aspect ratio", async () => {
-      const result = await validateGenerateOptions({ prompt: "x", model, size: "3840x1280" });
+      const result = await validateGenerateOptions({ prompt: "x", size: "3840x1280" });
       expect(result.options.size).toBe("3840x1280");
     });
 
     it("rejects an aspect ratio above 3:1", async () => {
-      await expect(
-        validateGenerateOptions({ prompt: "x", model, size: "3840x1184" }),
-      ).rejects.toThrow(/3:1/);
+      await expect(validateGenerateOptions({ prompt: "x", size: "3840x1184" })).rejects.toThrow(
+        /3:1/,
+      );
     });
 
     it("accepts the minimum pixel count", async () => {
       // Minimum is 655,360 pixels. Use 1280 x 512 = 655,360; both divisible by 16, ratio 2.5.
-      const result = await validateGenerateOptions({ prompt: "x", model, size: "1280x512" });
+      const result = await validateGenerateOptions({ prompt: "x", size: "1280x512" });
       expect(result.options.size).toBe("1280x512");
     });
 
     it("accepts the maximum pixel count", async () => {
       // 8,294,400 = 3840 x 2160; both edges divisible by 16, ratio 16/9.
-      const result = await validateGenerateOptions({ prompt: "x", model, size: "3840x2160" });
+      const result = await validateGenerateOptions({ prompt: "x", size: "3840x2160" });
       expect(result.options.size).toBe("3840x2160");
     });
 
     it("rejects a size below the pixel floor", async () => {
-      await expect(
-        validateGenerateOptions({ prompt: "x", model, size: "1024x624" }),
-      ).rejects.toThrow(/between 655,360 and 8,294,400/);
+      await expect(validateGenerateOptions({ prompt: "x", size: "1024x624" })).rejects.toThrow(
+        /between 655,360 and 8,294,400/,
+      );
     });
 
     it("rejects a size above the pixel ceiling", async () => {
-      await expect(
-        validateGenerateOptions({ prompt: "x", model, size: "3840x2208" }),
-      ).rejects.toThrow(/between 655,360 and 8,294,400/);
+      await expect(validateGenerateOptions({ prompt: "x", size: "3840x2208" })).rejects.toThrow(
+        /between 655,360 and 8,294,400/,
+      );
     });
   });
 
-  describe("model gating", () => {
-    it("downgrades gpt-image-2 to gpt-image-1.5 when background is transparent", async () => {
+  describe("validateSize boundaries (SPEC MH8)", () => {
+    it("accepts 1024x1024", async () => {
+      const result = await validateGenerateOptions({ prompt: "x", size: "1024x1024" });
+      expect(result.options.size).toBe("1024x1024");
+    });
+
+    it("rejects auto because gpt-image-2 requires explicit dimensions", async () => {
+      await expect(validateGenerateOptions({ prompt: "x", size: "auto" })).rejects.toThrow(
+        /not supported/,
+      );
+    });
+
+    it("rejects 1000x1000 because edges are not divisible by 16", async () => {
+      await expect(validateGenerateOptions({ prompt: "x", size: "1000x1000" })).rejects.toThrow(
+        /divisible by 16/,
+      );
+    });
+
+    it("rejects 4096x1024 because the max edge exceeds 3840px", async () => {
+      await expect(validateGenerateOptions({ prompt: "x", size: "4096x1024" })).rejects.toThrow(
+        /exceeds the 3840px/,
+      );
+    });
+
+    it("rejects 3072x512 because the aspect ratio exceeds 3:1", async () => {
+      await expect(validateGenerateOptions({ prompt: "x", size: "3072x512" })).rejects.toThrow(
+        /3:1/,
+      );
+    });
+
+    it("rejects 512x512 because the pixel count is below the 655,360 floor", async () => {
+      await expect(validateGenerateOptions({ prompt: "x", size: "512x512" })).rejects.toThrow(
+        /between 655,360 and 8,294,400/,
+      );
+    });
+  });
+
+  describe("transparent background: green-screen augmentation and png requirement", () => {
+    it("returns promptAugmentation with final === original + appended", async () => {
+      const result = await validateGenerateOptions({ ...base, background: "transparent" });
+      const aug = result.promptAugmentation;
+      expect(aug).toBeDefined();
+      expect(aug?.final).toBe((aug?.original ?? "") + (aug?.appended ?? ""));
+    });
+
+    it("augmented prompt mentions green background and no shadows", async () => {
+      const result = await validateGenerateOptions({ ...base, background: "transparent" });
+      const final = result.promptAugmentation?.final ?? "";
+      expect(final).toContain("green background");
+      expect(final.toLowerCase()).toContain("no shadows");
+    });
+
+    it("sets options.prompt to the augmented final prompt", async () => {
+      const result = await validateGenerateOptions({ ...base, background: "transparent" });
+      const aug = result.promptAugmentation;
+      expect(aug).toBeDefined();
+      if (!aug) return;
+      expect(result.options.prompt).toBe(aug.final);
+    });
+
+    it("leaves options.background as transparent (internal intent survives validation)", async () => {
+      const result = await validateGenerateOptions({ ...base, background: "transparent" });
+      expect(result.options.background).toBe("transparent");
+    });
+
+    it("defaults output format to png when no format is specified", async () => {
+      const result = await validateGenerateOptions({ ...base, background: "transparent" });
+      expect(result.options.outputFormat).toBe("png");
+    });
+
+    it("rejects transparent background with jpeg output and mentions png", async () => {
+      const error = await validateGenerateOptions({
+        ...base,
+        background: "transparent",
+        outputFormat: "jpeg",
+      }).catch((e: unknown) => e);
+      expect(error).toBeInstanceOf(ValidationError);
+      expect((error as Error).message).toContain("png");
+    });
+
+    it("rejects transparent background with webp output and mentions png", async () => {
+      const error = await validateGenerateOptions({
+        ...base,
+        background: "transparent",
+        outputFormat: "webp",
+      }).catch((e: unknown) => e);
+      expect(error).toBeInstanceOf(ValidationError);
+      expect((error as Error).message).toContain("png");
+    });
+  });
+
+  describe("transparent background: out path extension validation", () => {
+    it("rejects a .webp out path and mentions png in the error", async () => {
+      const error = await validateGenerateOptions(
+        { ...base, background: "transparent" },
+        "logo.webp",
+      ).catch((e: unknown) => e);
+      expect(error).toBeInstanceOf(ValidationError);
+      expect((error as Error).message).toContain("png");
+      expect((error as Error).message).toContain(".webp");
+    });
+
+    it("rejects a .jpg out path and mentions png in the error", async () => {
+      const error = await validateGenerateOptions(
+        { ...base, background: "transparent" },
+        "logo.jpg",
+      ).catch((e: unknown) => e);
+      expect(error).toBeInstanceOf(ValidationError);
+      expect((error as Error).message).toContain("png");
+    });
+
+    it("accepts a .png out path", async () => {
+      const result = await validateGenerateOptions(
+        { ...base, background: "transparent" },
+        "logo.png",
+      );
+      expect(result.options.background).toBe("transparent");
+    });
+
+    it("accepts a .PNG out path (case-insensitive)", async () => {
+      const result = await validateGenerateOptions(
+        { ...base, background: "transparent" },
+        "logo.PNG",
+      );
+      expect(result.options.background).toBe("transparent");
+    });
+
+    it("accepts an extensionless out path", async () => {
+      const result = await validateGenerateOptions({ ...base, background: "transparent" }, "logo");
+      expect(result.options.background).toBe("transparent");
+    });
+
+    it("does not check the out path when background is not transparent", async () => {
+      const result = await validateGenerateOptions({ ...base, background: "opaque" }, "logo.webp");
+      expect(result.options.background).toBe("opaque");
+    });
+
+    it("does not check the out path when out is omitted", async () => {
       const result = await validateGenerateOptions({
         ...base,
         background: "transparent",
       });
+      expect(result.options.background).toBe("transparent");
+    });
+  });
 
-      expect(result.options.model).toBe("gpt-image-1.5");
-      expect(result.modelSubstitution).toEqual({
-        from: "gpt-image-2",
-        to: "gpt-image-1.5",
-        reason:
-          'background="transparent" is not supported by gpt-image-2; the model has been switched to gpt-image-1.5.',
-      });
+  describe("non-transparent background: no augmentation", () => {
+    it("returns promptAugmentation undefined and unmodified prompt for opaque", async () => {
+      const result = await validateGenerateOptions({ ...base, background: "opaque" });
+      expect(result.promptAugmentation).toBeUndefined();
+      expect(result.options.prompt).toBe(base.prompt);
     });
 
-    it("does not downgrade when background is opaque or auto", async () => {
-      for (const background of ["opaque", "auto"] as const) {
-        const result = await validateGenerateOptions({ ...base, background });
-        expect(result.options.model).toBe("gpt-image-2");
-        expect(result.modelSubstitution).toBeUndefined();
-      }
+    it("returns promptAugmentation undefined and unmodified prompt for auto", async () => {
+      const result = await validateGenerateOptions({ ...base, background: "auto" });
+      expect(result.promptAugmentation).toBeUndefined();
+      expect(result.options.prompt).toBe(base.prompt);
     });
 
-    it("omits input_fidelity entirely for gpt-image-2", async () => {
-      const result = await validateGenerateOptions({
-        ...base,
-        inputFidelity: "high",
-      });
-      expect(result.options.model).toBe("gpt-image-2");
-      expect(result.options.inputFidelity).toBeUndefined();
-      const keys = Object.keys(result.options);
-      expect(keys).not.toContain("inputFidelity");
-    });
-
-    it("preserves input_fidelity for gpt-image-1.5", async () => {
-      const result = await validateGenerateOptions({
-        prompt: "x",
-        model: "gpt-image-1.5",
-        inputFidelity: "high",
-      });
-      expect(result.options.inputFidelity).toBe("high");
+    it("returns promptAugmentation undefined and unmodified prompt when background is omitted", async () => {
+      const result = await validateGenerateOptions({ ...base });
+      expect(result.promptAugmentation).toBeUndefined();
+      expect(result.options.prompt).toBe(base.prompt);
     });
   });
 });

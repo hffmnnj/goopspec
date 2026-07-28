@@ -14,9 +14,7 @@ import {
   BACKGROUNDS,
   DETAIL_LEVELS,
   IMAGE_ACTIONS,
-  IMAGE_MODELS,
   IMAGE_QUALITIES,
-  INPUT_FIDELITIES,
   MAX_COUNT,
   MAX_INPUT_IMAGES,
   MODERATION_LEVELS,
@@ -27,34 +25,31 @@ import { StreamError, describeStreamError } from "./sse.js";
 import type { GenerateImageArgs, GenerateOptions } from "./types.js";
 import { ValidationError, validateGenerateOptions } from "./validate.js";
 
-function isPartialFailure(result: {
+type PromptAugmentation = { original: string; appended: string; final: string };
+
+type GenerationResultView = {
   paths: string[];
   revisedPrompt?: string;
+  warnings?: string[];
   partial?: true;
   error?: Error;
-}): result is { paths: string[]; revisedPrompt?: string; partial: true; error: Error } {
+};
+
+function isPartialFailure(
+  result: GenerationResultView,
+): result is GenerationResultView & { partial: true; error: Error } {
   return result.partial === true && result.error !== undefined;
 }
 
-function formatModelUsed(
-  model: string,
-  substitution?: { from: string; to: string; reason: string },
-): string {
-  if (substitution === undefined) {
-    return model;
-  }
-  return `${model} (substituted from ${substitution.from} because ${substitution.reason})`;
-}
-
 function formatSuccessResult(
-  result: { paths: string[]; revisedPrompt?: string; partial?: true; error?: Error },
+  result: GenerationResultView,
   model: string,
-  substitution?: { from: string; to: string; reason: string },
+  promptAugmentation?: PromptAugmentation,
 ): string {
   const lines: string[] = [];
   const header = isPartialFailure(result) ? "Partial success" : "Success";
   lines.push(
-    `${header}: generated ${result.paths.length} image${result.paths.length === 1 ? "" : "s"} using ${formatModelUsed(model, substitution)}.`,
+    `${header}: generated ${result.paths.length} image${result.paths.length === 1 ? "" : "s"} using ${model}.`,
   );
 
   if (result.paths.length > 0) {
@@ -66,6 +61,23 @@ function formatSuccessResult(
 
   if (result.revisedPrompt !== undefined) {
     lines.push(`Revised prompt: ${result.revisedPrompt}`);
+  }
+
+  if (promptAugmentation !== undefined) {
+    lines.push(
+      "Transparency: gpt-image-2 has no native transparent background. The image was " +
+        "rendered on a green screen and keyed to alpha locally. The following instruction " +
+        "was appended to your prompt:",
+    );
+    lines.push("");
+    lines.push(promptAugmentation.appended.trim());
+  }
+
+  if (result.warnings !== undefined && result.warnings.length > 0) {
+    lines.push("Warnings:");
+    for (const warning of result.warnings) {
+      lines.push(`  ${warning}`);
+    }
   }
 
   if (isPartialFailure(result)) {
@@ -162,16 +174,11 @@ export function createGenerateImageTool(ctx: PluginContext): ToolDefinition {
         .max(MAX_INPUT_IMAGES)
         .optional()
         .describe("Up to 5 reference image paths to condition or edit generation on"),
-      model: tool.schema
-        .string()
-        .optional()
-        .describe(`Image model to use. Allowed: ${IMAGE_MODELS.join(", ")}`),
       size: tool.schema
         .string()
         .optional()
         .describe(
-          "Image dimensions. For gpt-image-1.5 use 1024x1024, 1536x1024, 1024x1536, or auto. " +
-            "For gpt-image-2 use a custom <width>x<height> with both edges divisible by 16, " +
+          "Image dimensions. Use a custom <width>x<height> with both edges divisible by 16, " +
             "max edge 3840, and total pixels between 655,360 and 8,294,400.",
         ),
       quality: tool.schema
@@ -193,10 +200,6 @@ export function createGenerateImageTool(ctx: PluginContext): ToolDefinition {
         .max(MAX_COUNT)
         .optional()
         .describe(`Number of images to generate (1-${MAX_COUNT})`),
-      inputFidelity: tool.schema
-        .string()
-        .optional()
-        .describe(`Input image fidelity. Allowed: ${INPUT_FIDELITIES.join(", ")}`),
       timeout: tool.schema
         .number()
         .positive()
@@ -247,22 +250,13 @@ export function createGenerateImageTool(ctx: PluginContext): ToolDefinition {
       try {
         const projectDir = ctx.sdk.directory;
 
-        const credentialOptions: ReadCredentialOptions = {
-          authFile: args.authFile,
-          allowRefresh: args.allowRefresh,
-        };
-
-        const credential = await readCredential(credentialOptions);
-
         const rawOptions: GenerateOptions = {
           prompt: args.prompt,
-          model: (args.model ?? "gpt-image-1.5") as GenerateOptions["model"],
           size: args.size,
           quality: args.quality as GenerateOptions["quality"],
           outputFormat: args.outputFormat as GenerateOptions["outputFormat"],
           background: args.background as GenerateOptions["background"],
           count: args.count,
-          inputFidelity: args.inputFidelity as GenerateOptions["inputFidelity"],
           timeoutSeconds: args.timeout,
           inputImages: args.images,
           authFile: args.authFile,
@@ -272,14 +266,23 @@ export function createGenerateImageTool(ctx: PluginContext): ToolDefinition {
           moderation: args.moderation as GenerateOptions["moderation"],
         };
 
-        const validation = await validateGenerateOptions(rawOptions);
+        // Validate before any credential or network work.
+        const validation = await validateGenerateOptions(rawOptions, args.out);
         const validated = validation.options;
+        const promptAugmentation = validation.promptAugmentation;
 
         log("generate_image tool validated options", {
           model: validated.model,
           size: validated.size,
           count: validated.count,
         });
+
+        const credentialOptions: ReadCredentialOptions = {
+          authFile: args.authFile,
+          allowRefresh: args.allowRefresh,
+        };
+
+        const credential = await readCredential(credentialOptions);
 
         if (args.dryRun) {
           const headers = buildHeaders(credential.accessToken);
@@ -299,7 +302,7 @@ export function createGenerateImageTool(ctx: PluginContext): ToolDefinition {
           return formatFailureResult(result.error);
         }
 
-        return formatSuccessResult(result, validated.model, validation.modelSubstitution);
+        return formatSuccessResult(result, validated.model, promptAugmentation);
       } catch (error: unknown) {
         logError("generate_image tool failed", error);
 

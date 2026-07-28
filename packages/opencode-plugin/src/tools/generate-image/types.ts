@@ -6,9 +6,7 @@ import type {
   Background,
   Detail,
   ImageAction,
-  ImageModel,
   ImageQuality,
-  InputFidelity,
   Moderation,
   OutputFormat,
 } from "./constants.js";
@@ -35,13 +33,11 @@ export interface NormalizedCredential {
 
 export interface GenerateOptions {
   prompt: string;
-  model: ImageModel;
   quality?: ImageQuality;
   outputFormat?: OutputFormat;
   background?: Background;
   detail?: Detail;
   action?: ImageAction;
-  inputFidelity?: InputFidelity;
   moderation?: Moderation;
   size?: string;
   count?: number;
@@ -60,13 +56,11 @@ export interface GenerateImageArgs {
   prompt: string;
   out?: string;
   images?: string[];
-  model?: string;
   size?: string;
   quality?: string;
   outputFormat?: string;
   background?: string;
   count?: number;
-  inputFidelity?: string;
   timeout?: number;
   dryRun?: boolean;
   authFile?: string;

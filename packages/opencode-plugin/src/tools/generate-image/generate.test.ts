@@ -17,7 +17,9 @@ import {
   generateImages,
   resolveOutputPath,
   writeImage,
+  writeImageBytes,
 } from "./generate.js";
+import { decodePng, encodePng } from "./png-codec.js";
 import type { ValidatedGenerateOptions } from "./validate.js";
 
 function frame(event: Record<string, unknown>): string {
@@ -49,6 +51,10 @@ function minimalOptions(count = 1): ValidatedGenerateOptions {
     inputImages: [],
     timeoutSeconds: 180,
   };
+}
+
+function transparentOptions(count = 1): ValidatedGenerateOptions {
+  return { ...minimalOptions(count), background: "transparent", outputFormat: "png" };
 }
 
 describe("encodeInputImage", () => {
@@ -133,6 +139,15 @@ describe("writeImage", () => {
     expect(existsSync(path)).toBe(true);
     expect(readFileSync(path).toString()).toBe("PNG payload");
   });
+
+  it("writes supplied bytes and creates parent directories", () => {
+    const bytes = Buffer.from("already decoded PNG payload");
+    const path = join(testDir, "nested", "bytes", "out.png");
+
+    writeImageBytes(path, bytes);
+
+    expect(readFileSync(path).equals(bytes)).toBe(true);
+  });
 });
 
 describe("output path helpers", () => {
@@ -209,6 +224,76 @@ describe("generateImages count loop", () => {
     );
   });
 
+  it("keys a transparent request before writing it to disk", async () => {
+    const source = encodePng({
+      width: 2,
+      height: 1,
+      data: Uint8Array.from([
+        0,
+        255,
+        0,
+        255, // Green screen
+        255,
+        0,
+        0,
+        255, // Red subject
+      ]),
+    });
+
+    await withMockedFetch(
+      [{ status: 200, body: primaryStream(source.toString("base64")) }],
+      async () => {
+        const result = await generateImages(ctx.sdk.directory, undefined, {
+          accessToken: "token",
+          options: transparentOptions(),
+          timeoutSeconds: 180,
+        });
+        const output = decodePng(readFileSync(result.paths[0]));
+
+        expect(output.data[3]).toBe(0);
+        expect(output.data[7]).toBe(255);
+      },
+    );
+  });
+
+  it("writes non-transparent requests byte-for-byte without post-processing", async () => {
+    const source = Buffer.from([0x00, 0xff, 0x61, 0x80, 0x20]);
+
+    await withMockedFetch(
+      [{ status: 200, body: primaryStream(source.toString("base64")) }],
+      async () => {
+        const result = await generateImages(ctx.sdk.directory, undefined, {
+          accessToken: "token",
+          options: minimalOptions(),
+          timeoutSeconds: 180,
+        });
+
+        expect(readFileSync(result.paths[0]).equals(source)).toBe(true);
+      },
+    );
+  });
+
+  it("writes original bytes and warns when transparent keying cannot decode the PNG", async () => {
+    const source = Buffer.from("not a PNG");
+
+    await withMockedFetch(
+      [{ status: 200, body: primaryStream(source.toString("base64")) }],
+      async () => {
+        const result = await generateImages(ctx.sdk.directory, undefined, {
+          accessToken: "token",
+          options: transparentOptions(),
+          timeoutSeconds: 180,
+        });
+
+        expect(result.paths).toHaveLength(1);
+        expect(readFileSync(result.paths[0]).equals(source)).toBe(true);
+        expect(result.warnings).toEqual([
+          `Image saved at ${result.paths[0]}, but its background is still green rather than transparent because local green-screen keying failed.`,
+        ]);
+      },
+    );
+  });
+
   it("sends three separate requests for count=3 and names files -1, -2, -3", async () => {
     const payloads = [
       Buffer.from("first").toString("base64"),
@@ -261,6 +346,29 @@ describe("generateImages count loop", () => {
         expect(existsSync(result.paths[0])).toBe(true);
         expect((result as PartialFailure).partial).toBe(true);
         expect((result as PartialFailure).error.message).toMatch(/rate-limited/);
+      },
+    );
+  });
+
+  it("preserves a keying warning when a later image request fails", async () => {
+    const source = Buffer.from("not a PNG");
+
+    await withMockedFetch(
+      [
+        { status: 200, body: primaryStream(source.toString("base64")) },
+        { status: 500, body: { error: { message: "server error" } } },
+      ],
+      async () => {
+        const result = await generateImages(ctx.sdk.directory, undefined, {
+          accessToken: "token",
+          options: transparentOptions(2),
+          timeoutSeconds: 180,
+        });
+
+        expect((result as PartialFailure).partial).toBe(true);
+        expect(result.warnings).toEqual([
+          `Image saved at ${result.paths[0]}, but its background is still green rather than transparent because local green-screen keying failed.`,
+        ]);
       },
     );
   });

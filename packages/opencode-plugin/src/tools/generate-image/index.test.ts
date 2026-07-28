@@ -20,6 +20,7 @@ import {
   withMockedFetch,
 } from "../../test-utils.js";
 import { createGenerateImageTool } from "./index.js";
+import { encodePng } from "./png-codec.js";
 import type { GenerateImageArgs } from "./types.js";
 
 const ACCESS_TOKEN = "fake-access-token-value";
@@ -55,13 +56,11 @@ function primaryStream(result: string, revisedPrompt?: string): string {
 
 function baseArgs(authFile?: string): {
   prompt: string;
-  model: string;
   size: string;
   authFile?: string;
 } {
   return {
     prompt: "a red circle on a white background",
-    model: "gpt-image-1.5",
     size: "1024x1024",
     authFile,
   };
@@ -129,20 +128,6 @@ describe("createGenerateImageTool", () => {
 
     expect(result).not.toMatch(/written to/i);
     expect(existsSync(join(testDir, ".goopspec", "generated-images"))).toBe(false);
-  });
-
-  it("returns a validation error for unsupported options without throwing", async () => {
-    const authPath = join(testDir, "auth.json");
-    writeAuthFile(authPath, ACCESS_TOKEN);
-
-    const result = await run(createGenerateImageTool(ctx), {
-      ...baseArgs(authPath),
-      model: "not-a-model",
-    });
-
-    expect(result.length).toBeGreaterThan(0);
-    expect(result).toMatch(/validation error/i);
-    expect(result).toContain("not-a-model");
   });
 
   it("returns an auth error when no credential is found without throwing", async () => {
@@ -307,30 +292,236 @@ describe("createGenerateImageTool", () => {
     expect(readFileSync(expectedPath).toString()).toBe("final image");
 
     expect(result).toContain(expectedPath);
-    expect(result).toContain("gpt-image-1.5");
+    expect(result).toContain("gpt-image-2");
     expect(result).toContain("Revised prompt: a red circle, centered");
   });
 
-  it("notes a model substitution in the result", async () => {
+  it("surfaces a Transparency line quoting the appended green-screen instruction for a transparent request", async () => {
     const authPath = join(testDir, "auth.json");
     writeAuthFile(authPath, ACCESS_TOKEN);
 
-    const payload = Buffer.from("substituted image").toString("base64");
+    const source = encodePng({
+      width: 2,
+      height: 1,
+      data: Uint8Array.from([
+        0,
+        255,
+        0,
+        255, // Green screen
+        255,
+        0,
+        0,
+        255, // Red subject
+      ]),
+    });
 
     const result = await withMockedFetch(
-      [{ status: 200, body: primaryStream(payload, "a transparent overlay") }],
+      [{ status: 200, body: primaryStream(source.toString("base64")) }],
       async () =>
         run(createGenerateImageTool(ctx), {
           ...baseArgs(authPath),
-          out: "out/substituted.png",
-          model: "gpt-image-2",
           background: "transparent",
+          out: "out/transparent.png",
         }),
     );
 
-    expect(result.length).toBeGreaterThan(0);
-    expect(result).toContain("substituted from gpt-image-2");
-    expect(result).toContain("gpt-image-1.5");
-    expect(result).toContain(join(testDir, "out", "substituted.png"));
+    expect(result).toContain("Transparency:");
+    expect(result).toContain("gpt-image-2 has no native transparent background");
+    expect(result).toContain("rendered on a green screen and keyed to alpha locally");
+    expect(result).toContain("Render the subject on a uniform, fully saturated green background");
+    expect(result).toContain("Produce no shadows, no contact shadows, and no reflections");
+    expect(result).toContain("Avoid green spill or green light bouncing onto the subject");
+    expect(result).not.toContain("Warnings:");
+  });
+
+  it("omits the Transparency line for a non-transparent request", async () => {
+    const authPath = join(testDir, "auth.json");
+    writeAuthFile(authPath, ACCESS_TOKEN);
+
+    const payload = Buffer.from("opaque image").toString("base64");
+
+    const result = await withMockedFetch(
+      [{ status: 200, body: primaryStream(payload) }],
+      async () =>
+        run(createGenerateImageTool(ctx), {
+          ...baseArgs(authPath),
+          background: "opaque",
+          out: "out/opaque.png",
+        }),
+    );
+
+    expect(result).not.toContain("Transparency:");
+    expect(result).not.toContain("green screen");
+  });
+
+  it("surfaces keying warnings in the success result", async () => {
+    const authPath = join(testDir, "auth.json");
+    writeAuthFile(authPath, ACCESS_TOKEN);
+
+    const source = Buffer.from("not a PNG");
+
+    const result = await withMockedFetch(
+      [{ status: 200, body: primaryStream(source.toString("base64")) }],
+      async () =>
+        run(createGenerateImageTool(ctx), {
+          ...baseArgs(authPath),
+          background: "transparent",
+          out: "out/green.png",
+        }),
+    );
+
+    expect(result).toContain("Warnings:");
+    expect(result).toContain("green-screen keying failed");
+    expect(result).toContain("still green rather than transparent");
+  });
+
+  it("surfaces keying warnings in the partial-failure result", async () => {
+    const authPath = join(testDir, "auth.json");
+    writeAuthFile(authPath, ACCESS_TOKEN);
+
+    const source = Buffer.from("not a PNG");
+
+    const result = await withMockedFetch(
+      [
+        { status: 200, body: primaryStream(source.toString("base64")) },
+        { status: 500, body: { error: { message: "server error mid-batch" } } },
+      ],
+      async () =>
+        run(createGenerateImageTool(ctx), {
+          ...baseArgs(authPath),
+          background: "transparent",
+          out: "out/batch.png",
+          count: 2,
+        }),
+    );
+
+    expect(result).toMatch(/partial success/i);
+    expect(result).toContain("Warnings:");
+    expect(result).toContain("green-screen keying failed");
+    expect(result).toContain("server error mid-batch");
+  });
+
+  it("rejects transparent background with jpeg output and names png in the error", async () => {
+    const authPath = join(testDir, "auth.json");
+    writeAuthFile(authPath, ACCESS_TOKEN);
+
+    const result = await run(createGenerateImageTool(ctx), {
+      ...baseArgs(authPath),
+      background: "transparent",
+      outputFormat: "jpeg",
+    });
+
+    expect(result).toMatch(/validation error/i);
+    expect(result).toMatch(/transparent background requires png/i);
+    expect(result).toContain("png");
+  });
+
+  it("rejects transparent background with webp output and names png in the error", async () => {
+    const authPath = join(testDir, "auth.json");
+    writeAuthFile(authPath, ACCESS_TOKEN);
+
+    const result = await run(createGenerateImageTool(ctx), {
+      ...baseArgs(authPath),
+      background: "transparent",
+      outputFormat: "webp",
+    });
+
+    expect(result).toMatch(/validation error/i);
+    expect(result).toMatch(/transparent background requires png/i);
+    expect(result).toContain("png");
+  });
+
+  it("rejects a transparent request with a .webp out path before any network call", async () => {
+    const authPath = join(testDir, "auth.json");
+    writeAuthFile(authPath, ACCESS_TOKEN);
+
+    const result = await withMockedFetch([], async (controls) => {
+      const r = await run(createGenerateImageTool(ctx), {
+        ...baseArgs(authPath),
+        background: "transparent",
+        out: "logo.webp",
+      });
+      expect(controls.requests.length).toBe(0);
+      return r;
+    });
+
+    expect(result).toMatch(/validation error/i);
+    expect(result).toContain("png");
+    expect(result).toContain(".webp");
+  });
+
+  it("rejects a transparent request with a .jpg out path before any network call", async () => {
+    const authPath = join(testDir, "auth.json");
+    writeAuthFile(authPath, ACCESS_TOKEN);
+
+    const result = await withMockedFetch([], async (controls) => {
+      const r = await run(createGenerateImageTool(ctx), {
+        ...baseArgs(authPath),
+        background: "transparent",
+        out: "logo.jpg",
+      });
+      expect(controls.requests.length).toBe(0);
+      return r;
+    });
+
+    expect(result).toMatch(/validation error/i);
+    expect(result).toContain("png");
+  });
+
+  it("accepts a transparent request with a .png out path", async () => {
+    const authPath = join(testDir, "auth.json");
+    writeAuthFile(authPath, ACCESS_TOKEN);
+
+    const result = await withMockedFetch([], async (controls) => {
+      const r = await run(createGenerateImageTool(ctx), {
+        ...baseArgs(authPath),
+        background: "transparent",
+        out: "logo.png",
+        dryRun: true,
+      });
+      expect(controls.requests.length).toBe(0);
+      return r;
+    });
+
+    expect(result).toContain("Dry run");
+    expect(result).not.toMatch(/validation error/i);
+  });
+
+  it("accepts a transparent request with an extensionless out path", async () => {
+    const authPath = join(testDir, "auth.json");
+    writeAuthFile(authPath, ACCESS_TOKEN);
+
+    const result = await withMockedFetch([], async (controls) => {
+      const r = await run(createGenerateImageTool(ctx), {
+        ...baseArgs(authPath),
+        background: "transparent",
+        out: "logo",
+        dryRun: true,
+      });
+      expect(controls.requests.length).toBe(0);
+      return r;
+    });
+
+    expect(result).toContain("Dry run");
+    expect(result).not.toMatch(/validation error/i);
+  });
+
+  it("accepts a non-transparent request with a .webp out path (fix does not leak)", async () => {
+    const authPath = join(testDir, "auth.json");
+    writeAuthFile(authPath, ACCESS_TOKEN);
+
+    const result = await withMockedFetch([], async (controls) => {
+      const r = await run(createGenerateImageTool(ctx), {
+        ...baseArgs(authPath),
+        background: "opaque",
+        out: "logo.webp",
+        dryRun: true,
+      });
+      expect(controls.requests.length).toBe(0);
+      return r;
+    });
+
+    expect(result).toContain("Dry run");
+    expect(result).not.toMatch(/validation error/i);
   });
 });

@@ -13,8 +13,10 @@ import { readFile, stat } from "node:fs/promises";
 import { dirname, extname, isAbsolute, join, resolve } from "node:path";
 
 import { log } from "../../shared/logger.js";
+import { keyGreenScreen } from "./chromakey.js";
 import { MAX_INPUT_IMAGE_BYTES } from "./constants.js";
 import type { OutputFormat } from "./constants.js";
+import { decodePng, encodePng } from "./png-codec.js";
 import { buildHeaders, sendRequest } from "./request.js";
 import { readImageStream } from "./sse.js";
 import type { ExtractedImage } from "./types.js";
@@ -32,6 +34,8 @@ export interface GenerationResult {
   paths: string[];
   /** The first revised_prompt returned by the backend, if any. */
   revisedPrompt?: string;
+  /** Non-fatal output-processing issues for files that were still written. */
+  warnings?: string[];
 }
 
 export interface PartialFailure extends GenerationResult {
@@ -97,8 +101,16 @@ export function writeImage(
   result: ExtractedImage,
   outputFormat?: OutputFormat,
 ): void {
+  writeImageBytes(path, Buffer.from(result.base64, "base64"), outputFormat);
+}
+
+/**
+ * Write already-decoded image bytes to `path`, creating parent directories as
+ * needed. The on-disk extension is the caller's responsibility; `outputFormat`
+ * is used only for logging.
+ */
+export function writeImageBytes(path: string, bytes: Buffer, outputFormat?: OutputFormat): void {
   mkdirSync(dirname(path), { recursive: true });
-  const bytes = Buffer.from(result.base64, "base64");
   writeFileSync(path, bytes);
   log("generate_image wrote output file", {
     path,
@@ -147,7 +159,7 @@ export function resolveOutputPath(projectDir: string, out: string): string {
 async function generateOne(
   attempt: GenerateAttemptOptions,
   outputPath: string,
-): Promise<ExtractedImage> {
+): Promise<{ image: ExtractedImage; warning?: string }> {
   const { buildBody } = await import("./request.js");
   const body = await buildBody(attempt.options);
   const headers = buildHeaders(attempt.accessToken);
@@ -159,8 +171,23 @@ async function generateOne(
     throw new Error("generate_image did not receive an image from the stream");
   }
 
-  writeImage(outputPath, image, attempt.options.outputFormat);
-  return image;
+  const originalBytes = Buffer.from(image.base64, "base64");
+  if (attempt.options.background !== "transparent") {
+    writeImageBytes(outputPath, originalBytes, attempt.options.outputFormat);
+    return { image };
+  }
+
+  try {
+    const keyedBytes = encodePng(keyGreenScreen(decodePng(originalBytes)));
+    writeImageBytes(outputPath, keyedBytes, attempt.options.outputFormat);
+    return { image };
+  } catch {
+    writeImageBytes(outputPath, originalBytes, attempt.options.outputFormat);
+    return {
+      image,
+      warning: `Image saved at ${outputPath}, but its background is still green rather than transparent because local green-screen keying failed.`,
+    };
+  }
 }
 
 /**
@@ -174,6 +201,7 @@ export async function generateImages(
 ): Promise<GenerationResult | PartialFailure> {
   const count = attempt.options.count;
   const paths: string[] = [];
+  const warnings: string[] = [];
   let revisedPrompt: string | undefined;
 
   for (let i = 1; i <= count; i++) {
@@ -187,8 +215,11 @@ export async function generateImages(
         );
 
     try {
-      const image = await generateOne(attempt, path);
+      const { image, warning } = await generateOne(attempt, path);
       paths.push(path);
+      if (warning !== undefined) {
+        warnings.push(warning);
+      }
       if (revisedPrompt === undefined && image.revisedPrompt !== undefined) {
         revisedPrompt = image.revisedPrompt;
       }
@@ -197,13 +228,14 @@ export async function generateImages(
       return {
         paths,
         revisedPrompt,
+        warnings: warnings.length > 0 ? warnings : undefined,
         partial: true,
         error: wrapped,
       };
     }
   }
 
-  return { paths, revisedPrompt };
+  return { paths, revisedPrompt, warnings: warnings.length > 0 ? warnings : undefined };
 }
 
 function resolveOutputPathWithCount(out: string, count: number, index: number): string {

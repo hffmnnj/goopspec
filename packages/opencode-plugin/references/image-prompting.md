@@ -2,7 +2,7 @@
 
 A practical prompting guide for the `generate_image` tool, built on verified GPT Image 2 behavior. Every technique below is backed by observed model behavior, not generic image-generation advice.
 
-The tool is invoked with `generate_image` and supports `prompt`, `out`, `images[]`, `model`, `size`, `quality`, `outputFormat`, `background`, `count`, `inputFidelity`, `detail`, `mask`, `moderation`, and `dryRun`. Default model is `gpt-image-1.5`.
+The tool is invoked with `generate_image` and supports `prompt`, `out`, `images[]`, `size`, `quality`, `outputFormat`, `background`, `count`, `action`, `timeout`, `dryRun`, `authFile`, `moderation`, `outputCompression`, `detail`, `mask`, and `allowRefresh`. Images are generated with `gpt-image-2`; there is no caller-facing `model` argument.
 
 ## Canonical Prompt Skeleton
 
@@ -121,46 +121,78 @@ Image 2: watercolor style reference.
 Apply Image 2's style to the product in Image 1.
 ```
 
-### inputFidelity Semantics
-
-`inputFidelity` only affects `gpt-image-1.5`.
-
-- `high`: strong preservation of input details; use for identity, brand, and precise edits.
-- `low`: more creative freedom; use for style transfer where you want a significant look change.
-
-`gpt-image-2` ignores `inputFidelity` and always processes references at high fidelity. Sending it has no effect but does not error.
-
 ## Transparent Backgrounds
 
-`gpt-image-2` does **not** support transparent backgrounds. This is a deliberate API limitation, not a bug. If you set `model: "gpt-image-2"` and `background: "transparent"`, the tool auto-downgrades to `gpt-image-1.5` and reports the substitution.
+`gpt-image-2` has no native transparent background. When you set `background: "transparent"`, the tool renders the subject on a green screen, then keys the green to alpha locally and writes a PNG.
 
-To get native transparent PNG output, explicitly use `gpt-image-1.5`:
+1. A green-screen instruction is appended to your prompt.
+2. The wire request sends `background: "opaque"` — `"transparent"` is rejected by the v2 backend, and omitting the field can fall back to `auto`.
+3. The returned image is decoded, the green is keyed to alpha, and the result is re-encoded as PNG.
+4. The success message quotes the exact instruction under a `Transparency:` line.
+
+Transparent output is PNG only. `outputFormat: "jpeg"` and `outputFormat: "webp"` are rejected because the local keyer produces PNG; if you omit `outputFormat` with `background: "transparent"`, it defaults to `png`.
+
+If decode, key, or encode throws, the original un-keyed image is still written to disk and a warning is returned. The file on disk will still have a green background.
+
+### Worked example
+
+Prompt you write:
+
+```text
+A cute orange cat sticker, simple design, bold outlines, vibrant colors, crisp silhouette.
+```
+
+Call:
 
 ```json
 {
-  "model": "gpt-image-1.5",
+  "prompt": "A cute orange cat sticker, simple design, bold outlines, vibrant colors, crisp silhouette.",
   "background": "transparent",
   "outputFormat": "png"
 }
 ```
 
-If you need the higher rendering quality of `gpt-image-2`, generate on a solid background and remove it in post-processing.
+What the model actually receives:
+
+```text
+A cute orange cat sticker, simple design, bold outlines, vibrant colors, crisp silhouette.
+
+Render the subject on a uniform, fully saturated green background. Produce no shadows, no contact shadows, and no reflections. Avoid green spill or green light bouncing onto the subject.
+```
+
+What you receive:
+
+```text
+Success: generated 1 image using gpt-image-2.
+Files written:
+  /project/.goopspec/generated-images/cute-orange-cat-sticker-1234567890.png
+Transparency: gpt-image-2 has no native transparent background. The image was rendered on a green screen and keyed to alpha locally. The following instruction was appended to your prompt:
+
+Render the subject on a uniform, fully saturated green background. Produce no shadows, no contact shadows, and no reflections. Avoid green spill or green light bouncing onto the subject.
+```
+
+If the local keying step fails, the same path is returned with a green background and a warning:
+
+```text
+Warnings:
+  Image saved at /project/.goopspec/generated-images/cute-orange-cat-sticker-1234567890.png, but its background is still green rather than transparent because local green-screen keying failed.
+```
+
+### Getting a clean key
+
+The main failure mode is shadows. A contact shadow under the subject keys as a hole or leaves a grey fringe because it is not pure green. The augmentation already asks for no shadows, no contact shadows, and no reflections, but the model may still draw them.
+
+To reduce shadow artifacts:
+
+- Keep the subject physically separated from any ground plane in the prompt. "Floating", "levitating", or "suspended in mid-air" removes the natural shadow anchor.
+- Ask for hard, even studio lighting rather than directional light.
+- Avoid prompts that imply a surface, such as "standing on a table" or "resting on a floor".
+- If you do get fringes, add explicit constraints: "no ground shadow", "no drop shadow", "no cast shadow", "no ambient occlusion".
+- Generate at a size large enough that soft edges are not a single pixel wide; a small anti-aliased fringe can disappear entirely or key unevenly.
 
 ## Size and Aspect Selection
 
-### gpt-image-1.5
-
-Allowed values: `1024x1024`, `1536x1024`, `1024x1536`, `auto`.
-
-| Size | Aspect | Best for |
-|------|--------|----------|
-| `1024x1024` | 1:1 | Icons, product shots, avatars |
-| `1536x1024` | 3:2 | Landscapes, hero banners |
-| `1024x1536` | 2:3 | Portraits, mobile screens |
-
-### gpt-image-2
-
-Custom sizes only. Constraints:
+`gpt-image-2` uses custom sizes only. Constraints:
 
 - Format: `<width>x<height>` with both edges divisible by 16.
 - Maximum edge: 3840px.
@@ -308,14 +340,13 @@ A cute orange cat sticker on a transparent background.
 
 ```json
 {
-  "model": "gpt-image-1.5",
   "prompt": "A cute orange cat sticker, simple design, bold outlines, vibrant colors, crisp silhouette, no halos or fringing.",
   "background": "transparent",
   "outputFormat": "png"
 }
 ```
 
-**Why it works:** `gpt-image-2` rejects transparency, so the strong version explicitly uses `gpt-image-1.5` with `background: "transparent"` and `outputFormat: "png"`.
+**Why it works:** `background: "transparent"` triggers green-screen rendering and local chromakey to alpha; `outputFormat: "png"` is required because the keyer produces PNG only.
 
 ### UI / App Mockups
 
@@ -351,7 +382,6 @@ A diagram of cellular respiration.
 
 ```json
 {
-  "model": "gpt-image-2",
   "prompt": "Create a simple biology diagram titled 'Cellular Respiration at a Glance' for high school students.
 Show how glucose turns into energy inside a cell. Include glycolysis, the Krebs cycle, and the electron transport chain.
 Use arrows to connect the steps and label the main molecules: glucose, pyruvate, ATP, NADH, FADH2, CO2, O2, and H2O.
@@ -397,9 +427,7 @@ She's wearing a blue denim jacket. Soft natural lighting, outdoor setting.
 
 ```json
 {
-  "model": "gpt-image-1.5",
   "images": ["portrait.png"],
-  "inputFidelity": "high",
   "prompt": "Generate a new photo of the SAME woman from the reference image.
 She is now in a coffee shop, wearing a black turtleneck, holding a mug.
 Preserve her exact facial features, hair color and style, eye color, and overall appearance.
@@ -407,7 +435,7 @@ Maintain photorealistic style and natural lighting."
 }
 ```
 
-**Why it works:** It uses the same reference image, the phrase "SAME woman", and an explicit preservation list. `inputFidelity: "high"` is meaningful only for `gpt-image-1.5`.
+**Why it works:** It uses the same reference image, the phrase "SAME woman", and an explicit preservation list. `gpt-image-2` processes reference images at high fidelity by default.
 
 ### Flat Vector Illustration
 
