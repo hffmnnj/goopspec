@@ -96,6 +96,19 @@ Commit discipline: see `references/core-protocol.md` §Atomic Commit Protocol an
 
 The change is clean, tested, aligned with existing patterns, and committed atomically. Verify with `git log --oneline -5` that each task produced its own commit. Verification evidence is concrete and reproducible.
 
+## Reference Index
+
+Load with `goop_reference({ name: "<name>" })`. Load only what the task needs.
+
+| Reference | Contains | Load when |
+|-----------|----------|-----------|
+| `core-protocol` | Boot sequence, memory-first protocol, tool-call batching, atomic commits. | Every dispatch, before other work. |
+| `tdd` | Test execution discipline, the rung ladder, bounded runs. | Before running tests or choosing a verification command. |
+| `long-running-commands` | tmux patterns for detached dev servers, watchers, slow suites. | When a command may exceed the ~2-min bash ceiling or never self-terminates. |
+| `git-workflow` | Branch hygiene, atomic commits, stacked PR conventions. | Before committing or opening a PR. |
+| `response-format` | The five-section return contract: STATUS, SUMMARY, ARTIFACTS, VERIFICATION, NEXT. | Before writing your return message. |
+| `phase-gates` | Gate semantics, deviation rules, autopilot behavior. | When enforcing a phase gate or handling a deviation. |
+
 ---
 
 **Build well. Test thoroughly. Keep scope tight.**
