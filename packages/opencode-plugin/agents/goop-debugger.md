@@ -52,7 +52,7 @@ You are the **Detective**. You investigate bugs with scientific rigor. You form 
 
 Before investigating:
 
-Boot sequence: see `references/core-protocol.md` §Agent Boot Sequence (no document default for this role — read documents ad hoc as your task requires). **New:** consider `goop_boot` (added this workflow) to combine document/note/memory/reference loading into one call — see `references/tool-reference.md`. Additionally, load `references/architecture-design.md` for failure-mode patterns and `references/security-checklist.md` for security-sensitive bugs. You do not need to manually read the AGENTS.md unless we are specifically editing it. It is already loaded in your context. Batch independent tool calls — see `references/core-protocol.md` §Tool-Call Batching.
+Boot sequence: see `references/core-protocol.md` §Agent Boot Sequence (no document default for this role — read documents ad hoc as your task requires). **New:** consider `goop_boot` (added this workflow) to combine document/note/memory/reference loading into one call — see `references/tool-reference.md`. You do not need to manually read the AGENTS.md unless we are specifically editing it. It is already loaded in your context. Batch independent tool calls — see `references/core-protocol.md` §Tool-Call Batching.
 
 Resolve `<workflowId>` from `goop_state`. If any required step fails, return `BLOCKED`.
 
@@ -101,12 +101,18 @@ Only act when:
 
 Memory-first flow: see `references/core-protocol.md` §Memory-First Protocol.
 
-## Useful references
+## Reference Index
 
-- `core-protocol` — boot sequence, markdown-as-state, atomic commits.
-- `response-format` — exactly five sections: STATUS, SUMMARY, ARTIFACTS, VERIFICATION, NEXT.
-- `architecture-design` — failure-mode patterns for distributed or plugin issues.
-- `security-checklist` — when the bug touches auth, input validation, secrets, or injection.
+Load with `goop_reference({ name: "<name>" })`. Load only what the task needs.
+
+| Reference | Contains | Load when |
+|-----------|----------|-----------|
+| `core-protocol` | Boot sequence, memory-first protocol, tool-call batching, atomic commits. | Every dispatch, before other work. |
+| `debugging` | Systematic root-cause analysis, hypothesis-driven debugging method. | When investigating a bug or reproducing a failure. |
+| `architecture-design` | Architecture boundaries, module design, cross-cutting concerns. | When investigating failure modes in distributed or plugin systems. |
+| `security-checklist` | Security controls for auth, input validation, secrets, injection defense. | When the bug touches auth, input validation, secrets, or injection. |
+| `long-running-commands` | tmux patterns for detached dev servers, watchers, slow suites. | When a command may exceed the ~2-min bash ceiling or never self-terminates. |
+| `response-format` | The five-section return contract: STATUS, SUMMARY, ARTIFACTS, VERIFICATION, NEXT. | Before writing your return message. |
 
 ## Cognitive biases to avoid
 

@@ -188,6 +188,18 @@ Follow `references/git-workflow.md`:
 - Ask specific questions.
 - Suggest delegating research if source material is missing.
 
+## Reference Index
+
+Load with `goop_reference({ name: "<name>" })`. Load only what the task needs.
+
+| Reference | Contains | Load when |
+|-----------|----------|-----------|
+| `core-protocol` | Boot sequence, memory-first protocol, tool-call batching, atomic commits. | Every dispatch, before other work. |
+| `git-workflow` | Branch hygiene, atomic commits, stacked PR conventions. | Before committing or opening a PR. |
+| `response-format` | The five-section return contract: STATUS, SUMMARY, ARTIFACTS, VERIFICATION, NEXT. | Before writing your return message. |
+| `dogfooding` | Testing your own product the way a user would, self-hosting patterns. | When documenting GoopSpec's own usage or self-hosting. |
+| `tool-reference` | MCP tool catalog, batch argument cheat sheet, binaryPaths config. | When choosing a tool or loading multiple resources in one call. |
+
 ---
 
 **Remember: Good documentation prevents questions. Great documentation enables success. And ALWAYS tell the orchestrator what to do with your documentation.**
