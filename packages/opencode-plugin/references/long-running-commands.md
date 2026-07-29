@@ -2,6 +2,10 @@
 
 Run dev servers, watch-mode test runners, build watchers, and slow suites inside detached tmux sessions so they survive the blocking `bash` tool's timeout.
 
+## Important: Shell State Does Not Persist Between Tool Calls
+
+Each `bash` tool call runs in a fresh shell. `$$`, `$PWD`, and any shell variables are gone on the next call. Session names and file paths must be **deterministic** so a later tool call can find them. If you need per-run uniqueness, write the chosen name to a stable file such as `/tmp/goopspec-runs/current-session` and read it back on the next call. Prefer absolute paths; the working directory resets to the project root each call.
+
 ## When to Use tmux vs. Blocking `bash`
 
 | Use blocking `bash` | Use a detached tmux session |
@@ -19,31 +23,31 @@ The verified command forms use tmux 3.7b flags. Do not substitute other flags.
 ### Start a detached session
 
 ```bash
-S=mytask-$$; tmux new-session -d -s "$S" 'bun test --watch'
+S=gsrun-build; tmux new-session -d -s "$S" 'bun test --watch'
 ```
 
 ### Check liveness
 
 ```bash
-tmux has-session -t "$S" && echo alive || echo dead
+S=gsrun-build; tmux has-session -t "$S" && echo alive || echo dead
 ```
 
 ### Capture recent pane output
 
 ```bash
-tmux capture-pane -p -t "$S"
+S=gsrun-build; tmux capture-pane -p -t "$S"
 ```
 
 Capture the full scrollback, including blank-prefixed lines, with:
 
 ```bash
-tmux capture-pane -p -S - -t "$S"
+S=gsrun-build; tmux capture-pane -p -S - -t "$S"
 ```
 
 ### Kill the session
 
 ```bash
-tmux kill-session -t "$S"
+S=gsrun-build; tmux kill-session -t "$S"
 ```
 
 ## Critical: tmux Destroys the Session When the Pane Command Exits
@@ -55,7 +59,7 @@ The moment the command running in a tmux pane exits, tmux destroys the session b
 Run the command in a subshell that writes both output and a sentinel file, then poll for the sentinel and read its value.
 
 ```bash
-S=gsrun-$$-build
+S=gsrun-build
 mkdir -p /tmp/goopspec-runs
 TMUX_CMD='bun run --cwd packages/opencode-plugin build'
 tmux new-session -d -s "$S" \
@@ -65,7 +69,7 @@ tmux new-session -d -s "$S" \
 Bounded poll across tool calls:
 
 ```bash
-S=gsrun-$$-build
+S=gsrun-build
 for i in 1 2 3 4 5; do
   if [ -f "/tmp/goopspec-runs/exit-$S" ]; then
     echo "exit=$(cat /tmp/goopspec-runs/exit-$S)"
@@ -78,7 +82,7 @@ done
 Read the captured log regardless of exit status:
 
 ```bash
-cat "/tmp/goopspec-runs/log-$S" | tail -n 80
+S=gsrun-build; cat "/tmp/goopspec-runs/log-$S" | tail -n 80
 ```
 
 This pattern is portable, works with any command, and does not depend on tmux keeping the pane open.
@@ -88,7 +92,7 @@ This pattern is portable, works with any command, and does not depend on tmux ke
 Inside the pane, enable `remain-on-exit` before the command runs, then query the pane's dead status.
 
 ```bash
-S=gsrun-$$-test
+S=gsrun-test
 tmux new-session -d -s "$S" \
   'tmux set -p remain-on-exit on; bun test packages/opencode-plugin/'
 ```
@@ -96,7 +100,7 @@ tmux new-session -d -s "$S" \
 Check whether the pane has died and what exit status it recorded:
 
 ```bash
-tmux display-message -p -t "$S" '#{pane_dead_status}'
+S=gsrun-test; tmux display-message -p -t "$S" '#{pane_dead_status}'
 ```
 
 The value is empty while the command runs, `0` on success, or another number on failure. Always set `remain-on-exit` from inside the pane, not as a chained `\; set -p` on the same `new-session` command; the chained form races the pane's startup and is unreliable.
@@ -106,7 +110,7 @@ The value is empty while the command runs, `0` on success, or another number on 
 Never wait unbounded in a single `bash` tool call. Use short, explicit polls and resume on the next tool call if the process is not ready.
 
 ```bash
-S=gsrun-$$-server
+S=gsrun-server
 for i in $(seq 1 6); do
   if tmux capture-pane -p -t "$S" | grep -q 'ready'; then
     echo ready; break
@@ -122,7 +126,7 @@ If the loop exhausts its budget, continue other work and poll again later. This 
 Use a project-scoped prefix so parallel agents and concurrent runs do not collide.
 
 ```bash
-PREFIX=gsrun-$$-
+PREFIX=gsrun-
 S="${PREFIX}watch"
 ```
 
@@ -131,7 +135,7 @@ Cleanup must be scoped to your own prefix. Never run `tmux kill-server`; it term
 Prefix-scoped cleanup example:
 
 ```bash
-PREFIX=gsrun-$$-
+PREFIX=gsrun-
 tmux list-sessions -F '#{session_name}' | grep "^$PREFIX" | \
   while read -r name; do tmux kill-session -t "$name"; done
 rm -f /tmp/goopspec-runs/log-${PREFIX}* /tmp/goopspec-runs/exit-${PREFIX}*
@@ -145,8 +149,12 @@ rmdir /tmp/goopspec-runs 2>/dev/null || true
 A `setsid` daemon, a double-forked service, or a child that escapes the session's process group may survive `tmux kill-session`. If you start such a process, track its PID and kill it explicitly:
 
 ```bash
-setsid sh -c 'bun run --cwd packages/opencode-plugin dev > /tmp/goopspec-runs/dev-$S.log 2>&1' &
-echo $! > /tmp/goopspec-runs/pid-$S
+S=gsrun-dev
+LOG="/tmp/goopspec-runs/dev-$S.log"
+PID="/tmp/goopspec-runs/pid-$S"
+mkdir -p /tmp/goopspec-runs
+setsid sh -c "bun run --cwd packages/opencode-plugin dev > $LOG 2>&1" &
+echo $! > "$PID"
 ```
 
 Then terminate with the exact PID:
@@ -170,11 +178,11 @@ fi
 Fallback using `setsid`, a PID file, and redirected output:
 
 ```bash
-S=gsrun-$$-watch
+S=gsrun-watch
 LOG="/tmp/goopspec-runs/log-$S"
 PID="/tmp/goopspec-runs/pid-$S"
 mkdir -p /tmp/goopspec-runs
-setsid sh -c 'bun test --watch > "$LOG" 2>&1' &
+setsid sh -c "bun test --watch > $LOG 2>&1" &
 echo $! > "$PID"
 ```
 
@@ -190,6 +198,7 @@ This fallback lacks tmux's pane capture but satisfies the same core requirement:
 ## Anti-Patterns
 
 - **Forgetting `-d`.** `tmux new-session` without `-d` attaches interactively and hangs the `bash` tool call forever. Always use `-d`.
+- **Using `$$` or other shell variables as session names.** Every `bash` tool call runs in a fresh shell, so `$$`-derived names change between calls and cannot be recovered. Use deterministic names like `gsrun-build`.
 - **`tmux wait-for CHANNEL` without `-S`.** `wait-for` waits for a signal that may never arrive. If you use it, wrap it in `timeout` and treat timeout as a resumable condition.
 - **Chaining `\; set -p remain-on-exit on`.** The set command can run before the pane exists, silently failing. Set `remain-on-exit` from inside the pane command instead.
 - **`pkill -f 'pattern'`.** It matches the agent's own command line. Kill by exact PID recorded at start.
