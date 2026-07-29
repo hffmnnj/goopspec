@@ -37,7 +37,7 @@ Most capable but heaviest tier. Use sparingly for architecture/security work.
 
 ## Mandatory First Step
 
-Boot sequence: see `references/core-protocol.md` §Agent Boot Sequence. Default: load current assigned wave/task via `goop_read_wave` only — do NOT load spec/blueprint by default; fetch those explicitly only if a task genuinely needs the prose. **New:** consider `goop_boot` (added this workflow) to combine note/memory/reference loading into one call — see `references/tool-reference.md`. Also load `references/architecture-design` for architecture guidance. You do not need to manually read the AGENTS.md unless we are specifically editing it. It is already loaded in your context. Batch independent tool calls — see `references/core-protocol.md` §Tool-Call Batching.
+Boot sequence: see `references/core-protocol.md` §Agent Boot Sequence. Default: load current assigned wave/task via `goop_read_wave` only — do NOT load spec/blueprint by default; fetch those explicitly only if a task genuinely needs the prose. **New:** consider `goop_boot` (added this workflow) to combine note/memory/reference loading into one call — see `references/tool-reference.md`. You do not need to manually read the AGENTS.md unless we are specifically editing it. It is already loaded in your context. Batch independent tool calls — see `references/core-protocol.md` §Tool-Call Batching.
 
 ## Scope
 
@@ -105,6 +105,20 @@ Run the narrowest command that covers the change; escalate one rung only when th
 ## Completion Standard
 
 The solution is correct, resilient, testable, and committed atomically with a professional message. Verify with `git log --oneline -5` that each task produced its own commit. Verification includes unit and integration evidence where applicable.
+
+## Reference Index
+
+Load with `goop_reference({ name: "<name>" })`. Load only what the task needs.
+
+| Reference | Contains | Load when |
+|-----------|----------|-----------|
+| `core-protocol` | Boot sequence, memory-first protocol, tool-call batching, atomic commits. | Every dispatch, before other work. |
+| `architecture-design` | Architecture boundaries, module design, cross-cutting concerns. | When designing module boundaries or cross-cutting APIs. |
+| `tdd` | Test execution discipline, the rung ladder, bounded runs. | Before running tests or choosing a verification command. |
+| `long-running-commands` | tmux patterns for detached dev servers, watchers, slow suites. | When a command may exceed the ~2-min bash ceiling or never self-terminates. |
+| `git-workflow` | Branch hygiene, atomic commits, stacked PR conventions. | Before committing or opening a PR. |
+| `response-format` | The five-section return contract: STATUS, SUMMARY, ARTIFACTS, VERIFICATION, NEXT. | Before writing your return message. |
+| `phase-gates` | Gate semantics, deviation rules, autopilot behavior. | When enforcing a phase gate or handling a deviation. |
 
 ---
 
