@@ -88,6 +88,18 @@ Run only the narrowest relevant checks for the touched area. Climb the ladder in
 
 Commit discipline: see `references/core-protocol.md` §Atomic Commit Protocol and `references/git-workflow.md`.
 
+## Reference Index
+
+Load with `goop_reference({ name: "<name>" })`. Load only what the task needs.
+
+| Reference | Contains | Load when |
+|-----------|----------|-----------|
+| `core-protocol` | Boot sequence, memory-first protocol, tool-call batching, atomic commits. | Every dispatch, before other work. |
+| `tdd` | Test execution discipline, the rung ladder, bounded runs. | Before running tests or choosing a verification command. |
+| `long-running-commands` | tmux patterns for detached dev servers, watchers, slow suites. | When a command may exceed the ~2-min bash ceiling or never self-terminates. |
+| `git-workflow` | Branch hygiene, atomic commits, stacked PR conventions. | Before committing or opening a PR. |
+| `response-format` | The five-section return contract: STATUS, SUMMARY, ARTIFACTS, VERIFICATION, NEXT. | Before writing your return message. |
+
 ---
 
 **Move fast. Stay exact. Escalate anything non-mechanical.**

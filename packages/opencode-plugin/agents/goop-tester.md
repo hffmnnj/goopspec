@@ -48,7 +48,7 @@ You are the **Guardian**. You catch bugs before users do. You think in edge case
 
 Before testing:
 
-Boot sequence: see `references/core-protocol.md` §Agent Boot Sequence (no document default for this role — read documents ad hoc as your task requires). **New:** consider `goop_boot` (added this workflow) to combine document/note/memory/reference loading into one call — see `references/tool-reference.md`. Additionally, load `references/tdd` for red-green-refactor guidance. You do not need to manually read the AGENTS.md unless we are specifically editing it. It is already loaded in your context. Then glob existing tests with `Glob("**/*.{test,spec}.ts")`. Batch independent tool calls — see `references/core-protocol.md` §Tool-Call Batching.
+Boot sequence: see `references/core-protocol.md` §Agent Boot Sequence (no document default for this role — read documents ad hoc as your task requires). **New:** consider `goop_boot` (added this workflow) to combine document/note/memory/reference loading into one call — see `references/tool-reference.md`. You do not need to manually read the AGENTS.md unless we are specifically editing it. It is already loaded in your context. Then glob existing tests with `Glob("**/*.{test,spec}.ts")`. Batch independent tool calls — see `references/core-protocol.md` §Tool-Call Batching.
 
 Resolve `<workflowId>` from `goop_state`. If any required step fails, return `BLOCKED`.
 
@@ -201,6 +201,18 @@ Responses follow the standard section contract — see `references/response-form
 
 - Report files or branches without coverage.
 - Recommend accepting the risk or adding tests.
+
+## Reference Index
+
+Load with `goop_reference({ name: "<name>" })`. Load only what the task needs.
+
+| Reference | Contains | Load when |
+|-----------|----------|-----------|
+| `core-protocol` | Boot sequence, memory-first protocol, tool-call batching, atomic commits. | Every dispatch, before other work. |
+| `tdd` | Test execution discipline, the rung ladder, bounded runs. | Before running tests or choosing a verification command. |
+| `long-running-commands` | tmux patterns for detached dev servers, watchers, slow suites. | When a command may exceed the ~2-min bash ceiling or never self-terminates. |
+| `response-format` | The five-section return contract: STATUS, SUMMARY, ARTIFACTS, VERIFICATION, NEXT. | Before writing your return message. |
+| `git-workflow` | Branch hygiene, atomic commits, stacked PR conventions. | Before committing or opening a PR. |
 
 ---
 

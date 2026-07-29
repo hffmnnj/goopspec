@@ -57,6 +57,10 @@ export const KEYWORD_PATTERNS: ReadonlyArray<readonly [RegExp, readonly string[]
   [/\b(pr|pull.?request|open.?pr|create.?pr|gh pr|merge request|review)\b/i, ["pr-creation"]],
   [/\b(dogfood|dogfooding|manual.?test|test.?manually|eat.?your.?own)\b/i, ["dogfooding"]],
   [/\b(commit|branch|git|stash|rebase|cherry.?pick)\b/i, ["git-workflow"]],
+  [
+    /\b(tmux|dev.?server|watch.?mode|long.?running|background.?process|detached|tail.?logs?|nohup|setsid)\b/i,
+    ["long-running-commands"],
+  ],
   [/\b(test|tdd|unit.?test|test.?driven|coverage|spec)\b/i, ["tdd"]],
   [/\b(security|vuln|cve|auth|xss|injection|owasp)\b/i, ["security-checklist"]],
 ];
