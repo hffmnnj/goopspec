@@ -49,7 +49,7 @@ packages/opencode-plugin/src/
 
 agents/                    # 14 agent markdown definitions
 commands/                  # 9 slash command definitions
-references/                # 19 consolidated reference documents (incl. field-notes-protocol)
+references/                # 20 consolidated reference documents (incl. field-notes-protocol)
 templates/                 # File templates
 ```
 
@@ -396,4 +396,4 @@ Three MCP tools wrapping external CLIs for AST-aware code analysis and transform
 
 - **Prefer `items[]` batch mode for multi-write turns.** All four write tools (`goop_write_db`, `goop_write_section`, `goop_write_wave`, `goop_save_note`) now accept an optional `items[]` parameter. When writing more than one doc/section/wave/row/note in a turn, use the batch form to minimize tool calls and wrap writes in a single transaction. Single-item usage is unchanged and still supported.
 
-- **Knowledge lives in `references/`, not `skills/`.** GoopSpec 1.0.0 removed the skills feature. Use `goop_reference` to load the 19 consolidated reference documents (including `field-notes-protocol`).
+- **Knowledge lives in `references/`, not `skills/`.** GoopSpec 1.0.0 removed the skills feature. Use `goop_reference` to load the 20 consolidated reference documents (including `field-notes-protocol`).
