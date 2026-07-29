@@ -87,23 +87,26 @@ describe("lazy autopilot nudge", () => {
   it.each([
     ["credentials", "Please provide the production API key before I continue."],
     ["destructive operation", "Should I delete the production database? This is irreversible."],
-  ])("suppresses a %s hard-stop extracted from the final assistant text part", async (_kind, text) => {
-    const ctx = makeExecuteContext(testDir);
-    const promptAsync = mock(async () => undefined);
-    Object.assign(ctx.sdk.client, {
-      session: {
-        messages: mock(async () => ({
-          data: [{ info: { role: "assistant" }, parts: [{ type: "text", text }] }],
-        })),
-        promptAsync,
-      },
-    });
+  ])(
+    "suppresses a %s hard-stop extracted from the final assistant text part",
+    async (_kind, text) => {
+      const ctx = makeExecuteContext(testDir);
+      const promptAsync = mock(async () => undefined);
+      Object.assign(ctx.sdk.client, {
+        session: {
+          messages: mock(async () => ({
+            data: [{ info: { role: "assistant" }, parts: [{ type: "text", text }] }],
+          })),
+          promptAsync,
+        },
+      });
 
-    await dispatchLazyAutopilotNudge(ctx, "sess-hard-stop");
+      await dispatchLazyAutopilotNudge(ctx, "sess-hard-stop");
 
-    expect(promptAsync).not.toHaveBeenCalled();
-    expect(ctx.pendingLazyAutopilotNudges.has("sess-hard-stop")).toBe(false);
-  });
+      expect(promptAsync).not.toHaveBeenCalled();
+      expect(ctx.pendingLazyAutopilotNudges.has("sess-hard-stop")).toBe(false);
+    },
+  );
 
   it("does not throw without promptAsync and queues the system-transform fallback", async () => {
     const ctx = makeExecuteContext(testDir);
