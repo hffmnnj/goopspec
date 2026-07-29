@@ -3,7 +3,12 @@ import { loadMergedConfig } from "../../features/setup/index.js";
 import { log, logError } from "../../shared/logger.js";
 import type { HookFactory, Hooks } from "../types.js";
 import { safeHandler } from "../utils.js";
-import { type NudgeGuardInput, evaluateNudgeGuards, lastMessageRole } from "./guards.js";
+import {
+  type NudgeGuardInput,
+  evaluateNudgeGuards,
+  lastAssistantMessageText,
+  lastMessageRole,
+} from "./guards.js";
 import {
   clearNudgeRateLimitState,
   createNudgeRateLimitCheck,
@@ -28,7 +33,8 @@ function clearNudge(ctx: PluginContext, sessionID: string): void {
 
 /**
  * Sends the lazy-autopilot user nudge after session.idle has fully returned.
- * The map is the single-dispatch gate; SDK failures are observed, never thrown.
+ * The map is a single-dispatch gate until promptAsync acknowledges the request;
+ * subsequent idle events are bounded by the rate limiter.
  */
 export async function dispatchLazyAutopilotNudge(
   ctx: PluginContext,
@@ -71,7 +77,7 @@ export async function dispatchLazyAutopilotNudge(
       lazyAutopilot: workflow.lazyAutopilot,
       acceptanceConfirmed: workflow.acceptanceConfirmed,
       lastMessages: response,
-      lastAssistantText: undefined,
+      lastAssistantText: lastAssistantMessageText(response),
       rateLimitCheck: createNudgeRateLimitCheck(ctx, nudgeConfig),
       killSwitch: true,
     };
@@ -100,13 +106,16 @@ export async function dispatchLazyAutopilotNudge(
       path: { id: sessionID },
       body: { parts: [{ type: "text", text: LAZY_AUTOPILOT_NUDGE_TEXT }] },
     });
-    // promptAsync acknowledges the request with 204, not turn completion. Keep
-    // in-flight state until lifecycle cleanup so duplicate idle events emitted
-    // for the injected turn cannot send a second nudge.
-    void Promise.resolve(request).catch((error: unknown) => {
-      clearNudge(ctx, sessionID);
-      logError("Lazy autopilot nudge request failed", error);
-    });
+    // Keep in-flight until the request is acknowledged so concurrent idle events
+    // cannot both send. Once acknowledged, G8's cooldown rejects duplicate idle
+    // events for this injected turn and permits genuinely later attempts.
+    void Promise.resolve(request).then(
+      () => clearNudge(ctx, sessionID),
+      (error: unknown) => {
+        clearNudge(ctx, sessionID);
+        logError("Lazy autopilot nudge request failed", error);
+      },
+    );
   } catch (error) {
     clearNudge(ctx, sessionID);
     logError("Lazy autopilot nudge dispatch failed", error);

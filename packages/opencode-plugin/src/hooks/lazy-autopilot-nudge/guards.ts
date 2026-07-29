@@ -43,7 +43,6 @@ export type NudgeSuppressionReason =
   | { readonly kind: "lazy-autopilot-disabled" }
   | { readonly kind: "wrong-phase"; readonly phase: WorkflowPhase | "unknown" }
   | { readonly kind: "pending-compaction"; readonly status: "queued" | "in-flight" }
-  | { readonly kind: "awaiting-acceptance" }
   | { readonly kind: "high-severity-blocker"; readonly blockerId: number }
   | { readonly kind: "hard-stop-question"; readonly category: "credentials" | "destructive" }
   | { readonly kind: "mid-work"; readonly lastRole: string | "unknown" }
@@ -70,6 +69,7 @@ export interface NudgeGuardInput {
   readonly workflowId: string;
   readonly phase: WorkflowPhase;
   readonly lazyAutopilot: boolean;
+  /** Workflow state is retained for production-call fidelity; G2 owns phase eligibility. */
   readonly acceptanceConfirmed: boolean;
   readonly lastMessages?: unknown;
   readonly lastAssistantText?: string;
@@ -97,6 +97,40 @@ export function lastMessageRole(messages: unknown): string | undefined {
   const message = last as { role?: unknown; info?: { role?: unknown } };
   const role = message.info?.role ?? message.role;
   return typeof role === "string" ? role : undefined;
+}
+
+/**
+ * Extract text parts from the final SDK message without trusting its shape.
+ * SessionMessagesResponse entries are `{ info, parts }`; unknown or malformed
+ * responses deliberately produce no hard-stop text rather than throwing.
+ */
+export function lastAssistantMessageText(messages: unknown): string | undefined {
+  const response =
+    messages !== null && typeof messages === "object"
+      ? (messages as { data?: unknown })
+      : undefined;
+  const entries = Array.isArray(messages)
+    ? messages
+    : Array.isArray(response?.data)
+      ? response.data
+      : undefined;
+  const last = entries?.at(-1);
+  if (last === null || typeof last !== "object") return undefined;
+
+  const parts = (last as { parts?: unknown }).parts;
+  if (!Array.isArray(parts)) return undefined;
+
+  const text = parts
+    .filter(
+      (part): part is { type: "text"; text: string } =>
+        part !== null &&
+        typeof part === "object" &&
+        (part as { type?: unknown }).type === "text" &&
+        typeof (part as { text?: unknown }).text === "string",
+    )
+    .map((part) => part.text)
+    .join("\n");
+  return text || undefined;
 }
 
 // ---------------------------------------------------------------------------
@@ -144,10 +178,6 @@ export function evaluateNudgeGuards(ctx: PluginContext, input: NudgeGuardInput):
       kind: "pending-compaction",
       status: liveCompaction.status,
     });
-  }
-
-  if (input.acceptanceConfirmed !== true) {
-    return suppress({ kind: "awaiting-acceptance" });
   }
 
   const openBlockers = ctx.db.getBlockers(input.workflowId, "open");

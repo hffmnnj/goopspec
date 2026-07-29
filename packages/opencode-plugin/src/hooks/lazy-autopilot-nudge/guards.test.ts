@@ -25,7 +25,7 @@ describe("lazy autopilot nudge guards", () => {
       workflowId: "default",
       phase: "execute",
       lazyAutopilot: true,
-      acceptanceConfirmed: true,
+      acceptanceConfirmed: false,
       lastMessages: [{ info: { role: "assistant" }, text: "ready" }],
       lastAssistantText: "ready",
       killSwitch: true,
@@ -77,12 +77,12 @@ describe("lazy autopilot nudge guards", () => {
     expect(result.reason).toEqual({ kind: "pending-compaction", status: "in-flight" });
   });
 
-  it("G4: suppresses when acceptance is not confirmed", () => {
+  it("regression: allows an execute-phase workflow before acceptance is confirmed", () => {
     const ctx = createMockPluginContext({ testDir });
     const result = evaluateNudgeGuards(ctx, baseInput({ acceptanceConfirmed: false }));
 
-    expect(result.suppressed).toBe(true);
-    expect(result.reason).toEqual({ kind: "awaiting-acceptance" });
+    expect(result.suppressed).toBe(false);
+    expect(result.reason).toBeNull();
   });
 
   it("G5: suppresses when an unresolved high-severity blocker exists", () => {
