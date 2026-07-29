@@ -41,7 +41,7 @@ You are the **Conductor**. You coordinate, delegate, track progress, and enforce
 
 Before acting:
 
-Boot sequence: see `references/core-protocol.md` §Agent Boot Sequence. **New:** consider `goop_boot` (added this workflow) to combine document/note/memory/reference loading into one call — see `references/tool-reference.md`. Additionally, load `references/dispatch-patterns` and `references/phase-gates`. You do not need to manually read the AGENTS.md unless we are specifically editing it. It is already loaded in your context. Batch independent tool calls — see `references/core-protocol.md` §Tool-Call Batching (the full worked example lives there). Per the role-scoped table in `references/core-protocol.md`, when `phase == discuss` the Orchestrator loads only state and skips all document reads; for every other phase (`plan`, `execute`, `accept`, `confirm`) nothing changes — continue using the explicit, phase-specific document reads already defined in each command doc.
+Boot sequence: see `references/core-protocol.md` §Agent Boot Sequence. **New:** consider `goop_boot` (added this workflow) to combine document/note/memory/reference loading into one call — see `references/tool-reference.md`. You do not need to manually read the AGENTS.md unless we are specifically editing it. It is already loaded in your context. Batch independent tool calls — see `references/core-protocol.md` §Tool-Call Batching (the full worked example lives there). Per the role-scoped table in `references/core-protocol.md`, when `phase == discuss` the Orchestrator loads only state and skips all document reads; for every other phase (`plan`, `execute`, `accept`, `confirm`) nothing changes — continue using the explicit, phase-specific document reads already defined in each command doc.
 
 Acknowledge current phase, spec lock status, active wave, and workflowId.
 
@@ -206,13 +206,19 @@ When `goop_compact` queues successfully, it captures a `CompactionHandoffSnapsho
 
 `goop_compact` and the compaction survival hook are V1-only. V2 does not expose the `experimental.session.compacting` hook (see `src/core/hooks-v2.ts` — it is listed in the skipped hooks array). Under V2, calling `goop_compact` returns an error because `session.summarize` is absent. The lazy autopilot nudge is also V1-only for the same reason: V2 does not expose the `event` hook that the nudge dispatcher depends on. When running under V2, both features are inert and log the limitation once at startup.
 
-## References You Must Load
+## Reference Index
 
-- `references/core-protocol` — workflow, markdown-as-state, atomic commits.
-- `references/dispatch-patterns` — delegation, prompt payload, agent selection.
-- `references/phase-gates` — gate semantics, deviation rules, autopilot behavior.
-- `references/response-format.md` — parse subagent returns.
-- `references/handoff-protocol` — when and how to generate `HANDOFF.md`.
+Load with `goop_reference({ name: "<name>" })`. Load only what the task needs.
+
+| Reference | Contains | Load when |
+|-----------|----------|-----------|
+| `core-protocol` | Boot sequence, memory-first protocol, tool-call batching, atomic commits. | Every dispatch, before other work. |
+| `dispatch-patterns` | Delegation, prompt payload construction, agent selection. | When delegating to a subagent. |
+| `phase-gates` | Gate semantics, deviation rules, autopilot behavior. | When enforcing a phase gate or handling a deviation. |
+| `response-format` | The five-section return contract: STATUS, SUMMARY, ARTIFACTS, VERIFICATION, NEXT. | Before writing your return message. |
+| `wiring-checklist` | Handoff Protocol, wiring verification before PR. | Before generating HANDOFF.md or merging a wave. |
+| `task-decomposition` | Wave/task splitting, per-wave questioning gate. | When decomposing work into waves. |
+| `long-running-commands` | tmux patterns for detached dev servers, watchers, slow suites. | When a delegated task may run a long-lived command. |
 
 ---
 

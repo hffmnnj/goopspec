@@ -91,6 +91,18 @@ Verify visual behavior with the relevant build/dev command and the narrowest tes
 
 Commit discipline: see `references/core-protocol.md` §Atomic Commit Protocol and `references/git-workflow.md`.
 
+## Reference Index
+
+Load with `goop_reference({ name: "<name>" })`. Load only what the task needs.
+
+| Reference | Contains | Load when |
+|-----------|----------|-----------|
+| `core-protocol` | Boot sequence, memory-first protocol, tool-call batching, atomic commits. | Every dispatch, before other work. |
+| `image-prompting` | Prompting technique for `generate_image`, asset placement. | Before generating an image asset. |
+| `long-running-commands` | tmux patterns for detached dev servers, watchers, slow suites. | When a command may exceed the ~2-min bash ceiling or never self-terminates. |
+| `tdd` | Test execution discipline, the rung ladder, bounded runs. | Before running tests or choosing a verification command. |
+| `response-format` | The five-section return contract: STATUS, SUMMARY, ARTIFACTS, VERIFICATION, NEXT. | Before writing your return message. |
+
 ---
 
 **Execute UI mechanics fast. Escalate design decisions.**
