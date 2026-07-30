@@ -101,7 +101,26 @@ describe("lazy autopilot nudge guards", () => {
     expect(result).toEqual(ALLOWED);
   });
 
-  it("carries a subagent parentID and directory in the guard input", () => {
+  it("G2a: suppresses a session whose metadata lookup is unavailable", () => {
+    const ctx = createMockPluginContext({ testDir });
+    const result = evaluateNudgeGuards(
+      ctx,
+      baseInput({
+        session: { status: "unavailable", reason: "get-failed" },
+      }),
+    );
+
+    expect(result).toEqual({
+      suppressed: true,
+      reason: {
+        kind: "session-not-nudge-eligible",
+        reason: "metadata-unavailable",
+        detail: "get-failed",
+      },
+    });
+  });
+
+  it("G2a: suppresses a subagent session", () => {
     const ctx = createMockPluginContext({ testDir });
     const result = evaluateNudgeGuards(
       ctx,
@@ -114,7 +133,62 @@ describe("lazy autopilot nudge guards", () => {
       }),
     );
 
+    expect(result).toEqual({
+      suppressed: true,
+      reason: {
+        kind: "session-not-nudge-eligible",
+        reason: "subagent",
+        detail: "parent-session",
+      },
+    });
+  });
+
+  it("G2b: suppresses a session outside the plugin project", () => {
+    const ctx = createMockPluginContext({ testDir });
+    const result = evaluateNudgeGuards(
+      ctx,
+      baseInput({
+        session: { status: "available", directory: "/workspace/other-project" },
+      }),
+    );
+
+    expect(result).toEqual({
+      suppressed: true,
+      reason: {
+        kind: "project-scope-unverified",
+        reason: "directory-mismatch",
+        sessionDirectory: "/workspace/other-project",
+        projectDirectory: testDir,
+      },
+    });
+  });
+
+  it("G2b: normalizes trailing separators before comparing project directories", () => {
+    const ctx = createMockPluginContext({ testDir });
+    const result = evaluateNudgeGuards(
+      ctx,
+      baseInput({
+        session: { status: "available", directory: `${testDir}/` },
+      }),
+    );
+
     expect(result).toEqual(ALLOWED);
+  });
+
+  it("G2b: fails closed when the plugin directory is unavailable at runtime", () => {
+    const ctx = createMockPluginContext({ testDir });
+    (ctx.sdk as { directory?: string }).directory = undefined;
+
+    const result = evaluateNudgeGuards(ctx, baseInput());
+
+    expect(result).toEqual({
+      suppressed: true,
+      reason: {
+        kind: "project-scope-unverified",
+        reason: "sdk-directory-unavailable",
+        sessionDirectory: testDir,
+      },
+    });
   });
 
   it("G5: suppresses when an unresolved high-severity blocker exists", () => {

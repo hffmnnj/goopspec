@@ -70,6 +70,7 @@ describe("lazy autopilot nudge", () => {
       _client: {},
       model: { providerID: "openai", modelID: "gpt-5.3-codex" },
       messages: mock(async () => [{ info: { role: "assistant" } }]),
+      get: mock(async () => ({ directory: testDir })),
       promptAsync(input: unknown): Promise<void> {
         if (this._client === undefined) throw new TypeError("detached this");
         calls.push(input);
@@ -119,10 +120,10 @@ describe("lazy autopilot nudge", () => {
     await dispatch;
     await Promise.resolve();
 
-    expect(promptAsync).toHaveBeenCalledTimes(1);
+    expect(promptAsync).not.toHaveBeenCalled();
   });
 
-  it("keeps the messages result when session metadata lookup fails", async () => {
+  it("does not nudge when session metadata lookup fails", async () => {
     const ctx = makeExecuteContext(testDir);
     const promptAsync = mock(async () => undefined);
     Object.assign(ctx.sdk.client, {
@@ -136,7 +137,7 @@ describe("lazy autopilot nudge", () => {
     await dispatchLazyAutopilotNudge(ctx, "sess-get-failed");
     await Promise.resolve();
 
-    expect(promptAsync).toHaveBeenCalledTimes(1);
+    expect(promptAsync).not.toHaveBeenCalled();
   });
 
   it("does not nudge when the last message is from the user", async () => {
@@ -168,6 +169,7 @@ describe("lazy autopilot nudge", () => {
           messages: mock(async () => ({
             data: [{ info: { role: "assistant" }, parts: [{ type: "text", text }] }],
           })),
+          get: mock(async () => ({ directory: testDir })),
           promptAsync,
         },
       });
@@ -203,6 +205,7 @@ describe("lazy autopilot nudge", () => {
     Object.assign(ctx.sdk.client, {
       session: {
         messages: mock(async () => [{ info: { role: "assistant" } }]),
+        get: mock(async () => ({ directory: testDir })),
         promptAsync,
       },
     });
@@ -232,6 +235,7 @@ describe("lazy autopilot nudge", () => {
           messages: mock(async () => ({
             data: [{ info: { role: "assistant" }, parts: [{ type: "text", text: "ready" }] }],
           })),
+          get: mock(async () => ({ directory: testDir })),
           promptAsync,
         },
       });
@@ -268,6 +272,7 @@ describe("lazy autopilot nudge", () => {
           messages: mock(async () => ({
             data: [{ info: { role: "assistant" }, parts: [{ type: "text", text: "ready" }] }],
           })),
+          get: mock(async () => ({ directory: testDir })),
           promptAsync,
         },
       });
@@ -297,6 +302,7 @@ describe("lazy autopilot nudge", () => {
       Object.assign(ctx.sdk.client, {
         session: {
           messages: mock(async () => [{ info: { role: "assistant" } }]),
+          get: mock(async () => ({ directory: testDir })),
           promptAsync,
         },
       });
@@ -321,6 +327,7 @@ describe("lazy autopilot nudge", () => {
       Object.assign(ctx.sdk.client, {
         session: {
           messages: mock(async () => [{ info: { role: "assistant" } }]),
+          get: mock(async () => ({ directory: testDir })),
           promptAsync,
         },
       });
@@ -414,6 +421,7 @@ describe("lazy autopilot nudge", () => {
     Object.assign(ctx.sdk.client, {
       session: {
         messages: mock(async () => [{ info: { role: "assistant" } }]),
+        get: mock(async () => ({ directory: testDir })),
         promptAsync(input: unknown): Promise<void> {
           calls.push(input);
           return Promise.resolve();
