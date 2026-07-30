@@ -42,7 +42,7 @@ goop_reference({ name: "core-protocol" })
    - Use sequential dispatch for shared files; parallel dispatch for independent tasks.
    - Require every task to return `STATUS`, `SUMMARY`, `ARTIFACTS`, `VERIFICATION`, `NEXT`.
 3. Apply the four-rule deviation system from `phase-gates`. Log every deviation to `ADL.md` via `goop_adl`.
-4. Verify the wave before calling `goop_state({ action: "update-wave", currentWave: N, totalWaves: M })`.
+4. Before dispatching a wave, call `goop_state({ action: "update-wave", currentWave: N, totalWaves: M })` to record that Wave N is in progress. `currentWave` is 1-based; `0` means no wave has started.
 5. If Atomic PRs = Yes: immediately open a PR for the verified wave against the previous branch (Wave N → Wave N-1; Wave 1 → main) via `gh pr create` or `goop_create_pr`. Do not wait for it to merge. Then create the Wave N+1 branch from the current wave's branch and continue. Show the PR URL in the checkpoint.
 6. Save a checkpoint at wave boundaries.
 
@@ -81,6 +81,6 @@ The lazy autopilot nudge is **V1-only**. V2 does not expose the `event` hook tha
 
 - Skip the spec lock gate.
 - Let the orchestrator write implementation files.
-- Update `update-wave` before verifying the wave.
+- Use `update-wave` to mark a wave complete instead of recording the wave currently in progress.
 - Announce `/goop-accept` without calling `mcp_slashcommand`.
 - Wait for a wave's PR to merge before starting the next wave — stack instead.

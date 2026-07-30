@@ -36,7 +36,6 @@ export const createAutoProgressionHook: HookFactory = (ctx: PluginContext): Part
     // Guard: totalWaves must be positive (waves are configured)
     if (totalWaves <= 0) return;
 
-    // Guard: all waves must be complete (currentWave = waves COMPLETED)
     if (currentWave < totalWaves) return;
 
     // Transition execute → accept

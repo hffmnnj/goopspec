@@ -198,6 +198,24 @@ describe("state durability regressions", () => {
     const persisted = JSON.parse(db.getWorkflow("default")?.state ?? "{}") as WorkflowState;
     expect(persisted.phase).toBe("plan");
   });
+
+  it("allows setState to correct the wave currently in progress", () => {
+    const m = mgr();
+    const state = m.getState();
+    m.updateWaveProgress(3, 5);
+
+    m.setState({
+      ...state,
+      workflows: {
+        ...state.workflows,
+        default: { ...state.workflows.default, currentWave: 2, totalWaves: 4 },
+      },
+    });
+
+    const persisted = JSON.parse(db.getWorkflow("default")?.state ?? "{}") as WorkflowState;
+    expect(persisted.currentWave).toBe(2);
+    expect(persisted.totalWaves).toBe(4);
+  });
 });
 
 // ===========================================================================

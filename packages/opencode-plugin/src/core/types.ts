@@ -139,7 +139,15 @@ export interface WorkflowState {
   interviewComplete: boolean;
   specLocked: boolean;
   acceptanceConfirmed: boolean;
+  /**
+   * Wave currently in progress, using a 1-based number. `0` means no wave has
+   * started; this is not a count of completed waves.
+   */
   currentWave: number;
+  /**
+   * Total number of waves configured for this workflow. `0` means no waves
+   * have been configured.
+   */
   totalWaves: number;
   autopilot: boolean;
   lazyAutopilot: boolean;

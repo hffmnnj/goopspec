@@ -86,6 +86,8 @@ The fastest mental model is: if the tool has a plural/batch argument (`doc_types
 
 **State actions:** `get`, `transition`, `complete-interview`/`reset-interview`, `lock-spec`/`unlock-spec`, `confirm-acceptance`/`reset-acceptance`, `set-mode`, `set-depth`, `set-autopilot`, `update-wave`, `reset`, `list-workflows`, `set-active-workflow`, `create-workflow`. `create-workflow` with `activate: true` collapses create + switch into one call.
 
+**`update-wave` semantics:** `currentWave` is the wave currently in progress, numbered from 1; `0` means no wave has started. `totalWaves` is the configured number of waves. `update-wave` does not count completed waves; completion is recorded in `waves` and `wave_tasks`.
+
 **Setup actions:** `detect` (inspect project), `init`/`plan`/`apply` (create `.goopspec` structure), `models` (view/configure per-role model routing), `verify` (health check), `status` (show config), `reset` (reset to defaults).
 
 `goop_infer_intent`'s `autoApply` (opt-in, default `false`) replaces a manual infer-then-act two-call flow for `create-workflow`/`transition`. When `autoApply: true` and confidence exceeds `confidenceThreshold` (default `0.9`, minimum `0.85`), non-destructive mutations are applied server-side. Returns `mutation: {applied, action, result|error}` in the JSON payload. Granular tools remain available and unchanged.

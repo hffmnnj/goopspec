@@ -214,9 +214,7 @@ function wouldRegressPersistedState(next: GoopState, persisted: GoopState): bool
     if (
       (current.interviewComplete && !candidate.interviewComplete) ||
       (current.specLocked && !candidate.specLocked) ||
-      (current.acceptanceConfirmed && !candidate.acceptanceConfirmed) ||
-      candidate.currentWave < current.currentWave ||
-      candidate.totalWaves < current.totalWaves
+      (current.acceptanceConfirmed && !candidate.acceptanceConfirmed)
     ) {
       return true;
     }
