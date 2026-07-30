@@ -123,7 +123,7 @@ export function createGoopSearchNotesTool(ctx: PluginContext): ToolDefinition {
       _context: ToolContext,
     ): Promise<string> {
       try {
-        if (args.note_id !== undefined) {
+        if (args.note_id !== undefined && args.note_id.trim() !== "") {
           const note = ctx.db.getNoteById(args.note_id);
           if (!note) {
             return `No Field Note found with ID '${args.note_id}'.`;

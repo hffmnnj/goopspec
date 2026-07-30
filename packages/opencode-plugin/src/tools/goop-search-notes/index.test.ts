@@ -230,6 +230,24 @@ describe("goop_search_notes tool", () => {
     expect(result).not.toContain("fn_20260618_sqlite01");
   });
 
+  it("treats empty note_id as omitted and falls through to search", async () => {
+    const tool = createGoopSearchNotesTool(ctx);
+    const result = await tool.execute({ note_id: "", query: "SQLite" }, toolCtx);
+
+    expect(result).toContain("Field Notes");
+    expect(result).toContain("fn_20260618_sqlite01");
+    expect(result).not.toContain("No Field Note found with ID");
+  });
+
+  it("treats whitespace-only note_id as omitted and falls through to search", async () => {
+    const tool = createGoopSearchNotesTool(ctx);
+    const result = await tool.execute({ note_id: "   ", query: "SQLite" }, toolCtx);
+
+    expect(result).toContain("Field Notes");
+    expect(result).toContain("fn_20260618_sqlite01");
+    expect(result).not.toContain("No Field Note found with ID");
+  });
+
   // -----------------------------------------------------------------------
   // Tag-only search (empty query)
   // -----------------------------------------------------------------------
