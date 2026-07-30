@@ -31,6 +31,10 @@ export interface Violation {
   replacement: string;
 }
 
+export interface ScanOptions {
+  maskCodeSpans?: boolean;
+}
+
 // ---------------------------------------------------------------------------
 // Forbidden terms
 // ---------------------------------------------------------------------------
@@ -159,16 +163,98 @@ export const FORBIDDEN_TERMS: TermRule[] = [
 // Scanner
 // ---------------------------------------------------------------------------
 
+function maskRange(text: string, start: number, end: number): string {
+  return text.slice(start, end).replace(/[^\n\r]/g, " ");
+}
+
+function countBackticks(text: string, start: number): number {
+  let end = start;
+  while (text[end] === "`") {
+    end++;
+  }
+  return end - start;
+}
+
+function isFenceStart(text: string, position: number): boolean {
+  const lineStart = text.lastIndexOf("\n", position - 1) + 1;
+  return /^[ \t]{0,3}$/.test(text.slice(lineStart, position));
+}
+
+function findClosingFence(text: string, start: number, delimiterLength: number): number {
+  for (
+    let position = text.indexOf("\n", start);
+    position !== -1;
+    position = text.indexOf("\n", position + 1)
+  ) {
+    const candidate = position + 1;
+    if (!isFenceStart(text, candidate)) {
+      continue;
+    }
+
+    const length = countBackticks(text, candidate);
+    if (length >= delimiterLength) {
+      return candidate + length;
+    }
+  }
+
+  return -1;
+}
+
+function findClosingInlineSpan(text: string, start: number, delimiterLength: number): number {
+  for (let position = start; position < text.length; position++) {
+    if (text[position] !== "`") {
+      continue;
+    }
+
+    const length = countBackticks(text, position);
+    if (length === delimiterLength) {
+      return position + length;
+    }
+    position += length - 1;
+  }
+
+  return -1;
+}
+
+function maskCodeSpans(text: string): string {
+  let masked = "";
+  let position = 0;
+
+  while (position < text.length) {
+    if (text[position] !== "`") {
+      masked += text[position];
+      position++;
+      continue;
+    }
+
+    const delimiterLength = countBackticks(text, position);
+    const end =
+      delimiterLength >= 3 && isFenceStart(text, position)
+        ? findClosingFence(text, position + delimiterLength, delimiterLength)
+        : findClosingInlineSpan(text, position + delimiterLength, delimiterLength);
+
+    if (end === -1) {
+      masked += text.slice(position, position + delimiterLength);
+    } else {
+      masked += maskRange(text, position, end);
+    }
+    position = end === -1 ? position + delimiterLength : end;
+  }
+
+  return masked;
+}
+
 /**
  * Scan text for GoopSpec-internal terminology violations.
  *
- * Splits the input by newlines and runs every `TermRule` pattern against
- * each line. Returns a flat array of all violations with 1-indexed line
- * and column positions.
+ * Masks balanced inline spans and fenced blocks with equal-length filler by
+ * default, then scans each line. The masking preserves line and column
+ * offsets; unbalanced delimiters remain visible to the scanner. Returns a
+ * flat array of all violations with 1-indexed line and column positions.
  */
-export function scanForViolations(text: string): Violation[] {
+export function scanForViolations(text: string, options: ScanOptions = {}): Violation[] {
   try {
-    const lines = text.split("\n");
+    const lines = (options.maskCodeSpans === false ? text : maskCodeSpans(text)).split("\n");
     const violations: Violation[] = [];
 
     for (let i = 0; i < lines.length; i++) {

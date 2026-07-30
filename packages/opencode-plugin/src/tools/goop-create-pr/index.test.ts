@@ -125,6 +125,68 @@ describe("createGoopCreatePrTool", () => {
       expect(spawnCalls).toHaveLength(0);
     });
 
+    it("allows terminology in inline and fenced API code examples", async () => {
+      const tool = createGoopCreatePrTool(ctx);
+      const result = await tool.execute(
+        {
+          title: "Document API usage",
+          body: "Call `goop_write_wave`.\n```ts\nawait goop_write_wave({ wave_number: 3 });\n```",
+          branch: "feat/document-api",
+        },
+        createMockToolContext(),
+      );
+
+      expect(result).toContain("PR Created");
+      expect(spawnCalls).toHaveLength(1);
+    });
+
+    it("still blocks terminology in body prose", async () => {
+      const tool = createGoopCreatePrTool(ctx);
+      const result = await tool.execute(
+        {
+          title: "Document API usage",
+          body: "wave 3 is complete",
+          branch: "feat/document-api",
+        },
+        createMockToolContext(),
+      );
+
+      expect(result).toContain("Blocked");
+      expect(result).toContain('Line 2, col 1: "wave"');
+      expect(spawnCalls).toHaveLength(0);
+    });
+
+    it("reports branch violations with a branch label", async () => {
+      const tool = createGoopCreatePrTool(ctx);
+      const result = await tool.execute(
+        {
+          title: "Document API usage",
+          body: "Clean body text",
+          branch: "feat/wave-api",
+        },
+        createMockToolContext(),
+      );
+
+      expect(result).toContain('branch: col 6: "wave"');
+      expect(result).not.toContain("Line 3");
+      expect(spawnCalls).toHaveLength(0);
+    });
+
+    it("does not exempt backticks in branch names", async () => {
+      const tool = createGoopCreatePrTool(ctx);
+      const result = await tool.execute(
+        {
+          title: "Document API usage",
+          body: "Clean body text",
+          branch: "feat/`wave`-api",
+        },
+        createMockToolContext(),
+      );
+
+      expect(result).toContain('branch: col 7: "wave"');
+      expect(spawnCalls).toHaveLength(0);
+    });
+
     it("does NOT block when content contains only warn-severity terms", async () => {
       const tool = createGoopCreatePrTool(ctx);
       const result = await tool.execute(
