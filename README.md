@@ -764,7 +764,7 @@ Current suite: **1956 tests, 5140 assertions, 109 files, roughly 13 seconds.**
 packages/opencode-plugin/
 ├── agents/           # 14 agent definitions
 ├── commands/         # 9 slash commands
-├── references/       # 20 reference documents
+├── references/       # 19 reference documents
 ├── templates/        # 12 document templates
 └── src/
     ├── core/         # types, constants, V1/V2 seams and adapters

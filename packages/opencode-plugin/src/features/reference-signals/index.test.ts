@@ -124,31 +124,6 @@ describe("detectReferences", () => {
     expect(result.length).toBe(2);
   });
 
-  // -------------------------------------------------------------------------
-  // long-running-commands (added in Task 2.1)
-  // -------------------------------------------------------------------------
-
-  it("matches 'run the dev server in tmux' → includes 'long-running-commands'", () => {
-    expect(detectReferences("run the dev server in tmux")).toContain("long-running-commands");
-  });
-
-  it("matches 'start a watch mode process in the background' → includes 'long-running-commands'", () => {
-    expect(detectReferences("start a watch mode process in the background")).toContain(
-      "long-running-commands",
-    );
-  });
-
-  // -------------------------------------------------------------------------
-  // Regression: the new long-running pattern must not steal test queries
-  // -------------------------------------------------------------------------
-
-  it("regression: 'run tests' is not claimed by long-running-commands", () => {
-    // "tests" (plural) does not match \btest\b, so this resolves to [].
-    // The key assertion: the new long-running pattern must not claim it.
-    const result = detectReferences("run tests");
-    expect(result).not.toContain("long-running-commands");
-  });
-
   it("regression: 'run test' → ['tdd'] (generic test queries still resolve to tdd)", () => {
     expect(detectReferences("run test")).toEqual(["tdd"]);
   });

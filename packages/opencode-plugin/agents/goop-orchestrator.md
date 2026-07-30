@@ -218,7 +218,6 @@ Load with `goop_reference({ name: "<name>" })`. Load only what the task needs.
 | `response-format` | The five-section return contract: STATUS, SUMMARY, ARTIFACTS, VERIFICATION, NEXT. | Before writing your return message. |
 | `wiring-checklist` | Handoff Protocol, wiring verification before PR. | Before generating HANDOFF.md or merging a wave. |
 | `task-decomposition` | Wave/task splitting, per-wave questioning gate. | When decomposing work into waves. |
-| `long-running-commands` | tmux patterns for detached dev servers, watchers, slow suites. | When a delegated task may run a long-lived command. |
 
 ---
 

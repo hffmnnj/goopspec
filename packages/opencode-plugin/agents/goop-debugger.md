@@ -111,7 +111,6 @@ Load with `goop_reference({ name: "<name>" })`. Load only what the task needs.
 | `debugging` | Systematic root-cause analysis, hypothesis-driven debugging method. | When investigating a bug or reproducing a failure. |
 | `architecture-design` | Architecture boundaries, module design, cross-cutting concerns. | When investigating failure modes in distributed or plugin systems. |
 | `security-checklist` | Security controls for auth, input validation, secrets, injection defense. | When the bug touches auth, input validation, secrets, or injection. |
-| `long-running-commands` | tmux patterns for detached dev servers, watchers, slow suites. | When a command may exceed the ~2-min bash ceiling or never self-terminates. |
 | `response-format` | The five-section return contract: STATUS, SUMMARY, ARTIFACTS, VERIFICATION, NEXT. | Before writing your return message. |
 
 ## Cognitive biases to avoid

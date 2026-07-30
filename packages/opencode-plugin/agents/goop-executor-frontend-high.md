@@ -120,7 +120,6 @@ Load with `goop_reference({ name: "<name>" })`. Load only what the task needs.
 | `core-protocol` | Boot sequence, memory-first protocol, tool-call batching, atomic commits. | Every dispatch, before other work. |
 | `architecture-design` | Architecture boundaries, module design, cross-cutting concerns. | When designing module boundaries or cross-cutting APIs. |
 | `image-prompting` | Prompting technique for `generate_image`, asset placement. | Before generating an image asset. |
-| `long-running-commands` | tmux patterns for detached dev servers, watchers, slow suites. | When a command may exceed the ~2-min bash ceiling or never self-terminates. |
 | `tdd` | Test execution discipline, the rung ladder, bounded runs. | Before running tests or choosing a verification command. |
 | `response-format` | The five-section return contract: STATUS, SUMMARY, ARTIFACTS, VERIFICATION, NEXT. | Before writing your return message. |
 | `phase-gates` | Gate semantics, deviation rules, autopilot behavior. | When enforcing a phase gate or handling a deviation. |
