@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, spyOn } from "bun:test";
 import type { PluginContext } from "../core/types.js";
+import type { GoopSpecDB } from "../features/db/index.js";
 import type { TaskStatus, WaveStatus } from "../features/db/types.js";
+import { createStateManager } from "../features/state-manager/index.js";
 import {
   createDefaultWorkflowState,
   createMockPluginContext,
@@ -333,5 +335,106 @@ describe("auto-progression hook", () => {
     expect(adl).toContain("Final wave 4 status: completed");
     expect(adl).toContain("task completion: 2/2");
     expect(adl).not.toContain("All 4 waves complete");
+  });
+});
+
+// -----------------------------------------------------------------------
+// 8. Caller-driven integration: goop_state update-wave → auto-progression
+//
+// These tests exercise the REAL caller path — goop_state tool → DB-backed
+// StateManager → GoopSpecDB — rather than seeding cached state directly.
+// This is the seam that let the original currentWave semantic collision
+// (fn_20260730_p35gznz1) ship unnoticed: both the write side (goop_state
+// update-wave) and the read side (auto-progression hook) were individually
+// tested with the in-memory mock, but the connection between them was not.
+// A test that seeds state directly does not close this gap.
+// -----------------------------------------------------------------------
+
+describe("caller-driven integration (goop_state update-wave → auto-progression hook)", () => {
+  let cleanup: () => void;
+  let testDir: string;
+  let db: GoopSpecDB;
+
+  beforeEach(() => {
+    const env = setupTestEnvironment("caller-driven");
+    cleanup = env.cleanup;
+    testDir = env.testDir;
+    db = env.db;
+  });
+
+  afterEach(() => cleanup());
+
+  /**
+   * Drive a fresh workflow to the execute phase via the real goop_state
+   * tool, then call update-wave to set wave progress. Returns the
+   * PluginContext wired to the REAL DB-backed StateManager — not the
+   * in-memory mock that the other tests in this file use.
+   */
+  async function driveToExecute(currentWave: number, totalWaves: number): Promise<PluginContext> {
+    const stateManager = createStateManager({ projectDir: testDir, db, workflowId: "default" });
+    const ctx = createMockPluginContext({ testDir, db, stateManager });
+    const stateTool = createGoopStateTool(ctx);
+    await stateTool.execute({ action: "transition", phase: "discuss" }, createMockToolContext());
+    await stateTool.execute({ action: "transition", phase: "plan" }, createMockToolContext());
+    await stateTool.execute({ action: "lock-spec" }, createMockToolContext());
+    await stateTool.execute({ action: "transition", phase: "execute" }, createMockToolContext());
+    await stateTool.execute(
+      { action: "update-wave", currentWave, totalWaves },
+      createMockToolContext(),
+    );
+    return ctx;
+  }
+
+  it("reproduces fn_20260730_p35gznz1: update-wave to final wave with pending status and zero tasks does not auto-advance", async () => {
+    // THE CALLER PATH: goop_state({action:"update-wave"}) writes
+    // currentWave=5, totalWaves=5 through the real DB-backed StateManager.
+    const ctx = await driveToExecute(5, 5);
+
+    // The final wave row exists but is pending with zero tasks complete.
+    seedFinalWave(ctx, 5, "pending");
+
+    // Fire the auto-progression hook as a real tool.execute.after event.
+    const hooks = createAutoProgressionHook(ctx);
+    const handler = hooks["tool.execute.after"] as NonNullable<Hooks["tool.execute.after"]>;
+    const output = makeOutput();
+    await handler(makeInput(), output);
+
+    // The phase MUST remain execute — the final wave is pending with 0 tasks.
+    // Pre-fix, currentWave === totalWaves alone triggered the transition.
+    expect(ctx.stateManager.getActiveWorkflow().phase).toBe("execute");
+    expect(output.output).toBe("ok");
+  });
+
+  it("transitions to accept when the final wave and all tasks are complete via the caller path", async () => {
+    const ctx = await driveToExecute(5, 5);
+    seedFinalWave(ctx, 5, "completed", ["done", "completed"]);
+
+    const hooks = createAutoProgressionHook(ctx);
+    const handler = hooks["tool.execute.after"] as NonNullable<Hooks["tool.execute.after"]>;
+    const output = makeOutput();
+    await handler(makeInput(), output);
+
+    expect(ctx.stateManager.getActiveWorkflow().phase).toBe("accept");
+    expect(output.output).toContain("2/2 tasks complete");
+  });
+
+  it("appends ADL with concrete final-wave evidence (not a counter comparison) on caller-driven progression", async () => {
+    const ctx = await driveToExecute(5, 5);
+    seedFinalWave(ctx, 5, "completed", ["done", "completed"]);
+
+    const hooks = createAutoProgressionHook(ctx);
+    const handler = hooks["tool.execute.after"] as NonNullable<Hooks["tool.execute.after"]>;
+    await handler(makeInput(), makeOutput());
+
+    expect(ctx.stateManager.getActiveWorkflow().phase).toBe("accept");
+
+    const adl = ctx.stateManager.getADL();
+    // Concrete evidence: final wave number, its status, task completion counts.
+    expect(adl).toContain("Auto-progression");
+    expect(adl).toContain("accept");
+    expect(adl).toContain("Final wave 5 status: completed");
+    expect(adl).toContain("task completion: 2/2");
+    // Must NOT be a bare counter comparison (the pre-fix message shape).
+    expect(adl).not.toContain("All 5 waves complete");
   });
 });
