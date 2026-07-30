@@ -40,6 +40,9 @@ import { createGoopWriteSectionTool } from "./goop-write-section/index.js";
 import { createGoopWriteWaveTool } from "./goop-write-wave/index.js";
 
 import { createAstGrepTool } from "./ast-grep/index.js";
+import { createBackgroundCancelTool } from "./background-cancel/index.js";
+import { createBackgroundCommandTool } from "./background-command/index.js";
+import { createBackgroundStatusTool } from "./background-status/index.js";
 import { createDifftasticTool } from "./difftastic/index.js";
 import { createGenerateImageTool } from "./generate-image/index.js";
 import { createMemoryForgetTool } from "./memory-forget/index.js";
@@ -47,9 +50,6 @@ import { createMemorySaveTool } from "./memory-save/index.js";
 import { createMemorySearchTool } from "./memory-search/index.js";
 import { createScipTool } from "./scip/index.js";
 import { createSlashcommandTool } from "./slashcommand/index.js";
-import { createBackgroundCommandTool } from "./background-command/index.js";
-import { createBackgroundStatusTool } from "./background-status/index.js";
-import { createBackgroundCancelTool } from "./background-cancel/index.js";
 
 export {
   createAstGrepTool,

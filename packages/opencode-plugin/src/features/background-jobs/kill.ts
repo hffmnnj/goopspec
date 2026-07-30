@@ -1,15 +1,10 @@
-import type { JobRecord } from "./types.js";
 import { logError } from "../../shared/logger.js";
+import type { JobRecord } from "./types.js";
 
 const KILL_GRACE_PERIOD_MS = 2_000;
 
 function isAlreadyDead(error: unknown): boolean {
-  return (
-    typeof error === "object" &&
-    error !== null &&
-    "code" in error &&
-    error.code === "ESRCH"
-  );
+  return typeof error === "object" && error !== null && "code" in error && error.code === "ESRCH";
 }
 
 function ensurePgid(pgid: number): void {
@@ -52,10 +47,7 @@ export function killJobGroup(pgid: number): void {
   escalationTimer.unref();
 }
 
-export function startExpiryTimer(
-  job: JobRecord,
-  onExpire: (job: JobRecord) => void,
-): Timer {
+export function startExpiryTimer(job: JobRecord, onExpire: (job: JobRecord) => void): Timer {
   const ttlMs = Math.max(0, job.deadline - Date.now());
   const timer = setTimeout(() => onExpire(job), ttlMs);
   timer.unref();

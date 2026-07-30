@@ -1,9 +1,9 @@
 import { tool } from "../../core/sdk-compat.js";
 import type { ToolContext, ToolDefinition } from "../../core/sdk-compat.js";
 import type { PluginContext } from "../../core/types.js";
+import { killJobGroup, startExpiryTimer } from "../../features/background-jobs/kill.js";
 import { generateJobId } from "../../features/background-jobs/registry.js";
 import { spawnBackgroundJob } from "../../features/background-jobs/spawn.js";
-import { killJobGroup, startExpiryTimer } from "../../features/background-jobs/kill.js";
 import type { JobRecord } from "../../features/background-jobs/types.js";
 import { logError } from "../../shared/logger.js";
 

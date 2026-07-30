@@ -1,5 +1,5 @@
-import type { JobRecord } from "./types.js";
 import { killJobGroup } from "./kill.js";
+import type { JobRecord } from "./types.js";
 
 export interface BackgroundJobRegistry {
   register(job: JobRecord): void;

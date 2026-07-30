@@ -1,16 +1,17 @@
-import { describe, it, expect, beforeEach, afterEach } from "bun:test";
-import { createBackgroundCancelTool } from "./index.js";
-import {
-  createMockPluginContext,
-  createMockToolContext,
-  setupTestEnvironment,
-  delay,
-  type PluginContext,
-} from "../../test-utils.js";
+import { afterEach, beforeEach, describe, expect, it } from "bun:test";
+import assert from "node:assert/strict";
+import { startExpiryTimer } from "../../features/background-jobs/kill.js";
 import { generateJobId } from "../../features/background-jobs/registry.js";
 import { spawnBackgroundJob } from "../../features/background-jobs/spawn.js";
-import { startExpiryTimer } from "../../features/background-jobs/kill.js";
 import type { JobRecord } from "../../features/background-jobs/types.js";
+import {
+  type PluginContext,
+  createMockPluginContext,
+  createMockToolContext,
+  delay,
+  setupTestEnvironment,
+} from "../../test-utils.js";
+import { createBackgroundCancelTool } from "./index.js";
 
 describe("background_cancel tool", () => {
   let ctx: PluginContext;
@@ -58,7 +59,8 @@ describe("background_cancel tool", () => {
       projectDir: testDir,
       deadline: Date.now() + deadlineMs,
     });
-    trackedJobs.push({ pgid: job.pgid, proc: job.proc! });
+    assert.ok(job.proc, "spawnBackgroundJob must set proc");
+    trackedJobs.push({ pgid: job.pgid, proc: job.proc });
     return job;
   }
 
@@ -85,10 +87,7 @@ describe("background_cancel tool", () => {
     }) as typeof process.kill;
 
     try {
-      const result = await tool.execute(
-        { job_id: job.id },
-        createMockToolContext(),
-      );
+      const result = await tool.execute({ job_id: job.id }, createMockToolContext());
       expect(result).toContain("Cancelled");
       expect(result).toContain(job.id);
     } finally {
@@ -97,8 +96,9 @@ describe("background_cancel tool", () => {
 
     const sigtermCall = killCalls.find((c) => c.signal === "SIGTERM");
     expect(sigtermCall).toBeDefined();
+    assert.ok(sigtermCall, "SIGTERM kill call must be recorded");
     // Kill issued against the NEGATED pgid (process group), not the single pid.
-    expect(sigtermCall!.pid).toBe(-job.pgid);
+    expect(sigtermCall.pid).toBe(-job.pgid);
     // Final registry state.
     expect(ctx.backgroundJobs.get(job.id)?.state).toBe("cancelled");
   });
@@ -134,7 +134,8 @@ describe("background_cancel tool", () => {
     await tool.execute({ job_id: job.id }, createMockToolContext());
 
     // Wait for the SIGTERM'd process to exit (143 = 128 + SIGTERM(15)).
-    const exitCode = await job.proc!.exited;
+    assert.ok(job.proc, "job.proc must be set");
+    const exitCode = await job.proc.exited;
     expect(exitCode).toBe(143);
 
     // Yield so the spawn.ts proc.exited handler (a separate consumer) runs.
@@ -148,17 +149,15 @@ describe("background_cancel tool", () => {
 
   it("returns a no-op message for an already-exited job", async () => {
     const job = spawnJob("true"); // exits 0 immediately
-    await job.proc!.exited;
+    assert.ok(job.proc, "job.proc must be set");
+    await job.proc.exited;
     await delay(50); // let the spawn.ts exit handler update the registry
 
     // Fixture sanity: the job is recorded as exited before we cancel.
     expect(ctx.backgroundJobs.get(job.id)?.state).toBe("exited");
 
     const tool = createBackgroundCancelTool(ctx);
-    const result = await tool.execute(
-      { job_id: job.id },
-      createMockToolContext(),
-    );
+    const result = await tool.execute({ job_id: job.id }, createMockToolContext());
 
     expect(result).toContain("already");
     expect(result).toContain("exited");
@@ -175,10 +174,7 @@ describe("background_cancel tool", () => {
     expect(ctx.backgroundJobs.get(job.id)?.state).toBe("cancelled");
 
     // Second cancel is a no-op.
-    const result = await tool.execute(
-      { job_id: job.id },
-      createMockToolContext(),
-    );
+    const result = await tool.execute({ job_id: job.id }, createMockToolContext());
     expect(result).toContain("already");
     expect(result).toContain("cancelled");
     expect(result).not.toContain("Cancelled background job");
@@ -186,10 +182,7 @@ describe("background_cancel tool", () => {
 
   it("returns not-found for an unknown job id without throwing", async () => {
     const tool = createBackgroundCancelTool(ctx);
-    const result = await tool.execute(
-      { job_id: "job_does_not_exist" },
-      createMockToolContext(),
-    );
+    const result = await tool.execute({ job_id: "job_does_not_exist" }, createMockToolContext());
 
     expect(result).toContain("not found");
     expect(result).toContain("job_does_not_exist");

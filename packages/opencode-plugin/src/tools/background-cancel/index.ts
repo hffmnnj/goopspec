@@ -23,11 +23,7 @@ import type { JobState } from "../../features/background-jobs/types.js";
 import { logError } from "../../shared/logger.js";
 
 /** States from which a job can no longer be cancelled. */
-const TERMINAL_STATES: ReadonlySet<JobState> = new Set([
-  "exited",
-  "cancelled",
-  "timed-out",
-]);
+const TERMINAL_STATES: ReadonlySet<JobState> = new Set(["exited", "cancelled", "timed-out"]);
 
 export function createBackgroundCancelTool(ctx: PluginContext): ToolDefinition {
   return tool({
@@ -38,10 +34,7 @@ export function createBackgroundCancelTool(ctx: PluginContext): ToolDefinition {
     args: {
       job_id: tool.schema.string(),
     },
-    async execute(
-      args: { job_id: string },
-      _context: ToolContext,
-    ): Promise<string> {
+    async execute(args: { job_id: string }, _context: ToolContext): Promise<string> {
       try {
         const job = ctx.backgroundJobs.get(args.job_id);
         if (!job) {
@@ -70,11 +63,7 @@ export function createBackgroundCancelTool(ctx: PluginContext): ToolDefinition {
         if (timer) clearTimeout(timer);
         killJobGroup(job.pgid);
 
-        return (
-          `Cancelled background job ${job.id} ("${job.command}"). ` +
-          `Sent SIGTERM to process group (pgid ${job.pgid}, signaled as ${-job.pgid}); ` +
-          `escalates to SIGKILL after 2s if the group does not exit.`
-        );
+        return `Cancelled background job ${job.id} ("${job.command}"). Sent SIGTERM to process group (pgid ${job.pgid}, signaled as ${-job.pgid}); escalates to SIGKILL after 2s if the group does not exit.`;
       } catch (error: unknown) {
         const msg = error instanceof Error ? error.message : String(error);
         logError("Failed to cancel background job", error);
