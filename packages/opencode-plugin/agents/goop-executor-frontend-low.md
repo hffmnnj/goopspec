@@ -23,6 +23,9 @@ tools:
   - memory_save
   - memory_search
   - todowrite
+  - background_command
+  - background_status
+  - background_cancel
 ---
 
 # GoopSpec Executor · Frontend Low Tier
@@ -86,6 +89,10 @@ Memory-first flow: see `references/core-protocol.md` §Memory-First Protocol.
 ## Verification
 
 Verify visual behavior with the relevant build/dev command and the narrowest test rung (file → directory → `--changed=main` → package), bounded with `--bail=3 --timeout=10000`. Run `bun run --cwd packages/opencode-plugin typecheck`. Scoped is not skipped. See `references/tdd.md` §Test Execution Discipline. For accessibility fixes, run any available a11y check.
+
+## Long-Running Commands
+
+Reach for `background_command` when a step won't self-terminate — a dev server (`vite dev`, `next dev`) or a watch-mode build — or may exceed the bash tool's ceiling (a slow install). Poll with `background_status` instead of waiting, and call `background_cancel` once the job is done. Jobs expire after 30 minutes by default, so pass a larger `timeout_seconds` for longer work. Short blocking commands stay on the plain `bash` tool — that path is unchanged.
 
 ## Commit Discipline
 

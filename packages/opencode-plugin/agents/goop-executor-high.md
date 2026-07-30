@@ -25,6 +25,9 @@ tools:
   - memory_save
   - memory_search
   - todowrite
+  - background_command
+  - background_status
+  - background_cancel
 ---
 
 # GoopSpec Executor · High Tier
@@ -101,6 +104,10 @@ Commit discipline: see `references/core-protocol.md` §Atomic Commit Protocol an
 ## Verification
 
 Run the narrowest command that covers the change; escalate one rung only when the one below cannot cover it. Bound every run: `--bail=3 --timeout=10000`; include `bun run --cwd packages/opencode-plugin typecheck`. See `references/tdd.md` §Test Execution Discipline for the full ladder. Scoped is not skipped. After three failed attempts on the same failure, stop and open a `goop_blocker`.
+
+## Long-Running Commands
+
+Reach for `background_command` when a step will not self-terminate (a dev server, a watch build) or may exceed the bash tool's ceiling (slow suites, long installs, complex builds). Poll with `background_status` rather than blocking, and call `background_cancel` to release the job once it has served its purpose. Every job expires after 30 minutes by default, so pass a larger `timeout_seconds` for longer work. Ordinary short blocking commands stay on the plain `bash` tool — that path is unchanged.
 
 ## Completion Standard
 

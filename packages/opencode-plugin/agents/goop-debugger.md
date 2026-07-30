@@ -23,6 +23,9 @@ tools:
   - memory_save
   - memory_search
   - todowrite
+  - background_command
+  - background_status
+  - background_cancel
 ---
 
 # GoopSpec Debugger
@@ -96,6 +99,10 @@ Only act when:
 - Run the narrowest covering rung (file → directory → `--changed=main` → package), bounded with `--bail=3 --timeout=10000`, then typecheck. See `references/tdd.md` §Test Execution Discipline; scoped is not skipped.
 - Check for regressions in adjacent behavior.
 - Persist the bug pattern to memory.
+
+## Long-Running Commands
+
+Reach for `background_command` when reproducing an issue requires a process that stays alive — a dev server, a running service, or a watch build you need to probe. Poll with `background_status` rather than blocking, and call `background_cancel` once you have captured the reproduction. Jobs expire after 30 minutes by default, so pass a larger `timeout_seconds` for longer investigations. Short blocking commands stay on the plain `bash` tool — that path is unchanged.
 
 ## Memory-first flow
 
