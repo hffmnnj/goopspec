@@ -1,4 +1,5 @@
 import type { JobRecord } from "./types.js";
+import { killJobGroup } from "./kill.js";
 
 export interface BackgroundJobRegistry {
   register(job: JobRecord): void;
@@ -6,6 +7,7 @@ export interface BackgroundJobRegistry {
   list(): JobRecord[];
   update(id: string, changes: Omit<Partial<JobRecord>, "id">): JobRecord | undefined;
   delete(id: string): boolean;
+  disposeAll(): Promise<void>;
 }
 
 const JOB_ID_SPACE = 0x1000000;
@@ -55,6 +57,23 @@ export function createBackgroundJobRegistry(): BackgroundJobRegistry {
 
     delete(id): boolean {
       return jobs.delete(id);
+    },
+
+    async disposeAll(): Promise<void> {
+      for (const job of jobs.values()) {
+        if (job.timer) {
+          clearTimeout(job.timer);
+        }
+
+        if (job.state !== "running") continue;
+
+        try {
+          killJobGroup(job.pgid);
+        } catch {
+          // A failed group cleanup must not prevent remaining jobs from being swept.
+        }
+      }
+      jobs.clear();
     },
   };
 }

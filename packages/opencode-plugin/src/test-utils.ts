@@ -35,6 +35,7 @@ import type {
   WorkflowState,
 } from "./core/types.js";
 import { GoopSpecDB } from "./features/db/index.js";
+import { createBackgroundJobRegistry } from "./features/background-jobs/registry.js";
 import { createSessionManager } from "./features/session/index.js";
 
 // Re-export types that tests commonly need alongside the factories.
@@ -465,6 +466,7 @@ export function createMockPluginContext(opts: MockPluginContextOptions = {}): Pl
     compactionHandoff: new Map(),
     pendingCompactions: new Map(),
     pendingLazyAutopilotNudges: new Map(),
+    backgroundJobs: createBackgroundJobRegistry(),
   };
 }
 

@@ -1,4 +1,7 @@
-import { describe, expect, it } from "bun:test";
+import { afterEach, describe, expect, it } from "bun:test";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 import {
   createBackgroundJobRegistry,
@@ -6,6 +9,7 @@ import {
   transitionJobToExited,
 } from "./registry.js";
 import type { JobRecord } from "./types.js";
+import { spawnBackgroundJob } from "./spawn.js";
 
 function createJob(overrides: Partial<JobRecord> = {}): JobRecord {
   return {
@@ -24,6 +28,14 @@ function createJob(overrides: Partial<JobRecord> = {}): JobRecord {
 }
 
 describe("background job registry", () => {
+  const tempDirs: string[] = [];
+
+  afterEach(() => {
+    for (const tempDir of tempDirs.splice(0)) {
+      rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
   it("round-trips a record across separate get calls", () => {
     const registry = createBackgroundJobRegistry();
     const job = createJob();
@@ -76,5 +88,56 @@ describe("background job registry", () => {
 
     expect(exited.state).toBe("exited");
     expect(exited.exitCode).toBe(0);
+  });
+
+  it("disposes a real running process group and empties the registry", async () => {
+    const tempDir = mkdtempSync(join(tmpdir(), "background-job-registry-"));
+    tempDirs.push(tempDir);
+    const registry = createBackgroundJobRegistry();
+    const job = spawnBackgroundJob(registry, {
+      id: "job_123456",
+      command: "sleep 30",
+      cwd: tempDir,
+      projectDir: tempDir,
+      deadline: Date.now() + 60_000,
+    });
+
+    try {
+      await registry.disposeAll();
+
+      expect(registry.list()).toHaveLength(0);
+      expect(await job.proc?.exited).not.toBe(0);
+    } finally {
+      await registry.disposeAll();
+    }
+  });
+
+  it("continues sweeping after a job cleanup throws and clears expiry timers", async () => {
+    const tempDir = mkdtempSync(join(tmpdir(), "background-job-registry-"));
+    tempDirs.push(tempDir);
+    const registry = createBackgroundJobRegistry();
+    let timerFired = false;
+    const timer = setTimeout(() => {
+      timerFired = true;
+    }, 20);
+    registry.register(createJob({ id: "job_bad001", pgid: 0, timer }));
+    const job = spawnBackgroundJob(registry, {
+      id: "job_dead02",
+      command: "sleep 30",
+      cwd: tempDir,
+      projectDir: tempDir,
+      deadline: Date.now() + 60_000,
+    });
+
+    try {
+      await registry.disposeAll();
+      await Bun.sleep(30);
+
+      expect(registry.list()).toHaveLength(0);
+      expect(await job.proc?.exited).not.toBe(0);
+      expect(timerFired).toBe(false);
+    } finally {
+      await registry.disposeAll();
+    }
   });
 });

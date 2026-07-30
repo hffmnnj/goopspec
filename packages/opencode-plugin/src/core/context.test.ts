@@ -49,7 +49,7 @@ describe("createPluginContext()", () => {
 
   afterEach(() => cleanup());
 
-  it("returns a context with all six required fields", async () => {
+  it("returns a context with all required fields", async () => {
     const input = createMockPluginInput(testDir);
     const ctx = await createPluginContext(input);
 
@@ -59,6 +59,7 @@ describe("createPluginContext()", () => {
     expect(ctx.resolver).toBeDefined();
     expect(ctx.session).toBeDefined();
     expect(ctx.sessionManager).toBeDefined();
+    expect(ctx.backgroundJobs).toBeDefined();
   });
 
   it("populates sdk essentials from PluginInput", async () => {
