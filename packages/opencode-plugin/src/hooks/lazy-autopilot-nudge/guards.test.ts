@@ -185,6 +185,23 @@ describe("lazy autopilot nudge guards", () => {
     expect(result.reason).toEqual({ kind: "rate-limited", detail: "cooldown active" });
   });
 
+  it("G8: reports repeated promptAsync failures with a typed suppression reason", () => {
+    const ctx = createMockPluginContext({ testDir });
+    const rateLimitCheck: NudgeRateLimitCheck = {
+      check: () => ({
+        allowed: false,
+        reason: "reached 3 consecutive promptAsync failures",
+        consecutiveDispatchFailures: 3,
+        maxConsecutiveDispatchFailures: 3,
+      }),
+    };
+
+    const result = evaluateNudgeGuards(ctx, baseInput({ rateLimitCheck }));
+
+    expect(result.suppressed).toBe(true);
+    expect(result.reason).toEqual({ kind: "dispatch-failure-cap", failures: 3, cap: 3 });
+  });
+
   it("G8: default rate-limit check allows the nudge", () => {
     const ctx = createMockPluginContext({ testDir });
     const result = evaluateNudgeGuards(ctx, baseInput());

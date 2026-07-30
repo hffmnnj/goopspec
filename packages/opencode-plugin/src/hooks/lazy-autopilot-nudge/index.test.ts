@@ -223,6 +223,56 @@ describe("lazy autopilot nudge", () => {
     }
   });
 
+  it("contains consecutive promptAsync failures after three attempts", async () => {
+    const errorSpy = spyOn(console, "error").mockImplementation(() => {});
+    try {
+      const ctx = makeExecuteContext(testDir);
+      await Bun.write(
+        `${testDir}/goopspec.json`,
+        JSON.stringify({ lazyAutopilotNudge: { cap: 10, cooldownMs: 0 } }),
+      );
+      const promptAsync = mock(() => Promise.reject(new Error("host unavailable")));
+      Object.assign(ctx.sdk.client, {
+        session: {
+          messages: mock(async () => [{ info: { role: "assistant" } }]),
+          promptAsync,
+        },
+      });
+
+      for (let attempt = 0; attempt < 4; attempt += 1) {
+        await expect(dispatchLazyAutopilotNudge(ctx, "sess-reject")).resolves.toBeUndefined();
+        await Promise.resolve();
+      }
+
+      expect(promptAsync).toHaveBeenCalledTimes(3);
+      expect(ctx.pendingLazyAutopilotNudges.has("sess-reject")).toBe(false);
+    } finally {
+      errorSpy.mockRestore();
+    }
+  });
+
+  it("applies the cooldown before retrying a rejected promptAsync request", async () => {
+    const ctx = makeExecuteContext(testDir);
+    const errorSpy = spyOn(console, "error").mockImplementation(() => {});
+    try {
+      const promptAsync = mock(() => Promise.reject(new Error("temporary host failure")));
+      Object.assign(ctx.sdk.client, {
+        session: {
+          messages: mock(async () => [{ info: { role: "assistant" } }]),
+          promptAsync,
+        },
+      });
+
+      await dispatchLazyAutopilotNudge(ctx, "sess-retry-cooldown");
+      await Promise.resolve();
+      await dispatchLazyAutopilotNudge(ctx, "sess-retry-cooldown");
+
+      expect(promptAsync).toHaveBeenCalledTimes(1);
+    } finally {
+      errorSpy.mockRestore();
+    }
+  });
+
   it("is fully inert when the kill switch is off and makes zero SDK calls", async () => {
     const ctx = makeExecuteContext(testDir);
     // Write a project-root config that disables the nudge.

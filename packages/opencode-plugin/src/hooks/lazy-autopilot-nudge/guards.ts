@@ -21,6 +21,10 @@ import type { PluginContext } from "../../core/types.js";
 export interface NudgeRateLimitResult {
   readonly allowed: boolean;
   readonly reason?: string;
+  /** Set when repeated promptAsync rejections suppress this session. */
+  readonly consecutiveDispatchFailures?: number;
+  /** The dispatch-failure threshold that triggered suppression. */
+  readonly maxConsecutiveDispatchFailures?: number;
   /** Set when the cap is reached and the wave's nudges are abandoned. */
   readonly abandoned?: boolean;
   /** User-visible message to surface on abandonment. */
@@ -46,6 +50,7 @@ export type NudgeSuppressionReason =
   | { readonly kind: "high-severity-blocker"; readonly blockerId: number }
   | { readonly kind: "hard-stop-question"; readonly category: "credentials" | "destructive" }
   | { readonly kind: "mid-work"; readonly lastRole: string | "unknown" }
+  | { readonly kind: "dispatch-failure-cap"; readonly failures: number; readonly cap: number }
   | { readonly kind: "rate-limited"; readonly detail: string }
   | { readonly kind: "kill-switch-off" };
 
@@ -197,6 +202,16 @@ export function evaluateNudgeGuards(ctx: PluginContext, input: NudgeGuardInput):
 
   const rateLimit = (input.rateLimitCheck ?? DEFAULT_RATE_LIMIT_CHECK).check(ctx, input.sessionID);
   if (!rateLimit.allowed) {
+    if (
+      rateLimit.consecutiveDispatchFailures != null &&
+      rateLimit.maxConsecutiveDispatchFailures != null
+    ) {
+      return suppress({
+        kind: "dispatch-failure-cap",
+        failures: rateLimit.consecutiveDispatchFailures,
+        cap: rateLimit.maxConsecutiveDispatchFailures,
+      });
+    }
     return suppress({
       kind: "rate-limited",
       detail: rateLimit.reason ?? "rate-limit check denied nudge",

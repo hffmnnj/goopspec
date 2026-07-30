@@ -17,6 +17,8 @@ import {
   clearNudgeRateLimitState,
   createNudgeRateLimitCheck,
   recordNudge,
+  recordNudgeDispatchFailure,
+  recordNudgeDispatchSuccess,
   resolveLazyAutopilotNudgeConfig,
 } from "./rate-limit.js";
 
@@ -89,6 +91,7 @@ export async function dispatchLazyAutopilotNudge(
     return;
   }
 
+  let promptAsyncStarted = false;
   try {
     const response = await session.messages({ path: { id: sessionID } });
     if (lastMessageRole(response) !== "assistant") {
@@ -130,6 +133,7 @@ export async function dispatchLazyAutopilotNudge(
     recordNudge(ctx, sessionID, workflowId);
 
     const model = resolveOrchestratorModel(ctx.sdk.directory);
+    promptAsyncStarted = true;
     const request = session.promptAsync({
       path: { id: sessionID },
       body: {
@@ -142,14 +146,23 @@ export async function dispatchLazyAutopilotNudge(
     // cannot both send. Once acknowledged, G8's cooldown rejects duplicate idle
     // events for this injected turn and permits genuinely later attempts.
     void Promise.resolve(request).then(
-      () => clearNudge(ctx, sessionID),
-      (error: unknown) => {
+      () => {
+        recordNudgeDispatchSuccess(sessionID);
         clearNudge(ctx, sessionID);
-        logError("Lazy autopilot nudge request failed", error);
+      },
+      () => {
+        recordNudgeDispatchFailure(sessionID);
+        clearNudge(ctx, sessionID);
+        log("Lazy autopilot nudge request failed", { sessionID });
       },
     );
   } catch (error) {
     clearNudge(ctx, sessionID);
+    if (promptAsyncStarted) {
+      recordNudgeDispatchFailure(sessionID);
+      log("Lazy autopilot nudge request failed", { sessionID });
+      return;
+    }
     logError("Lazy autopilot nudge dispatch failed", error);
   }
 }
