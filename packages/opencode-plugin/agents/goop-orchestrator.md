@@ -27,6 +27,7 @@ tools:
   - memory_save
   - memory_search
   - slashcommand
+  - background_status
 permission:
   question: allow
   task:

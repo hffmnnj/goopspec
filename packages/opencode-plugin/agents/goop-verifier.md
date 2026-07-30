@@ -22,6 +22,7 @@ tools:
   - goop_adl
   - memory_save
   - memory_search
+  - background_status
 permission:
   task:
     "*": allow

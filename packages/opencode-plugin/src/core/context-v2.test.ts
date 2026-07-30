@@ -27,6 +27,7 @@ describe("createPluginContextV2()", () => {
     expect(context.resolver).toBeDefined();
     expect(context.session).toBeDefined();
     expect(context.sessionManager).toBeDefined();
+    expect(context.backgroundJobs).toBeDefined();
   });
 
   it("uses the process working directory when V2 provides no directory", async () => {
