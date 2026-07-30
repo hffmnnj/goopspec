@@ -1,4 +1,5 @@
 import type { JobRecord } from "./types.js";
+import { logError } from "../../shared/logger.js";
 
 const KILL_GRACE_PERIOD_MS = 2_000;
 
@@ -39,12 +40,13 @@ export function killJobGroup(pgid: number): void {
   }
 
   const escalationTimer = setTimeout(() => {
-    if (!isAlive(groupId)) return;
-
     try {
+      if (!isAlive(groupId)) return;
       process.kill(groupId, "SIGKILL");
     } catch (error) {
-      if (!isAlreadyDead(error)) throw error;
+      if (!isAlreadyDead(error)) {
+        logError("Failed to escalate background job process group termination", error);
+      }
     }
   }, KILL_GRACE_PERIOD_MS);
   escalationTimer.unref();

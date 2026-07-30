@@ -21,11 +21,21 @@ function createJob(overrides: Partial<JobRecord> = {}): JobRecord {
 
 describe("background job termination", () => {
   let originalKill: typeof process.kill | undefined;
+  let originalSetTimeout: typeof setTimeout | undefined;
+  let originalConsoleError: typeof console.error | undefined;
 
   afterEach(() => {
     if (originalKill) {
       process.kill = originalKill;
       originalKill = undefined;
+    }
+    if (originalSetTimeout) {
+      globalThis.setTimeout = originalSetTimeout;
+      originalSetTimeout = undefined;
+    }
+    if (originalConsoleError) {
+      console.error = originalConsoleError;
+      originalConsoleError = undefined;
     }
   });
 
@@ -52,6 +62,33 @@ describe("background job termination", () => {
 
     expect(() => killJobGroup(456)).not.toThrow();
     expect(isAlive(456)).toBe(false);
+  });
+
+  it("logs and swallows a non-ESRCH escalation failure", () => {
+    originalKill = process.kill;
+    originalSetTimeout = globalThis.setTimeout;
+    originalConsoleError = console.error;
+    const errors: unknown[][] = [];
+    let escalationCallback: (() => void) | undefined;
+    console.error = ((...args: unknown[]) => {
+      errors.push(args);
+    }) as typeof console.error;
+    globalThis.setTimeout = ((callback: () => void) => {
+      escalationCallback = callback;
+      return { unref: () => undefined } as unknown as ReturnType<typeof setTimeout>;
+    }) as typeof setTimeout;
+    process.kill = ((_pid: number, signal?: NodeJS.Signals | number) => {
+      if (signal === "SIGTERM") return true;
+      const error = new Error("permission denied") as NodeJS.ErrnoException;
+      error.code = "EPERM";
+      throw error;
+    }) as typeof process.kill;
+
+    killJobGroup(456);
+
+    expect(escalationCallback).toBeDefined();
+    expect(() => escalationCallback?.()).not.toThrow();
+    expect(errors[0]?.[0]).toContain("Failed to escalate background job process group termination");
   });
 
   it("reports a backdated deadline as expired", () => {

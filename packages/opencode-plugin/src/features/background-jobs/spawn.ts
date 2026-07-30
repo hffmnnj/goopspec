@@ -1,6 +1,7 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
+import { logError } from "../../shared/logger.js";
 import {
   type BackgroundJobRegistry,
   transitionJobToExited,
@@ -54,13 +55,30 @@ export function spawnBackgroundJob(
   };
 
   registry.register(job);
-  void proc.exited.then((exitCode) => {
-    const currentJob = registry.get(job.id);
-    if (currentJob) {
-      registry.update(job.id, transitionJobToExited(currentJob, exitCode));
-    }
-    writeFileSync(join(logDir, "exit.code"), String(exitCode));
-  });
+  void proc.exited
+    .then((exitCode) => {
+      try {
+        const currentJob = registry.get(job.id);
+        if (currentJob) {
+          const exitedJob = transitionJobToExited(currentJob, exitCode);
+          registry.update(job.id, {
+            state: exitedJob.state,
+            exitCode: exitedJob.exitCode,
+          });
+        }
+      } catch (error) {
+        logError("Failed to update exited background job state", error);
+      }
+
+      try {
+        writeFileSync(join(logDir, "exit.code"), String(exitCode));
+      } catch (error) {
+        logError("Failed to write background job exit code", error);
+      }
+    })
+    .catch((error) => {
+      logError("Failed to process background job exit", error);
+    });
 
   return job;
 }
