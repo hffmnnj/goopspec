@@ -355,6 +355,14 @@ describe("phase transitions", () => {
     expect(m.getActiveWorkflow().phase).toBe("accept");
   });
 
+  it("persists the manual override latch for a forced transition", () => {
+    const m1 = mgr();
+    m1.transitionPhase("accept", true);
+
+    const m2 = createStateManager({ projectDir: testDir, db });
+    expect(m2.getActiveWorkflow().manualOverride).toBe(true);
+  });
+
   it("transitions are scoped to the active workflow", () => {
     const m = mgr();
     m.createWorkflow("feat-auth");

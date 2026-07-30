@@ -149,6 +149,12 @@ export interface WorkflowState {
    * have been configured.
    */
   totalWaves: number;
+  /**
+   * Prevents automatic phase progression after an operator makes a forced
+   * transition. It persists across restarts until `clear-manual-override` is
+   * explicitly invoked through `goop_state`, or the workflow is reset.
+   */
+  manualOverride?: boolean;
   autopilot: boolean;
   lazyAutopilot: boolean;
   gitignoreGoopspec?: boolean;
@@ -178,6 +184,7 @@ export interface StateManager {
 
   // Workflow mutations (operate on the active workflow)
   updateWorkflow(updates: Partial<WorkflowState>): void;
+  /** A forced transition also enables the persisted manual-override latch. */
   transitionPhase(to: WorkflowPhase, force?: boolean): void;
   lockSpec(): void;
   unlockSpec(): void;

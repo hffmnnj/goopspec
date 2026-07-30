@@ -4,8 +4,10 @@ import type { TaskStatus, WaveStatus } from "../features/db/types.js";
 import {
   createDefaultWorkflowState,
   createMockPluginContext,
+  createMockToolContext,
   setupTestEnvironment,
 } from "../test-utils.js";
+import { createGoopStateTool } from "../tools/goop-state/index.js";
 import { createAutoProgressionHook } from "./auto-progression.js";
 import type { Hooks } from "./types.js";
 
@@ -167,6 +169,42 @@ describe("auto-progression hook", () => {
     // Phase stays accept — no double-transition
     expect(ctx.stateManager.getActiveWorkflow().phase).toBe("accept");
     expect(output.output).toBe("ok");
+  });
+
+  it("honors a forced accept-to-execute correction until explicitly cleared", async () => {
+    const ctx = createMockPluginContext({
+      testDir,
+      state: {
+        workflows: {
+          default: createDefaultWorkflowState({
+            phase: "accept",
+            currentWave: 3,
+            totalWaves: 3,
+            specLocked: true,
+          }),
+        },
+      },
+    });
+    seedFinalWave(ctx, 3, "completed", ["completed"]);
+    const stateTool = createGoopStateTool(ctx);
+    await stateTool.execute(
+      { action: "transition", phase: "execute", force: true },
+      createMockToolContext(),
+    );
+
+    const hooks = createAutoProgressionHook(ctx);
+    const handler = hooks["tool.execute.after"] as NonNullable<Hooks["tool.execute.after"]>;
+
+    await handler(makeInput(), makeOutput());
+    await handler(makeInput(), makeOutput());
+
+    expect(ctx.stateManager.getActiveWorkflow().phase).toBe("execute");
+    expect(ctx.stateManager.getActiveWorkflow().manualOverride).toBe(true);
+
+    await stateTool.execute({ action: "clear-manual-override" }, createMockToolContext());
+    await handler(makeInput(), makeOutput());
+
+    expect(ctx.stateManager.getActiveWorkflow().phase).toBe("accept");
   });
 
   // -----------------------------------------------------------------------

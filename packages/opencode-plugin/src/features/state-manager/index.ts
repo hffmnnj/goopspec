@@ -559,6 +559,7 @@ export function createStateManager(opts: CreateStateManagerOptions): StateManage
 
       mutateActive((wf) => {
         wf.phase = to;
+        if (force) wf.manualOverride = true;
       });
     },
 

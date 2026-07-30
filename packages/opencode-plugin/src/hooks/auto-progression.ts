@@ -11,6 +11,8 @@
  * Guards:
  * - Idempotent: does not re-trigger if already in the target phase.
  * - Safe: totalWaves must be > 0 (no progression on uninitialised waves).
+ * - Manual: a persisted forced-transition override pauses progression until
+ *   the operator explicitly clears it through `goop_state`.
  * - Graceful: never throws — wrapped with safeHandler.
  */
 
@@ -31,6 +33,10 @@ export const createAutoProgressionHook: HookFactory = (ctx: PluginContext): Part
 
     // Only progress from execute phase
     if (workflow.phase !== "execute") return;
+
+    // A forced phase correction is durable operator intent. Do not undo it
+    // until the operator explicitly returns control to automatic progression.
+    if (workflow.manualOverride) return;
 
     const { totalWaves } = workflow;
 

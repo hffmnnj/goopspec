@@ -97,6 +97,7 @@ describe("goop_state tool", () => {
       );
       expect(result).toContain("execute");
       expect(ctx.stateManager.getActiveWorkflow().phase).toBe("execute");
+      expect(ctx.stateManager.getActiveWorkflow().manualOverride).toBe(true);
     });
 
     it("renders STATUS.md after phase transition and spec lock mutations", async () => {
@@ -345,6 +346,28 @@ describe("goop_state tool", () => {
       const result = await tool.execute({ action: "set-autopilot" }, createMockToolContext());
       expect(result).toContain("Error");
       expect(result).toContain("autopilot");
+    });
+  });
+
+  // -----------------------------------------------------------------------
+  // manual progression override
+  // -----------------------------------------------------------------------
+
+  describe("action: clear-manual-override", () => {
+    it("clears the persisted forced-transition latch", async () => {
+      const tool = createGoopStateTool(ctx);
+      await tool.execute(
+        { action: "transition", phase: "execute", force: true },
+        createMockToolContext(),
+      );
+
+      const result = await tool.execute(
+        { action: "clear-manual-override" },
+        createMockToolContext(),
+      );
+
+      expect(result).toContain("Automatic progression may resume");
+      expect(ctx.stateManager.getActiveWorkflow().manualOverride).toBe(false);
     });
   });
 
