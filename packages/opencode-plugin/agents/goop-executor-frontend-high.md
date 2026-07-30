@@ -110,6 +110,10 @@ Commit discipline: see `references/core-protocol.md` §Atomic Commit Protocol an
 
 Verify behavior with the relevant build/dev command and the narrowest test rung (file → directory → `--changed=main` → package), bounded with `--bail=3 --timeout=10000`. Run `bun run --cwd packages/opencode-plugin typecheck`. Scoped is not skipped. See `references/tdd.md` §Test Execution Discipline. For a11y changes, run available checks.
 
+## Long-Running Commands
+
+Reach for `background_command` when a step will not self-terminate — a dev server or a watch-mode build — or may exceed the bash tool's ceiling (a slow install, a long build). Poll with `background_status` rather than blocking, and call `background_cancel` to release the job once it has served its purpose. Jobs expire after 30 minutes by default, so pass a larger `timeout_seconds` for longer work. Ordinary short blocking commands stay on the plain `bash` tool — that path is unchanged.
+
 ## Completion Standard
 
 The interface is polished, accessible, responsive, and aligned with project conventions. Verify with `git log --oneline -5` that each task produced its own commit. Verification includes meaningful evidence for visual behavior and accessibility-sensitive interactions.

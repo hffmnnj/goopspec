@@ -88,7 +88,7 @@ describe("background_status tool", () => {
   });
 
   // -------------------------------------------------------------------------
-  // LOAD-BEARING: the core tmux failure this workflow exists to fix
+  // LOAD-BEARING: the core detached-process failure this workflow exists to fix
   // -------------------------------------------------------------------------
 
   it("returns captured output for an already-exited job", async () => {

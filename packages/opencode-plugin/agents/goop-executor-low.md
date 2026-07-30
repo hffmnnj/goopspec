@@ -87,6 +87,10 @@ Memory-first flow: see `references/core-protocol.md` §Memory-First Protocol.
 
 Run only the narrowest relevant checks for the touched area. Climb the ladder in `references/tdd.md` §Test Execution Discipline; bound each run with `--bail=3 --timeout=10000`, include `bun run --cwd packages/opencode-plugin typecheck`. Scoped is not skipped. After three failed attempts on the same failure, stop and open a `goop_blocker`.
 
+## Long-Running Commands
+
+Reach for `background_command` when a step won't self-terminate (a dev server, a watch build) or may exceed the bash tool's ceiling (a slow install). Poll with `background_status` instead of waiting, and call `background_cancel` once the job is done. Every job expires after 30 minutes by default, so pass a larger `timeout_seconds` for longer work. Ordinary short blocking commands stay on the plain `bash` tool — that path is unchanged.
+
 ## Commit Discipline
 
 Commit discipline: see `references/core-protocol.md` §Atomic Commit Protocol and `references/git-workflow.md`.

@@ -100,6 +100,10 @@ Only act when:
 - Check for regressions in adjacent behavior.
 - Persist the bug pattern to memory.
 
+## Long-Running Commands
+
+Reach for `background_command` when reproducing an issue requires a process that stays alive — a dev server, a running service, or a watch build you need to probe. Poll with `background_status` rather than blocking, and call `background_cancel` once you have captured the reproduction. Jobs expire after 30 minutes by default, so pass a larger `timeout_seconds` for longer investigations. Short blocking commands stay on the plain `bash` tool — that path is unchanged.
+
 ## Memory-first flow
 
 Memory-first flow: see `references/core-protocol.md` §Memory-First Protocol.
