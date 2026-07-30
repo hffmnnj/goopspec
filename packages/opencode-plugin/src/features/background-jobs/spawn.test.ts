@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it } from "bun:test";
+import assert from "node:assert/strict";
 import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -61,7 +62,7 @@ describe("spawnBackgroundJob", () => {
     originalSpawn = Bun.spawn;
     originalConsoleError = console.error;
     const errors: unknown[][] = [];
-    let resolveExit: (exitCode: number) => void;
+    let resolveExit: (exitCode: number) => void = () => {};
     const exited = new Promise<number>((resolve) => {
       resolveExit = resolve;
     });
@@ -80,7 +81,8 @@ describe("spawnBackgroundJob", () => {
       deadline: Date.now() + 1_000,
     });
     rmSync(job.logDir, { recursive: true, force: true });
-    resolveExit!(23);
+    assert.ok(resolveExit, "resolveExit must be defined before calling it");
+    resolveExit(23);
     await exited;
     await Promise.resolve();
     await Promise.resolve();

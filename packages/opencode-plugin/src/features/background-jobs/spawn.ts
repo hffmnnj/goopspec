@@ -2,10 +2,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { logError } from "../../shared/logger.js";
-import {
-  type BackgroundJobRegistry,
-  transitionJobToExited,
-} from "./registry.js";
+import { type BackgroundJobRegistry, transitionJobToExited } from "./registry.js";
 import type { JobRecord } from "./types.js";
 
 /**

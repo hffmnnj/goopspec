@@ -9,8 +9,8 @@
  */
 
 import type { PluginInput } from "@opencode-ai/plugin";
-import type { GoopSpecDB } from "../features/db/index.js";
 import type { BackgroundJobRegistry } from "../features/background-jobs/registry.js";
+import type { GoopSpecDB } from "../features/db/index.js";
 import type { SessionManager } from "../features/session/index.js";
 import type {
   AgentRole,

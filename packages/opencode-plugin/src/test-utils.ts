@@ -34,8 +34,8 @@ import type {
   StateManager,
   WorkflowState,
 } from "./core/types.js";
-import { GoopSpecDB } from "./features/db/index.js";
 import { createBackgroundJobRegistry } from "./features/background-jobs/registry.js";
+import { GoopSpecDB } from "./features/db/index.js";
 import { createSessionManager } from "./features/session/index.js";
 
 // Re-export types that tests commonly need alongside the factories.

@@ -3,13 +3,9 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import {
-  createBackgroundJobRegistry,
-  generateJobId,
-  transitionJobToExited,
-} from "./registry.js";
-import type { JobRecord } from "./types.js";
+import { createBackgroundJobRegistry, generateJobId, transitionJobToExited } from "./registry.js";
 import { spawnBackgroundJob } from "./spawn.js";
+import type { JobRecord } from "./types.js";
 
 function createJob(overrides: Partial<JobRecord> = {}): JobRecord {
   return {
