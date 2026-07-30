@@ -16,22 +16,32 @@ import type { FieldNoteRow } from "../../features/db/types.js";
 // Formatting
 // ---------------------------------------------------------------------------
 
-function sliceNoteBody(body: string, full: boolean, bodyOffset: number, bodyLimit: number): string {
+interface SlicedBody {
+  body: string;
+  truncated: boolean;
+  bodyChars: number;
+}
+
+function sliceNoteBody(body: string, full: boolean, bodyOffset: number, bodyLimit: number): SlicedBody {
+  const bodyChars = body.length;
   const hasRangeRequest = full || bodyOffset > 0 || bodyLimit > 0;
   if (!hasRangeRequest) {
-    return body.length > 200 ? `${body.slice(0, 200)}...` : body;
+    if (body.length > 200) {
+      return { body: `${body.slice(0, 200)}...`, truncated: true, bodyChars };
+    }
+    return { body, truncated: false, bodyChars };
   }
 
   const offset = Math.max(bodyOffset, 0);
   if (offset >= body.length) {
-    return "";
+    return { body: "", truncated: false, bodyChars };
   }
 
   if (bodyLimit <= 0) {
-    return body.slice(offset);
+    return { body: body.slice(offset), truncated: false, bodyChars };
   }
 
-  return body.slice(offset, offset + bodyLimit);
+  return { body: body.slice(offset, offset + bodyLimit), truncated: false, bodyChars };
 }
 
 function formatNote(
@@ -47,15 +57,21 @@ function formatNote(
     tags = note.tags;
   }
 
-  const body = sliceNoteBody(note.body, full, bodyOffset, bodyLimit);
+  const { body, truncated, bodyChars } = sliceNoteBody(note.body, full, bodyOffset, bodyLimit);
 
-  return [
+  const lines = [
     `### ${note.id} — ${note.title}`,
-    `**Tags:** ${tags} | **Importance:** ${note.importance}/10 | **Agent:** ${note.source_agent}`,
+    `**Tags:** ${tags} | **Importance:** ${note.importance}/10 | **Agent:** ${note.source_agent} | **Body chars:** ${bodyChars}`,
     body,
-    "",
-    "---",
-  ].join("\n");
+  ];
+
+  if (truncated) {
+    lines.push("*(truncated — re-fetch with full: true or note_id for the complete body)*");
+  }
+
+  lines.push("", "---");
+
+  return lines.join("\n");
 }
 
 // ---------------------------------------------------------------------------
