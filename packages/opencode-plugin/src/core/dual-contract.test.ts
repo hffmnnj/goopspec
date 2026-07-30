@@ -188,12 +188,12 @@ describe("dual-contract parity", () => {
     expect(typeof plugin.setup).toBe("function");
   });
 
-  it("V1 path returns the canonical 35-tool set", async () => {
+  it("V1 path returns the canonical 38-tool set", async () => {
     const input = createV1MockPluginInput(testDir);
     const result = await plugin(input);
 
     expect(result.tool).toBeDefined();
-    expect(Object.keys(result.tool ?? {})).toHaveLength(35);
+    expect(Object.keys(result.tool ?? {})).toHaveLength(38);
 
     const directTools = Object.keys(createTools(createMockPluginContext({ testDir }))).sort();
     expect(Object.keys(result.tool ?? {}).sort()).toEqual(directTools);
@@ -215,7 +215,7 @@ describe("dual-contract parity", () => {
     // Every other V1/V2 tool registration must remain in strict parity.
     expect(v1Only).toEqual(["goop_compact"]);
     expect(v2Only).toEqual([]);
-    expect(v2Tools).toHaveLength(34);
+    expect(v2Tools).toHaveLength(37);
   });
 
   it("goop_status produces identical text through V1 and V2", async () => {
