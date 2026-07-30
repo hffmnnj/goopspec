@@ -49,7 +49,7 @@ describe("createPluginContext()", () => {
 
   afterEach(() => cleanup());
 
-  it("returns a context with all six required fields", async () => {
+  it("returns a context with all required fields", async () => {
     const input = createMockPluginInput(testDir);
     const ctx = await createPluginContext(input);
 
@@ -59,6 +59,7 @@ describe("createPluginContext()", () => {
     expect(ctx.resolver).toBeDefined();
     expect(ctx.session).toBeDefined();
     expect(ctx.sessionManager).toBeDefined();
+    expect(ctx.backgroundJobs).toBeDefined();
   });
 
   it("populates sdk essentials from PluginInput", async () => {
@@ -106,13 +107,13 @@ describe("createPluginContext()", () => {
     expect(Number.isNaN(Date.parse(ctx.session.startedAt))).toBe(false);
   });
 
-  it("produces a context that createTools accepts (35 tools)", async () => {
+  it("produces a context that createTools accepts (38 tools)", async () => {
     const input = createMockPluginInput(testDir);
     const ctx = await createPluginContext(input);
     const tools = createTools(ctx);
 
     const toolNames = Object.keys(tools);
-    expect(toolNames).toHaveLength(35);
+    expect(toolNames).toHaveLength(38);
     expect(toolNames).toContain("goop_status");
     expect(toolNames).toContain("goop_state");
     expect(toolNames).toContain("goop_compact");

@@ -23,6 +23,9 @@ tools:
   - memory_save
   - memory_search
   - todowrite
+  - background_command
+  - background_status
+  - background_cancel
 ---
 
 # GoopSpec Debugger
@@ -97,6 +100,10 @@ Only act when:
 - Check for regressions in adjacent behavior.
 - Persist the bug pattern to memory.
 
+## Long-Running Commands
+
+Reach for `background_command` when reproducing an issue requires a process that stays alive — a dev server, a running service, or a watch build you need to probe. Poll with `background_status` rather than blocking, and call `background_cancel` once you have captured the reproduction. Jobs expire after 30 minutes by default, so pass a larger `timeout_seconds` for longer investigations. Short blocking commands stay on the plain `bash` tool — that path is unchanged.
+
 ## Memory-first flow
 
 Memory-first flow: see `references/core-protocol.md` §Memory-First Protocol.
@@ -111,7 +118,6 @@ Load with `goop_reference({ name: "<name>" })`. Load only what the task needs.
 | `debugging` | Systematic root-cause analysis, hypothesis-driven debugging method. | When investigating a bug or reproducing a failure. |
 | `architecture-design` | Architecture boundaries, module design, cross-cutting concerns. | When investigating failure modes in distributed or plugin systems. |
 | `security-checklist` | Security controls for auth, input validation, secrets, injection defense. | When the bug touches auth, input validation, secrets, or injection. |
-| `long-running-commands` | tmux patterns for detached dev servers, watchers, slow suites. | When a command may exceed the ~2-min bash ceiling or never self-terminates. |
 | `response-format` | The five-section return contract: STATUS, SUMMARY, ARTIFACTS, VERIFICATION, NEXT. | Before writing your return message. |
 
 ## Cognitive biases to avoid

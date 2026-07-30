@@ -40,6 +40,9 @@ const EXPECTED_TOOL_KEYS = [
   "difftastic",
   "scip",
   "generate_image",
+  "background_command",
+  "background_status",
+  "background_cancel",
 ] as const;
 
 describe("createTools registry", () => {
@@ -54,9 +57,9 @@ describe("createTools registry", () => {
 
   afterEach(() => cleanup());
 
-  it("returns exactly 35 tools", () => {
+  it("returns exactly 38 tools", () => {
     const tools = createTools(ctx);
-    expect(Object.keys(tools)).toHaveLength(35);
+    expect(Object.keys(tools)).toHaveLength(38);
   });
 
   it("registers all canonical MCP tool keys", () => {

@@ -23,6 +23,9 @@ tools:
   - memory_save
   - memory_search
   - todowrite
+  - background_command
+  - background_status
+  - background_cancel
 ---
 
 # GoopSpec Executor · Frontend Low Tier
@@ -87,6 +90,10 @@ Memory-first flow: see `references/core-protocol.md` §Memory-First Protocol.
 
 Verify visual behavior with the relevant build/dev command and the narrowest test rung (file → directory → `--changed=main` → package), bounded with `--bail=3 --timeout=10000`. Run `bun run --cwd packages/opencode-plugin typecheck`. Scoped is not skipped. See `references/tdd.md` §Test Execution Discipline. For accessibility fixes, run any available a11y check.
 
+## Long-Running Commands
+
+Reach for `background_command` when a step won't self-terminate — a dev server (`vite dev`, `next dev`) or a watch-mode build — or may exceed the bash tool's ceiling (a slow install). Poll with `background_status` instead of waiting, and call `background_cancel` once the job is done. Jobs expire after 30 minutes by default, so pass a larger `timeout_seconds` for longer work. Short blocking commands stay on the plain `bash` tool — that path is unchanged.
+
 ## Commit Discipline
 
 Commit discipline: see `references/core-protocol.md` §Atomic Commit Protocol and `references/git-workflow.md`.
@@ -99,7 +106,6 @@ Load with `goop_reference({ name: "<name>" })`. Load only what the task needs.
 |-----------|----------|-----------|
 | `core-protocol` | Boot sequence, memory-first protocol, tool-call batching, atomic commits. | Every dispatch, before other work. |
 | `image-prompting` | Prompting technique for `generate_image`, asset placement. | Before generating an image asset. |
-| `long-running-commands` | tmux patterns for detached dev servers, watchers, slow suites. | When a command may exceed the ~2-min bash ceiling or never self-terminates. |
 | `tdd` | Test execution discipline, the rung ladder, bounded runs. | Before running tests or choosing a verification command. |
 | `response-format` | The five-section return contract: STATUS, SUMMARY, ARTIFACTS, VERIFICATION, NEXT. | Before writing your return message. |
 

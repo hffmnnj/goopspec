@@ -24,6 +24,9 @@ tools:
   - memory_save
   - memory_search
   - todowrite
+  - background_command
+  - background_status
+  - background_cancel
 ---
 
 # GoopSpec Executor · Frontend Medium Tier
@@ -86,6 +89,10 @@ Memory-first flow: see `references/core-protocol.md` §Memory-First Protocol.
 
 Verify behavior with the relevant build/dev command and the narrowest test rung (file → directory → `--changed=main` → package), bounded with `--bail=3 --timeout=10000`. Run `bun run --cwd packages/opencode-plugin typecheck`. Scoped is not skipped. See `references/tdd.md` §Test Execution Discipline.
 
+## Long-Running Commands
+
+Reach for `background_command` when a command won't self-terminate — a dev server or a watch-mode build — or may exceed the bash tool's ceiling (a slow install, a long build). Poll with `background_status` rather than blocking the turn, and call `background_cancel` to clean up once you have what you need. Jobs expire after 30 minutes by default — pass a larger `timeout_seconds` for longer work. Short blocking commands stay on the plain `bash` tool; that path is unchanged.
+
 ## Commit Discipline
 
 Commit discipline: see `references/core-protocol.md` §Atomic Commit Protocol and `references/git-workflow.md`.
@@ -98,7 +105,6 @@ Load with `goop_reference({ name: "<name>" })`. Load only what the task needs.
 |-----------|----------|-----------|
 | `core-protocol` | Boot sequence, memory-first protocol, tool-call batching, atomic commits. | Every dispatch, before other work. |
 | `image-prompting` | Prompting technique for `generate_image`, asset placement. | Before generating an image asset. |
-| `long-running-commands` | tmux patterns for detached dev servers, watchers, slow suites. | When a command may exceed the ~2-min bash ceiling or never self-terminates. |
 | `tdd` | Test execution discipline, the rung ladder, bounded runs. | Before running tests or choosing a verification command. |
 | `git-workflow` | Branch hygiene, atomic commits, stacked PR conventions. | Before committing or opening a PR. |
 | `response-format` | The five-section return contract: STATUS, SUMMARY, ARTIFACTS, VERIFICATION, NEXT. | Before writing your return message. |
