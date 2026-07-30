@@ -1,4 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, spyOn } from "bun:test";
+import type { PluginContext } from "../core/types.js";
+import type { TaskStatus, WaveStatus } from "../features/db/types.js";
 import {
   createDefaultWorkflowState,
   createMockPluginContext,
@@ -18,6 +20,27 @@ function makeOutput(text = "ok"): ToolAfterOutput {
   return { title: "result", output: text, metadata: {} };
 }
 
+function seedFinalWave(
+  ctx: PluginContext,
+  waveNumber: number,
+  status: WaveStatus,
+  taskStatuses: TaskStatus[] = [],
+): void {
+  const workflowId = ctx.stateManager.getActiveWorkflowId();
+  ctx.db.upsertWave(workflowId, { wave_number: waveNumber, status });
+  const wave = ctx.db.getWave(workflowId, waveNumber);
+  if (!wave) throw new Error("Failed to seed final wave");
+
+  for (const [index, taskStatus] of taskStatuses.entries()) {
+    ctx.db.upsertWaveTask({
+      wave_id: wave.id,
+      workflow_id: workflowId,
+      task_index: index + 1,
+      status: taskStatus,
+    });
+  }
+}
+
 describe("auto-progression hook", () => {
   let cleanup: () => void;
   let testDir: string;
@@ -31,10 +54,10 @@ describe("auto-progression hook", () => {
   afterEach(() => cleanup());
 
   // -----------------------------------------------------------------------
-  // 1. Progresses execute → accept when currentWave >= totalWaves
+  // 1. Progresses execute → accept with final-wave completion evidence
   // -----------------------------------------------------------------------
 
-  it("transitions execute → accept when currentWave >= totalWaves", async () => {
+  it("does not transition when the final wave is pending despite matching counters", async () => {
     const ctx = createMockPluginContext({
       testDir,
       state: {
@@ -48,6 +71,7 @@ describe("auto-progression hook", () => {
         },
       },
     });
+    seedFinalWave(ctx, 3, "pending");
 
     const hooks = createAutoProgressionHook(ctx);
     const handler = hooks["tool.execute.after"] as NonNullable<Hooks["tool.execute.after"]>;
@@ -55,24 +79,25 @@ describe("auto-progression hook", () => {
 
     await handler(makeInput(), output);
 
-    expect(ctx.stateManager.getActiveWorkflow().phase).toBe("accept");
-    expect(output.output).toContain("accept");
+    expect(ctx.stateManager.getActiveWorkflow().phase).toBe("execute");
+    expect(output.output).toBe("ok");
   });
 
-  it("transitions when currentWave exceeds totalWaves", async () => {
+  it("transitions when the final wave and all of its tasks are complete", async () => {
     const ctx = createMockPluginContext({
       testDir,
       state: {
         workflows: {
           default: createDefaultWorkflowState({
             phase: "execute",
-            currentWave: 5,
+            currentWave: 3,
             totalWaves: 3,
             specLocked: true,
           }),
         },
       },
     });
+    seedFinalWave(ctx, 3, "completed", ["done", "completed"]);
 
     const hooks = createAutoProgressionHook(ctx);
     const handler = hooks["tool.execute.after"] as NonNullable<Hooks["tool.execute.after"]>;
@@ -81,13 +106,14 @@ describe("auto-progression hook", () => {
     await handler(makeInput(), output);
 
     expect(ctx.stateManager.getActiveWorkflow().phase).toBe("accept");
+    expect(output.output).toContain("2/2 tasks complete");
   });
 
   // -----------------------------------------------------------------------
-  // 2. Does NOT progress when currentWave < totalWaves
+  // 2. Final-wave evidence is independent of currentWave
   // -----------------------------------------------------------------------
 
-  it("does NOT progress when currentWave < totalWaves", async () => {
+  it("transitions when final-wave evidence is complete even if currentWave lags", async () => {
     const ctx = createMockPluginContext({
       testDir,
       state: {
@@ -101,6 +127,7 @@ describe("auto-progression hook", () => {
         },
       },
     });
+    seedFinalWave(ctx, 5, "completed", ["completed"]);
 
     const hooks = createAutoProgressionHook(ctx);
     const handler = hooks["tool.execute.after"] as NonNullable<Hooks["tool.execute.after"]>;
@@ -108,8 +135,7 @@ describe("auto-progression hook", () => {
 
     await handler(makeInput(), output);
 
-    expect(ctx.stateManager.getActiveWorkflow().phase).toBe("execute");
-    expect(output.output).toBe("ok");
+    expect(ctx.stateManager.getActiveWorkflow().phase).toBe("accept");
   });
 
   // -----------------------------------------------------------------------
@@ -130,6 +156,7 @@ describe("auto-progression hook", () => {
         },
       },
     });
+    seedFinalWave(ctx, 3, "completed", ["completed"]);
 
     const hooks = createAutoProgressionHook(ctx);
     const handler = hooks["tool.execute.after"] as NonNullable<Hooks["tool.execute.after"]>;
@@ -159,6 +186,7 @@ describe("auto-progression hook", () => {
         },
       },
     });
+    seedFinalWave(ctx, 3, "completed", ["done", "completed"]);
 
     // Force transitionPhase to throw
     const originalTransition = ctx.stateManager.transitionPhase;
@@ -197,7 +225,6 @@ describe("auto-progression hook", () => {
         },
       },
     });
-
     const hooks = createAutoProgressionHook(ctx);
     const handler = hooks["tool.execute.after"] as NonNullable<Hooks["tool.execute.after"]>;
     const output = makeOutput();
@@ -255,6 +282,7 @@ describe("auto-progression hook", () => {
         },
       },
     });
+    seedFinalWave(ctx, 4, "completed", ["done", "completed"]);
 
     const hooks = createAutoProgressionHook(ctx);
     const handler = hooks["tool.execute.after"] as NonNullable<Hooks["tool.execute.after"]>;
@@ -264,5 +292,8 @@ describe("auto-progression hook", () => {
     const adl = ctx.stateManager.getADL();
     expect(adl).toContain("Auto-progression");
     expect(adl).toContain("accept");
+    expect(adl).toContain("Final wave 4 status: completed");
+    expect(adl).toContain("task completion: 2/2");
+    expect(adl).not.toContain("All 4 waves complete");
   });
 });
