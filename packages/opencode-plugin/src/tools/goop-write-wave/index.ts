@@ -36,6 +36,8 @@ interface WavePayload {
   tasks?: InlineWaveTask[];
 }
 
+const TERMINAL_STATUSES = new Set(["done", "completed"]);
+
 interface BulkTaskStatusUpdate {
   task_index: number;
   status: string;
@@ -183,6 +185,26 @@ function validateAndNormalizeStatuses(args: {
   return null;
 }
 
+function statusRegressionError(
+  subject: string,
+  currentStatus: string,
+  nextStatus: string | undefined,
+  allowStatusRegression: boolean,
+): string | null {
+  if (
+    !allowStatusRegression &&
+    TERMINAL_STATUSES.has(currentStatus) &&
+    nextStatus === "pending"
+  ) {
+    return `Error in goop_write_wave: refusing to regress ${subject} from '${currentStatus}' to 'pending'. Set allow_status_regression: true to override deliberately.`;
+  }
+  return null;
+}
+
+function incompatiblePayloadError(mode: string, fields: string[]): string {
+  return `Error in goop_write_wave: ${fields.join(", ")} cannot be supplied alongside ${mode}; use one write mode per call so no fields are ignored.`;
+}
+
 // ---------------------------------------------------------------------------
 // Tool factory
 // ---------------------------------------------------------------------------
@@ -214,6 +236,7 @@ export function createGoopWriteWaveTool(ctx: PluginContext): ToolDefinition {
           status: tool.schema.string(),
         })
         .optional(),
+      allow_status_regression: tool.schema.boolean().optional(),
       workflow_id: tool.schema.string().optional(),
       items: tool.schema
         .array(
@@ -277,6 +300,7 @@ export function createGoopWriteWaveTool(ctx: PluginContext): ToolDefinition {
         pr_url?: string;
         tasks?: InlineWaveTask[];
         task_update?: TaskStatusUpdate;
+        allow_status_regression?: boolean;
         workflow_id?: string;
         items?: WavePayload[];
         task_updates?: BulkTaskStatusUpdate[];
@@ -294,6 +318,18 @@ export function createGoopWriteWaveTool(ctx: PluginContext): ToolDefinition {
         }
 
         if (Array.isArray(args.items) && args.items.length > 0) {
+          const ignoredFields = [
+            args.title !== undefined ? "title" : null,
+            args.status !== undefined ? "status" : null,
+            args.pr_branch !== undefined ? "pr_branch" : null,
+            args.pr_url !== undefined ? "pr_url" : null,
+            args.tasks !== undefined ? "tasks" : null,
+            args.task_update !== undefined ? "task_update" : null,
+            args.task_updates !== undefined ? "task_updates" : null,
+          ].filter((field): field is string => field !== null);
+          if (ignoredFields.length > 0) {
+            return incompatiblePayloadError("items[] batch mode", ignoredFields);
+          }
           if (args.verifications !== undefined || args.traceability !== undefined) {
             return (
               "Error in goop_write_wave: verifications and traceability side-payloads are " +
@@ -303,6 +339,14 @@ export function createGoopWriteWaveTool(ctx: PluginContext): ToolDefinition {
           }
 
           const result = runBatch(ctx.db, args.items, (item) => {
+            const existingWave = ctx.db.getWave(workflowId, item.wave_number);
+            const waveRegression = statusRegressionError(
+              `wave ${item.wave_number}`,
+              existingWave?.status ?? "pending",
+              item.status,
+              args.allow_status_regression ?? false,
+            );
+            if (waveRegression !== null) throw new Error(waveRegression);
             ctx.db.upsertWave(workflowId, {
               wave_number: item.wave_number,
               title: item.title,
@@ -317,6 +361,16 @@ export function createGoopWriteWaveTool(ctx: PluginContext): ToolDefinition {
             }
 
             for (const task of item.tasks ?? []) {
+              const existingTask = ctx.db
+                .getWaveTasks(wave.id)
+                .find((candidate) => candidate.task_index === task.task_index);
+              const taskRegression = statusRegressionError(
+                `task ${task.task_index} on wave ${item.wave_number}`,
+                existingTask?.status ?? "pending",
+                task.status,
+                args.allow_status_regression ?? false,
+              );
+              if (taskRegression !== null) throw new Error(taskRegression);
               ctx.db.upsertWaveTask({
                 wave_id: wave.id,
                 workflow_id: workflowId,
@@ -342,7 +396,18 @@ export function createGoopWriteWaveTool(ctx: PluginContext): ToolDefinition {
           return anyComplete ? `${response}${WAVE_COMPLETE_COMPACT_REMINDER}` : response;
         }
 
-        if (args.task_updates !== undefined) {
+        if (args.task_updates !== undefined && args.task_updates.length > 0) {
+          const ignoredFields = [
+            args.title !== undefined ? "title" : null,
+            args.status !== undefined ? "status" : null,
+            args.pr_branch !== undefined ? "pr_branch" : null,
+            args.pr_url !== undefined ? "pr_url" : null,
+            args.tasks !== undefined ? "tasks" : null,
+            args.task_update !== undefined ? "task_update" : null,
+          ].filter((field): field is string => field !== null);
+          if (ignoredFields.length > 0) {
+            return incompatiblePayloadError("task_updates batch mode", ignoredFields);
+          }
           if (args.verifications !== undefined || args.traceability !== undefined) {
             return (
               "Error in goop_write_wave: verifications and traceability side-payloads are " +
@@ -357,6 +422,19 @@ export function createGoopWriteWaveTool(ctx: PluginContext): ToolDefinition {
           }
 
           const result = runBatch(ctx.db, args.task_updates, (update) => {
+            const task = ctx.db
+              .getWaveTasks(wave.id)
+              .find((candidate) => candidate.task_index === update.task_index);
+            if (task === undefined) {
+              throw new Error(`task ${update.task_index} not found on wave ${args.wave_number}`);
+            }
+            const taskRegression = statusRegressionError(
+              `task ${update.task_index} on wave ${args.wave_number}`,
+              task.status,
+              update.status,
+              args.allow_status_regression ?? false,
+            );
+            if (taskRegression !== null) throw new Error(taskRegression);
             ctx.db.setWaveTaskStatus(wave.id, update.task_index, update.status);
             ctx.db.appendEvent(workflowId, "wave_write", {
               wave_number: args.wave_number,
@@ -389,42 +467,52 @@ export function createGoopWriteWaveTool(ctx: PluginContext): ToolDefinition {
           return "Error in goop_write_wave: items[] array is empty and no wave fields were provided";
         }
 
-        if (args.task_update !== undefined) {
-          const wave = ctx.db.getWave(workflowId, args.wave_number);
-          if (wave === null) {
-            return `No wave ${args.wave_number} found for workflow '${workflowId}'. Use goop_write_wave to create it.`;
+        const hasWaveWrite =
+          args.title !== undefined ||
+          args.status !== undefined ||
+          args.pr_branch !== undefined ||
+          args.pr_url !== undefined ||
+          args.tasks !== undefined;
+
+        ctx.db.runTransaction(() => {
+          let wave = ctx.db.getWave(workflowId, args.wave_number);
+          if (hasWaveWrite) {
+            const waveRegression = statusRegressionError(
+              `wave ${args.wave_number}`,
+              wave?.status ?? "pending",
+              args.status,
+              args.allow_status_regression ?? false,
+            );
+            if (waveRegression !== null) throw new Error(waveRegression);
+
+            ctx.db.upsertWave(workflowId, {
+              wave_number: args.wave_number,
+              title: args.title,
+              status: args.status,
+              pr_branch: args.pr_branch,
+              pr_url: args.pr_url,
+            });
+            wave = ctx.db.getWave(workflowId, args.wave_number);
           }
 
-          defaultWaveId = wave.id;
-
-          ctx.db.setWaveTaskStatus(wave.id, args.task_update.task_index, args.task_update.status);
-          ctx.db.appendEvent(workflowId, "wave_write", {
-            wave_number: args.wave_number,
-            task_index: args.task_update.task_index,
-            status: args.task_update.status,
-            mode: "task_update",
-            timestamp: Date.now(),
-          });
-          renderSidecars(ctx, workflowId);
-
-          mainResult = `Updated task ${args.task_update.task_index} on wave ${args.wave_number} to '${args.task_update.status}' for workflow '${workflowId}'.`;
-        } else {
-          ctx.db.upsertWave(workflowId, {
-            wave_number: args.wave_number,
-            title: args.title,
-            status: args.status,
-            pr_branch: args.pr_branch,
-            pr_url: args.pr_url,
-          });
-
-          const wave = ctx.db.getWave(workflowId, args.wave_number);
           if (wave === null) {
-            return `Error in goop_write_wave: wave ${args.wave_number} was not found after write`;
+            throw new Error(
+              `No wave ${args.wave_number} found for workflow '${workflowId}'. Use goop_write_wave to create it.`,
+            );
           }
-
           defaultWaveId = wave.id;
 
           for (const task of args.tasks ?? []) {
+            const existingTask = ctx.db
+              .getWaveTasks(wave.id)
+              .find((candidate) => candidate.task_index === task.task_index);
+            const taskRegression = statusRegressionError(
+              `task ${task.task_index} on wave ${args.wave_number}`,
+              existingTask?.status ?? "pending",
+              task.status,
+              args.allow_status_regression ?? false,
+            );
+            if (taskRegression !== null) throw new Error(taskRegression);
             ctx.db.upsertWaveTask({
               wave_id: wave.id,
               workflow_id: workflowId,
@@ -435,15 +523,42 @@ export function createGoopWriteWaveTool(ctx: PluginContext): ToolDefinition {
             });
           }
 
+          if (args.task_update !== undefined) {
+            const task = ctx.db
+              .getWaveTasks(wave.id)
+              .find((candidate) => candidate.task_index === args.task_update?.task_index);
+            if (task === undefined) {
+              throw new Error(
+                `task ${args.task_update.task_index} not found on wave ${args.wave_number}`,
+              );
+            }
+            const taskRegression = statusRegressionError(
+              `task ${args.task_update.task_index} on wave ${args.wave_number}`,
+              task.status,
+              args.task_update.status,
+              args.allow_status_regression ?? false,
+            );
+            if (taskRegression !== null) throw new Error(taskRegression);
+            ctx.db.setWaveTaskStatus(wave.id, args.task_update.task_index, args.task_update.status);
+          }
+
           ctx.db.appendEvent(workflowId, "wave_write", {
             wave_number: args.wave_number,
             task_count: args.tasks?.length ?? 0,
-            mode: "wave_upsert",
+            task_index: args.task_update?.task_index ?? null,
+            status: args.task_update?.status ?? args.status ?? null,
+            mode: args.task_update === undefined ? "wave_upsert" : "wave_and_task_update",
             timestamp: Date.now(),
           });
-          renderSidecars(ctx, workflowId);
+        });
+        renderSidecars(ctx, workflowId);
 
-          mainResult = `Written wave ${args.wave_number} for workflow '${workflowId}' with ${args.tasks?.length ?? 0} task(s).`;
+        mainResult = hasWaveWrite
+          ? `Written wave ${args.wave_number} for workflow '${workflowId}' with ${args.tasks?.length ?? 0} task(s).`
+          : "";
+        if (args.task_update !== undefined) {
+          const taskResult = `Updated task ${args.task_update.task_index} on wave ${args.wave_number} to '${args.task_update.status}' for workflow '${workflowId}'.`;
+          mainResult = mainResult.length > 0 ? `${mainResult}\n${taskResult}` : taskResult;
         }
 
         const waveComplete = args.task_update === undefined && isWaveComplete(args.status);

@@ -797,3 +797,149 @@ describe("goop_write_wave status validation", () => {
     expect(tasks[0].status).toBe("pending");
   });
 });
+
+describe("goop_write_wave write integrity", () => {
+  let ctx: PluginContext;
+  let toolCtx: ToolContext;
+  let cleanup: () => void;
+
+  beforeEach(() => {
+    const env = setupTestEnvironment("goop-write-wave-integrity");
+    cleanup = env.cleanup;
+    ctx = createMockPluginContext({ testDir: env.testDir, db: env.db });
+    toolCtx = createMockToolContext();
+  });
+
+  afterEach(() => cleanup());
+
+  it("writes top-level status and task_update together without dropping either", async () => {
+    const writeTool = createGoopWriteWaveTool(ctx);
+    await writeTool.execute(
+      {
+        wave_number: 1,
+        title: "Integrity wave",
+        tasks: [{ task_index: 1, description: "First task", status: "pending" }],
+      },
+      toolCtx,
+    );
+
+    const result = await writeTool.execute(
+      {
+        wave_number: 1,
+        status: "in_progress",
+        task_update: { task_index: 1, status: "in_progress" },
+      },
+      toolCtx,
+    );
+
+    const wave = ctx.db.getWave("default", 1);
+    expect(result).toContain("Written wave 1");
+    expect(result).toContain("Updated task 1");
+    expect(wave?.status).toBe("in_progress");
+    expect(ctx.db.getWaveTasks(wave?.id ?? -1)[0].status).toBe("in_progress");
+  });
+
+  it("rejects top-level fields incompatible with batch modes before writing", async () => {
+    const writeTool = createGoopWriteWaveTool(ctx);
+
+    const itemsResult = await writeTool.execute(
+      {
+        wave_number: 1,
+        status: "in_progress",
+        items: [{ wave_number: 1, title: "Batch wave" }],
+      },
+      toolCtx,
+    );
+    expect(itemsResult).toContain("status cannot be supplied alongside items[] batch mode");
+    expect(ctx.db.getWave("default", 1)).toBeNull();
+
+    await writeTool.execute(
+      {
+        wave_number: 2,
+        title: "Task batch wave",
+        tasks: [{ task_index: 1, description: "Task" }],
+      },
+      toolCtx,
+    );
+    const taskUpdatesResult = await writeTool.execute(
+      {
+        wave_number: 2,
+        status: "in_progress",
+        task_updates: [{ task_index: 1, status: "in_progress" }],
+      },
+      toolCtx,
+    );
+    expect(taskUpdatesResult).toContain("status cannot be supplied alongside task_updates batch mode");
+    expect(ctx.db.getWave("default", 2)?.status).toBe("pending");
+  });
+
+  it("rejects terminal status regressions unless explicitly overridden", async () => {
+    const writeTool = createGoopWriteWaveTool(ctx);
+    await writeTool.execute(
+      {
+        wave_number: 1,
+        title: "Completed wave",
+        status: "done",
+        tasks: [{ task_index: 1, description: "Completed task", status: "completed" }],
+      },
+      toolCtx,
+    );
+
+    const waveRegression = await writeTool.execute(
+      { wave_number: 1, status: "pending" },
+      toolCtx,
+    );
+    const taskRegression = await writeTool.execute(
+      { wave_number: 1, task_update: { task_index: 1, status: "pending" } },
+      toolCtx,
+    );
+    expect(waveRegression).toContain("allow_status_regression: true");
+    expect(taskRegression).toContain("allow_status_regression: true");
+
+    const overrideResult = await writeTool.execute(
+      { wave_number: 1, status: "pending", allow_status_regression: true },
+      toolCtx,
+    );
+    expect(overrideResult).toContain("Written wave 1");
+    expect(ctx.db.getWave("default", 1)?.status).toBe("pending");
+  });
+
+  it("rolls back the wave write when an inline task write fails", async () => {
+    const writeTool = createGoopWriteWaveTool(ctx);
+    const upsertWaveTask = ctx.db.upsertWaveTask.bind(ctx.db);
+    let writes = 0;
+    ctx.db.upsertWaveTask = (task) => {
+      writes += 1;
+      if (writes === 2) throw new Error("simulated task write failure");
+      upsertWaveTask(task);
+    };
+
+    const result = await writeTool.execute(
+      {
+        wave_number: 1,
+        title: "Atomic wave",
+        status: "done",
+        tasks: [
+          { task_index: 1, description: "First task" },
+          { task_index: 2, description: "Second task" },
+        ],
+      },
+      toolCtx,
+    );
+
+    expect(result).toContain("simulated task write failure");
+    expect(ctx.db.getWave("default", 1)).toBeNull();
+  });
+
+  it("rejects a task update for a missing task instead of reporting success", async () => {
+    const writeTool = createGoopWriteWaveTool(ctx);
+    await writeTool.execute({ wave_number: 1, title: "Wave" }, toolCtx);
+
+    const result = await writeTool.execute(
+      { wave_number: 1, task_update: { task_index: 99, status: "done" } },
+      toolCtx,
+    );
+
+    expect(result).toContain("task 99 not found on wave 1");
+  });
+});
