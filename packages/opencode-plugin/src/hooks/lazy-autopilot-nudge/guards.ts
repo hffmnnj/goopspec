@@ -8,6 +8,9 @@
  * All guards evaluate BEFORE any SDK call.
  */
 
+import { realpathSync } from "node:fs";
+import { resolve } from "node:path";
+
 import type { WorkflowPhase } from "../../core/constants.js";
 import { getLivePendingCompaction } from "../../core/pending-compaction.js";
 import type { PluginContext } from "../../core/types.js";
@@ -21,6 +24,10 @@ import type { PluginContext } from "../../core/types.js";
 export interface NudgeRateLimitResult {
   readonly allowed: boolean;
   readonly reason?: string;
+  /** Set when repeated promptAsync rejections suppress this session. */
+  readonly consecutiveDispatchFailures?: number;
+  /** The dispatch-failure threshold that triggered suppression. */
+  readonly maxConsecutiveDispatchFailures?: number;
   /** Set when the cap is reached and the wave's nudges are abandoned. */
   readonly abandoned?: boolean;
   /** User-visible message to surface on abandonment. */
@@ -42,10 +49,22 @@ const DEFAULT_RATE_LIMIT_CHECK: NudgeRateLimitCheck = {
 export type NudgeSuppressionReason =
   | { readonly kind: "lazy-autopilot-disabled" }
   | { readonly kind: "wrong-phase"; readonly phase: WorkflowPhase | "unknown" }
+  | {
+      readonly kind: "session-not-nudge-eligible";
+      readonly reason: "metadata-unavailable" | "subagent";
+      readonly detail: string;
+    }
+  | {
+      readonly kind: "project-scope-unverified";
+      readonly reason: "directory-mismatch" | "sdk-directory-unavailable";
+      readonly sessionDirectory: string;
+      readonly projectDirectory?: string;
+    }
   | { readonly kind: "pending-compaction"; readonly status: "queued" | "in-flight" }
   | { readonly kind: "high-severity-blocker"; readonly blockerId: number }
   | { readonly kind: "hard-stop-question"; readonly category: "credentials" | "destructive" }
   | { readonly kind: "mid-work"; readonly lastRole: string | "unknown" }
+  | { readonly kind: "dispatch-failure-cap"; readonly failures: number; readonly cap: number }
   | { readonly kind: "rate-limited"; readonly detail: string }
   | { readonly kind: "kill-switch-off" };
 
@@ -64,8 +83,26 @@ function suppress(reason: NudgeSuppressionReason): NudgeGuardResult {
 // Guard inputs
 // ---------------------------------------------------------------------------
 
+/**
+ * Session metadata fetched alongside messages before guard evaluation.
+ *
+ * `unavailable` deliberately does not flatten to optional fields: a top-level
+ * session legitimately has no parentID, while a failed lookup is indeterminate.
+ */
+export type NudgeSessionMetadata =
+  | {
+      readonly status: "available";
+      readonly parentID?: string;
+      readonly directory: string;
+    }
+  | {
+      readonly status: "unavailable";
+      readonly reason: "get-unavailable" | "get-failed" | "invalid-response";
+    };
+
 export interface NudgeGuardInput {
   readonly sessionID: string;
+  readonly session: NudgeSessionMetadata;
   readonly workflowId: string;
   readonly phase: WorkflowPhase;
   readonly lazyAutopilot: boolean;
@@ -159,6 +196,22 @@ function buildHardStopReason(text: string | undefined): NudgeSuppressionReason {
   return { kind: "hard-stop-question", category };
 }
 
+/**
+ * Canonicalize directories before comparing session and plugin scope. Realpath
+ * resolves symlink aliases when possible; resolve still normalizes relative
+ * paths and trailing separators for paths that no longer exist.
+ */
+function normalizeDirectory(directory: unknown): string | undefined {
+  if (typeof directory !== "string" || directory.length === 0) return undefined;
+
+  const absolute = resolve(directory);
+  try {
+    return realpathSync.native(absolute);
+  } catch {
+    return absolute;
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Guard evaluation
 // ---------------------------------------------------------------------------
@@ -170,6 +223,44 @@ export function evaluateNudgeGuards(ctx: PluginContext, input: NudgeGuardInput):
 
   if (input.phase !== "execute") {
     return suppress({ kind: "wrong-phase", phase: input.phase });
+  }
+
+  // G2a: Session identity takes precedence over later operational guards. A
+  // nudge sent to a subagent, or after an indeterminate lookup, is unsafe.
+  if (input.session.status === "unavailable") {
+    return suppress({
+      kind: "session-not-nudge-eligible",
+      reason: "metadata-unavailable",
+      detail: input.session.reason,
+    });
+  }
+  if (input.session.parentID) {
+    return suppress({
+      kind: "session-not-nudge-eligible",
+      reason: "subagent",
+      detail: input.session.parentID,
+    });
+  }
+
+  // G2b: A session belongs to the project only when canonical directories
+  // match. An unavailable plugin directory is indeterminate, so fail closed
+  // rather than treating `undefined !== session.directory` as a comparison.
+  const sessionDirectory = normalizeDirectory(input.session.directory);
+  const projectDirectory = normalizeDirectory((ctx.sdk as { directory?: unknown }).directory);
+  if (sessionDirectory === undefined || projectDirectory === undefined) {
+    return suppress({
+      kind: "project-scope-unverified",
+      reason: "sdk-directory-unavailable",
+      sessionDirectory: sessionDirectory ?? input.session.directory,
+    });
+  }
+  if (sessionDirectory !== projectDirectory) {
+    return suppress({
+      kind: "project-scope-unverified",
+      reason: "directory-mismatch",
+      sessionDirectory,
+      projectDirectory,
+    });
   }
 
   const liveCompaction = getLivePendingCompaction(ctx, input.sessionID);
@@ -197,6 +288,16 @@ export function evaluateNudgeGuards(ctx: PluginContext, input: NudgeGuardInput):
 
   const rateLimit = (input.rateLimitCheck ?? DEFAULT_RATE_LIMIT_CHECK).check(ctx, input.sessionID);
   if (!rateLimit.allowed) {
+    if (
+      rateLimit.consecutiveDispatchFailures != null &&
+      rateLimit.maxConsecutiveDispatchFailures != null
+    ) {
+      return suppress({
+        kind: "dispatch-failure-cap",
+        failures: rateLimit.consecutiveDispatchFailures,
+        cap: rateLimit.maxConsecutiveDispatchFailures,
+      });
+    }
     return suppress({
       kind: "rate-limited",
       detail: rateLimit.reason ?? "rate-limit check denied nudge",

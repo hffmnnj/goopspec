@@ -1,3 +1,6 @@
+import { mkdirSync } from "node:fs";
+import { join } from "node:path";
+
 import { afterEach, beforeEach, describe, expect, it, mock, spyOn } from "bun:test";
 import { createMockPluginContext, setupTestEnvironment } from "../../test-utils.js";
 import {
@@ -7,7 +10,7 @@ import {
 } from "./index.js";
 import { __clearNudgeRateLimitState } from "./rate-limit.js";
 
-import type { GoopState } from "../../test-utils.js";
+import type { GoopState, WorkflowState } from "../../test-utils.js";
 
 const EXECUTE_CTX_OVERRIDES: Partial<GoopState> = {
   workflows: {
@@ -30,6 +33,22 @@ function makeExecuteContext(testDir: string) {
   return createMockPluginContext({ testDir, state: EXECUTE_CTX_OVERRIDES });
 }
 
+function makeNudgeWorkflowState(overrides: Partial<WorkflowState>): WorkflowState {
+  return {
+    phase: "execute",
+    mode: "standard",
+    depth: "standard",
+    interviewComplete: false,
+    specLocked: false,
+    acceptanceConfirmed: false,
+    currentWave: 1,
+    totalWaves: 3,
+    autopilot: false,
+    lazyAutopilot: true,
+    ...overrides,
+  };
+}
+
 describe("lazy autopilot nudge", () => {
   let cleanup: () => void;
   let testDir: string;
@@ -43,12 +62,18 @@ describe("lazy autopilot nudge", () => {
 
   afterEach(() => cleanup());
 
-  it("dispatches exactly one method-bound promptAsync with the canonical text", async () => {
+  it("targets the orchestrator with the live configured model instead of inheriting gpt-5.3-codex", async () => {
     const ctx = makeExecuteContext(testDir);
+    await Bun.write(
+      `${testDir}/goopspec.json`,
+      JSON.stringify({ agentModels: { orchestrator: "anthropic/claude-user-override" } }),
+    );
     const calls: unknown[] = [];
     const session = {
       _client: {},
+      model: { providerID: "openai", modelID: "gpt-5.3-codex" },
       messages: mock(async () => [{ info: { role: "assistant" } }]),
+      get: mock(async () => ({ directory: testDir })),
       promptAsync(input: unknown): Promise<void> {
         if (this._client === undefined) throw new TypeError("detached this");
         calls.push(input);
@@ -63,9 +88,59 @@ describe("lazy autopilot nudge", () => {
     expect(calls).toEqual([
       {
         path: { id: "sess-happy" },
-        body: { parts: [{ type: "text", text: LAZY_AUTOPILOT_NUDGE_TEXT }] },
+        body: {
+          agent: "goop-orchestrator",
+          model: { providerID: "anthropic", modelID: "claude-user-override" },
+          parts: [{ type: "text", text: LAZY_AUTOPILOT_NUDGE_TEXT }],
+        },
       },
     ]);
+  });
+
+  it("fetches session metadata concurrently and preserves it for guard evaluation", async () => {
+    const ctx = makeExecuteContext(testDir);
+    let releaseMessages: ((value: { data: Array<{ info: { role: string } }> }) => void) | undefined;
+    const messages = mock(
+      () =>
+        new Promise<{ data: Array<{ info: { role: string } }> }>((resolve) => {
+          releaseMessages = resolve;
+        }),
+    );
+    const get = mock(async () => ({
+      id: "sess-session-metadata",
+      directory: testDir,
+      parentID: "parent-session",
+    }));
+    const promptAsync = mock(async () => undefined);
+    Object.assign(ctx.sdk.client, { session: { messages, get, promptAsync } });
+
+    const dispatch = dispatchLazyAutopilotNudge(ctx, "sess-session-metadata");
+    await Promise.resolve();
+
+    expect(messages).toHaveBeenCalledTimes(1);
+    expect(get).toHaveBeenCalledTimes(1);
+    releaseMessages?.({ data: [{ info: { role: "assistant" } }] });
+    await dispatch;
+    await Promise.resolve();
+
+    expect(promptAsync).not.toHaveBeenCalled();
+  });
+
+  it("does not nudge when session metadata lookup fails", async () => {
+    const ctx = makeExecuteContext(testDir);
+    const promptAsync = mock(async () => undefined);
+    Object.assign(ctx.sdk.client, {
+      session: {
+        messages: mock(async () => [{ info: { role: "assistant" } }]),
+        get: mock(() => Promise.reject(new Error("session lookup failed"))),
+        promptAsync,
+      },
+    });
+
+    await dispatchLazyAutopilotNudge(ctx, "sess-get-failed");
+    await Promise.resolve();
+
+    expect(promptAsync).not.toHaveBeenCalled();
   });
 
   it("does not nudge when the last message is from the user", async () => {
@@ -97,6 +172,7 @@ describe("lazy autopilot nudge", () => {
           messages: mock(async () => ({
             data: [{ info: { role: "assistant" }, parts: [{ type: "text", text }] }],
           })),
+          get: mock(async () => ({ directory: testDir })),
           promptAsync,
         },
       });
@@ -132,6 +208,7 @@ describe("lazy autopilot nudge", () => {
     Object.assign(ctx.sdk.client, {
       session: {
         messages: mock(async () => [{ info: { role: "assistant" } }]),
+        get: mock(async () => ({ directory: testDir })),
         promptAsync,
       },
     });
@@ -161,6 +238,7 @@ describe("lazy autopilot nudge", () => {
           messages: mock(async () => ({
             data: [{ info: { role: "assistant" }, parts: [{ type: "text", text: "ready" }] }],
           })),
+          get: mock(async () => ({ directory: testDir })),
           promptAsync,
         },
       });
@@ -197,6 +275,7 @@ describe("lazy autopilot nudge", () => {
           messages: mock(async () => ({
             data: [{ info: { role: "assistant" }, parts: [{ type: "text", text: "ready" }] }],
           })),
+          get: mock(async () => ({ directory: testDir })),
           promptAsync,
         },
       });
@@ -211,6 +290,58 @@ describe("lazy autopilot nudge", () => {
     } finally {
       errorSpy.mockRestore();
       now.mockRestore();
+    }
+  });
+
+  it("contains consecutive promptAsync failures after three attempts", async () => {
+    const errorSpy = spyOn(console, "error").mockImplementation(() => {});
+    try {
+      const ctx = makeExecuteContext(testDir);
+      await Bun.write(
+        `${testDir}/goopspec.json`,
+        JSON.stringify({ lazyAutopilotNudge: { cap: 10, cooldownMs: 0 } }),
+      );
+      const promptAsync = mock(() => Promise.reject(new Error("host unavailable")));
+      Object.assign(ctx.sdk.client, {
+        session: {
+          messages: mock(async () => [{ info: { role: "assistant" } }]),
+          get: mock(async () => ({ directory: testDir })),
+          promptAsync,
+        },
+      });
+
+      for (let attempt = 0; attempt < 4; attempt += 1) {
+        await expect(dispatchLazyAutopilotNudge(ctx, "sess-reject")).resolves.toBeUndefined();
+        await Promise.resolve();
+      }
+
+      expect(promptAsync).toHaveBeenCalledTimes(3);
+      expect(ctx.pendingLazyAutopilotNudges.has("sess-reject")).toBe(false);
+    } finally {
+      errorSpy.mockRestore();
+    }
+  });
+
+  it("applies the cooldown before retrying a rejected promptAsync request", async () => {
+    const ctx = makeExecuteContext(testDir);
+    const errorSpy = spyOn(console, "error").mockImplementation(() => {});
+    try {
+      const promptAsync = mock(() => Promise.reject(new Error("temporary host failure")));
+      Object.assign(ctx.sdk.client, {
+        session: {
+          messages: mock(async () => [{ info: { role: "assistant" } }]),
+          get: mock(async () => ({ directory: testDir })),
+          promptAsync,
+        },
+      });
+
+      await dispatchLazyAutopilotNudge(ctx, "sess-retry-cooldown");
+      await Promise.resolve();
+      await dispatchLazyAutopilotNudge(ctx, "sess-retry-cooldown");
+
+      expect(promptAsync).toHaveBeenCalledTimes(1);
+    } finally {
+      errorSpy.mockRestore();
     }
   });
 
@@ -243,4 +374,183 @@ describe("lazy autopilot nudge", () => {
     expect(ctx.pendingLazyAutopilotNudges.get("sess-no-sdk")?.source).toBe("system-transform");
     errorSpy.mockRestore();
   });
+
+  // -------------------------------------------------------------------------
+  // T3: dispatch-path regression for guards G1/G2 and a positive canary.
+  // guards.test.ts covers G1/G2 directly on evaluateNudgeGuards; these tests
+  // prove the wiring through dispatchLazyAutopilotNudge so a refactor cannot
+  // silently disconnect the guards from the new agent/model dispatch body.
+  // -------------------------------------------------------------------------
+
+  it("suppresses via guard G1 when lazyAutopilot is false in workflow state", async () => {
+    const ctx = createMockPluginContext({
+      testDir,
+      state: {
+        workflows: { default: makeNudgeWorkflowState({ lazyAutopilot: false }) },
+      },
+    });
+    const messages = mock(async () => [{ info: { role: "assistant" } }]);
+    const promptAsync = mock(async () => undefined);
+    Object.assign(ctx.sdk.client, { session: { messages, promptAsync } });
+
+    await dispatchLazyAutopilotNudge(ctx, "sess-g1");
+
+    expect(messages).toHaveBeenCalledTimes(1);
+    expect(promptAsync).not.toHaveBeenCalled();
+    expect(ctx.pendingLazyAutopilotNudges.has("sess-g1")).toBe(false);
+  });
+
+  it("suppresses via guard G2 when phase is not execute", async () => {
+    const ctx = createMockPluginContext({
+      testDir,
+      state: {
+        workflows: { default: makeNudgeWorkflowState({ phase: "plan" }) },
+      },
+    });
+    const messages = mock(async () => [{ info: { role: "assistant" } }]);
+    const promptAsync = mock(async () => undefined);
+    Object.assign(ctx.sdk.client, { session: { messages, promptAsync } });
+
+    await dispatchLazyAutopilotNudge(ctx, "sess-g2");
+
+    expect(messages).toHaveBeenCalledTimes(1);
+    expect(promptAsync).not.toHaveBeenCalled();
+    expect(ctx.pendingLazyAutopilotNudges.has("sess-g2")).toBe(false);
+  });
+
+  it("fires in the correct case: execute phase, lazy autopilot on, orchestrator agent with resolved model", async () => {
+    const ctx = makeExecuteContext(testDir);
+    const calls: unknown[] = [];
+    Object.assign(ctx.sdk.client, {
+      session: {
+        messages: mock(async () => [{ info: { role: "assistant" } }]),
+        get: mock(async () => ({ directory: testDir })),
+        promptAsync(input: unknown): Promise<void> {
+          calls.push(input);
+          return Promise.resolve();
+        },
+      },
+    });
+
+    await dispatchLazyAutopilotNudge(ctx, "sess-positive");
+    await Promise.resolve();
+
+    expect(calls).toHaveLength(1);
+    const dispatched = calls[0] as {
+      body: {
+        agent: string;
+        model?: { providerID: string; modelID: string };
+        parts: { type: string; text: string }[];
+      };
+    };
+    expect(dispatched.body.agent).toBe("goop-orchestrator");
+    expect(dispatched.body.model).toBeDefined();
+    expect(dispatched.body.model?.providerID).toBeTruthy();
+    expect(dispatched.body.model?.modelID).toBeTruthy();
+    expect(dispatched.body.parts).toEqual([{ type: "text", text: LAZY_AUTOPILOT_NUDGE_TEXT }]);
+  });
+
+  // -------------------------------------------------------------------------
+  // T3: Regression tests for firsthand-observed nudge misfires and fail-closed
+  // paths through the dispatch path (index.ts), complementing the guard unit
+  // tests in guards.test.ts.
+  //
+  // Deliverable coverage map:
+  //   D1 subagent misfire — guard unit covered by T2; dispatch path below.
+  //   D2 cross-project misfire — guard unit covered by T2; dispatch path below.
+  //   D3 fail-closed (get-failed) — dispatch path covered by T1 test above.
+  //   D3 fail-closed (get-unavailable, invalid-response) — dispatch path below.
+  //   D4 positive canary — already covered by "fires in the correct case" above.
+  // -------------------------------------------------------------------------
+
+  it.each([
+    ["sess-liquid-glass", "sess-lg-parent"],
+    ["sess-shell", "sess-shell-parent"],
+  ])(
+    "regression: suppresses subagent session %s that wrongly received an orchestrator nudge",
+    async (sessionID, parentID) => {
+      const ctx = makeExecuteContext(testDir);
+      const promptAsync = mock(async () => undefined);
+      Object.assign(ctx.sdk.client, {
+        session: {
+          messages: mock(async () => [{ info: { role: "assistant" } }]),
+          get: mock(async () => ({
+            directory: testDir,
+            parentID,
+          })),
+          promptAsync,
+        },
+      });
+
+      await dispatchLazyAutopilotNudge(ctx, sessionID);
+      await Promise.resolve();
+
+      expect(promptAsync).not.toHaveBeenCalled();
+      expect(ctx.pendingLazyAutopilotNudges.has(sessionID)).toBe(false);
+    },
+  );
+
+  it("regression: suppresses a cross-project session (pulsyn-app-2.0 while GoopSpec state lives elsewhere)", async () => {
+    const ctx = makeExecuteContext(testDir);
+    const otherProject = join(testDir, "pulsyn-app-2.0");
+    mkdirSync(otherProject, { recursive: true });
+    const promptAsync = mock(async () => undefined);
+    Object.assign(ctx.sdk.client, {
+      session: {
+        messages: mock(async () => [{ info: { role: "assistant" } }]),
+        get: mock(async () => ({ directory: otherProject })),
+        promptAsync,
+      },
+    });
+
+    await dispatchLazyAutopilotNudge(ctx, "sess-pulsyn");
+    await Promise.resolve();
+
+    expect(promptAsync).not.toHaveBeenCalled();
+    expect(ctx.pendingLazyAutopilotNudges.has("sess-pulsyn")).toBe(false);
+  });
+
+  it("fail-closed: suppresses when session.get is unavailable on the host", async () => {
+    const ctx = makeExecuteContext(testDir);
+    const promptAsync = mock(async () => undefined);
+    Object.assign(ctx.sdk.client, {
+      session: {
+        messages: mock(async () => [{ info: { role: "assistant" } }]),
+        // session.get is absent — host does not expose it
+        promptAsync,
+      },
+    });
+
+    await dispatchLazyAutopilotNudge(ctx, "sess-no-get");
+    await Promise.resolve();
+
+    expect(promptAsync).not.toHaveBeenCalled();
+    expect(ctx.pendingLazyAutopilotNudges.has("sess-no-get")).toBe(false);
+  });
+
+  it.each([
+    ["null", null],
+    ["object without directory", {}],
+    ["non-string directory", { directory: 12345 }],
+    ["non-string parentID", { directory: "/any-project", parentID: 999 }],
+  ] as Array<[string, unknown]>)(
+    "fail-closed: suppresses when session.get returns indeterminate data (%s)",
+    async (_label, getSessionValue: unknown) => {
+      const ctx = makeExecuteContext(testDir);
+      const promptAsync = mock(async () => undefined);
+      Object.assign(ctx.sdk.client, {
+        session: {
+          messages: mock(async () => [{ info: { role: "assistant" } }]),
+          get: mock(async () => getSessionValue),
+          promptAsync,
+        },
+      });
+
+      await dispatchLazyAutopilotNudge(ctx, "sess-invalid-response");
+      await Promise.resolve();
+
+      expect(promptAsync).not.toHaveBeenCalled();
+      expect(ctx.pendingLazyAutopilotNudges.has("sess-invalid-response")).toBe(false);
+    },
+  );
 });

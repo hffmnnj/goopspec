@@ -145,6 +145,33 @@ describe("goop_search_notes tool", () => {
     expect(result).not.toContain("checkpoint threshold");
   });
 
+  it("signals truncation with body_chars and a truncated indicator for long bodies", async () => {
+    const tool = createGoopSearchNotesTool(ctx);
+    const result = await tool.execute({ query: "SQLite" }, toolCtx);
+
+    expect(result).toContain("Body chars:");
+    expect(result).toContain(String(LONG_BODY.length));
+    expect(result).toContain("truncated");
+    expect(result).toContain("re-fetch with full: true or note_id");
+  });
+
+  it("does not signal truncation for short bodies", async () => {
+    const tool = createGoopSearchNotesTool(ctx);
+    const result = await tool.execute({ query: "React" }, toolCtx);
+
+    expect(result).toContain("Body chars:");
+    expect(result).not.toContain("truncated");
+  });
+
+  it("does not signal truncation when full is true", async () => {
+    const tool = createGoopSearchNotesTool(ctx);
+    const result = await tool.execute({ query: "SQLite", full: true }, toolCtx);
+
+    expect(result).toContain("Body chars:");
+    expect(result).toContain(String(LONG_BODY.length));
+    expect(result).not.toContain("truncated");
+  });
+
   it("returns complete body when full is true", async () => {
     const tool = createGoopSearchNotesTool(ctx);
     const result = await tool.execute({ query: "SQLite", full: true }, toolCtx);
@@ -201,6 +228,24 @@ describe("goop_search_notes tool", () => {
     expect(result).toContain("### fn_20260618_bun0001");
     expect(result).toContain("Bun test supports describe/it/expect with built-in mocking.");
     expect(result).not.toContain("fn_20260618_sqlite01");
+  });
+
+  it("treats empty note_id as omitted and falls through to search", async () => {
+    const tool = createGoopSearchNotesTool(ctx);
+    const result = await tool.execute({ note_id: "", query: "SQLite" }, toolCtx);
+
+    expect(result).toContain("Field Notes");
+    expect(result).toContain("fn_20260618_sqlite01");
+    expect(result).not.toContain("No Field Note found with ID");
+  });
+
+  it("treats whitespace-only note_id as omitted and falls through to search", async () => {
+    const tool = createGoopSearchNotesTool(ctx);
+    const result = await tool.execute({ note_id: "   ", query: "SQLite" }, toolCtx);
+
+    expect(result).toContain("Field Notes");
+    expect(result).toContain("fn_20260618_sqlite01");
+    expect(result).not.toContain("No Field Note found with ID");
   });
 
   // -----------------------------------------------------------------------
