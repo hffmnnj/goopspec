@@ -7,7 +7,7 @@ import {
 } from "./index.js";
 import { __clearNudgeRateLimitState } from "./rate-limit.js";
 
-import type { GoopState } from "../../test-utils.js";
+import type { GoopState, WorkflowState } from "../../test-utils.js";
 
 const EXECUTE_CTX_OVERRIDES: Partial<GoopState> = {
   workflows: {
@@ -28,6 +28,22 @@ const EXECUTE_CTX_OVERRIDES: Partial<GoopState> = {
 
 function makeExecuteContext(testDir: string) {
   return createMockPluginContext({ testDir, state: EXECUTE_CTX_OVERRIDES });
+}
+
+function makeNudgeWorkflowState(overrides: Partial<WorkflowState>): WorkflowState {
+  return {
+    phase: "execute",
+    mode: "standard",
+    depth: "standard",
+    interviewComplete: false,
+    specLocked: false,
+    acceptanceConfirmed: false,
+    currentWave: 1,
+    totalWaves: 3,
+    autopilot: false,
+    lazyAutopilot: true,
+    ...overrides,
+  };
 }
 
 describe("lazy autopilot nudge", () => {
@@ -301,5 +317,79 @@ describe("lazy autopilot nudge", () => {
     await expect(dispatchLazyAutopilotNudge(ctx, "sess-no-sdk")).resolves.toBeUndefined();
     expect(ctx.pendingLazyAutopilotNudges.get("sess-no-sdk")?.source).toBe("system-transform");
     errorSpy.mockRestore();
+  });
+
+  // -------------------------------------------------------------------------
+  // T3: dispatch-path regression for guards G1/G2 and a positive canary.
+  // guards.test.ts covers G1/G2 directly on evaluateNudgeGuards; these tests
+  // prove the wiring through dispatchLazyAutopilotNudge so a refactor cannot
+  // silently disconnect the guards from the new agent/model dispatch body.
+  // -------------------------------------------------------------------------
+
+  it("suppresses via guard G1 when lazyAutopilot is false in workflow state", async () => {
+    const ctx = createMockPluginContext({
+      testDir,
+      state: {
+        workflows: { default: makeNudgeWorkflowState({ lazyAutopilot: false }) },
+      },
+    });
+    const messages = mock(async () => [{ info: { role: "assistant" } }]);
+    const promptAsync = mock(async () => undefined);
+    Object.assign(ctx.sdk.client, { session: { messages, promptAsync } });
+
+    await dispatchLazyAutopilotNudge(ctx, "sess-g1");
+
+    expect(messages).toHaveBeenCalledTimes(1);
+    expect(promptAsync).not.toHaveBeenCalled();
+    expect(ctx.pendingLazyAutopilotNudges.has("sess-g1")).toBe(false);
+  });
+
+  it("suppresses via guard G2 when phase is not execute", async () => {
+    const ctx = createMockPluginContext({
+      testDir,
+      state: {
+        workflows: { default: makeNudgeWorkflowState({ phase: "plan" }) },
+      },
+    });
+    const messages = mock(async () => [{ info: { role: "assistant" } }]);
+    const promptAsync = mock(async () => undefined);
+    Object.assign(ctx.sdk.client, { session: { messages, promptAsync } });
+
+    await dispatchLazyAutopilotNudge(ctx, "sess-g2");
+
+    expect(messages).toHaveBeenCalledTimes(1);
+    expect(promptAsync).not.toHaveBeenCalled();
+    expect(ctx.pendingLazyAutopilotNudges.has("sess-g2")).toBe(false);
+  });
+
+  it("fires in the correct case: execute phase, lazy autopilot on, orchestrator agent with resolved model", async () => {
+    const ctx = makeExecuteContext(testDir);
+    const calls: unknown[] = [];
+    Object.assign(ctx.sdk.client, {
+      session: {
+        messages: mock(async () => [{ info: { role: "assistant" } }]),
+        promptAsync(input: unknown): Promise<void> {
+          calls.push(input);
+          return Promise.resolve();
+        },
+      },
+    });
+
+    await dispatchLazyAutopilotNudge(ctx, "sess-positive");
+    await Promise.resolve();
+
+    expect(calls).toHaveLength(1);
+    const dispatched = calls[0] as {
+      body: {
+        agent: string;
+        model?: { providerID: string; modelID: string };
+        parts: { type: string; text: string }[];
+      };
+    };
+    expect(dispatched.body.agent).toBe("goop-orchestrator");
+    expect(dispatched.body.model).toBeDefined();
+    expect(dispatched.body.model?.providerID).toBeTruthy();
+    expect(dispatched.body.model?.modelID).toBeTruthy();
+    expect(dispatched.body.parts).toEqual([{ type: "text", text: LAZY_AUTOPILOT_NUDGE_TEXT }]);
   });
 });
