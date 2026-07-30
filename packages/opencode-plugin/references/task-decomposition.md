@@ -94,14 +94,12 @@ After all waves are drafted:
 
 ## update-wave Calling Convention
 
-`goop_state({ action: "update-wave" })` must only be called after a wave's tasks are fully complete and verified.
+`goop_state({ action: "update-wave" })` records the wave currently in progress.
 
-- `update-wave(N, total)` means "N waves are now complete."
-- When starting Wave N, call `update-wave(N-1, total)` to record the previous wave complete.
-- When Wave N finishes, call `update-wave(N, total)`.
-- Wave 1 has no previous wave; call `update-wave(1, total)` only after Wave 1 completes.
-
-Calling `update-wave(total, total)` before the final wave runs triggers premature auto-progression to the accept phase.
+- `update-wave(N, total)` means "Wave N is now in progress," using 1-based numbering.
+- `currentWave: 0` means no wave has started.
+- Call `update-wave(N, total)` when work on Wave N begins, including `update-wave(1, total)` when Wave 1 starts.
+- Wave completion comes from the `waves` and `wave_tasks` records, not from this progress indicator.
 
 ### Parallel Execution Within a Wave
 

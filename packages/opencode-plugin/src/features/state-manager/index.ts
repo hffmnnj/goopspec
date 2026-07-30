@@ -214,9 +214,7 @@ function wouldRegressPersistedState(next: GoopState, persisted: GoopState): bool
     if (
       (current.interviewComplete && !candidate.interviewComplete) ||
       (current.specLocked && !candidate.specLocked) ||
-      (current.acceptanceConfirmed && !candidate.acceptanceConfirmed) ||
-      candidate.currentWave < current.currentWave ||
-      candidate.totalWaves < current.totalWaves
+      (current.acceptanceConfirmed && !candidate.acceptanceConfirmed)
     ) {
       return true;
     }
@@ -379,6 +377,9 @@ export function createStateManager(opts: CreateStateManagerOptions): StateManage
       logError("Unable to refresh active workflow before mutation: row not found", {
         activeWorkflowId,
       });
+      cached = null;
+      cachedBaseline = null;
+      throw new Error(`Active workflow "${activeWorkflowId}" not found in persisted state`);
     }
 
     if (!wf) {
@@ -561,6 +562,7 @@ export function createStateManager(opts: CreateStateManagerOptions): StateManage
 
       mutateActive((wf) => {
         wf.phase = to;
+        if (force) wf.manualOverride = true;
       });
     },
 

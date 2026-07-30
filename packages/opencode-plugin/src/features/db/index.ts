@@ -11,6 +11,7 @@ import { Database } from "bun:sqlite";
 import { patchContent } from "../../shared/content-patch.js";
 import { runMigrations } from "./migrations.js";
 import { initSchema } from "./schema.js";
+import { TASK_STATUSES, WAVE_STATUSES, normalizeStatus } from "./types.js";
 import type {
   BlockerRow,
   ChronicleEventRow,
@@ -260,6 +261,10 @@ export class GoopSpecDB {
       completed_at?: number;
     },
   ): void {
+    const status = normalizeStatus(wave.status ?? "pending", WAVE_STATUSES);
+    if (!status.ok) {
+      throw new Error(`Invalid wave status: ${status.error}`);
+    }
     const now = Math.floor(Date.now() / 1000);
     const updates = ["updated_at = $now"];
     if (wave.title !== undefined) updates.push("title = $title");
@@ -285,7 +290,7 @@ export class GoopSpecDB {
         $workflowId: workflowId,
         $waveNumber: wave.wave_number,
         $title: wave.title ?? "",
-        $status: wave.status ?? "pending",
+        $status: status.status,
         $prBranch: wave.pr_branch ?? null,
         $prUrl: wave.pr_url ?? null,
         $startedAt: wave.started_at ?? null,
@@ -387,6 +392,10 @@ export class GoopSpecDB {
     started_at?: number;
     completed_at?: number;
   }): void {
+    const status = normalizeStatus(task.status ?? "pending", TASK_STATUSES);
+    if (!status.ok) {
+      throw new Error(`Invalid task status: ${status.error}`);
+    }
     const now = Math.floor(Date.now() / 1000);
     const updates = ["updated_at = $now"];
     if (task.description !== undefined) updates.push("description = $description");
@@ -413,7 +422,7 @@ export class GoopSpecDB {
         $taskIndex: task.task_index,
         $description: task.description ?? "",
         $agent: task.agent ?? null,
-        $status: task.status ?? "pending",
+        $status: status.status,
         $startedAt: task.started_at ?? null,
         $completedAt: task.completed_at ?? null,
         $now: now,
@@ -429,6 +438,10 @@ export class GoopSpecDB {
   }
 
   setWaveTaskStatus(waveId: number, taskIndex: number, status: string): void {
+    const normalized = normalizeStatus(status, TASK_STATUSES);
+    if (!normalized.ok) {
+      throw new Error(`Invalid task status: ${normalized.error}`);
+    }
     const now = Math.floor(Date.now() / 1000);
     this.db
       .query<WaveTaskRow, NamedBindings>(
@@ -436,7 +449,7 @@ export class GoopSpecDB {
          SET status = $status, updated_at = $now
          WHERE wave_id = $waveId AND task_index = $taskIndex`,
       )
-      .run({ $waveId: waveId, $taskIndex: taskIndex, $status: status, $now: now });
+      .run({ $waveId: waveId, $taskIndex: taskIndex, $status: normalized.status, $now: now });
   }
 
   // -----------------------------------------------------------------------

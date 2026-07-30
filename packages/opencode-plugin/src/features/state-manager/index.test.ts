@@ -147,6 +147,28 @@ describe("state durability regressions", () => {
     expect(persisted.specLocked).toBe(true);
   });
 
+  it("applies a forced transition without discarding freshly persisted fields", () => {
+    const m = mgr();
+    m.getState();
+
+    db.upsertWorkflow(
+      "default",
+      createDefaultWorkflowState({
+        phase: "execute",
+        interviewComplete: true,
+        specLocked: true,
+      }),
+    );
+
+    m.transitionPhase("idle", true);
+
+    const persisted = JSON.parse(db.getWorkflow("default")?.state ?? "{}") as WorkflowState;
+    expect(persisted.phase).toBe("idle");
+    expect(persisted.manualOverride).toBe(true);
+    expect(persisted.interviewComplete).toBe(true);
+    expect(persisted.specLocked).toBe(true);
+  });
+
   it("falls back to the most recently active workflow when _meta names a deleted workflow", () => {
     db.upsertWorkflow("older", createDefaultWorkflowState({ phase: "plan" }));
     db.upsertWorkflow("newer", createDefaultWorkflowState({ phase: "execute" }));
@@ -155,6 +177,20 @@ describe("state durability regressions", () => {
     const m = mgr();
 
     expect(m.getActiveWorkflowId()).toBe("newer");
+  });
+
+  it("refuses to resurrect a cached workflow when its persisted binding was deleted", () => {
+    const m = mgr();
+    m.getState();
+
+    db.deleteWorkflow("default");
+    db.upsertWorkflow("replacement", createDefaultWorkflowState({ phase: "execute" }));
+    db.upsertWorkflow("_meta", { activeWorkflowId: "default" });
+
+    expect(() => m.lockSpec()).toThrow('Active workflow "default" not found in persisted state');
+    expect(db.getWorkflow("default")).toBeNull();
+    expect(m.getActiveWorkflowId()).toBe("replacement");
+    expect(m.getActiveWorkflow().specLocked).toBe(false);
   });
 
   it("falls back to the most recently active workflow when _meta is missing", () => {
@@ -197,6 +233,24 @@ describe("state durability regressions", () => {
 
     const persisted = JSON.parse(db.getWorkflow("default")?.state ?? "{}") as WorkflowState;
     expect(persisted.phase).toBe("plan");
+  });
+
+  it("allows setState to correct the wave currently in progress", () => {
+    const m = mgr();
+    const state = m.getState();
+    m.updateWaveProgress(3, 5);
+
+    m.setState({
+      ...state,
+      workflows: {
+        ...state.workflows,
+        default: { ...state.workflows.default, currentWave: 2, totalWaves: 4 },
+      },
+    });
+
+    const persisted = JSON.parse(db.getWorkflow("default")?.state ?? "{}") as WorkflowState;
+    expect(persisted.currentWave).toBe(2);
+    expect(persisted.totalWaves).toBe(4);
   });
 });
 
@@ -335,6 +389,14 @@ describe("phase transitions", () => {
     const m = mgr();
     m.transitionPhase("accept", true);
     expect(m.getActiveWorkflow().phase).toBe("accept");
+  });
+
+  it("persists the manual override latch for a forced transition", () => {
+    const m1 = mgr();
+    m1.transitionPhase("accept", true);
+
+    const m2 = createStateManager({ projectDir: testDir, db });
+    expect(m2.getActiveWorkflow().manualOverride).toBe(true);
   });
 
   it("transitions are scoped to the active workflow", () => {

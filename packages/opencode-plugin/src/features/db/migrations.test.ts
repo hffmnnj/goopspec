@@ -161,7 +161,7 @@ describe("migrations v2", () => {
   });
 });
 
-describe("migrations v3-v6", () => {
+describe("migrations v3-v7", () => {
   function getObjectName(db: GoopSpecDB, type: string, name: string): string | null {
     // biome-ignore lint/complexity/useLiteralKeys: accessing private property for test
     const row = db["db"]
@@ -172,8 +172,8 @@ describe("migrations v3-v6", () => {
     return row?.name ?? null;
   }
 
-  it("sets CURRENT_SCHEMA_VERSION to 6", () => {
-    expect(CURRENT_SCHEMA_VERSION).toBe(6);
+  it("sets CURRENT_SCHEMA_VERSION to 7", () => {
+    expect(CURRENT_SCHEMA_VERSION).toBe(7);
   });
 
   it("fresh DB has new relational foundation tables", () => {
@@ -213,11 +213,53 @@ describe("migrations v3-v6", () => {
   it("re-running migrations on already-migrated DB remains a no-op", () => {
     const db = new GoopSpecDB(":memory:");
 
-    expect(db.getSchemaVersion()).toBe(6);
+    expect(db.getSchemaVersion()).toBe(7);
 
     // biome-ignore lint/complexity/useLiteralKeys: accessing private property for test
     expect(() => runMigrations(db["db"])).not.toThrow();
-    expect(db.getSchemaVersion()).toBe(6);
+    expect(db.getSchemaVersion()).toBe(7);
+
+    db.close();
+  });
+
+  it("v_wave_progress counts legacy 'complete' task status as complete", () => {
+    const db = new GoopSpecDB(":memory:");
+    db.upsertWave("wf-1", { wave_number: 1, title: "Wave 1" });
+    const wave = db.getWave("wf-1", 1);
+    expect(wave).not.toBeNull();
+    const waveId = wave?.id ?? -1;
+
+    db.upsertWaveTask({
+      wave_id: waveId,
+      workflow_id: "wf-1",
+      task_index: 1,
+      status: "completed",
+    });
+    // Corrupt to legacy 'complete' to simulate an existing database.
+    // biome-ignore lint/complexity/useLiteralKeys: accessing private property for test
+    db["db"]
+      .query("UPDATE wave_tasks SET status = $status WHERE wave_id = $waveId")
+      .run({ $status: "complete", $waveId: waveId });
+
+    const progress = db.getWaveProgress("wf-1", 1)[0];
+    expect(progress.completed_tasks).toBe(1);
+    expect(progress.total_tasks).toBe(1);
+
+    db.close();
+  });
+
+  it("v_workflow_summary counts legacy 'complete' wave status as complete", () => {
+    const db = new GoopSpecDB(":memory:");
+    db.upsertWave("wf-1", { wave_number: 1, title: "Wave 1", status: "completed" });
+    // Corrupt to legacy 'complete' to simulate an existing database.
+    // biome-ignore lint/complexity/useLiteralKeys: accessing private property for test
+    db["db"]
+      .query("UPDATE waves SET status = $status WHERE workflow_id = $workflowId")
+      .run({ $status: "complete", $workflowId: "wf-1" });
+
+    const summary = db.getWorkflowSummaries().find((s) => s.workflow_id === "wf-1");
+    expect(summary?.completed_waves).toBe(1);
+    expect(summary?.total_waves).toBe(1);
 
     db.close();
   });

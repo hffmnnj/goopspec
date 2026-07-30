@@ -5,19 +5,19 @@
  * consistently. Exported as a DB feature module because formatting is
  * tightly coupled to the waves/wave_tasks schema and DB read methods.
  *
+ * The progress counter is derived from the same task rows (and the same
+ * {@link isCompleteStatus} predicate) that drive the per-row display, so
+ * `progress: N/M` can never contradict the rows printed beside it.
+ *
  * @module features/db/wave-format
  */
 
-import type { WaveProgressRow, WaveRow, WaveTaskRow } from "./types.js";
+import { isCompleteStatus } from "../../shared/status.js";
+import type { WaveRow, WaveTaskRow } from "./types.js";
 
 /** Minimal data-source contract required to format waves. */
 export interface WaveDataSource {
   getWaveTasks(waveId: number): WaveTaskRow[];
-  getWaveProgress(
-    workflowId: string,
-    waveNumber?: number,
-    waveNumbers?: number[],
-  ): WaveProgressRow[];
 }
 
 function formatWaveTasks(tasks: WaveTaskRow[]): string {
@@ -38,16 +38,16 @@ function formatWaveTasks(tasks: WaveTaskRow[]): string {
 }
 
 /**
- * Format a single wave with its tasks and optional progress.
+ * Format a single wave with its tasks.
+ *
+ * Both the progress counter and the per-row display are derived from the same
+ * `getWaveTasks` result, so the counter can never disagree with the rows
+ * printed beside it regardless of how completion is defined.
  */
-export function formatWave(
-  dataSource: WaveDataSource,
-  wave: WaveRow,
-  progress?: WaveProgressRow,
-): string {
+export function formatWave(dataSource: WaveDataSource, wave: WaveRow): string {
   const tasks = dataSource.getWaveTasks(wave.id);
-  const completedTasks = progress?.completed_tasks ?? 0;
-  const totalTasks = progress?.total_tasks ?? tasks.length;
+  const completedTasks = tasks.filter((task) => isCompleteStatus(task.status)).length;
+  const totalTasks = tasks.length;
   const lines = [
     `## Wave ${wave.wave_number}: ${wave.title || "Untitled"}`,
     "",
@@ -85,14 +85,5 @@ export function formatWaves(
     return `No ${scope} found for workflow '${workflowId}'. Use goop_write_wave to create one.`;
   }
 
-  const progressRows =
-    waveNumbers !== undefined && waveNumbers.length > 0
-      ? dataSource.getWaveProgress(workflowId, undefined, waveNumbers)
-      : dataSource.getWaveProgress(workflowId);
-
-  const progressByWaveNumber = new Map(progressRows.map((row) => [row.wave_number, row] as const));
-
-  return waves
-    .map((wave) => formatWave(dataSource, wave, progressByWaveNumber.get(wave.wave_number)))
-    .join("\n\n---\n\n");
+  return waves.map((wave) => formatWave(dataSource, wave)).join("\n\n---\n\n");
 }

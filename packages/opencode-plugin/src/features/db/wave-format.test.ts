@@ -51,7 +51,7 @@ describe("wave-format", () => {
     expect(rendered).toContain("  - agent: executor-medium");
   });
 
-  it("formats a wave with progress from the view", () => {
+  it("formats a wave with progress derived from task rows", () => {
     const workflowId = ctx.stateManager.getState().activeWorkflowId;
     ctx.db.upsertWave(workflowId, {
       wave_number: 1,
@@ -74,8 +74,7 @@ describe("wave-format", () => {
       status: "done",
     });
 
-    const progress = ctx.db.getWaveProgress(workflowId, 1)[0];
-    const rendered = formatWave(ctx.db, wave, progress);
+    const rendered = formatWave(ctx.db, wave);
     expect(rendered).toContain("- progress: 2/2 tasks complete");
   });
 
@@ -182,5 +181,36 @@ describe("wave-format", () => {
     expect(rendered).toContain("## Wave 2: Wave two");
     expect(rendered).toContain("- 1. [in_progress] Filtered task");
     expect(rendered).not.toContain("## Wave 1: Wave one");
+  });
+
+  it("rendered progress counter agrees with rendered task rows for a legacy 'complete' row", () => {
+    const workflowId = ctx.stateManager.getState().activeWorkflowId;
+    ctx.db.upsertWave(workflowId, {
+      wave_number: 1,
+      title: "Legacy wave",
+      status: "in_progress",
+    });
+    const wave = getWave(workflowId, 1);
+    ctx.db.upsertWaveTask({
+      wave_id: wave.id,
+      workflow_id: workflowId,
+      task_index: 1,
+      description: "Legacy complete task",
+      status: "completed",
+    });
+    // Simulate a legacy 'complete' row already persisted in an existing
+    // database. The write boundary now normalises 'complete' -> 'completed',
+    // so raw SQL is the only way to reproduce the legacy state.
+    // biome-ignore lint/complexity/useLiteralKeys: accessing private property for test
+    ctx.db["db"]
+      .query("UPDATE wave_tasks SET status = $status WHERE wave_id = $waveId")
+      .run({ $status: "complete", $waveId: wave.id });
+
+    const rendered = formatWave(ctx.db, wave);
+    // The per-row display echoes the raw legacy status...
+    expect(rendered).toContain("- 1. [complete] Legacy complete task");
+    // ...and the progress counter counts it as complete via the shared
+    // predicate, so the counter and the rows can never disagree.
+    expect(rendered).toContain("- progress: 1/1 tasks complete");
   });
 });

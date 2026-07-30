@@ -139,8 +139,22 @@ export interface WorkflowState {
   interviewComplete: boolean;
   specLocked: boolean;
   acceptanceConfirmed: boolean;
+  /**
+   * Wave currently in progress, using a 1-based number. `0` means no wave has
+   * started; this is not a count of completed waves.
+   */
   currentWave: number;
+  /**
+   * Total number of waves configured for this workflow. `0` means no waves
+   * have been configured.
+   */
   totalWaves: number;
+  /**
+   * Prevents automatic phase progression after an operator makes a forced
+   * transition. It persists across restarts until `clear-manual-override` is
+   * explicitly invoked through `goop_state`, or the workflow is reset.
+   */
+  manualOverride?: boolean;
   autopilot: boolean;
   lazyAutopilot: boolean;
   gitignoreGoopspec?: boolean;
@@ -170,6 +184,7 @@ export interface StateManager {
 
   // Workflow mutations (operate on the active workflow)
   updateWorkflow(updates: Partial<WorkflowState>): void;
+  /** A forced transition also enables the persisted manual-override latch. */
   transitionPhase(to: WorkflowPhase, force?: boolean): void;
   lockSpec(): void;
   unlockSpec(): void;

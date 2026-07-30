@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { existsSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 
+import { createStateManager } from "../../features/state-manager/index.js";
 import {
   createMockPluginContext,
   createMockToolContext,
@@ -97,6 +98,7 @@ describe("goop_state tool", () => {
       );
       expect(result).toContain("execute");
       expect(ctx.stateManager.getActiveWorkflow().phase).toBe("execute");
+      expect(ctx.stateManager.getActiveWorkflow().manualOverride).toBe(true);
     });
 
     it("renders STATUS.md after phase transition and spec lock mutations", async () => {
@@ -349,6 +351,28 @@ describe("goop_state tool", () => {
   });
 
   // -----------------------------------------------------------------------
+  // manual progression override
+  // -----------------------------------------------------------------------
+
+  describe("action: clear-manual-override", () => {
+    it("clears the persisted forced-transition latch", async () => {
+      const tool = createGoopStateTool(ctx);
+      await tool.execute(
+        { action: "transition", phase: "execute", force: true },
+        createMockToolContext(),
+      );
+
+      const result = await tool.execute(
+        { action: "clear-manual-override" },
+        createMockToolContext(),
+      );
+
+      expect(result).toContain("Automatic progression may resume");
+      expect(ctx.stateManager.getActiveWorkflow().manualOverride).toBe(false);
+    });
+  });
+
+  // -----------------------------------------------------------------------
   // update-wave
   // -----------------------------------------------------------------------
 
@@ -531,6 +555,41 @@ describe("goop_state tool", () => {
       const result = await tool.execute({ action: "get" }, createMockToolContext());
       expect(result).toContain("Error");
       expect(result).toContain("corrupt state");
+    });
+  });
+
+  // -----------------------------------------------------------------------
+  // Caller-driven write-side: update-wave through the real DB-backed
+  // StateManager. The existing update-wave tests use the in-memory mock,
+  // which bypasses DB persistence. This test verifies that what the tool
+  // writes actually round-trips through the DB — the write side of the
+  // seam the auto-progression hook reads.
+  // -----------------------------------------------------------------------
+
+  describe("goop_state update-wave DB-backed persistence (caller-driven write side)", () => {
+    it("persists currentWave/totalWaves through the real DB-backed StateManager so a fresh reader observes the same values", async () => {
+      const env = setupTestEnvironment("goop-state-persist");
+      const { testDir, db, cleanup } = env;
+      try {
+        const stateManager = createStateManager({ projectDir: testDir, db, workflowId: "default" });
+        const ctx = createMockPluginContext({ testDir, db, stateManager });
+
+        const stateTool = createGoopStateTool(ctx);
+        await stateTool.execute(
+          { action: "update-wave", currentWave: 5, totalWaves: 5 },
+          createMockToolContext(),
+        );
+
+        // A fresh StateManager (simulating a new process) must read the
+        // persisted values — this is the write side of the seam the
+        // auto-progression hook reads.
+        const fresh = createStateManager({ projectDir: testDir, db, workflowId: "default" });
+        const wf = fresh.getActiveWorkflow();
+        expect(wf.currentWave).toBe(5);
+        expect(wf.totalWaves).toBe(5);
+      } finally {
+        cleanup();
+      }
     });
   });
 });

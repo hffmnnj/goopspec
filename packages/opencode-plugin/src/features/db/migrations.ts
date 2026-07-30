@@ -11,7 +11,7 @@ import type { Database } from "bun:sqlite";
 
 import { isFts5Available } from "./schema.js";
 
-export const CURRENT_SCHEMA_VERSION = 6;
+export const CURRENT_SCHEMA_VERSION = 7;
 
 interface VersionRow {
   v: number | null;
@@ -245,5 +245,47 @@ export function runMigrations(db: Database): void {
     `);
 
     db.run("INSERT OR IGNORE INTO schema_version(version) VALUES(6)");
+  }
+
+  if (current < 7) {
+    // v7: recreate the progress views so their completion predicate matches
+    // the shared isCompleteStatus() predicate (shared/status.ts). The views
+    // now count 'complete' (legacy near-miss) alongside 'done' and 'completed',
+    // and match case-insensitively via LOWER(TRIM(...)). Views hold no data, so
+    // DROP + CREATE is safe, additive, and does not touch any table or row.
+    db.run("DROP VIEW IF EXISTS v_wave_progress");
+    db.run("DROP VIEW IF EXISTS v_workflow_summary");
+    db.run(`
+      CREATE VIEW v_workflow_summary AS
+      SELECT
+        wf.workflow_id AS workflow_id,
+        COUNT(DISTINCT w.id) AS total_waves,
+        COUNT(DISTINCT CASE WHEN LOWER(TRIM(w.status)) IN ('done', 'completed', 'complete') THEN w.id END) AS completed_waves,
+        COUNT(DISTINCT CASE WHEN b.status = 'open' THEN b.id END) AS open_blockers,
+        MAX(MAX(w.updated_at), COALESCE(MAX(b.created_at), MAX(w.updated_at))) AS last_activity
+      FROM (
+        SELECT workflow_id FROM waves
+        UNION
+        SELECT workflow_id FROM blockers
+      ) wf
+      LEFT JOIN waves w ON w.workflow_id = wf.workflow_id
+      LEFT JOIN blockers b ON b.workflow_id = wf.workflow_id
+      GROUP BY wf.workflow_id
+    `);
+
+    db.run(`
+      CREATE VIEW v_wave_progress AS
+      SELECT
+        w.id AS wave_id,
+        w.workflow_id AS workflow_id,
+        w.wave_number AS wave_number,
+        COUNT(t.id) AS total_tasks,
+        COUNT(CASE WHEN LOWER(TRIM(t.status)) IN ('done', 'completed', 'complete') THEN 1 END) AS completed_tasks
+      FROM waves w
+      LEFT JOIN wave_tasks t ON t.wave_id = w.id
+      GROUP BY w.id, w.workflow_id, w.wave_number
+    `);
+
+    db.run("INSERT OR IGNORE INTO schema_version(version) VALUES(7)");
   }
 }

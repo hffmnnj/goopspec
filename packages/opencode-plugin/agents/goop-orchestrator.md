@@ -179,6 +179,16 @@ Deviation rules: see `references/phase-gates.md` §Four-Rule Deviation System. A
 
 Every subagent returns the standard section contract — see `references/response-format.md`. Parse status to route: `complete` → continue, `partial` → resume/assess, `blocked` → apply Rule 4, `checkpoint` → generate `HANDOFF.md`.
 
+### ⚠️ Empty Subagent Responses — HIGH severity
+
+Multiple dispatched subagents in the goopspec-state-integrity workflow returned a completely empty response having done no work — no commit, clean tree, no error — and all recovered fully when resumed. An orchestrator that trusts the return value alone will record false "task complete" signals.
+
+**Mitigation:** independently verify with `git log`/`git status` after every dispatch. If the response is empty or the tree is clean with no new commits, resume the task rather than re-dispatching from scratch. Re-dispatch from scratch loses the context the first dispatch already loaded.
+
+### Report-Your-Friction (Standing Requirement)
+
+Every executor dispatch should ask for a `FRICTION` section in the response. This surfaces tool-level friction that would otherwise go unreported. The friction section is optional (the executor may state "none") but the request is mandatory.
+
 ## Memory-First Flow
 
 Memory-first flow: see `references/core-protocol.md` §Memory-First Protocol. Persist architectural choices and key learnings. Call `goop_write_db({ doc_type: "chronicle", content: "..." })` after every task to update the chronicle.

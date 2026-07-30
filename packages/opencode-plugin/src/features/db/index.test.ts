@@ -519,6 +519,26 @@ describe("GoopSpecDB", () => {
       db.close();
     });
 
+    it("rejects invalid direct wave and task statuses", () => {
+      const db = new GoopSpecDB(":memory:");
+
+      expect(() => db.upsertWave("wf-1", { wave_number: 1, status: "" })).toThrow(
+        "Invalid wave status",
+      );
+      db.upsertWave("wf-1", { wave_number: 1 });
+      const wave = db.getWave("wf-1", 1);
+      expect(() =>
+        db.upsertWaveTask({
+          wave_id: wave?.id ?? -1,
+          workflow_id: "wf-1",
+          task_index: 1,
+          status: "",
+        }),
+      ).toThrow("Invalid task status");
+
+      db.close();
+    });
+
     it("upsertWaveTask + setWaveTaskStatus update task progress view", () => {
       const db = new GoopSpecDB(":memory:");
       db.upsertWave("wf-1", { wave_number: 1, title: "Wave 1" });
