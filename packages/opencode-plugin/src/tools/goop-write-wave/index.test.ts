@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 
 import { GoopSpecDB } from "../../features/db/index.js";
-import { TASK_STATUSES, WAVE_STATUSES, normalizeStatus } from "../../features/db/types.js";
+import { TASK_STATUSES, WAVE_STATUSES, normalizeStatus, type WaveStatus } from "../../features/db/types.js";
 import type { PluginContext, ToolContext } from "../../test-utils.js";
 import {
   createMockPluginContext,
@@ -910,6 +910,38 @@ describe("goop_write_wave write integrity", () => {
       toolCtx,
     );
     expect(overrideResult).toContain("Written wave 1");
+    expect(ctx.db.getWave("default", 1)?.status).toBe("pending");
+  });
+
+  it("protects legacy 'complete' status from regression to pending", async () => {
+    const writeTool = createGoopWriteWaveTool(ctx);
+    await writeTool.execute({ wave_number: 1, title: "Legacy wave", status: "done" }, toolCtx);
+
+    // Simulate a legacy 'complete' status in the DB (pre-normalisation data
+    // that would have been written before the status normalisation boundary).
+    const realGetWave = ctx.db.getWave.bind(ctx.db);
+    ctx.db.getWave = (workflowId: string, waveNumber: number) => {
+      const wave = realGetWave(workflowId, waveNumber);
+      if (wave && waveNumber === 1) {
+        return { ...wave, status: "complete" as WaveStatus };
+      }
+      return wave;
+    };
+
+    // Regression to pending should be rejected — 'complete' is terminal.
+    const result = await writeTool.execute({ wave_number: 1, status: "pending" }, toolCtx);
+    expect(result).toContain("allow_status_regression: true");
+    expect(result).toContain("'complete'");
+
+    // With explicit override, regression is allowed.
+    const overrideResult = await writeTool.execute(
+      { wave_number: 1, status: "pending", allow_status_regression: true },
+      toolCtx,
+    );
+    expect(overrideResult).toContain("Written wave 1");
+
+    // Restore the real getWave and verify the DB now has 'pending'.
+    ctx.db.getWave = realGetWave;
     expect(ctx.db.getWave("default", 1)?.status).toBe("pending");
   });
 

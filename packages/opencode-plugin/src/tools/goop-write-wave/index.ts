@@ -14,6 +14,7 @@ import { formatBatchResult, runBatch } from "../../features/db/batch.js";
 import { TASK_STATUSES, WAVE_STATUSES, normalizeStatus } from "../../features/db/types.js";
 import { WAVE_COMPLETE_COMPACT_REMINDER, isWaveComplete } from "../../shared/compact-reminder.js";
 import { renderSidecars } from "../../shared/render-sidecars.js";
+import { isCompleteStatus } from "../../shared/status.js";
 
 interface InlineWaveTask {
   task_index: number;
@@ -36,8 +37,6 @@ interface WavePayload {
   tasks?: InlineWaveTask[];
 }
 
-const TERMINAL_STATUSES = new Set(["done", "completed"]);
-
 interface BulkTaskStatusUpdate {
   task_index: number;
   status: string;
@@ -46,8 +45,8 @@ interface BulkTaskStatusUpdate {
 const VERIFICATION_CHECK_NAMES = ["typecheck", "test", "lint", "custom"] as const;
 type VerificationCheckName = (typeof VERIFICATION_CHECK_NAMES)[number];
 
-const VERIFICATION_STATUSES = ["pass", "fail", "skip"] as const;
-type VerificationStatus = (typeof VERIFICATION_STATUSES)[number];
+const VERIFICATION_RESULT_STATUSES = ["pass", "fail", "skip"] as const;
+type VerificationStatus = (typeof VERIFICATION_RESULT_STATUSES)[number];
 
 interface VerificationPayload {
   check_name: VerificationCheckName;
@@ -191,7 +190,7 @@ function statusRegressionError(
   nextStatus: string | undefined,
   allowStatusRegression: boolean,
 ): string | null {
-  if (!allowStatusRegression && TERMINAL_STATUSES.has(currentStatus) && nextStatus === "pending") {
+  if (!allowStatusRegression && isCompleteStatus(currentStatus) && nextStatus === "pending") {
     return `Error in goop_write_wave: refusing to regress ${subject} from '${currentStatus}' to 'pending'. Set allow_status_regression: true to override deliberately.`;
   }
   return null;
@@ -267,7 +266,7 @@ export function createGoopWriteWaveTool(ctx: PluginContext): ToolDefinition {
         .array(
           tool.schema.object({
             check_name: tool.schema.enum(VERIFICATION_CHECK_NAMES),
-            status: tool.schema.enum(VERIFICATION_STATUSES),
+            status: tool.schema.enum(VERIFICATION_RESULT_STATUSES),
             detail: tool.schema.string().optional(),
             wave_id: tool.schema
               .number()
