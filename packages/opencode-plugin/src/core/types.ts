@@ -9,6 +9,7 @@
  */
 
 import type { PluginInput } from "@opencode-ai/plugin";
+import type { BackgroundJobRegistry } from "../features/background-jobs/registry.js";
 import type { GoopSpecDB } from "../features/db/index.js";
 import type { SessionManager } from "../features/session/index.js";
 import type {
@@ -71,6 +72,8 @@ export interface PluginContext {
   readonly pendingCompactions: Map<string, PendingCompactionRequest>;
   /** Session-scoped lazy-autopilot nudges awaiting dispatch or system-transform fallback. */
   readonly pendingLazyAutopilotNudges: Map<string, PendingLazyAutopilotNudge>;
+  /** Process-scoped background jobs, swept when the plugin is disposed. */
+  readonly backgroundJobs: BackgroundJobRegistry;
 }
 
 /** A validated compaction request queued at request time and dispatched in-flight on session.idle. */

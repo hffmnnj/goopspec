@@ -40,7 +40,18 @@ const goopspec: Plugin = async (input) => {
 
     return {
       ...hooks,
-      dispose: async () => watcher.dispose(),
+      dispose: async () => {
+        try {
+          watcher.dispose();
+        } catch (error) {
+          logError("Failed to dispose V1 config watcher", error);
+        }
+        try {
+          await ctx.backgroundJobs.disposeAll();
+        } catch (error) {
+          logError("Failed to dispose V1 background jobs", error);
+        }
+      },
       tool: { ...(hooks.tool ?? {}), ...tools },
     };
   } catch (error) {
@@ -66,12 +77,10 @@ const v2Plugin = V2Plugin.define({
         });
         try {
           await ctx.teardown.register(async () => {
-            watcher.dispose();
-            await hooks.dispose();
+            await disposeV2Resources(watcher, hooks.dispose, pluginCtx.backgroundJobs.disposeAll);
           });
         } catch (error) {
-          watcher.dispose();
-          await hooks.dispose();
+          await disposeV2Resources(watcher, hooks.dispose, pluginCtx.backgroundJobs.disposeAll);
           throw error;
         }
       } else {
@@ -82,6 +91,28 @@ const v2Plugin = V2Plugin.define({
     }
   },
 });
+
+async function disposeV2Resources(
+  watcher: { dispose(): void },
+  disposeHooks: () => Promise<void>,
+  disposeBackgroundJobs: () => Promise<void>,
+): Promise<void> {
+  try {
+    watcher.dispose();
+  } catch (error) {
+    logError("Failed to dispose V2 config watcher", error);
+  }
+  try {
+    await disposeHooks();
+  } catch (error) {
+    logError("Failed to dispose V2 hooks", error);
+  }
+  try {
+    await disposeBackgroundJobs();
+  } catch (error) {
+    logError("Failed to dispose V2 background jobs", error);
+  }
+}
 
 export const server = goopspec;
 export default Object.assign(goopspec, v2Plugin);

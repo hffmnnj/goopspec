@@ -54,6 +54,9 @@ const EXPECTED_TOOL_KEYS = [
   "ast_grep",
   "scip",
   "generate_image",
+  "background_command",
+  "background_status",
+  "background_cancel",
 ] as const;
 
 const V2_EXPECTED_TOOL_KEYS = EXPECTED_TOOL_KEYS.filter((key) => key !== "goop_compact");
@@ -142,7 +145,7 @@ describe("plugin entrypoint", () => {
     const result = await plugin(input);
     const toolKeys = Object.keys(result.tool ?? {});
 
-    expect(toolKeys).toHaveLength(35);
+    expect(toolKeys).toHaveLength(38);
     for (const key of EXPECTED_TOOL_KEYS) {
       expect(toolKeys).toContain(key);
     }
@@ -200,7 +203,7 @@ describe("plugin entrypoint", () => {
 
     // goop_compact is the single capability-gated omission: V2 has no
     // session.summarize client capability.
-    expect(Object.keys(v2Tools)).toHaveLength(34);
+    expect(Object.keys(v2Tools)).toHaveLength(37);
     for (const key of V2_EXPECTED_TOOL_KEYS) {
       expect(v2Tools).toHaveProperty(key);
     }

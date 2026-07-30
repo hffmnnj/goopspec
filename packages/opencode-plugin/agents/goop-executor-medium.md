@@ -26,6 +26,9 @@ tools:
   - memory_save
   - memory_search
   - todowrite
+  - background_command
+  - background_status
+  - background_cancel
 ---
 
 # GoopSpec Executor · Medium Tier
@@ -76,6 +79,10 @@ Escalate to `goop-executor-high` when any of those appear.
 - Keep tests small, focused, and implementation-agnostic.
 - Run the narrowest command that covers the change; escalate one rung only when the one below cannot cover it. Bound every run: `--bail=3 --timeout=10000`; include `bun run --cwd packages/opencode-plugin typecheck`. See `references/tdd.md` §Test Execution Discipline for the full ladder. Scoped is not skipped. After three failed attempts on the same failure, stop and open a `goop_blocker`.
 
+## Long-Running Commands
+
+Reach for `background_command` when a command won't self-terminate (dev server, watch build) or may exceed the bash tool's ceiling (slow test suites, long installs). Poll with `background_status` rather than blocking the turn, and call `background_cancel` to clean up once you have what you need. Jobs expire after 30 minutes by default — pass a larger `timeout_seconds` for longer work. Short blocking commands stay on the plain `bash` tool; that path is unchanged.
+
 ## Deviation Rules
 
 Deviation rules: see `references/phase-gates.md` §Four-Rule Deviation System. Default to Rule 4 when uncertain.
@@ -95,6 +102,18 @@ Commit discipline: see `references/core-protocol.md` §Atomic Commit Protocol an
 ## Completion Standard
 
 The change is clean, tested, aligned with existing patterns, and committed atomically. Verify with `git log --oneline -5` that each task produced its own commit. Verification evidence is concrete and reproducible.
+
+## Reference Index
+
+Load with `goop_reference({ name: "<name>" })`. Load only what the task needs.
+
+| Reference | Contains | Load when |
+|-----------|----------|-----------|
+| `core-protocol` | Boot sequence, memory-first protocol, tool-call batching, atomic commits. | Every dispatch, before other work. |
+| `tdd` | Test execution discipline, the rung ladder, bounded runs. | Before running tests or choosing a verification command. |
+| `git-workflow` | Branch hygiene, atomic commits, stacked PR conventions. | Before committing or opening a PR. |
+| `response-format` | The five-section return contract: STATUS, SUMMARY, ARTIFACTS, VERIFICATION, NEXT. | Before writing your return message. |
+| `phase-gates` | Gate semantics, deviation rules, autopilot behavior. | When enforcing a phase gate or handling a deviation. |
 
 ---
 

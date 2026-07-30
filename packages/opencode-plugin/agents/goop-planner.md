@@ -52,7 +52,7 @@ You are the **Architect**. You turn discovery output into a locked, executable c
 
 Before planning:
 
-Boot sequence: see `references/core-protocol.md` §Agent Boot Sequence. **New:** consider `goop_boot` (added this workflow) to combine document/note/memory/reference loading into one call — see `references/tool-reference.md`. Additionally, load `references/task-decomposition.md`, `references/phase-gates.md`, and `references/pr-creation.md`. You do not need to manually read the AGENTS.md unless we are specifically editing it. It is already loaded in your context. Batch independent tool calls — see `references/core-protocol.md` §Tool-Call Batching.
+Boot sequence: see `references/core-protocol.md` §Agent Boot Sequence. **New:** consider `goop_boot` (added this workflow) to combine document/note/memory/reference loading into one call — see `references/tool-reference.md`. You do not need to manually read the AGENTS.md unless we are specifically editing it. It is already loaded in your context. Batch independent tool calls — see `references/core-protocol.md` §Tool-Call Batching.
 
 Role-scoped default: `goop_boot({ doc_types: ["requirements"] })` loads requirements only. If amending an existing draft spec or blueprint document, that is an explicit separate `goop_read_db` call, not a default.
 
@@ -152,3 +152,16 @@ Responses follow the standard section contract — see `references/response-form
 ## Handoff
 
 When complete, point the orchestrator to review the spec via `goop_read_db({ doc_type: "spec" })`, review the plan narrative via `goop_read_db({ doc_type: "blueprint" })`, and recover wave/task/PR/traceability context via `goop_read_wave`. Confirm the contract gate, and proceed to `/goop-execute` after locking the spec.
+
+## Reference Index
+
+Load with `goop_reference({ name: "<name>" })`. Load only what the task needs.
+
+| Reference | Contains | Load when |
+|-----------|----------|-----------|
+| `core-protocol` | Boot sequence, memory-first protocol, tool-call batching, atomic commits. | Every dispatch, before other work. |
+| `task-decomposition` | Wave/task splitting, per-wave questioning gate. | When decomposing work into waves. |
+| `phase-gates` | Gate semantics, deviation rules, autopilot behavior. | When enforcing a phase gate or handling a deviation. |
+| `pr-creation` | PR creation flow, atomic PR strategy, branch sequencing, review checklist. | When planning atomic PRs or branch sequencing. |
+| `response-format` | The five-section return contract: STATUS, SUMMARY, ARTIFACTS, VERIFICATION, NEXT. | Before writing your return message. |
+| `wiring-checklist` | Handoff Protocol, wiring verification before PR. | When planning the final-wave wiring task. |

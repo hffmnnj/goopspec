@@ -11,6 +11,7 @@ import { mkdirSync } from "node:fs";
 import type { PluginInput } from "./sdk-compat.js";
 import type { PluginContext, SdkEssentials, SessionInfo } from "./types.js";
 
+import { createBackgroundJobRegistry } from "../features/background-jobs/registry.js";
 import { GoopSpecDB } from "../features/db/index.js";
 import { SqliteMemoryManager } from "../features/memory/index.js";
 import { createResourceResolver, defaultReferencePaths } from "../features/resolver/index.js";
@@ -108,6 +109,7 @@ export async function createPluginSubsystems(
     compactionHandoff: new Map(),
     pendingCompactions: new Map(),
     pendingLazyAutopilotNudges: new Map(),
+    backgroundJobs: createBackgroundJobRegistry(),
   };
 }
 

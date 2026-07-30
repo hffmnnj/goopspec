@@ -1,4 +1,6 @@
 import { afterEach, describe, expect, it } from "bun:test";
+import { existsSync } from "node:fs";
+import { join } from "node:path";
 import {
   KEYWORD_PATTERNS,
   clearSignals,
@@ -120,5 +122,52 @@ describe("detectReferences", () => {
     expect(result).toContain("debugging");
     expect(result).toContain("pr-creation");
     expect(result.length).toBe(2);
+  });
+
+  it("regression: 'run test' → ['tdd'] (generic test queries still resolve to tdd)", () => {
+    expect(detectReferences("run test")).toEqual(["tdd"]);
+  });
+
+  // -------------------------------------------------------------------------
+  // Regression: existing patterns still resolve
+  // -------------------------------------------------------------------------
+
+  it("regression: 'debug this error' → includes 'debugging'", () => {
+    expect(detectReferences("debug this error")).toContain("debugging");
+  });
+
+  it("regression: 'create a PR' → includes 'pr-creation'", () => {
+    expect(detectReferences("create a PR")).toContain("pr-creation");
+  });
+
+  it("regression: 'git rebase' → includes 'git-workflow'", () => {
+    expect(detectReferences("git rebase")).toContain("git-workflow");
+  });
+
+  it("regression: 'check for security vulns' → includes 'security-checklist'", () => {
+    expect(detectReferences("check for security vulns")).toContain("security-checklist");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Guard: every reference name in KEYWORD_PATTERNS must exist on disk
+// ---------------------------------------------------------------------------
+
+describe("KEYWORD_PATTERNS reference names exist on disk", () => {
+  // Resolve the real references directory relative to this test file so the
+  // assertion works regardless of the process cwd.
+  const referencesDir = join(import.meta.dir, "..", "..", "..", "references");
+
+  it("every reference name in KEYWORD_PATTERNS has a matching .md file", () => {
+    const missing: string[] = [];
+    for (const [, refs] of KEYWORD_PATTERNS) {
+      for (const ref of refs) {
+        const filePath = join(referencesDir, `${ref}.md`);
+        if (!existsSync(filePath)) {
+          missing.push(`${ref}.md`);
+        }
+      }
+    }
+    expect(missing).toEqual([]);
   });
 });

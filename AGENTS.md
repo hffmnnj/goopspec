@@ -378,6 +378,22 @@ Three MCP tools wrapping external CLIs for AST-aware code analysis and transform
 - **When to use:** Generating images using the user's existing ChatGPT subscription OAuth credentials — no API key required. Uses `gpt-image-2`. Images default to `.goopspec/generated-images/`; pass an explicit `out` path to place an asset elsewhere. For prompting technique, see `goop_reference({ name: "image-prompting" })`.
 - **Transparency:** `background: "transparent"` is delivered via green-screen prompt injection plus a local chromakey step that always encodes PNG — transparent output is therefore PNG only, and a non-`.png` `out` extension is rejected at validation. The chromakey codec is `pngjs`, a runtime dependency isolated behind `png-codec.ts`.
 
+## Background Command Tools
+
+Three tools for launching, monitoring, and cancelling detached background jobs. Jobs are scoped to the plugin process lifetime and expire after 30 minutes (1800 seconds) by default. Logs are written to `.goopspec/background-jobs/<jobId>/stdout.log` and `stderr.log`.
+
+### `background_command` — start a detached background job
+- **Args:** `command` (required, string), `cwd` (optional, string — defaults to the plugin working directory), `timeout_seconds` (optional, number — default 1800, range 1–86400)
+- **When to use:** Launching long-running processes (dev servers, test suites, watchers) that should not block the agent's response. Returns the job id, pid, cwd, and deadline immediately.
+
+### `background_status` — poll one job or list all
+- **Args:** `job_id` (optional, string — omit to list all jobs), `tail_bytes` (optional, number — default 4096, controls how many bytes of stdout/stderr to show)
+- **When to use:** Checking whether a background job is still running, reading its output tail, or listing all registered jobs. Runs a lazy expiry sweep that marks deadline-past jobs as `timed-out` without killing them.
+
+### `background_cancel` — terminate a job and its process group
+- **Args:** `job_id` (required, string)
+- **When to use:** Stopping a background job that is stuck, no longer needed, or consuming resources. Sends SIGTERM to the entire process group, escalating to SIGKILL after 2 seconds. Returns a no-op message if the job is already terminal.
+
 ## Gotchas (Auto)
 
 <!-- Last verified: 2026-06-18 — GoopSpec 1.0.0 plugin-only structure -->
