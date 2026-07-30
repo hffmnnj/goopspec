@@ -54,12 +54,19 @@ export function resolveLazyAutopilotNudgeConfig(
 export const LAZY_AUTOPILOT_NUDGE_ABANDONMENT_TEXT =
   "Autonomous continuation stopped: the session received multiple lazy-autopilot nudges without making progress. The loop was broken deliberately to avoid repeated interruptions; continue manually when you are ready.";
 
+/**
+ * Three failed requests distinguish a transient host error from a persistent
+ * incompatibility while keeping autonomous retries bounded.
+ */
+export const MAX_CONSECUTIVE_NUDGE_DISPATCH_FAILURES = 3;
+
 // ---------------------------------------------------------------------------
 // Per-session state
 // ---------------------------------------------------------------------------
 
 interface SessionRateState {
   count: number;
+  consecutiveDispatchFailures: number;
   lastNudgeMs: number;
   fingerprint: string;
   abandoned: boolean;
@@ -206,6 +213,7 @@ export function createNudgeRateLimitCheck(
         // Progress changed (or first nudge for this session) — start fresh.
         state = {
           count: 0,
+          consecutiveDispatchFailures: 0,
           lastNudgeMs: 0,
           fingerprint,
           abandoned: false,
@@ -217,6 +225,15 @@ export function createNudgeRateLimitCheck(
         return {
           allowed: false,
           reason: "autonomous continuation abandoned for this wave",
+        };
+      }
+
+      if (state.consecutiveDispatchFailures >= MAX_CONSECUTIVE_NUDGE_DISPATCH_FAILURES) {
+        return {
+          allowed: false,
+          reason: `reached ${MAX_CONSECUTIVE_NUDGE_DISPATCH_FAILURES} consecutive promptAsync failures`,
+          consecutiveDispatchFailures: state.consecutiveDispatchFailures,
+          maxConsecutiveDispatchFailures: MAX_CONSECUTIVE_NUDGE_DISPATCH_FAILURES,
         };
       }
 
@@ -271,4 +288,16 @@ export function recordNudge(ctx: PluginContext, sessionID: string, workflowId: s
   });
 
   appendNudgeAuditTrail(ctx, workflowId, sessionID, state.count, "fired");
+}
+
+/** Record a rejected promptAsync request without letting the failure escape the hook. */
+export function recordNudgeDispatchFailure(sessionID: string): void {
+  const state = sessions.get(sessionID);
+  if (state != null) state.consecutiveDispatchFailures += 1;
+}
+
+/** Acknowledged requests break the consecutive dispatch-failure sequence. */
+export function recordNudgeDispatchSuccess(sessionID: string): void {
+  const state = sessions.get(sessionID);
+  if (state != null) state.consecutiveDispatchFailures = 0;
 }

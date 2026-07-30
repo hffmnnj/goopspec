@@ -125,6 +125,7 @@ export function createDefaultWorkflowState(overrides: Partial<WorkflowState> = {
     acceptanceConfirmed: false,
     currentWave: 0,
     totalWaves: 0,
+    manualOverride: false,
     autopilot: false,
     lazyAutopilot: false,
     ...overrides,
@@ -220,6 +221,7 @@ export function createMockStateManager(initialState?: Partial<GoopState>): State
       }
       mutateActive((wf) => {
         wf.phase = to;
+        if (force) wf.manualOverride = true;
       });
     },
     lockSpec: () =>

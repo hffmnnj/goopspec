@@ -188,6 +188,7 @@ describe("event-handler hook", () => {
     Object.assign(ctx.sdk.client, {
       session: {
         messages: mock(async () => [{ info: { role: "assistant" } }]),
+        get: mock(async () => ({ directory: testDir })),
         promptAsync,
       },
     });
@@ -202,6 +203,11 @@ describe("event-handler hook", () => {
     expect(promptAsync).toHaveBeenCalledWith({
       path: { id: "sess-lazy-deduped" },
       body: {
+        agent: "goop-orchestrator",
+        model: {
+          providerID: expect.any(String),
+          modelID: expect.any(String),
+        },
         parts: [
           {
             type: "text",

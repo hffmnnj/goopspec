@@ -21,11 +21,20 @@ import { log, logError } from "../../shared/logger.js";
 // Formatting helpers
 // ---------------------------------------------------------------------------
 
-function formatViolation(v: Violation): string {
+interface ReportViolation {
+  violation: Violation;
+  source: "content" | "branch";
+}
+
+function formatViolation({ violation, source }: ReportViolation): string {
+  const v = violation;
+  if (source === "branch") {
+    return `  branch: col ${v.column}: "${v.match}" → use "${v.replacement}" instead`;
+  }
   return `  Line ${v.line}, col ${v.column}: "${v.match}" → use "${v.replacement}" instead`;
 }
 
-function formatBlockedReport(errors: Violation[], warnings: Violation[]): string {
+function formatBlockedReport(errors: ReportViolation[], warnings: ReportViolation[]): string {
   const lines: string[] = [];
 
   lines.push("## PR Creation Blocked");
@@ -52,7 +61,7 @@ function formatBlockedReport(errors: Violation[], warnings: Violation[]): string
   return lines.join("\n");
 }
 
-function formatWarnings(warnings: Violation[]): string {
+function formatWarnings(warnings: ReportViolation[]): string {
   const lines: string[] = [];
   lines.push("Terminology warnings (non-blocking):");
   for (const w of warnings) {
@@ -92,13 +101,24 @@ export function createGoopCreatePrTool(ctx: PluginContext): ToolDefinition {
         const base = args.base ?? "main";
         const draft = args.draft ?? false;
 
-        // 1. Combine content for scanning
-        const contentToScan = `${args.title}\n${args.body}\n${args.branch}`;
+        // 1. Scan public content with code examples masked, but never mask branch names.
+        const contentViolations = scanForViolations(`${args.title}\n${args.body}`).map(
+          (violation) => ({
+            violation,
+            source: "content" as const,
+          }),
+        );
+        const branchViolations = scanForViolations(args.branch, { maskCodeSpans: false }).map(
+          (violation) => ({
+            violation,
+            source: "branch" as const,
+          }),
+        );
+        const violations = [...contentViolations, ...branchViolations];
 
-        // 2. Scan for violations
-        const violations = scanForViolations(contentToScan);
-        const errors = violations.filter((v) => v.severity === "error");
-        const warnings = violations.filter((v) => v.severity === "warn");
+        // 2. Block error-severity violations while retaining their source labels.
+        const errors = violations.filter(({ violation }) => violation.severity === "error");
+        const warnings = violations.filter(({ violation }) => violation.severity === "warn");
 
         // 3. Block on error-severity violations
         if (errors.length > 0) {

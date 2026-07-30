@@ -1,10 +1,15 @@
+import { join } from "node:path";
+
 import type { PluginContext } from "../../core/types.js";
+import { loadAgentConfigs } from "../../features/agents/index.js";
 import { loadMergedConfig } from "../../features/setup/index.js";
 import { log, logError } from "../../shared/logger.js";
+import { getPackageRoot } from "../../shared/paths.js";
 import type { HookFactory, Hooks } from "../types.js";
 import { safeHandler } from "../utils.js";
 import {
   type NudgeGuardInput,
+  type NudgeSessionMetadata,
   evaluateNudgeGuards,
   lastAssistantMessageText,
   lastMessageRole,
@@ -13,6 +18,8 @@ import {
   clearNudgeRateLimitState,
   createNudgeRateLimitCheck,
   recordNudge,
+  recordNudgeDispatchFailure,
+  recordNudgeDispatchSuccess,
   resolveLazyAutopilotNudgeConfig,
 } from "./rate-limit.js";
 
@@ -29,6 +36,49 @@ function logPromptAsyncUnavailable(): void {
 
 function clearNudge(ctx: PluginContext, sessionID: string): void {
   ctx.pendingLazyAutopilotNudges.delete(sessionID);
+}
+
+function toNudgeSessionMetadata(response: unknown): NudgeSessionMetadata {
+  if (response === null || typeof response !== "object") {
+    return { status: "unavailable", reason: "invalid-response" };
+  }
+
+  const session = response as { parentID?: unknown; directory?: unknown };
+  if (typeof session.directory !== "string") {
+    return { status: "unavailable", reason: "invalid-response" };
+  }
+  if (session.parentID !== undefined && typeof session.parentID !== "string") {
+    return { status: "unavailable", reason: "invalid-response" };
+  }
+
+  return {
+    status: "available",
+    directory: session.directory,
+    ...(session.parentID === undefined ? {} : { parentID: session.parentID }),
+  };
+}
+
+function parseModelIdentifier(
+  model: string | undefined,
+): { providerID: string; modelID: string } | undefined {
+  if (!model) return undefined;
+
+  const separatorIndex = model.indexOf("/");
+  if (separatorIndex <= 0 || separatorIndex === model.length - 1) return undefined;
+
+  const providerID = model.slice(0, separatorIndex).trim();
+  const modelID = model.slice(separatorIndex + 1).trim();
+  return providerID && modelID ? { providerID, modelID } : undefined;
+}
+
+function resolveOrchestratorModel(
+  projectDir: string,
+): { providerID: string; modelID: string } | undefined {
+  const config = loadMergedConfig(projectDir);
+  const configuredModel = config.agentModels?.orchestrator ?? config.defaultModel;
+  const frontmatterModel = loadAgentConfigs(join(getPackageRoot(), "agents"))["goop-orchestrator"]
+    ?.model;
+  return parseModelIdentifier(configuredModel ?? frontmatterModel);
 }
 
 /**
@@ -62,8 +112,32 @@ export async function dispatchLazyAutopilotNudge(
     return;
   }
 
+  let promptAsyncStarted = false;
   try {
-    const response = await session.messages({ path: { id: sessionID } });
+    const messagesRequest = Promise.resolve().then(() =>
+      session.messages({ path: { id: sessionID } }),
+    );
+    const sessionRequest =
+      typeof session.get === "function"
+        ? Promise.resolve().then(() => session.get({ path: { id: sessionID } }))
+        : Promise.reject<NudgeSessionMetadata>(new Error("session.get is unavailable"));
+    const [messagesResult, sessionResult] = await Promise.allSettled([
+      messagesRequest,
+      sessionRequest,
+    ]);
+    if (messagesResult.status === "rejected") throw messagesResult.reason;
+
+    const response = messagesResult.value;
+    const sessionMetadata =
+      sessionResult.status === "fulfilled"
+        ? toNudgeSessionMetadata(sessionResult.value)
+        : {
+            status: "unavailable" as const,
+            reason:
+              typeof session.get === "function"
+                ? ("get-failed" as const)
+                : ("get-unavailable" as const),
+          };
     if (lastMessageRole(response) !== "assistant") {
       clearNudge(ctx, sessionID);
       return;
@@ -72,6 +146,7 @@ export async function dispatchLazyAutopilotNudge(
     const workflow = ctx.stateManager.getActiveWorkflow();
     const guardInput: NudgeGuardInput = {
       sessionID,
+      session: sessionMetadata,
       workflowId: ctx.stateManager.getActiveWorkflowId(),
       phase: workflow.phase,
       lazyAutopilot: workflow.lazyAutopilot,
@@ -102,22 +177,37 @@ export async function dispatchLazyAutopilotNudge(
     const workflowId = ctx.stateManager.getActiveWorkflowId();
     recordNudge(ctx, sessionID, workflowId);
 
+    const model = resolveOrchestratorModel(ctx.sdk.directory);
+    promptAsyncStarted = true;
     const request = session.promptAsync({
       path: { id: sessionID },
-      body: { parts: [{ type: "text", text: LAZY_AUTOPILOT_NUDGE_TEXT }] },
+      body: {
+        agent: "goop-orchestrator",
+        ...(model ? { model } : {}),
+        parts: [{ type: "text", text: LAZY_AUTOPILOT_NUDGE_TEXT }],
+      },
     });
     // Keep in-flight until the request is acknowledged so concurrent idle events
     // cannot both send. Once acknowledged, G8's cooldown rejects duplicate idle
     // events for this injected turn and permits genuinely later attempts.
     void Promise.resolve(request).then(
-      () => clearNudge(ctx, sessionID),
-      (error: unknown) => {
+      () => {
+        recordNudgeDispatchSuccess(sessionID);
         clearNudge(ctx, sessionID);
-        logError("Lazy autopilot nudge request failed", error);
+      },
+      () => {
+        recordNudgeDispatchFailure(sessionID);
+        clearNudge(ctx, sessionID);
+        log("Lazy autopilot nudge request failed", { sessionID });
       },
     );
   } catch (error) {
     clearNudge(ctx, sessionID);
+    if (promptAsyncStarted) {
+      recordNudgeDispatchFailure(sessionID);
+      log("Lazy autopilot nudge request failed", { sessionID });
+      return;
+    }
     logError("Lazy autopilot nudge dispatch failed", error);
   }
 }

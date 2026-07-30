@@ -7,6 +7,7 @@ import {
 
 import {
   LAZY_AUTOPILOT_NUDGE_ABANDONMENT_TEXT,
+  MAX_CONSECUTIVE_NUDGE_DISPATCH_FAILURES,
   type ResolvedLazyAutopilotNudgeConfig,
   __clearNudgeRateLimitState,
   __getNudgeRateLimitState,
@@ -14,6 +15,7 @@ import {
   clearNudgeRateLimitState,
   createNudgeRateLimitCheck,
   recordNudge,
+  recordNudgeDispatchFailure,
   resolveLazyAutopilotNudgeConfig,
 } from "./rate-limit.js";
 
@@ -169,6 +171,23 @@ describe("lazy autopilot nudge rate-limit", () => {
     expect(check(baseCtx, sess).allowed).toBe(true);
     recordNudge(baseCtx, sess, "default");
     expect(__getNudgeRateLimitState(sess)?.count).toBe(2);
+  });
+
+  it("suppresses a session after three consecutive promptAsync failures", () => {
+    const check = createNudgeRateLimitCheck(baseCtx, cfg({ cap: 10, cooldownMs: 0 })).check;
+    const sess = "sess-dispatch-failures";
+
+    for (let failures = 0; failures < MAX_CONSECUTIVE_NUDGE_DISPATCH_FAILURES; failures += 1) {
+      expect(check(baseCtx, sess).allowed).toBe(true);
+      recordNudge(baseCtx, sess, "default");
+      recordNudgeDispatchFailure(sess);
+    }
+
+    expect(check(baseCtx, sess)).toMatchObject({
+      allowed: false,
+      consecutiveDispatchFailures: MAX_CONSECUTIVE_NUDGE_DISPATCH_FAILURES,
+      maxConsecutiveDispatchFailures: MAX_CONSECUTIVE_NUDGE_DISPATCH_FAILURES,
+    });
   });
 
   it("builds a stable fingerprint from phase, wave, and task statuses", () => {

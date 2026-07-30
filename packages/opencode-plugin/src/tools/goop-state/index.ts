@@ -50,6 +50,7 @@ const STATE_ACTIONS = [
   "set-depth",
   "set-autopilot",
   "update-wave",
+  "clear-manual-override",
   "reset",
   "list-workflows",
   "set-active-workflow",
@@ -89,6 +90,11 @@ function formatGetResponse(
   lines.push(`- **Phase:** ${icon} ${wf.phase} | **Mode:** ${wf.mode} | **Depth:** ${wf.depth}`);
   lines.push(`- **Interview:** ${interviewDate} | **Spec:** ${specStatus}`);
   lines.push(`- **Acceptance:** ${acceptStatus} | **Wave:** ${wf.currentWave}/${wf.totalWaves}`);
+  if (wf.manualOverride) {
+    lines.push(
+      "- **Auto-progression:** paused by a forced transition; use `clear-manual-override` to resume it.",
+    );
+  }
 
   if (wf.checkpoint) {
     lines.push(`- **Checkpoint:** ${wf.checkpoint}`);
@@ -147,7 +153,8 @@ export function createGoopStateTool(ctx: PluginContext): ToolDefinition {
   return tool({
     description:
       "Safe atomic state operations for GoopSpec workflow. Use this instead of directly editing state.json. " +
-      "This is the ONLY sanctioned mutation boundary for workflow state.",
+      "This is the ONLY sanctioned mutation boundary for workflow state. A forced transition pauses " +
+      "automatic progression until the explicit clear-manual-override action is used or the workflow is reset.",
     args: {
       action: tool.schema.enum(STATE_ACTIONS),
       phase: tool.schema.string().optional(),
@@ -312,6 +319,13 @@ function executeAction(
       sm.updateWaveProgress(args.currentWave, args.totalWaves);
       renderStatusAfterMutation(ctx);
       return `Wave progress updated to **${args.currentWave}/${args.totalWaves}**.`;
+    }
+
+    // -- Manual progression override --------------------------------------
+    case "clear-manual-override": {
+      sm.updateWorkflow({ manualOverride: false });
+      renderStatusAfterMutation(ctx);
+      return "Manual override cleared. Automatic progression may resume on the next eligible tool call.";
     }
 
     // -- Reset --------------------------------------------------------------

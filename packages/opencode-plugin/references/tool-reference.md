@@ -46,7 +46,7 @@ The fastest mental model is: if the tool has a plural/batch argument (`doc_types
 | `goop_blocker` | `action: "open" \| "resolve" \| "list"`, `description?`, `severity?`, `wave_id?`, `id?`, `resolution?`, `status?`, `workflow_id?`, `items?: {action, description?, severity?, wave_id?, id?, resolution?, status?, workflow_id?}[]` | `goop_blocker({ action: "open", description: "CI token expired", severity: "high", wave_id: 2 })` |
 | `goop_acceptance_audit` | `workflow_id?`, `wave_ids?: number[]`, `include_all_blockers?: boolean` | `goop_acceptance_audit({ wave_ids: [1, 2], include_all_blockers: true })` |
 
-`goop_write_wave`'s `verifications`/`traceability` fields replace the retired standalone `goop_record_verification` and `goop_write_traceability` tools — their behavior is fully absorbed as inline args. Not available alongside `items` or `task_updates` batch modes.
+`goop_write_wave`'s `verifications`/`traceability` fields replace the retired standalone `goop_record_verification` and `goop_write_traceability` tools — their behavior is fully absorbed as inline args. Available alongside `task_updates` (processed atomically in one transaction; if any task update fails, verifications and traceability are rolled back too). Not available alongside `items` batch mode.
 
 `goop_acceptance_audit` replaces the retired `goop_read_verifications` and `goop_read_waves` tools at the accept gate, plus blockers. Returns combined `{blockers, verifications, waves}` in a JSON comment.
 
@@ -85,6 +85,8 @@ The fastest mental model is: if the tool has a plural/batch argument (`doc_types
 | `goop_infer_intent` | `transcript`, `workflowPhase?`, `hasActiveWorkflow?`, `autoApply?`, `confidenceThreshold?` | `goop_infer_intent({ transcript: "create a plan for the auth refactor", hasActiveWorkflow: false })` |
 
 **State actions:** `get`, `transition`, `complete-interview`/`reset-interview`, `lock-spec`/`unlock-spec`, `confirm-acceptance`/`reset-acceptance`, `set-mode`, `set-depth`, `set-autopilot`, `update-wave`, `reset`, `list-workflows`, `set-active-workflow`, `create-workflow`. `create-workflow` with `activate: true` collapses create + switch into one call.
+
+**`update-wave` semantics:** `currentWave` is the wave currently in progress, numbered from 1; `0` means no wave has started. `totalWaves` is the configured number of waves. `update-wave` does not count completed waves; completion is recorded in `waves` and `wave_tasks`.
 
 **Setup actions:** `detect` (inspect project), `init`/`plan`/`apply` (create `.goopspec` structure), `models` (view/configure per-role model routing), `verify` (health check), `status` (show config), `reset` (reset to defaults).
 
@@ -148,7 +150,7 @@ The following tools and extended arguments reduce multi-call sequences to single
 | Pattern | Replaces | How |
 |---------|----------|------|
 | `goop_boot` | 4-5-call agent boot (read docs + search notes + search memory + load references) | Single call returns all requested blocks. Documents require explicit `doc_types` — no default. Wave context is fetched separately via `goop_read_wave`. |
-| `goop_write_wave` + `verifications`/`traceability` | Retired `goop_record_verification`/`goop_write_traceability` | Side-payloads run sequentially inside the same `execute()`. Not available in `items`/`task_updates` batch modes. |
+| `goop_write_wave` + `verifications`/`traceability` | Retired `goop_record_verification`/`goop_write_traceability` | Side-payloads run sequentially inside the same `execute()`. Available alongside `task_updates` (atomic transaction); not available in `items` batch mode. |
 | `goop_infer_intent` + `autoApply` | Manual infer-then-act two-call flow for `create-workflow`/`transition` | Opt-in (`autoApply: true`), confidence-gated (threshold `0.9`, minimum `0.85`), non-destructive-only. Returns `mutation` in result. |
 | `goop_append_chronicle` + `alsoLogAdl`/`alsoSaveMemory` | Separate `goop_adl`/`memory_save` calls alongside a chronicle entry | Best-effort sequential writes with partial-failure reporting. Not available in `entries` batch mode. |
 | `goop_acceptance_audit` | Retired `goop_read_verifications`/`goop_read_waves` + blockers at the accept gate | Single read-only call returns combined `{blockers, verifications, waves}`. |
