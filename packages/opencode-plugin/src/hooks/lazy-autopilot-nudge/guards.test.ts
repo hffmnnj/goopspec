@@ -22,6 +22,10 @@ describe("lazy autopilot nudge guards", () => {
   function baseInput(overrides: Partial<NudgeGuardInput> = {}): NudgeGuardInput {
     return {
       sessionID: "sess-1",
+      session: {
+        status: "available",
+        directory: testDir,
+      },
       workflowId: "default",
       phase: "execute",
       lazyAutopilot: true,
@@ -83,6 +87,34 @@ describe("lazy autopilot nudge guards", () => {
 
     expect(result.suppressed).toBe(false);
     expect(result.reason).toBeNull();
+  });
+
+  it("accepts top-level session metadata with no parentID", () => {
+    const ctx = createMockPluginContext({ testDir });
+    const result = evaluateNudgeGuards(
+      ctx,
+      baseInput({
+        session: { status: "available", directory: testDir },
+      }),
+    );
+
+    expect(result).toEqual(ALLOWED);
+  });
+
+  it("carries a subagent parentID and directory in the guard input", () => {
+    const ctx = createMockPluginContext({ testDir });
+    const result = evaluateNudgeGuards(
+      ctx,
+      baseInput({
+        session: {
+          status: "available",
+          parentID: "parent-session",
+          directory: "/workspace/other-project",
+        },
+      }),
+    );
+
+    expect(result).toEqual(ALLOWED);
   });
 
   it("G5: suppresses when an unresolved high-severity blocker exists", () => {

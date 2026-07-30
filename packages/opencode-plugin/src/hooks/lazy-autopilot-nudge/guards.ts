@@ -69,8 +69,26 @@ function suppress(reason: NudgeSuppressionReason): NudgeGuardResult {
 // Guard inputs
 // ---------------------------------------------------------------------------
 
+/**
+ * Session metadata fetched alongside messages before guard evaluation.
+ *
+ * `unavailable` deliberately does not flatten to optional fields: a top-level
+ * session legitimately has no parentID, while a failed lookup is indeterminate.
+ */
+export type NudgeSessionMetadata =
+  | {
+      readonly status: "available";
+      readonly parentID?: string;
+      readonly directory: string;
+    }
+  | {
+      readonly status: "unavailable";
+      readonly reason: "get-unavailable" | "get-failed" | "invalid-response";
+    };
+
 export interface NudgeGuardInput {
   readonly sessionID: string;
+  readonly session: NudgeSessionMetadata;
   readonly workflowId: string;
   readonly phase: WorkflowPhase;
   readonly lazyAutopilot: boolean;

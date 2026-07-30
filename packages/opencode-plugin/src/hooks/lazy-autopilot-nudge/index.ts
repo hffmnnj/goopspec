@@ -9,6 +9,7 @@ import type { HookFactory, Hooks } from "../types.js";
 import { safeHandler } from "../utils.js";
 import {
   type NudgeGuardInput,
+  type NudgeSessionMetadata,
   evaluateNudgeGuards,
   lastAssistantMessageText,
   lastMessageRole,
@@ -35,6 +36,26 @@ function logPromptAsyncUnavailable(): void {
 
 function clearNudge(ctx: PluginContext, sessionID: string): void {
   ctx.pendingLazyAutopilotNudges.delete(sessionID);
+}
+
+function toNudgeSessionMetadata(response: unknown): NudgeSessionMetadata {
+  if (response === null || typeof response !== "object") {
+    return { status: "unavailable", reason: "invalid-response" };
+  }
+
+  const session = response as { parentID?: unknown; directory?: unknown };
+  if (typeof session.directory !== "string") {
+    return { status: "unavailable", reason: "invalid-response" };
+  }
+  if (session.parentID !== undefined && typeof session.parentID !== "string") {
+    return { status: "unavailable", reason: "invalid-response" };
+  }
+
+  return {
+    status: "available",
+    directory: session.directory,
+    ...(session.parentID === undefined ? {} : { parentID: session.parentID }),
+  };
 }
 
 function parseModelIdentifier(
@@ -93,7 +114,30 @@ export async function dispatchLazyAutopilotNudge(
 
   let promptAsyncStarted = false;
   try {
-    const response = await session.messages({ path: { id: sessionID } });
+    const messagesRequest = Promise.resolve().then(() =>
+      session.messages({ path: { id: sessionID } }),
+    );
+    const sessionRequest =
+      typeof session.get === "function"
+        ? Promise.resolve().then(() => session.get({ path: { id: sessionID } }))
+        : Promise.reject<NudgeSessionMetadata>(new Error("session.get is unavailable"));
+    const [messagesResult, sessionResult] = await Promise.allSettled([
+      messagesRequest,
+      sessionRequest,
+    ]);
+    if (messagesResult.status === "rejected") throw messagesResult.reason;
+
+    const response = messagesResult.value;
+    const sessionMetadata =
+      sessionResult.status === "fulfilled"
+        ? toNudgeSessionMetadata(sessionResult.value)
+        : {
+            status: "unavailable" as const,
+            reason:
+              typeof session.get === "function"
+                ? ("get-failed" as const)
+                : ("get-unavailable" as const),
+          };
     if (lastMessageRole(response) !== "assistant") {
       clearNudge(ctx, sessionID);
       return;
@@ -102,6 +146,7 @@ export async function dispatchLazyAutopilotNudge(
     const workflow = ctx.stateManager.getActiveWorkflow();
     const guardInput: NudgeGuardInput = {
       sessionID,
+      session: sessionMetadata,
       workflowId: ctx.stateManager.getActiveWorkflowId(),
       phase: workflow.phase,
       lazyAutopilot: workflow.lazyAutopilot,

@@ -93,6 +93,52 @@ describe("lazy autopilot nudge", () => {
     ]);
   });
 
+  it("fetches session metadata concurrently and preserves it for guard evaluation", async () => {
+    const ctx = makeExecuteContext(testDir);
+    let releaseMessages: ((value: { data: Array<{ info: { role: string } }> }) => void) | undefined;
+    const messages = mock(
+      () =>
+        new Promise<{ data: Array<{ info: { role: string } }> }>((resolve) => {
+          releaseMessages = resolve;
+        }),
+    );
+    const get = mock(async () => ({
+      id: "sess-session-metadata",
+      directory: testDir,
+      parentID: "parent-session",
+    }));
+    const promptAsync = mock(async () => undefined);
+    Object.assign(ctx.sdk.client, { session: { messages, get, promptAsync } });
+
+    const dispatch = dispatchLazyAutopilotNudge(ctx, "sess-session-metadata");
+    await Promise.resolve();
+
+    expect(messages).toHaveBeenCalledTimes(1);
+    expect(get).toHaveBeenCalledTimes(1);
+    releaseMessages?.({ data: [{ info: { role: "assistant" } }] });
+    await dispatch;
+    await Promise.resolve();
+
+    expect(promptAsync).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps the messages result when session metadata lookup fails", async () => {
+    const ctx = makeExecuteContext(testDir);
+    const promptAsync = mock(async () => undefined);
+    Object.assign(ctx.sdk.client, {
+      session: {
+        messages: mock(async () => [{ info: { role: "assistant" } }]),
+        get: mock(() => Promise.reject(new Error("session lookup failed"))),
+        promptAsync,
+      },
+    });
+
+    await dispatchLazyAutopilotNudge(ctx, "sess-get-failed");
+    await Promise.resolve();
+
+    expect(promptAsync).toHaveBeenCalledTimes(1);
+  });
+
   it("does not nudge when the last message is from the user", async () => {
     const ctx = makeExecuteContext(testDir);
     const promptAsync = mock(async () => undefined);
