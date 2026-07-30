@@ -10,7 +10,12 @@
 import { tool } from "../../core/sdk-compat.js";
 import type { ToolContext, ToolDefinition } from "../../core/sdk-compat.js";
 import type { PluginContext } from "../../core/types.js";
-import { formatBatchResult, runBatch, type BatchItemResult, type BatchResult } from "../../features/db/batch.js";
+import {
+  type BatchItemResult,
+  type BatchResult,
+  formatBatchResult,
+  runBatch,
+} from "../../features/db/batch.js";
 import { TASK_STATUSES, WAVE_STATUSES, normalizeStatus } from "../../features/db/types.js";
 import { WAVE_COMPLETE_COMPACT_REMINDER, isWaveComplete } from "../../shared/compact-reminder.js";
 import { renderSidecars } from "../../shared/render-sidecars.js";
@@ -410,6 +415,7 @@ export function createGoopWriteWaveTool(ctx: PluginContext): ToolDefinition {
           }
 
           const defaultWaveId = wave.id;
+          const taskUpdates = args.task_updates;
           const successes: BatchItemResult[] = [];
           let verificationResults: string[] = [];
           let traceabilityResults: string[] = [];
@@ -418,7 +424,7 @@ export function createGoopWriteWaveTool(ctx: PluginContext): ToolDefinition {
 
           try {
             ctx.db.runTransaction(() => {
-              for (const [index, update] of args.task_updates!.entries()) {
+              for (const [index, update] of taskUpdates.entries()) {
                 try {
                   const task = ctx.db
                     .getWaveTasks(wave.id)
@@ -460,7 +466,9 @@ export function createGoopWriteWaveTool(ctx: PluginContext): ToolDefinition {
               }
 
               for (const item of args.traceability ?? []) {
-                traceabilityResults.push(writeTraceability(ctx, workflowId, item, args.wave_number));
+                traceabilityResults.push(
+                  writeTraceability(ctx, workflowId, item, args.wave_number),
+                );
               }
             });
           } catch (error: unknown) {
@@ -470,7 +478,7 @@ export function createGoopWriteWaveTool(ctx: PluginContext): ToolDefinition {
             verificationResults = [];
             traceabilityResults = [];
 
-            const resultItems: BatchItemResult[] = args.task_updates.map((_, index) => {
+            const resultItems: BatchItemResult[] = taskUpdates.map((_, index) => {
               if (index === failureIndex) {
                 return { index, ok: false, detail: failureDetail };
               }
@@ -481,9 +489,9 @@ export function createGoopWriteWaveTool(ctx: PluginContext): ToolDefinition {
             });
 
             const failResult: BatchResult = {
-              total: args.task_updates.length,
+              total: taskUpdates.length,
               succeeded: 0,
-              failed: args.task_updates.length,
+              failed: taskUpdates.length,
               items: resultItems,
             };
             renderSidecars(ctx, workflowId);
@@ -491,7 +499,7 @@ export function createGoopWriteWaveTool(ctx: PluginContext): ToolDefinition {
           }
 
           const okResult: BatchResult = {
-            total: args.task_updates.length,
+            total: taskUpdates.length,
             succeeded: successes.length,
             failed: 0,
             items: successes,

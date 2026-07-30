@@ -1,7 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 
 import { GoopSpecDB } from "../../features/db/index.js";
-import { TASK_STATUSES, WAVE_STATUSES, normalizeStatus, type WaveStatus } from "../../features/db/types.js";
+import {
+  TASK_STATUSES,
+  WAVE_STATUSES,
+  type WaveStatus,
+  normalizeStatus,
+} from "../../features/db/types.js";
 import type { PluginContext, ToolContext } from "../../test-utils.js";
 import {
   createMockPluginContext,

@@ -22,7 +22,12 @@ interface SlicedBody {
   bodyChars: number;
 }
 
-function sliceNoteBody(body: string, full: boolean, bodyOffset: number, bodyLimit: number): SlicedBody {
+function sliceNoteBody(
+  body: string,
+  full: boolean,
+  bodyOffset: number,
+  bodyLimit: number,
+): SlicedBody {
   const bodyChars = body.length;
   const hasRangeRequest = full || bodyOffset > 0 || bodyLimit > 0;
   if (!hasRangeRequest) {

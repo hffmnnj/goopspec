@@ -190,7 +190,11 @@ export function createGoopSaveNoteTool(ctx: PluginContext): ToolDefinition {
                 project_id: item.project_id ?? null,
               });
 
-              batchItems.push({ index, ok: true, detail: `saved ${id} (${(item.body as string).length} chars)` });
+              batchItems.push({
+                index,
+                ok: true,
+                detail: `saved ${id} (${(item.body as string).length} chars)`,
+              });
               succeeded++;
             } catch (error: unknown) {
               const msg = error instanceof Error ? error.message : String(error);
