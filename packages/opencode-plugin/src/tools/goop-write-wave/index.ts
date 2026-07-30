@@ -11,6 +11,7 @@ import { tool } from "../../core/sdk-compat.js";
 import type { ToolContext, ToolDefinition } from "../../core/sdk-compat.js";
 import type { PluginContext } from "../../core/types.js";
 import { formatBatchResult, runBatch } from "../../features/db/batch.js";
+import { normalizeStatus, TASK_STATUSES, WAVE_STATUSES } from "../../features/db/types.js";
 import { WAVE_COMPLETE_COMPACT_REMINDER, isWaveComplete } from "../../shared/compact-reminder.js";
 import { renderSidecars } from "../../shared/render-sidecars.js";
 
@@ -119,6 +120,70 @@ function writeTraceability(
 }
 
 // ---------------------------------------------------------------------------
+// Status validation & normalisation
+// ---------------------------------------------------------------------------
+
+/**
+ * Validate and normalise every status-bearing argument in-place.
+ *
+ * Checks all six status paths: top-level `status`, `tasks[].status`,
+ * `items[].status`, `items[].tasks[].status`, `task_update.status`,
+ * `task_updates[].status`. Returns an error string if any status is invalid,
+ * or null if all statuses are valid (and args have been mutated to hold the
+ * canonical forms).
+ */
+function validateAndNormalizeStatuses(args: {
+  status?: string;
+  tasks?: InlineWaveTask[];
+  items?: WavePayload[];
+  task_update?: TaskStatusUpdate;
+  task_updates?: BulkTaskStatusUpdate[];
+}): string | null {
+  if (args.status !== undefined) {
+    const r = normalizeStatus(args.status, WAVE_STATUSES);
+    if (!r.ok) return `Error in goop_write_wave: ${r.error}`;
+    args.status = r.status;
+  }
+
+  for (const task of args.tasks ?? []) {
+    if (task.status !== undefined) {
+      const r = normalizeStatus(task.status, TASK_STATUSES);
+      if (!r.ok) return `Error in goop_write_wave: ${r.error}`;
+      task.status = r.status;
+    }
+  }
+
+  for (const item of args.items ?? []) {
+    if (item.status !== undefined) {
+      const r = normalizeStatus(item.status, WAVE_STATUSES);
+      if (!r.ok) return `Error in goop_write_wave: ${r.error}`;
+      item.status = r.status;
+    }
+    for (const task of item.tasks ?? []) {
+      if (task.status !== undefined) {
+        const r = normalizeStatus(task.status, TASK_STATUSES);
+        if (!r.ok) return `Error in goop_write_wave: ${r.error}`;
+        task.status = r.status;
+      }
+    }
+  }
+
+  if (args.task_update !== undefined) {
+    const r = normalizeStatus(args.task_update.status, TASK_STATUSES);
+    if (!r.ok) return `Error in goop_write_wave: ${r.error}`;
+    args.task_update.status = r.status;
+  }
+
+  for (const update of args.task_updates ?? []) {
+    const r = normalizeStatus(update.status, TASK_STATUSES);
+    if (!r.ok) return `Error in goop_write_wave: ${r.error}`;
+    update.status = r.status;
+  }
+
+  return null;
+}
+
+// ---------------------------------------------------------------------------
 // Tool factory
 // ---------------------------------------------------------------------------
 
@@ -222,6 +287,11 @@ export function createGoopWriteWaveTool(ctx: PluginContext): ToolDefinition {
     ): Promise<string> {
       try {
         const workflowId = args.workflow_id ?? ctx.stateManager.getState().activeWorkflowId;
+
+        const statusError = validateAndNormalizeStatuses(args);
+        if (statusError !== null) {
+          return statusError;
+        }
 
         if (Array.isArray(args.items) && args.items.length > 0) {
           if (args.verifications !== undefined || args.traceability !== undefined) {

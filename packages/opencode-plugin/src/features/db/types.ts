@@ -37,6 +37,56 @@ export const BLOCKER_STATUSES = ["open", "resolved"] as const;
 export type BlockerStatus = (typeof BLOCKER_STATUSES)[number];
 
 // ---------------------------------------------------------------------------
+// Status normalisation
+// ---------------------------------------------------------------------------
+
+/** Unambiguous near-miss corrections for status strings (lowercased keys). */
+const STATUS_NEAR_MISSES: Readonly<Record<string, string>> = {
+  complete: "completed",
+  "in-progress": "in_progress",
+};
+
+/** Result of {@link normalizeStatus}. */
+export type NormalizeStatusResult =
+  | { ok: true; status: string }
+  | { ok: false; error: string };
+
+/**
+ * Normalise a status string against a set of valid values.
+ *
+ * Accepts exact matches (case-insensitive, trimmed) and a small set of
+ * unambiguous near-misses (`complete` → `completed`, `in-progress` → `in_progress`).
+ * Returns the canonical status on success, or an error message naming the
+ * valid set on failure. Never throws.
+ *
+ * @param status - The raw status string to normalise.
+ * @param valid - The set of valid status strings (e.g. `WAVE_STATUSES`).
+ */
+export function normalizeStatus(
+  status: string,
+  valid: readonly string[],
+): NormalizeStatusResult {
+  const trimmed = status.trim();
+  const lower = trimmed.toLowerCase();
+
+  for (const v of valid) {
+    if (v === lower) {
+      return { ok: true, status: v };
+    }
+  }
+
+  const corrected = STATUS_NEAR_MISSES[lower];
+  if (corrected !== undefined && valid.includes(corrected)) {
+    return { ok: true, status: corrected };
+  }
+
+  return {
+    ok: false,
+    error: `Invalid status '${trimmed}'. Valid statuses: ${valid.join(", ")}.`,
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Database row shapes
 // ---------------------------------------------------------------------------
 
