@@ -20,6 +20,9 @@ tools:
   - goop_state
   - memory_search
   - todowrite
+  - background_command
+  - background_status
+  - background_cancel
 ---
 
 # GoopSpec Tester
