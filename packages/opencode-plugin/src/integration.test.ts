@@ -13,7 +13,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, mock } from "bun:test";
-import { existsSync } from "node:fs";
+import { existsSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 
 import { createPluginContext } from "./core/context.js";
@@ -30,13 +30,16 @@ import {
   validateSpecContract,
 } from "./features/enforcement/index.js";
 import { detectAutoDelegation } from "./features/routing/index.js";
+import { createAutoProgressionHook } from "./hooks/auto-progression.js";
 import { IDLE_COMPACTION_DEFER_MS, createEventHandlerHook } from "./hooks/event-handler.js";
 import { createHooks } from "./hooks/index.js";
+import { dispatchLazyAutopilotNudge } from "./hooks/lazy-autopilot-nudge/index.js";
 import {
   createDefaultWorkflowState,
   createMockCompactionHandoff,
   createMockPluginContext,
   createMockStateManager,
+  createMockToolContext,
   setupTestEnvironment,
 } from "./test-utils.js";
 import { createTools } from "./tools/index.js";
@@ -725,6 +728,114 @@ describe("GoopSpec 5-phase integration", () => {
 
       expect(summarize).toHaveBeenCalledTimes(1);
       expect(promptAsync).toHaveBeenCalledTimes(0);
+    });
+  });
+
+  // ========================================================================
+  // 10. State-integrity repaired-path wiring
+  // ========================================================================
+
+  describe("state-integrity repaired-path wiring", () => {
+    it("renders real progress, requires completion evidence, and scopes nudges to the top-level project session", async () => {
+      const ctx = createMockPluginContext({
+        testDir,
+        state: {
+          workflows: {
+            default: createDefaultWorkflowState({
+              phase: "execute",
+              currentWave: 3,
+              totalWaves: 3,
+              lazyAutopilot: true,
+            }),
+          },
+        },
+      });
+      const tools = createTools(ctx);
+      const writeWave = tools.goop_write_wave;
+      const readWave = tools.goop_read_wave;
+      const toolContext = createMockToolContext();
+
+      await writeWave.execute(
+        {
+          wave_number: 3,
+          title: "Final integration wave",
+          status: "complete",
+          tasks: [
+            { task_index: 1, description: "First", status: "complete" },
+            { task_index: 2, description: "Second", status: "complete" },
+            { task_index: 3, description: "Last", status: "pending" },
+          ],
+        },
+        toolContext,
+      );
+
+      const initiallyRendered = (await readWave.execute(
+        { wave_numbers: [3] },
+        toolContext,
+      )) as unknown as string;
+      expect(initiallyRendered).toContain("progress: 2/3 tasks complete");
+      expect(initiallyRendered).toContain("[completed] First");
+      expect(initiallyRendered).toContain("[completed] Second");
+      expect(initiallyRendered).toContain("[pending] Last");
+
+      const promptAsync = mock(async () => undefined);
+      const foreignProject = join(testDir, "foreign-project");
+      mkdirSync(foreignProject, { recursive: true });
+      Object.assign(ctx.sdk.client, {
+        session: {
+          messages: mock(async () => [{ info: { role: "assistant" } }]),
+          get: mock(async ({ path }: { path: { id: string } }) => {
+            if (path.id === "subagent") return { directory: testDir, parentID: "parent" };
+            if (path.id === "foreign") return { directory: foreignProject };
+            return { directory: testDir };
+          }),
+          promptAsync,
+        },
+      });
+
+      await dispatchLazyAutopilotNudge(ctx, "subagent");
+      await dispatchLazyAutopilotNudge(ctx, "foreign");
+      await dispatchLazyAutopilotNudge(ctx, "top-level");
+      await Promise.resolve();
+      expect(promptAsync).toHaveBeenCalledTimes(1);
+      expect(promptAsync).toHaveBeenCalledWith(
+        expect.objectContaining({
+          path: { id: "top-level" },
+          body: expect.objectContaining({ agent: "goop-orchestrator" }),
+        }),
+      );
+
+      const autoProgression = createAutoProgressionHook(ctx)["tool.execute.after"];
+      const incompleteOutput = { title: "result", output: "ok", metadata: {} };
+      await autoProgression?.(
+        { tool: "goop_write_wave", sessionID: "top-level", callID: "incomplete", args: {} },
+        incompleteOutput,
+      );
+      expect(ctx.stateManager.getActiveWorkflow().phase).toBe("execute");
+      expect(incompleteOutput.output).toBe("ok");
+
+      await writeWave.execute(
+        {
+          wave_number: 3,
+          task_updates: [{ task_index: 3, status: "complete" }],
+          verifications: [{ check_name: "test", status: "pass", detail: "integration" }],
+        },
+        toolContext,
+      );
+      const completedRendered = (await readWave.execute(
+        { wave_numbers: [3] },
+        toolContext,
+      )) as unknown as string;
+      expect(completedRendered).toContain("progress: 3/3 tasks complete");
+      expect(completedRendered.match(/\[completed\]/g)).toHaveLength(3);
+
+      const completedOutput = { title: "result", output: "ok", metadata: {} };
+      await autoProgression?.(
+        { tool: "goop_write_wave", sessionID: "top-level", callID: "complete", args: {} },
+        completedOutput,
+      );
+      expect(ctx.stateManager.getActiveWorkflow().phase).toBe("accept");
+      expect(completedOutput.output).toContain("3/3 tasks complete");
     });
   });
 });
