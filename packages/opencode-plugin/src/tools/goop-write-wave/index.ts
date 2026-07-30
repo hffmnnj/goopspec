@@ -10,7 +10,7 @@
 import { tool } from "../../core/sdk-compat.js";
 import type { ToolContext, ToolDefinition } from "../../core/sdk-compat.js";
 import type { PluginContext } from "../../core/types.js";
-import { formatBatchResult, runBatch } from "../../features/db/batch.js";
+import { formatBatchResult, runBatch, type BatchItemResult, type BatchResult } from "../../features/db/batch.js";
 import { TASK_STATUSES, WAVE_STATUSES, normalizeStatus } from "../../features/db/types.js";
 import { WAVE_COMPLETE_COMPACT_REMINDER, isWaveComplete } from "../../shared/compact-reminder.js";
 import { renderSidecars } from "../../shared/render-sidecars.js";
@@ -403,46 +403,109 @@ export function createGoopWriteWaveTool(ctx: PluginContext): ToolDefinition {
           if (ignoredFields.length > 0) {
             return incompatiblePayloadError("task_updates batch mode", ignoredFields);
           }
-          if (args.verifications !== undefined || args.traceability !== undefined) {
-            return (
-              "Error in goop_write_wave: verifications and traceability side-payloads are " +
-              "not supported alongside task_updates; use the single-wave path or call the " +
-              "granular tools directly."
-            );
-          }
 
           const wave = ctx.db.getWave(workflowId, args.wave_number);
           if (wave === null) {
             return `No wave ${args.wave_number} found for workflow '${workflowId}'. Use goop_write_wave to create it.`;
           }
 
-          const result = runBatch(ctx.db, args.task_updates, (update) => {
-            const task = ctx.db
-              .getWaveTasks(wave.id)
-              .find((candidate) => candidate.task_index === update.task_index);
-            if (task === undefined) {
-              throw new Error(`task ${update.task_index} not found on wave ${args.wave_number}`);
+          const defaultWaveId = wave.id;
+          const successes: BatchItemResult[] = [];
+          let verificationResults: string[] = [];
+          let traceabilityResults: string[] = [];
+          let failureIndex: number | null = null;
+          let failureDetail = "";
+
+          try {
+            ctx.db.runTransaction(() => {
+              for (const [index, update] of args.task_updates!.entries()) {
+                try {
+                  const task = ctx.db
+                    .getWaveTasks(wave.id)
+                    .find((candidate) => candidate.task_index === update.task_index);
+                  if (task === undefined) {
+                    throw new Error(
+                      `task ${update.task_index} not found on wave ${args.wave_number}`,
+                    );
+                  }
+                  const taskRegression = statusRegressionError(
+                    `task ${update.task_index} on wave ${args.wave_number}`,
+                    task.status,
+                    update.status,
+                    args.allow_status_regression ?? false,
+                  );
+                  if (taskRegression !== null) throw new Error(taskRegression);
+                  ctx.db.setWaveTaskStatus(wave.id, update.task_index, update.status);
+                  ctx.db.appendEvent(workflowId, "wave_write", {
+                    wave_number: args.wave_number,
+                    task_index: update.task_index,
+                    status: update.status,
+                    mode: "task_update",
+                    timestamp: Date.now(),
+                  });
+                  successes.push({
+                    index,
+                    ok: true,
+                    detail: `updated task ${update.task_index} to ${update.status}`,
+                  });
+                } catch (error: unknown) {
+                  failureIndex = index;
+                  failureDetail = error instanceof Error ? error.message : String(error);
+                  throw error;
+                }
+              }
+
+              for (const item of args.verifications ?? []) {
+                verificationResults.push(recordVerification(ctx, workflowId, item, defaultWaveId));
+              }
+
+              for (const item of args.traceability ?? []) {
+                traceabilityResults.push(writeTraceability(ctx, workflowId, item, args.wave_number));
+              }
+            });
+          } catch (error: unknown) {
+            if (!failureDetail) {
+              failureDetail = error instanceof Error ? error.message : String(error);
             }
-            const taskRegression = statusRegressionError(
-              `task ${update.task_index} on wave ${args.wave_number}`,
-              task.status,
-              update.status,
-              args.allow_status_regression ?? false,
-            );
-            if (taskRegression !== null) throw new Error(taskRegression);
-            ctx.db.setWaveTaskStatus(wave.id, update.task_index, update.status);
-            ctx.db.appendEvent(workflowId, "wave_write", {
-              wave_number: args.wave_number,
-              task_index: update.task_index,
-              status: update.status,
-              mode: "task_update",
-              timestamp: Date.now(),
+            verificationResults = [];
+            traceabilityResults = [];
+
+            const resultItems: BatchItemResult[] = args.task_updates.map((_, index) => {
+              if (index === failureIndex) {
+                return { index, ok: false, detail: failureDetail };
+              }
+              if (index < successes.length) {
+                return { index, ok: false, detail: "rolled back due to batch failure" };
+              }
+              return { index, ok: false, detail: "not processed due to batch failure" };
             });
 
-            return `updated task ${update.task_index} to ${update.status}`;
-          });
+            const failResult: BatchResult = {
+              total: args.task_updates.length,
+              succeeded: 0,
+              failed: args.task_updates.length,
+              items: resultItems,
+            };
+            renderSidecars(ctx, workflowId);
+            return formatBatchResult(failResult, "write-wave-task-updates");
+          }
+
+          const okResult: BatchResult = {
+            total: args.task_updates.length,
+            succeeded: successes.length,
+            failed: 0,
+            items: successes,
+          };
           renderSidecars(ctx, workflowId);
-          return formatBatchResult(result, "write-wave-task-updates");
+
+          let response = formatBatchResult(okResult, "write-wave-task-updates");
+          if (verificationResults.length > 0) {
+            response += `\n\nVerifications:\n${verificationResults.map((line) => `- ${line}`).join("\n")}`;
+          }
+          if (traceabilityResults.length > 0) {
+            response += `\n\nTraceability:\n${traceabilityResults.map((line) => `- ${line}`).join("\n")}`;
+          }
+          return response;
         }
 
         let mainResult = "";
