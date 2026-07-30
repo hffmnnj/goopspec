@@ -11,15 +11,18 @@ import { tool } from "../../core/sdk-compat.js";
 import type { ToolContext, ToolDefinition } from "../../core/sdk-compat.js";
 import type { PluginContext } from "../../core/types.js";
 import { formatBatchResult, runBatch } from "../../features/db/batch.js";
-import type { BlockerRow } from "../../features/db/types.js";
+import type { BlockerRow, BlockerSeverity } from "../../features/db/types.js";
+import { BLOCKER_SEVERITIES } from "../../features/db/types.js";
 import { renderSidecars } from "../../shared/render-sidecars.js";
 import { isCompleteStatus } from "../../shared/status.js";
 
 const BLOCKER_ACTIONS = ["open", "resolve", "list"] as const;
 type BlockerAction = (typeof BLOCKER_ACTIONS)[number];
 
-const BLOCKER_TOOL_SEVERITIES = ["low", "medium", "high"] as const;
-type BlockerToolSeverity = (typeof BLOCKER_TOOL_SEVERITIES)[number];
+// Derived from the shared DB constant so the tool boundary and the DB schema
+// can never drift. BLOCKER_SEVERITIES is ["low", "medium", "high", "critical"].
+const BLOCKER_TOOL_SEVERITIES = BLOCKER_SEVERITIES;
+type BlockerToolSeverity = BlockerSeverity;
 
 const BLOCKER_TOOL_STATUSES = ["open", "resolved"] as const;
 type BlockerToolStatus = (typeof BLOCKER_TOOL_STATUSES)[number];

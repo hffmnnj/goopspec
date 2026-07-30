@@ -301,6 +301,32 @@ describe("goop_blocker tool", () => {
     expect(ctx.db.getBlockers("default", "open").length).toBe(1);
   });
 
+  // -----------------------------------------------------------------------
+  // Severity enum alignment
+  // -----------------------------------------------------------------------
+
+  it("opens a blocker with severity 'critical' and reads it back", async () => {
+    const blockerTool = createGoopBlockerTool(ctx);
+
+    const openResult = await blockerTool.execute(
+      {
+        action: "open",
+        description: "Critical infrastructure failure",
+        severity: "critical",
+        wave_id: 1,
+      },
+      toolCtx,
+    );
+
+    expect(openResult).toContain("Opened blocker #");
+
+    const openBlockers = ctx.db.getBlockers("default", "open");
+    expect(openBlockers.length).toBe(1);
+    expect(openBlockers[0].description).toBe("Critical infrastructure failure");
+    expect(openBlockers[0].severity).toBe("critical");
+    expect(openBlockers[0].status).toBe("open");
+  });
+
   it("surfaces the completed-wave warning in batch items[] mode", async () => {
     ctx.db.upsertWave("default", { wave_number: 1, status: "completed" });
     const blockerTool = createGoopBlockerTool(ctx);
