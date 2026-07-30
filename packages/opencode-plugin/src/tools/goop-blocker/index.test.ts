@@ -218,4 +218,110 @@ describe("goop_blocker tool", () => {
     expect(ctx.db.getBlockers("default").length).toBe(0);
     expect(ctx.db.getEvents("default").length).toBe(0);
   });
+
+  // -----------------------------------------------------------------------
+  // Completed-wave guard
+  // -----------------------------------------------------------------------
+
+  it("warns but still opens a blocker against a wave marked 'done'", async () => {
+    ctx.db.upsertWave("default", { wave_number: 2, status: "done" });
+    const blockerTool = createGoopBlockerTool(ctx);
+
+    const result = await blockerTool.execute(
+      { action: "open", description: "Regression in wave 2", wave_id: 2 },
+      toolCtx,
+    );
+
+    // The warning is present and actionable.
+    expect(result).toContain("WARNING: Wave 2 is already marked complete");
+    expect(result).toContain("status: 'done'");
+    expect(result).toContain("late-discovered regression");
+    expect(result).toContain("omit wave_id");
+
+    // The blocker was still opened — the signal is preserved.
+    expect(result).toContain("Opened blocker #");
+    const openBlockers = ctx.db.getBlockers("default", "open");
+    expect(openBlockers.length).toBe(1);
+    expect(openBlockers[0].description).toBe("Regression in wave 2");
+    expect(openBlockers[0].wave_id).toBe(2);
+  });
+
+  it("warns but still opens a blocker against a wave marked 'completed'", async () => {
+    ctx.db.upsertWave("default", { wave_number: 1, status: "completed" });
+    const blockerTool = createGoopBlockerTool(ctx);
+
+    const result = await blockerTool.execute(
+      { action: "open", description: "Late issue in wave 1", wave_id: 1 },
+      toolCtx,
+    );
+
+    expect(result).toContain("WARNING: Wave 1 is already marked complete");
+    expect(result).toContain("status: 'completed'");
+    expect(result).toContain("Opened blocker #");
+    expect(ctx.db.getBlockers("default", "open").length).toBe(1);
+  });
+
+  it("does not warn when opening a blocker against an in-progress wave", async () => {
+    ctx.db.upsertWave("default", { wave_number: 3, status: "in_progress" });
+    const blockerTool = createGoopBlockerTool(ctx);
+
+    const result = await blockerTool.execute(
+      { action: "open", description: "Blocked on wave 3", wave_id: 3 },
+      toolCtx,
+    );
+
+    expect(result).not.toContain("WARNING");
+    expect(result).toContain("Opened blocker #");
+    expect(ctx.db.getBlockers("default", "open").length).toBe(1);
+  });
+
+  it("does not warn when opening a blocker without a wave_id", async () => {
+    const blockerTool = createGoopBlockerTool(ctx);
+
+    const result = await blockerTool.execute(
+      { action: "open", description: "Workflow-level blocker" },
+      toolCtx,
+    );
+
+    expect(result).not.toContain("WARNING");
+    expect(result).toContain("Opened blocker #");
+    expect(ctx.db.getBlockers("default", "open").length).toBe(1);
+  });
+
+  it("does not warn when the wave_id does not match any wave row", async () => {
+    const blockerTool = createGoopBlockerTool(ctx);
+
+    const result = await blockerTool.execute(
+      { action: "open", description: "Phantom wave blocker", wave_id: 99 },
+      toolCtx,
+    );
+
+    expect(result).not.toContain("WARNING");
+    expect(result).toContain("Opened blocker #");
+    expect(ctx.db.getBlockers("default", "open").length).toBe(1);
+  });
+
+  it("surfaces the completed-wave warning in batch items[] mode", async () => {
+    ctx.db.upsertWave("default", { wave_number: 1, status: "completed" });
+    const blockerTool = createGoopBlockerTool(ctx);
+
+    const result = await blockerTool.execute(
+      {
+        items: [
+          { action: "open", description: "Against completed wave", wave_id: 1 },
+          { action: "open", description: "Against in-progress wave", wave_id: 2 },
+        ],
+      },
+      toolCtx,
+    );
+
+    expect(result).toContain("Batch blocker: 2/2 succeeded");
+    // First item carries the warning.
+    expect(result).toContain("[0] OK: WARNING: Wave 1 is already marked complete");
+    // Second item has no warning (wave 2 doesn't exist).
+    expect(result).not.toContain("[1] OK: WARNING");
+    expect(result).toContain("[1] OK: Opened blocker #");
+
+    expect(ctx.db.getBlockers("default", "open").length).toBe(2);
+  });
 });

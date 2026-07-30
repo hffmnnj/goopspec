@@ -151,6 +151,28 @@ Log every deviation with:
 - action taken
 - affected files
 
+## Blocker Hygiene
+
+Blockers are opened by agents calling `goop_blocker` — there is no auto-blocker mechanism. Because the tool is the only entry point, the boundary is where misuse is caught.
+
+### Don't open blockers against completed waves
+
+Opening a blocker against a wave whose status is already `done` or `completed` is **usually a mistake** — the wave is finished and the orchestrator has moved on. The `goop_blocker` tool detects this and returns a `WARNING:` prefix in its result, but **still opens the blocker**.
+
+The warning is non-blocking by design: a late-discovered regression or an acceptance-phase issue that traces back to earlier work is a legitimate reason to open a blocker against a completed wave. Hard rejection would silently destroy that signal.
+
+**When you see the warning:**
+
+1. **Verify your intent.** Is this a genuine late-discovered regression against the completed wave, or did you pass the wrong `wave_id`?
+2. **If it was a mistake**, resolve the blocker (`goop_blocker({ action: "resolve", id, resolution: "opened against wrong wave" })`) and open a new one against the correct in-progress wave, or omit `wave_id` for a workflow-level blocker.
+3. **If it is legitimate**, proceed — the blocker is already open. Log the context to `ADL.md` so the regression is traceable.
+
+### Target the right wave
+
+- Pass `wave_id` as the **wave number** (the human-facing number, e.g. `3` for wave 3), not the internal row id.
+- Omit `wave_id` for workflow-level blockers that aren't tied to a specific wave.
+- The warning only fires when the wave **exists and is complete**. A non-existent wave number produces no warning (the blocker is opened as-is).
+
 ## Boundary System
 
 Boundaries are three-tier guardrails enforced by hooks and configuration.
