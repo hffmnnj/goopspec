@@ -5,6 +5,7 @@ import {
   WAVE_COMPLETE_COMPACT_REMINDER,
   isWaveComplete,
 } from "./compact-reminder.js";
+import { isCompleteStatus } from "./status.js";
 
 describe("compact-reminder", () => {
   describe("SPEC_LOCK_COMPACT_REMINDER", () => {
@@ -41,12 +42,37 @@ describe("compact-reminder", () => {
       expect(isWaveComplete("")).toBe(false);
       expect(isWaveComplete("pending")).toBe(false);
       expect(isWaveComplete("in_progress")).toBe(false);
-      expect(isWaveComplete("complete")).toBe(false);
+    });
+
+    it("tolerates legacy 'complete' rows already persisted in existing databases", () => {
+      expect(isWaveComplete("complete")).toBe(true);
+      expect(isWaveComplete("Complete")).toBe(true);
+      expect(isWaveComplete("  complete  ")).toBe(true);
     });
 
     it("is total and never throws", () => {
       expect(() => isWaveComplete()).not.toThrow();
       expect(() => isWaveComplete("   ")).not.toThrow();
+    });
+
+    it("delegates to the shared isCompleteStatus predicate", () => {
+      const inputs = [
+        "done",
+        "completed",
+        "complete",
+        "Done",
+        "COMPLETED",
+        "  DoNe  ",
+        "pending",
+        "in_progress",
+        "in-progress",
+        "",
+        "bogus",
+        undefined,
+      ];
+      for (const input of inputs) {
+        expect(isWaveComplete(input)).toBe(isCompleteStatus(input));
+      }
     });
   });
 });

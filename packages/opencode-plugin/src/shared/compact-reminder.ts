@@ -5,6 +5,8 @@
  * and the wave-completion predicate. No I/O, no logging, no context imports.
  */
 
+import { isCompleteStatus } from "./status.js";
+
 /**
  * Reminder shown after the spec is locked: planning is done and now is a
  * scheduled compaction point before dispatching the first execute wave.
@@ -29,10 +31,11 @@ export const COMPACT_RECONCILIATION_DIRECTIVE =
 /**
  * Returns true only when the provided status is a terminal wave status.
  *
- * Terminal statuses are "done" and "completed" (case-insensitive).
- * Intentionally non-terminal: "complete" (no trailing 'd').
+ * Delegates to the shared {@link isCompleteStatus} predicate so the
+ * compact-reminder gate and the wave renderer can never disagree on what
+ * counts as complete. Tolerates the legacy `complete` near-miss for rows
+ * already persisted in existing databases.
  */
 export function isWaveComplete(status?: string): boolean {
-  const normalized = status?.trim().toLowerCase() ?? "";
-  return normalized === "done" || normalized === "completed";
+  return isCompleteStatus(status);
 }
