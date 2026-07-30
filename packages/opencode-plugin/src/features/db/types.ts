@@ -47,9 +47,7 @@ const STATUS_NEAR_MISSES: Readonly<Record<string, string>> = {
 };
 
 /** Result of {@link normalizeStatus}. */
-export type NormalizeStatusResult =
-  | { ok: true; status: string }
-  | { ok: false; error: string };
+export type NormalizeStatusResult = { ok: true; status: string } | { ok: false; error: string };
 
 /**
  * Normalise a status string against a set of valid values.
@@ -62,10 +60,7 @@ export type NormalizeStatusResult =
  * @param status - The raw status string to normalise.
  * @param valid - The set of valid status strings (e.g. `WAVE_STATUSES`).
  */
-export function normalizeStatus(
-  status: string,
-  valid: readonly string[],
-): NormalizeStatusResult {
+export function normalizeStatus(status: string, valid: readonly string[]): NormalizeStatusResult {
   const trimmed = status.trim();
   const lower = trimmed.toLowerCase();
 

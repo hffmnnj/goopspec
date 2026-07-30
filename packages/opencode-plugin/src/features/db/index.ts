@@ -11,11 +11,7 @@ import { Database } from "bun:sqlite";
 import { patchContent } from "../../shared/content-patch.js";
 import { runMigrations } from "./migrations.js";
 import { initSchema } from "./schema.js";
-import {
-  normalizeStatus,
-  TASK_STATUSES,
-  WAVE_STATUSES,
-} from "./types.js";
+import { TASK_STATUSES, WAVE_STATUSES, normalizeStatus } from "./types.js";
 import type {
   BlockerRow,
   ChronicleEventRow,

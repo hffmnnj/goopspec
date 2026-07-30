@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 
 import { GoopSpecDB } from "../../features/db/index.js";
-import { normalizeStatus, TASK_STATUSES, WAVE_STATUSES } from "../../features/db/types.js";
+import { TASK_STATUSES, WAVE_STATUSES, normalizeStatus } from "../../features/db/types.js";
 import type { PluginContext, ToolContext } from "../../test-utils.js";
 import {
   createMockPluginContext,
@@ -555,7 +555,10 @@ describe("goop_write_wave status validation", () => {
 
   it("normalizeStatus accepts exact match", () => {
     expect(normalizeStatus("pending", WAVE_STATUSES)).toEqual({ ok: true, status: "pending" });
-    expect(normalizeStatus("in_progress", WAVE_STATUSES)).toEqual({ ok: true, status: "in_progress" });
+    expect(normalizeStatus("in_progress", WAVE_STATUSES)).toEqual({
+      ok: true,
+      status: "in_progress",
+    });
     expect(normalizeStatus("done", WAVE_STATUSES)).toEqual({ ok: true, status: "done" });
     expect(normalizeStatus("completed", WAVE_STATUSES)).toEqual({ ok: true, status: "completed" });
   });
@@ -565,13 +568,22 @@ describe("goop_write_wave status validation", () => {
   });
 
   it("normalizeStatus corrects in-progress to in_progress", () => {
-    expect(normalizeStatus("in-progress", WAVE_STATUSES)).toEqual({ ok: true, status: "in_progress" });
+    expect(normalizeStatus("in-progress", WAVE_STATUSES)).toEqual({
+      ok: true,
+      status: "in_progress",
+    });
   });
 
   it("normalizeStatus is case-insensitive and trims whitespace", () => {
     expect(normalizeStatus("DONE", WAVE_STATUSES)).toEqual({ ok: true, status: "done" });
-    expect(normalizeStatus(" Completed ", WAVE_STATUSES)).toEqual({ ok: true, status: "completed" });
-    expect(normalizeStatus("IN-PROGRESS", TASK_STATUSES)).toEqual({ ok: true, status: "in_progress" });
+    expect(normalizeStatus(" Completed ", WAVE_STATUSES)).toEqual({
+      ok: true,
+      status: "completed",
+    });
+    expect(normalizeStatus("IN-PROGRESS", TASK_STATUSES)).toEqual({
+      ok: true,
+      status: "in_progress",
+    });
   });
 
   it("normalizeStatus rejects unknown values with the valid set in the error", () => {
@@ -693,10 +705,7 @@ describe("goop_write_wave status validation", () => {
 
   it("rejects unknown top-level status without writing to DB", async () => {
     const tool = createGoopWriteWaveTool(ctx);
-    const result = await tool.execute(
-      { wave_number: 1, title: "W1", status: "bogus" },
-      toolCtx,
-    );
+    const result = await tool.execute({ wave_number: 1, title: "W1", status: "bogus" }, toolCtx);
     expect(result).toContain("Error in goop_write_wave");
     expect(result).toContain("Invalid status 'bogus'");
     expect(result).toContain("pending, in_progress, done, completed");
@@ -869,7 +878,9 @@ describe("goop_write_wave write integrity", () => {
       },
       toolCtx,
     );
-    expect(taskUpdatesResult).toContain("status cannot be supplied alongside task_updates batch mode");
+    expect(taskUpdatesResult).toContain(
+      "status cannot be supplied alongside task_updates batch mode",
+    );
     expect(ctx.db.getWave("default", 2)?.status).toBe("pending");
   });
 
@@ -885,10 +896,7 @@ describe("goop_write_wave write integrity", () => {
       toolCtx,
     );
 
-    const waveRegression = await writeTool.execute(
-      { wave_number: 1, status: "pending" },
-      toolCtx,
-    );
+    const waveRegression = await writeTool.execute({ wave_number: 1, status: "pending" }, toolCtx);
     const taskRegression = await writeTool.execute(
       { wave_number: 1, task_update: { task_index: 1, status: "pending" } },
       toolCtx,

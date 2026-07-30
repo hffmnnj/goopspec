@@ -11,7 +11,7 @@ import { tool } from "../../core/sdk-compat.js";
 import type { ToolContext, ToolDefinition } from "../../core/sdk-compat.js";
 import type { PluginContext } from "../../core/types.js";
 import { formatBatchResult, runBatch } from "../../features/db/batch.js";
-import { normalizeStatus, TASK_STATUSES, WAVE_STATUSES } from "../../features/db/types.js";
+import { TASK_STATUSES, WAVE_STATUSES, normalizeStatus } from "../../features/db/types.js";
 import { WAVE_COMPLETE_COMPACT_REMINDER, isWaveComplete } from "../../shared/compact-reminder.js";
 import { renderSidecars } from "../../shared/render-sidecars.js";
 
@@ -191,11 +191,7 @@ function statusRegressionError(
   nextStatus: string | undefined,
   allowStatusRegression: boolean,
 ): string | null {
-  if (
-    !allowStatusRegression &&
-    TERMINAL_STATUSES.has(currentStatus) &&
-    nextStatus === "pending"
-  ) {
+  if (!allowStatusRegression && TERMINAL_STATUSES.has(currentStatus) && nextStatus === "pending") {
     return `Error in goop_write_wave: refusing to regress ${subject} from '${currentStatus}' to 'pending'. Set allow_status_regression: true to override deliberately.`;
   }
   return null;
