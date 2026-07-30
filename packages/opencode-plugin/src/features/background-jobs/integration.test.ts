@@ -8,12 +8,12 @@ import {
   createMockToolContext,
   setupTestEnvironment,
 } from "../../test-utils.js";
-import { killJobGroup, startExpiryTimer } from "./kill.js";
-import { spawnBackgroundJob } from "./spawn.js";
-import type { JobState } from "./types.js";
 import { createBackgroundCancelTool } from "../../tools/background-cancel/index.js";
 import { createBackgroundCommandTool } from "../../tools/background-command/index.js";
 import { createBackgroundStatusTool } from "../../tools/background-status/index.js";
+import { killJobGroup, startExpiryTimer } from "./kill.js";
+import { spawnBackgroundJob } from "./spawn.js";
+import type { JobState } from "./types.js";
 
 const POLL_INTERVAL_MS = 10;
 const WAIT_TIMEOUT_MS = 1_000;
@@ -24,11 +24,7 @@ function jobIdFrom(result: unknown): string {
   return match[0];
 }
 
-async function waitForJobState(
-  ctx: PluginContext,
-  jobId: string,
-  state: JobState,
-): Promise<void> {
+async function waitForJobState(ctx: PluginContext, jobId: string, state: JobState): Promise<void> {
   const deadline = Date.now() + WAIT_TIMEOUT_MS;
   while (Date.now() < deadline) {
     if (ctx.backgroundJobs.get(jobId)?.state === state) return;
@@ -112,9 +108,7 @@ describe("background jobs real-process lifecycle", () => {
 
       const job = ctx.backgroundJobs.get(jobId);
       expect(job?.exitCode).toBe(expectedCode);
-      expect(readFileSync(join(job?.logDir ?? "", "exit.code"), "utf8")).toBe(
-        String(expectedCode),
-      );
+      expect(readFileSync(join(job?.logDir ?? "", "exit.code"), "utf8")).toBe(String(expectedCode));
     }
   });
 
@@ -126,7 +120,10 @@ describe("background jobs real-process lifecycle", () => {
     );
     const job = ctx.backgroundJobs.get(jobId);
     if (!job) throw new Error(`Missing job ${jobId}`);
-    const grandchildPid = Number.parseInt(await waitForFileText(join(job.logDir, "stdout.log")), 10);
+    const grandchildPid = Number.parseInt(
+      await waitForFileText(join(job.logDir, "stdout.log")),
+      10,
+    );
     expect(Number.isSafeInteger(grandchildPid)).toBe(true);
 
     await cancel.execute({ job_id: jobId }, createMockToolContext());
