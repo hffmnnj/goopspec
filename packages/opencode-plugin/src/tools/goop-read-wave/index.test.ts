@@ -6,6 +6,7 @@ import {
   createMockToolContext,
   setupTestEnvironment,
 } from "../../test-utils.js";
+import { createGoopWriteWaveTool } from "../goop-write-wave/index.js";
 import { createGoopReadWaveTool } from "./index.js";
 
 describe("goop_read_wave tool", () => {
@@ -135,5 +136,73 @@ describe("goop_read_wave tool", () => {
     const result = await tool.execute({ wave_numbers: [99] }, createMockToolContext());
 
     expect(result).toContain("No wave numbers [99] found for workflow");
+  });
+});
+
+describe("goop_read_wave regression and durability", () => {
+  let ctx: PluginContext;
+  let cleanup: () => void;
+
+  beforeEach(() => {
+    const env = setupTestEnvironment("read-wave-regression");
+    cleanup = env.cleanup;
+    ctx = createMockPluginContext({ testDir: env.testDir, db: env.db });
+  });
+
+  afterEach(() => cleanup());
+
+  it("rendered progress agrees with rendered rows for legacy 'complete' task status", async () => {
+    // Defect A: a wave rendered "progress: 0/3" beside three [complete] rows.
+    // The counter refused to count a status the renderer happily printed.
+    // Using 'complete' (the legacy near-miss) exercises both the write-side
+    // normalisation (complete -> completed) and the read-side unified
+    // completion predicate so the counter and rows can never disagree.
+    const writeTool = createGoopWriteWaveTool(ctx);
+    await writeTool.execute(
+      {
+        wave_number: 1,
+        title: "Phantom progress wave",
+        tasks: [
+          { task_index: 1, description: "Task one", status: "complete" },
+          { task_index: 2, description: "Task two", status: "complete" },
+          { task_index: 3, description: "Task three", status: "complete" },
+        ],
+      },
+      createMockToolContext(),
+    );
+
+    const readTool = createGoopReadWaveTool(ctx);
+    const result = await readTool.execute({}, createMockToolContext());
+
+    expect(result).toContain("progress: 3/3 tasks complete");
+  });
+
+  it("durability: top-level status write is reflected by a subsequent read", async () => {
+    const writeTool = createGoopWriteWaveTool(ctx);
+    await writeTool.execute(
+      { wave_number: 1, title: "Status wave", status: "complete" },
+      createMockToolContext(),
+    );
+
+    const readTool = createGoopReadWaveTool(ctx);
+    const result = await readTool.execute({}, createMockToolContext());
+
+    expect(result).toContain("status: completed");
+  });
+
+  it("durability: items[] batch write is reflected by a subsequent read", async () => {
+    const writeTool = createGoopWriteWaveTool(ctx);
+    await writeTool.execute(
+      {
+        wave_number: 1,
+        items: [{ wave_number: 1, title: "Items wave", status: "complete" }],
+      },
+      createMockToolContext(),
+    );
+
+    const readTool = createGoopReadWaveTool(ctx);
+    const result = await readTool.execute({}, createMockToolContext());
+
+    expect(result).toContain("status: completed");
   });
 });

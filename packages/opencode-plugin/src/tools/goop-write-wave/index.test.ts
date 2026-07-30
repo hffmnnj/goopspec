@@ -8,6 +8,7 @@ import {
   createMockToolContext,
   setupTestEnvironment,
 } from "../../test-utils.js";
+import { createGoopReadWaveTool } from "../goop-read-wave/index.js";
 import { createGoopWriteWaveTool } from "./index.js";
 
 describe("goop_write_wave tool", () => {
@@ -949,5 +950,102 @@ describe("goop_write_wave write integrity", () => {
     );
 
     expect(result).toContain("task 99 not found on wave 1");
+  });
+});
+
+describe("goop_write_wave durability, idempotence, and preservation", () => {
+  let ctx: PluginContext;
+  let toolCtx: ToolContext;
+  let cleanup: () => void;
+
+  beforeEach(() => {
+    const env = setupTestEnvironment("write-wave-durability");
+    cleanup = env.cleanup;
+    ctx = createMockPluginContext({ testDir: env.testDir, db: env.db });
+    toolCtx = createMockToolContext();
+  });
+
+  afterEach(() => cleanup());
+
+  it("durability: task_update write is reflected by a subsequent goop_read_wave", async () => {
+    const writeTool = createGoopWriteWaveTool(ctx);
+    await writeTool.execute(
+      {
+        wave_number: 1,
+        title: "Task update wave",
+        tasks: [{ task_index: 1, description: "Only task", status: "pending" }],
+      },
+      toolCtx,
+    );
+
+    await writeTool.execute(
+      { wave_number: 1, task_update: { task_index: 1, status: "complete" } },
+      toolCtx,
+    );
+
+    const readTool = createGoopReadWaveTool(ctx);
+    const result = await readTool.execute({}, toolCtx);
+
+    expect(result).toContain("[completed]");
+    expect(result).toContain("progress: 1/1 tasks complete");
+  });
+
+  it("durability: task_updates[] batch write is reflected by a subsequent goop_read_wave", async () => {
+    const writeTool = createGoopWriteWaveTool(ctx);
+    await writeTool.execute(
+      {
+        wave_number: 1,
+        title: "Task updates wave",
+        tasks: [
+          { task_index: 1, description: "Task one", status: "pending" },
+          { task_index: 2, description: "Task two", status: "pending" },
+        ],
+      },
+      toolCtx,
+    );
+
+    await writeTool.execute(
+      {
+        wave_number: 1,
+        task_updates: [
+          { task_index: 1, status: "complete" },
+          { task_index: 2, status: "complete" },
+        ],
+      },
+      toolCtx,
+    );
+
+    const readTool = createGoopReadWaveTool(ctx);
+    const result = await readTool.execute({}, toolCtx);
+
+    expect(result).toContain("progress: 2/2 tasks complete");
+  });
+
+  it("idempotence: writing the same terminal status twice is a no-op the second time", async () => {
+    const writeTool = createGoopWriteWaveTool(ctx);
+    const first = await writeTool.execute(
+      { wave_number: 1, title: "Idempotent wave", status: "complete" },
+      toolCtx,
+    );
+    expect(first).toContain("Written wave 1");
+
+    const second = await writeTool.execute({ wave_number: 1, status: "complete" }, toolCtx);
+    expect(second).toContain("Written wave 1");
+
+    const readTool = createGoopReadWaveTool(ctx);
+    const result = await readTool.execute({}, toolCtx);
+    expect(result).toContain("status: completed");
+  });
+
+  it("preservation: a later write omitting status leaves an existing terminal status intact", async () => {
+    const writeTool = createGoopWriteWaveTool(ctx);
+    await writeTool.execute({ wave_number: 1, title: "Original", status: "complete" }, toolCtx);
+
+    await writeTool.execute({ wave_number: 1, title: "Updated title" }, toolCtx);
+
+    const readTool = createGoopReadWaveTool(ctx);
+    const result = await readTool.execute({}, toolCtx);
+    expect(result).toContain("status: completed");
+    expect(result).toContain("Updated title");
   });
 });
