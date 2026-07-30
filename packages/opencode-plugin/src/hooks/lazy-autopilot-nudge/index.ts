@@ -1,6 +1,10 @@
+import { join } from "node:path";
+
 import type { PluginContext } from "../../core/types.js";
+import { loadAgentConfigs } from "../../features/agents/index.js";
 import { loadMergedConfig } from "../../features/setup/index.js";
 import { log, logError } from "../../shared/logger.js";
+import { getPackageRoot } from "../../shared/paths.js";
 import type { HookFactory, Hooks } from "../types.js";
 import { safeHandler } from "../utils.js";
 import {
@@ -29,6 +33,29 @@ function logPromptAsyncUnavailable(): void {
 
 function clearNudge(ctx: PluginContext, sessionID: string): void {
   ctx.pendingLazyAutopilotNudges.delete(sessionID);
+}
+
+function parseModelIdentifier(
+  model: string | undefined,
+): { providerID: string; modelID: string } | undefined {
+  if (!model) return undefined;
+
+  const separatorIndex = model.indexOf("/");
+  if (separatorIndex <= 0 || separatorIndex === model.length - 1) return undefined;
+
+  const providerID = model.slice(0, separatorIndex).trim();
+  const modelID = model.slice(separatorIndex + 1).trim();
+  return providerID && modelID ? { providerID, modelID } : undefined;
+}
+
+function resolveOrchestratorModel(
+  projectDir: string,
+): { providerID: string; modelID: string } | undefined {
+  const config = loadMergedConfig(projectDir);
+  const configuredModel = config.agentModels?.orchestrator ?? config.defaultModel;
+  const frontmatterModel = loadAgentConfigs(join(getPackageRoot(), "agents"))["goop-orchestrator"]
+    ?.model;
+  return parseModelIdentifier(configuredModel ?? frontmatterModel);
 }
 
 /**
@@ -102,9 +129,14 @@ export async function dispatchLazyAutopilotNudge(
     const workflowId = ctx.stateManager.getActiveWorkflowId();
     recordNudge(ctx, sessionID, workflowId);
 
+    const model = resolveOrchestratorModel(ctx.sdk.directory);
     const request = session.promptAsync({
       path: { id: sessionID },
-      body: { parts: [{ type: "text", text: LAZY_AUTOPILOT_NUDGE_TEXT }] },
+      body: {
+        agent: "goop-orchestrator",
+        ...(model ? { model } : {}),
+        parts: [{ type: "text", text: LAZY_AUTOPILOT_NUDGE_TEXT }],
+      },
     });
     // Keep in-flight until the request is acknowledged so concurrent idle events
     // cannot both send. Once acknowledged, G8's cooldown rejects duplicate idle

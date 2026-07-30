@@ -675,6 +675,11 @@ describe("GoopSpec 5-phase integration", () => {
       expect(promptAsync).toHaveBeenCalledWith({
         path: { id: "sess-nudge-once" },
         body: {
+          agent: "goop-orchestrator",
+          model: {
+            providerID: expect.any(String),
+            modelID: expect.any(String),
+          },
           parts: [
             {
               type: "text",

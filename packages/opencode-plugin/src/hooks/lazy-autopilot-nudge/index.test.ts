@@ -43,11 +43,16 @@ describe("lazy autopilot nudge", () => {
 
   afterEach(() => cleanup());
 
-  it("dispatches exactly one method-bound promptAsync with the canonical text", async () => {
+  it("targets the orchestrator with the live configured model instead of inheriting gpt-5.3-codex", async () => {
     const ctx = makeExecuteContext(testDir);
+    await Bun.write(
+      `${testDir}/goopspec.json`,
+      JSON.stringify({ agentModels: { orchestrator: "anthropic/claude-user-override" } }),
+    );
     const calls: unknown[] = [];
     const session = {
       _client: {},
+      model: { providerID: "openai", modelID: "gpt-5.3-codex" },
       messages: mock(async () => [{ info: { role: "assistant" } }]),
       promptAsync(input: unknown): Promise<void> {
         if (this._client === undefined) throw new TypeError("detached this");
@@ -63,7 +68,11 @@ describe("lazy autopilot nudge", () => {
     expect(calls).toEqual([
       {
         path: { id: "sess-happy" },
-        body: { parts: [{ type: "text", text: LAZY_AUTOPILOT_NUDGE_TEXT }] },
+        body: {
+          agent: "goop-orchestrator",
+          model: { providerID: "anthropic", modelID: "claude-user-override" },
+          parts: [{ type: "text", text: LAZY_AUTOPILOT_NUDGE_TEXT }],
+        },
       },
     ]);
   });

@@ -202,6 +202,11 @@ describe("event-handler hook", () => {
     expect(promptAsync).toHaveBeenCalledWith({
       path: { id: "sess-lazy-deduped" },
       body: {
+        agent: "goop-orchestrator",
+        model: {
+          providerID: expect.any(String),
+          modelID: expect.any(String),
+        },
         parts: [
           {
             type: "text",
