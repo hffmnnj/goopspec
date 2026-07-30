@@ -11,14 +11,18 @@ import { tool } from "../../core/sdk-compat.js";
 import type { ToolContext, ToolDefinition } from "../../core/sdk-compat.js";
 import type { PluginContext } from "../../core/types.js";
 import { formatBatchResult, runBatch } from "../../features/db/batch.js";
-import type { BlockerRow } from "../../features/db/types.js";
+import type { BlockerRow, BlockerSeverity } from "../../features/db/types.js";
+import { BLOCKER_SEVERITIES } from "../../features/db/types.js";
 import { renderSidecars } from "../../shared/render-sidecars.js";
+import { isCompleteStatus } from "../../shared/status.js";
 
 const BLOCKER_ACTIONS = ["open", "resolve", "list"] as const;
 type BlockerAction = (typeof BLOCKER_ACTIONS)[number];
 
-const BLOCKER_TOOL_SEVERITIES = ["low", "medium", "high"] as const;
-type BlockerToolSeverity = (typeof BLOCKER_TOOL_SEVERITIES)[number];
+// Derived from the shared DB constant so the tool boundary and the DB schema
+// can never drift. BLOCKER_SEVERITIES is ["low", "medium", "high", "critical"].
+const BLOCKER_TOOL_SEVERITIES = BLOCKER_SEVERITIES;
+type BlockerToolSeverity = BlockerSeverity;
 
 const BLOCKER_TOOL_STATUSES = ["open", "resolved"] as const;
 type BlockerToolStatus = (typeof BLOCKER_TOOL_STATUSES)[number];
@@ -84,7 +88,21 @@ function processBlockerItem(
         timestamp: Date.now(),
       });
 
-      return `Opened blocker #${blockerId} for workflow '${workflowId}'.`;
+      const baseMessage = `Opened blocker #${blockerId} for workflow '${workflowId}'.`;
+
+      // Warn (but still open) when the target wave is already complete. A
+      // late-discovered regression against a completed wave is legitimate, so
+      // we never hard-reject — but the warning makes the common mistake (wrong
+      // wave_id) visible and actionable. See references/phase-gates.md
+      // §Blocker Hygiene.
+      if (item.wave_id !== undefined) {
+        const wave = ctx.db.getWave(workflowId, item.wave_id);
+        if (wave !== null && isCompleteStatus(wave.status)) {
+          return `WARNING: Wave ${item.wave_id} is already marked complete (status: '${wave.status}'). Blockers against completed waves are usually a mistake — verify this is an intentional late-discovered regression. If not, resolve this blocker and open one against the current in-progress wave (or omit wave_id). The blocker has still been opened.\n${baseMessage}`;
+        }
+      }
+
+      return baseMessage;
     }
 
     case "resolve": {

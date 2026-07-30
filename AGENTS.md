@@ -22,6 +22,10 @@ bun test --bail=3 --timeout=10000                     # Bounded run
 bun test --watch                                      # Watch mode
 ```
 
+### ⚠️ `rtk` test gotcha — HIGH severity
+
+`rtk bun test` reports "0 passed / N skipped" for runs that actually execute thousands of tests. **Only `rtk proxy bun test ...` is trustworthy.** This caused real confusion during execution — a run that passed 1960 tests was reported as "0 passed / 44 skipped". Always use `rtk proxy` for test commands, never bare `rtk`.
+
 ## Project Structure
 
 ```
@@ -413,3 +417,7 @@ Three tools for launching, monitoring, and cancelling detached background jobs. 
 - **Prefer `items[]` batch mode for multi-write turns.** All four write tools (`goop_write_db`, `goop_write_section`, `goop_write_wave`, `goop_save_note`) now accept an optional `items[]` parameter. When writing more than one doc/section/wave/row/note in a turn, use the batch form to minimize tool calls and wrap writes in a single transaction. Single-item usage is unchanged and still supported.
 
 - **Knowledge lives in `references/`, not `skills/`.** GoopSpec 1.0.0 removed the skills feature. Use `goop_reference` to load the 19 consolidated reference documents (including `field-notes-protocol`).
+
+- **ADL is an append-log, not a document row.** Read it with `goop_adl({ action: "read" })`. `goop_read_db({ doc_type: "adl" })` returns "No adl document found" — the ADL is stored as structured events, not a full document.
+
+- **`goop_write_wave` now accepts `verifications[]` alongside `task_updates[]`.** Both are processed atomically in one transaction. If any task update fails, verifications and traceability writes are rolled back too. This changed in the goopspec-state-integrity workflow; the old behaviour was outright rejection.

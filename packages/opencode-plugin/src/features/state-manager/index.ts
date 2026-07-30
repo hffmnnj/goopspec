@@ -377,6 +377,9 @@ export function createStateManager(opts: CreateStateManagerOptions): StateManage
       logError("Unable to refresh active workflow before mutation: row not found", {
         activeWorkflowId,
       });
+      cached = null;
+      cachedBaseline = null;
+      throw new Error(`Active workflow "${activeWorkflowId}" not found in persisted state`);
     }
 
     if (!wf) {
