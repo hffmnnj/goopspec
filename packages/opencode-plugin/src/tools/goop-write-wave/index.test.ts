@@ -1,7 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 
 import { GoopSpecDB } from "../../features/db/index.js";
-import { TASK_STATUSES, WAVE_STATUSES, normalizeStatus } from "../../features/db/types.js";
+import {
+  TASK_STATUSES,
+  WAVE_STATUSES,
+  type WaveStatus,
+  normalizeStatus,
+} from "../../features/db/types.js";
 import type { PluginContext, ToolContext } from "../../test-utils.js";
 import {
   createMockPluginContext,
@@ -512,7 +517,7 @@ describe("goop_write_wave combinator mode", () => {
     expect(result).toContain("not supported in items[] batch mode");
   });
 
-  it("rejects verifications/traceability alongside task_updates", async () => {
+  it("processes verifications and traceability alongside task_updates in one call", async () => {
     const tool = createGoopWriteWaveTool(ctx);
     await tool.execute(
       {
@@ -527,12 +532,105 @@ describe("goop_write_wave combinator mode", () => {
       {
         wave_number: 1,
         task_updates: [{ task_index: 1, status: "completed" }],
+        verifications: [{ check_name: "test", status: "pass" }],
         traceability: [{ requirement_key: "MH2" }],
       },
       toolCtx,
     );
 
-    expect(result).toContain("not supported alongside task_updates");
+    expect(result).toContain("1/1 succeeded");
+    expect(result).toContain("Verifications:");
+    expect(result).toContain("test=pass");
+    expect(result).toContain("Traceability:");
+    expect(result).toContain("MH2");
+
+    // Verify both payloads landed in the DB.
+    const wave = ctx.db.getWave("default", 1);
+    const tasks = ctx.db.getWaveTasks(wave?.id ?? -1);
+    expect(tasks[0].status).toBe("completed");
+
+    const verifications = ctx.db.getVerifications("default", wave?.id ?? -1);
+    expect(verifications.length).toBe(1);
+    expect(verifications[0].check_name).toBe("test");
+
+    const traceability = ctx.db.getTraceability("default");
+    expect(traceability.some((r) => r.requirement_key === "MH2")).toBe(true);
+  });
+
+  it("rolls back verifications when a task_update fails alongside (atomicity)", async () => {
+    const tool = createGoopWriteWaveTool(ctx);
+    await tool.execute(
+      {
+        wave_number: 1,
+        title: "Wave One",
+        tasks: [{ task_index: 1, description: "Task 1", status: "pending" }],
+      },
+      toolCtx,
+    );
+
+    // task_index 99 does not exist — the task_update will fail.
+    const result = await tool.execute(
+      {
+        wave_number: 1,
+        task_updates: [{ task_index: 99, status: "completed" }],
+        verifications: [{ check_name: "test", status: "pass" }],
+        traceability: [{ requirement_key: "MH2" }],
+      },
+      toolCtx,
+    );
+
+    expect(result).toContain("0/1 succeeded");
+    expect(result).toContain("FAIL");
+    expect(result).toContain("task 99 not found");
+    expect(result).not.toContain("Verifications:");
+    expect(result).not.toContain("Traceability:");
+
+    // Verify nothing was written.
+    const wave = ctx.db.getWave("default", 1);
+    const verifications = ctx.db.getVerifications("default", wave?.id ?? -1);
+    expect(verifications.length).toBe(0);
+
+    const traceability = ctx.db.getTraceability("default");
+    expect(traceability.length).toBe(0);
+  });
+
+  it("processes multiple task_updates with verifications atomically", async () => {
+    const tool = createGoopWriteWaveTool(ctx);
+    await tool.execute(
+      {
+        wave_number: 1,
+        title: "Wave One",
+        tasks: [
+          { task_index: 1, description: "Task 1", status: "pending" },
+          { task_index: 2, description: "Task 2", status: "pending" },
+        ],
+      },
+      toolCtx,
+    );
+
+    const result = await tool.execute(
+      {
+        wave_number: 1,
+        task_updates: [
+          { task_index: 1, status: "completed" },
+          { task_index: 2, status: "completed" },
+        ],
+        verifications: [
+          { check_name: "typecheck", status: "pass" },
+          { check_name: "test", status: "pass" },
+        ],
+      },
+      toolCtx,
+    );
+
+    expect(result).toContain("2/2 succeeded");
+    expect(result).toContain("Verifications:");
+    expect(result).toContain("typecheck=pass");
+    expect(result).toContain("test=pass");
+
+    const wave = ctx.db.getWave("default", 1);
+    const verifications = ctx.db.getVerifications("default", wave?.id ?? -1);
+    expect(verifications.length).toBe(2);
   });
 });
 
@@ -910,6 +1008,38 @@ describe("goop_write_wave write integrity", () => {
       toolCtx,
     );
     expect(overrideResult).toContain("Written wave 1");
+    expect(ctx.db.getWave("default", 1)?.status).toBe("pending");
+  });
+
+  it("protects legacy 'complete' status from regression to pending", async () => {
+    const writeTool = createGoopWriteWaveTool(ctx);
+    await writeTool.execute({ wave_number: 1, title: "Legacy wave", status: "done" }, toolCtx);
+
+    // Simulate a legacy 'complete' status in the DB (pre-normalisation data
+    // that would have been written before the status normalisation boundary).
+    const realGetWave = ctx.db.getWave.bind(ctx.db);
+    ctx.db.getWave = (workflowId: string, waveNumber: number) => {
+      const wave = realGetWave(workflowId, waveNumber);
+      if (wave && waveNumber === 1) {
+        return { ...wave, status: "complete" as WaveStatus };
+      }
+      return wave;
+    };
+
+    // Regression to pending should be rejected — 'complete' is terminal.
+    const result = await writeTool.execute({ wave_number: 1, status: "pending" }, toolCtx);
+    expect(result).toContain("allow_status_regression: true");
+    expect(result).toContain("'complete'");
+
+    // With explicit override, regression is allowed.
+    const overrideResult = await writeTool.execute(
+      { wave_number: 1, status: "pending", allow_status_regression: true },
+      toolCtx,
+    );
+    expect(overrideResult).toContain("Written wave 1");
+
+    // Restore the real getWave and verify the DB now has 'pending'.
+    ctx.db.getWave = realGetWave;
     expect(ctx.db.getWave("default", 1)?.status).toBe("pending");
   });
 

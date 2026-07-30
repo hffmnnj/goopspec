@@ -117,6 +117,14 @@ it("completes within 100ms", async () => {
 });
 ```
 
+## Pre-Commit Checklist
+
+Run these **before** every commit, in order:
+
+1. **Lint** — `bun run --cwd packages/opencode-plugin lint` must exit 0. Do not treat lint as a post-hoc gate. Two separate executors in the goopspec-state-integrity workflow had to add `style:` fixup commits because they only ran lint after committing.
+2. **Typecheck** — `bun run --cwd packages/opencode-plugin typecheck` must exit 0.
+3. **Tests** — Run the narrowest covering rung (see §Test Execution Discipline) with `--bail=3 --timeout=10000`.
+
 ## Verification
 
 Every TDD task must end with:

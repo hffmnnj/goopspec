@@ -188,6 +188,7 @@ describe("event-handler hook", () => {
     Object.assign(ctx.sdk.client, {
       session: {
         messages: mock(async () => [{ info: { role: "assistant" } }]),
+        get: mock(async () => ({ directory: testDir })),
         promptAsync,
       },
     });

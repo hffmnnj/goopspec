@@ -1,3 +1,6 @@
+import { mkdirSync, symlinkSync } from "node:fs";
+import { join } from "node:path";
+
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { createMockPluginContext, setupTestEnvironment } from "../../test-utils.js";
 import {
@@ -22,6 +25,10 @@ describe("lazy autopilot nudge guards", () => {
   function baseInput(overrides: Partial<NudgeGuardInput> = {}): NudgeGuardInput {
     return {
       sessionID: "sess-1",
+      session: {
+        status: "available",
+        directory: testDir,
+      },
       workflowId: "default",
       phase: "execute",
       lazyAutopilot: true,
@@ -83,6 +90,179 @@ describe("lazy autopilot nudge guards", () => {
 
     expect(result.suppressed).toBe(false);
     expect(result.reason).toBeNull();
+  });
+
+  it("accepts top-level session metadata with no parentID", () => {
+    const ctx = createMockPluginContext({ testDir });
+    const result = evaluateNudgeGuards(
+      ctx,
+      baseInput({
+        session: { status: "available", directory: testDir },
+      }),
+    );
+
+    expect(result).toEqual(ALLOWED);
+  });
+
+  it("G2a: suppresses a session whose metadata lookup is unavailable", () => {
+    const ctx = createMockPluginContext({ testDir });
+    const result = evaluateNudgeGuards(
+      ctx,
+      baseInput({
+        session: { status: "unavailable", reason: "get-failed" },
+      }),
+    );
+
+    expect(result).toEqual({
+      suppressed: true,
+      reason: {
+        kind: "session-not-nudge-eligible",
+        reason: "metadata-unavailable",
+        detail: "get-failed",
+      },
+    });
+  });
+
+  it("G2a: suppresses a subagent session", () => {
+    const ctx = createMockPluginContext({ testDir });
+    const result = evaluateNudgeGuards(
+      ctx,
+      baseInput({
+        session: {
+          status: "available",
+          parentID: "parent-session",
+          directory: "/workspace/other-project",
+        },
+      }),
+    );
+
+    expect(result).toEqual({
+      suppressed: true,
+      reason: {
+        kind: "session-not-nudge-eligible",
+        reason: "subagent",
+        detail: "parent-session",
+      },
+    });
+  });
+
+  it("G2b: suppresses a session outside the plugin project", () => {
+    const ctx = createMockPluginContext({ testDir });
+    const result = evaluateNudgeGuards(
+      ctx,
+      baseInput({
+        session: { status: "available", directory: "/workspace/other-project" },
+      }),
+    );
+
+    expect(result).toEqual({
+      suppressed: true,
+      reason: {
+        kind: "project-scope-unverified",
+        reason: "directory-mismatch",
+        sessionDirectory: "/workspace/other-project",
+        projectDirectory: testDir,
+      },
+    });
+  });
+
+  it("G2b: normalizes trailing separators before comparing project directories", () => {
+    const ctx = createMockPluginContext({ testDir });
+    const result = evaluateNudgeGuards(
+      ctx,
+      baseInput({
+        session: { status: "available", directory: `${testDir}/` },
+      }),
+    );
+
+    expect(result).toEqual(ALLOWED);
+  });
+
+  it("G2b: fails closed when the plugin directory is unavailable at runtime", () => {
+    const ctx = createMockPluginContext({ testDir });
+    (ctx.sdk as { directory?: string }).directory = undefined;
+
+    const result = evaluateNudgeGuards(ctx, baseInput());
+
+    expect(result).toEqual({
+      suppressed: true,
+      reason: {
+        kind: "project-scope-unverified",
+        reason: "sdk-directory-unavailable",
+        sessionDirectory: testDir,
+      },
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // T3: Distinct unavailable reasons for G2a (fail-closed coverage).
+  // T2 covered get-failed; get-unavailable and invalid-response are the
+  // remaining two branches of the NudgeSessionMetadata discriminated union.
+  // -------------------------------------------------------------------------
+
+  it("G2a: suppresses with get-unavailable reason when session.get is absent on the host", () => {
+    const ctx = createMockPluginContext({ testDir });
+    const result = evaluateNudgeGuards(
+      ctx,
+      baseInput({
+        session: { status: "unavailable", reason: "get-unavailable" },
+      }),
+    );
+
+    expect(result).toEqual({
+      suppressed: true,
+      reason: {
+        kind: "session-not-nudge-eligible",
+        reason: "metadata-unavailable",
+        detail: "get-unavailable",
+      },
+    });
+  });
+
+  it("G2a: suppresses with invalid-response reason when session.get returns non-directory data", () => {
+    const ctx = createMockPluginContext({ testDir });
+    const result = evaluateNudgeGuards(
+      ctx,
+      baseInput({
+        session: { status: "unavailable", reason: "invalid-response" },
+      }),
+    );
+
+    expect(result).toEqual({
+      suppressed: true,
+      reason: {
+        kind: "session-not-nudge-eligible",
+        reason: "metadata-unavailable",
+        detail: "invalid-response",
+      },
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // T3: Canonicalisation positive test — proves realpathSync.native resolves
+  // symlink aliases so a legitimate same-project session is not suppressed.
+  // On hosts where the temp dir is a symlink (e.g. macOS /tmp → /private/tmp),
+  // a session reporting the symlinked path must still match the plugin's
+  // resolved directory. This test cannot fail against pre-T2 code (there was
+  // no directory check), but it guards against a regression in T2's
+  // canonicalisation logic that would silently suppress legitimate sessions.
+  // -------------------------------------------------------------------------
+
+  it("G2b: canonicalises a symlinked session directory to match the real plugin directory", () => {
+    const realDir = join(testDir, "real-project");
+    const symlinkDir = join(testDir, "symlink-project");
+    mkdirSync(realDir, { recursive: true });
+    symlinkSync(realDir, symlinkDir);
+
+    const ctx = createMockPluginContext({ testDir: realDir });
+    const result = evaluateNudgeGuards(
+      ctx,
+      baseInput({
+        session: { status: "available", directory: symlinkDir },
+      }),
+    );
+
+    expect(result).toEqual(ALLOWED);
   });
 
   it("G5: suppresses when an unresolved high-severity blocker exists", () => {

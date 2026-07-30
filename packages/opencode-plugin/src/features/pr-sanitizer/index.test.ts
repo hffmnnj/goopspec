@@ -219,6 +219,49 @@ describe("scanForViolations", () => {
     expect(match?.column).toBeGreaterThan(0);
   });
 
+  it("exempts inline code spans without shifting prose diagnostics", () => {
+    const result = scanForViolations("Use `goop_write_wave` for storage; wave 3 is complete");
+
+    expect(result).toHaveLength(1);
+    expect(result[0]).toMatchObject({
+      term: "wave standalone",
+      match: "wave",
+      line: 1,
+      column: 36,
+    });
+  });
+
+  it("exempts fenced code blocks while scanning prose after the closing fence", () => {
+    const result = scanForViolations(
+      "Use this API:\n```ts\nawait goop_write_wave({ wave_number: 3 });\n```\nwave 3 is complete",
+    );
+
+    expect(result).toHaveLength(1);
+    expect(result[0]).toMatchObject({
+      term: "wave standalone",
+      match: "wave",
+      line: 5,
+      column: 1,
+    });
+  });
+
+  it("does not let an unclosed code span hide following prose", () => {
+    const result = scanForViolations("Use `goop_write_wave, then wave 3 is complete");
+    const match = result.find((v) => v.term === "wave standalone");
+
+    expect(match).toMatchObject({ match: "wave", column: 28 });
+    expect(result).toHaveLength(1);
+  });
+
+  it("does not let an unclosed fenced block hide following prose", () => {
+    const result = scanForViolations(
+      "```ts\nawait goop_write_wave({ wave_number: 3 });\nwave 3 is complete",
+    );
+    const match = result.find((v) => v.term === "wave standalone");
+
+    expect(match).toMatchObject({ match: "wave", line: 3, column: 1 });
+  });
+
   // -----------------------------------------------------------------------
   // Word boundaries
   // -----------------------------------------------------------------------
