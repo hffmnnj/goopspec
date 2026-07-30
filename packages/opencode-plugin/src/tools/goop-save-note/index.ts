@@ -190,7 +190,7 @@ export function createGoopSaveNoteTool(ctx: PluginContext): ToolDefinition {
                 project_id: item.project_id ?? null,
               });
 
-              batchItems.push({ index, ok: true, detail: `saved ${id}` });
+              batchItems.push({ index, ok: true, detail: `saved ${id} (${(item.body as string).length} chars)` });
               succeeded++;
             } catch (error: unknown) {
               const msg = error instanceof Error ? error.message : String(error);
@@ -259,7 +259,7 @@ export function createGoopSaveNoteTool(ctx: PluginContext): ToolDefinition {
           project_id: args.project_id ?? null,
         });
 
-        return `Field Note saved: ${id}\nTitle: ${args.title}\nTags: ${(args.tags as string[]).join(", ")}`;
+        return `Field Note saved: ${id}\nTitle: ${args.title}\nTags: ${(args.tags as string[]).join(", ")}\nBody chars: ${(args.body as string).length}`;
       } catch (error: unknown) {
         const message = error instanceof Error ? error.message : String(error);
         return `Error saving Field Note: ${message}`;

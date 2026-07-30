@@ -45,6 +45,43 @@ describe("goop_save_note tool", () => {
     expect(result).toContain("SQLite WAL mode");
   });
 
+  it("echoes body_chars in the save result", async () => {
+    const tool = createGoopSaveNoteTool(ctx);
+    const body = "WAL mode improves concurrent read performance.";
+    const result = String(
+      await tool.execute(
+        {
+          title: "SQLite WAL mode",
+          body,
+          tags: ["sqlite", "performance"],
+          source_agent: "goop-researcher",
+        },
+        toolCtx,
+      ),
+    );
+
+    expect(result).toContain(`Body chars: ${body.length}`);
+  });
+
+  it("echoes body_chars in batch mode item details", async () => {
+    const tool = createGoopSaveNoteTool(ctx);
+    const result = String(
+      await tool.execute(
+        {
+          title: "",
+          body: "",
+          tags: [],
+          source_agent: "test",
+          items: [{ title: "Note 1", body: "Body 1", tags: ["a"], source_agent: "goop-tester" }],
+        },
+        toolCtx,
+      ),
+    );
+
+    expect(result).toContain("1/1 succeeded");
+    expect(result).toContain("6 chars");
+  });
+
   it("ID matches fn_YYYYMMDD_random8 format", async () => {
     const tool = createGoopSaveNoteTool(ctx);
     const result = String(
