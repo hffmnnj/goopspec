@@ -54,7 +54,7 @@ packages/opencode-plugin/src/
 packages/opencode-plugin/
 ├── agents/                # 14 agent markdown definitions
 ├── commands/              # 9 slash command definitions
-├── references/            # 19 consolidated reference documents (incl. field-notes-protocol)
+├── references/            # 20 consolidated reference documents (incl. field-notes-protocol)
 └── templates/             # File templates
 ```
 
@@ -421,7 +421,7 @@ Three tools for launching, monitoring, and cancelling detached background jobs. 
 
 - **`goop_write_wave`'s top-level `wave_number` is conditionally required.** It is required for wave writes, task writes, verifications, and `items[]`. It is omittable only for a traceability-only call where every row carries its own `wave_number`. A traceability-only call where any row omits `wave_number` is rejected rather than persisting a null target.
 
-- **Knowledge lives in `references/`, not `skills/`.** GoopSpec 1.0.0 removed the skills feature. Use `goop_reference` to load the 19 consolidated reference documents (including `field-notes-protocol`).
+- **Knowledge lives in `references/`, not `skills/`.** GoopSpec 1.0.0 removed the skills feature. Use `goop_reference` to load the 20 consolidated reference documents (including `field-notes-protocol`).
 
 - **ADL is an append-log, not a document row.** Read it with `goop_adl({ action: "read" })`. `goop_read_db({ doc_type: "adl" })` returns "No adl document found" — the ADL is stored as structured events, not a full document.
 
