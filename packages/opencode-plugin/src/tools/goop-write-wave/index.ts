@@ -40,6 +40,8 @@ interface WavePayload {
   pr_branch?: string;
   pr_url?: string;
   tasks?: InlineWaveTask[];
+  verifications?: VerificationPayload[];
+  traceability?: TraceabilityPayload[];
 }
 
 interface BulkTaskStatusUpdate {
@@ -105,9 +107,14 @@ function writeTraceability(
   ctx: PluginContext,
   workflowId: string,
   item: TraceabilityPayload,
-  defaultWaveNumber: number,
+  defaultWaveNumber: number | undefined,
 ): string {
   const waveNumber = item.wave_number ?? defaultWaveNumber;
+  if (waveNumber === undefined) {
+    throw new Error(
+      `traceability row for requirement_key '${item.requirement_key}' has no wave_number and no top-level wave_number was provided`,
+    );
+  }
 
   ctx.db.upsertTraceability(workflowId, {
     requirement_key: item.requirement_key,
@@ -118,7 +125,7 @@ function writeTraceability(
 
   ctx.db.appendEvent(workflowId, "traceability_write", {
     requirement_key: item.requirement_key,
-    wave_number: waveNumber ?? null,
+    wave_number: waveNumber,
     task_index: item.task_index ?? null,
     status: item.status ?? "pending",
     timestamp: Date.now(),
@@ -220,7 +227,13 @@ export function createGoopWriteWaveTool(ctx: PluginContext): ToolDefinition {
       "A tasks[] entry with task_index and status updates that task's status alone. " +
       "Optionally record verifications and traceability rows in the same call.",
     args: {
-      wave_number: tool.schema.number(),
+      wave_number: tool.schema
+        .number()
+        .optional()
+        .describe(
+          "Required for wave writes, task writes, verifications, and items[]; " +
+            "omit only for traceability-only calls where every row carries its own wave_number.",
+        ),
       title: tool.schema
         .string()
         .optional()
@@ -300,6 +313,38 @@ export function createGoopWriteWaveTool(ctx: PluginContext): ToolDefinition {
                 }),
               )
               .optional(),
+            verifications: tool.schema
+              .array(
+                tool.schema.object({
+                  check_name: tool.schema.enum(VERIFICATION_CHECK_NAMES),
+                  status: tool.schema.enum(VERIFICATION_RESULT_STATUSES),
+                  detail: tool.schema.string().optional(),
+                  wave_id: tool.schema
+                    .number()
+                    .optional()
+                    .describe("Internal wave row id (not wave_number)"),
+                }),
+              )
+              .optional()
+              .describe(
+                "Records verification rows for this item's wave inside the batch transaction.",
+              ),
+            traceability: tool.schema
+              .array(
+                tool.schema.object({
+                  requirement_key: tool.schema.string(),
+                  wave_number: tool.schema
+                    .number()
+                    .optional()
+                    .describe("Omit to inherit the enclosing item's wave_number."),
+                  task_index: tool.schema.number().optional(),
+                  status: tool.schema.string().optional(),
+                }),
+              )
+              .optional()
+              .describe(
+                "Writes traceability rows for this item's wave inside the batch transaction.",
+              ),
           }),
         )
         .optional(),
@@ -337,7 +382,7 @@ export function createGoopWriteWaveTool(ctx: PluginContext): ToolDefinition {
     },
     async execute(
       args: {
-        wave_number: number;
+        wave_number?: number;
         title?: string;
         status?: string;
         pr_branch?: string;
@@ -364,6 +409,53 @@ export function createGoopWriteWaveTool(ctx: PluginContext): ToolDefinition {
           return statusError;
         }
 
+        if (args.wave_number === undefined) {
+          // wave_number is only optional for traceability-only calls where every
+          // row self-describes its target. Any other payload requires it.
+          const hasNonTraceabilityPayload =
+            args.title !== undefined ||
+            args.status !== undefined ||
+            args.pr_branch !== undefined ||
+            args.pr_url !== undefined ||
+            args.tasks !== undefined ||
+            args.task_update !== undefined ||
+            args.task_updates !== undefined ||
+            args.items !== undefined ||
+            args.verifications !== undefined;
+
+          if (hasNonTraceabilityPayload) {
+            return "Error in goop_write_wave: wave_number is required for wave writes, task writes, verifications, and items[]; only traceability-only calls may omit it.";
+          }
+
+          if (args.traceability === undefined || args.traceability.length === 0) {
+            return "Error in goop_write_wave: wave_number is required when no traceability rows are provided.";
+          }
+
+          for (const [index, row] of args.traceability.entries()) {
+            if (row.wave_number === undefined) {
+              return `Error in goop_write_wave: traceability row ${index} (requirement_key '${row.requirement_key}') has no wave_number and no top-level wave_number was provided; supply wave_number on the row or at the top level.`;
+            }
+          }
+
+          // All rows self-describe — write them without a top-level wave_number.
+          ctx.db.runTransaction(() => {
+            for (const item of args.traceability ?? []) {
+              traceabilityResults.push(writeTraceability(ctx, workflowId, item, undefined));
+            }
+          });
+          renderSidecars(ctx, workflowId);
+
+          const sections: string[] = [];
+          if (traceabilityResults.length > 0) {
+            sections.push(
+              `Traceability:\n${traceabilityResults.map((line) => `- ${line}`).join("\n")}`,
+            );
+          }
+          return sections.join("\n\n");
+        }
+
+        const waveNumber = args.wave_number;
+
         if (Array.isArray(args.items) && args.items.length > 0) {
           const ignoredFields = [
             args.title !== undefined ? "title" : null,
@@ -373,18 +465,12 @@ export function createGoopWriteWaveTool(ctx: PluginContext): ToolDefinition {
             args.tasks !== undefined ? "tasks" : null,
             args.task_update !== undefined ? "task_update" : null,
             args.task_updates !== undefined ? "task_updates" : null,
+            args.verifications !== undefined ? "verifications" : null,
+            args.traceability !== undefined ? "traceability" : null,
           ].filter((field): field is string => field !== null);
           if (ignoredFields.length > 0) {
             return incompatiblePayloadError("items[] batch mode", ignoredFields);
           }
-          if (args.verifications !== undefined || args.traceability !== undefined) {
-            return (
-              "Error in goop_write_wave: verifications and traceability side-payloads are " +
-              "not supported in items[] batch mode; use the single-wave path or call the " +
-              "granular tools directly."
-            );
-          }
-
           const result = runBatch(ctx.db, args.items, (item) => {
             const existingWave = ctx.db.getWave(workflowId, item.wave_number);
             const waveRegression = statusRegressionError(
@@ -406,6 +492,13 @@ export function createGoopWriteWaveTool(ctx: PluginContext): ToolDefinition {
             if (wave === null) {
               throw new Error(`wave ${item.wave_number} not found after upsert`);
             }
+
+            const itemVerificationResults = (item.verifications ?? []).map((verification) =>
+              recordVerification(ctx, workflowId, verification, wave.id, item.wave_number),
+            );
+            const itemTraceabilityResults = (item.traceability ?? []).map((traceability) =>
+              writeTraceability(ctx, workflowId, traceability, item.wave_number),
+            );
 
             for (const task of item.tasks ?? []) {
               const existingTask = ctx.db
@@ -435,7 +528,16 @@ export function createGoopWriteWaveTool(ctx: PluginContext): ToolDefinition {
               timestamp: Date.now(),
             });
 
-            return `wrote wave ${item.wave_number}`;
+            const sidePayloadCounts: string[] = [];
+            if (itemVerificationResults.length > 0) {
+              sidePayloadCounts.push(`${itemVerificationResults.length} verification(s)`);
+            }
+            if (itemTraceabilityResults.length > 0) {
+              sidePayloadCounts.push(`${itemTraceabilityResults.length} traceability row(s)`);
+            }
+            const suffix =
+              sidePayloadCounts.length > 0 ? `; wrote ${sidePayloadCounts.join(" and ")}` : "";
+            return `wrote wave ${item.wave_number}${suffix}`;
           });
           renderSidecars(ctx, workflowId);
           const response = formatBatchResult(result, "write-wave");
@@ -456,9 +558,9 @@ export function createGoopWriteWaveTool(ctx: PluginContext): ToolDefinition {
             return incompatiblePayloadError("task_updates batch mode", ignoredFields);
           }
 
-          const wave = ctx.db.getWave(workflowId, args.wave_number);
+          const wave = ctx.db.getWave(workflowId, waveNumber);
           if (wave === null) {
-            return `No wave ${args.wave_number} found for workflow '${workflowId}'. Use goop_write_wave to create it.`;
+            return `No wave ${waveNumber} found for workflow '${workflowId}'. Use goop_write_wave to create it.`;
           }
 
           const defaultWaveId = wave.id;
@@ -477,12 +579,10 @@ export function createGoopWriteWaveTool(ctx: PluginContext): ToolDefinition {
                     .getWaveTasks(wave.id)
                     .find((candidate) => candidate.task_index === update.task_index);
                   if (task === undefined) {
-                    throw new Error(
-                      `task ${update.task_index} not found on wave ${args.wave_number}`,
-                    );
+                    throw new Error(`task ${update.task_index} not found on wave ${waveNumber}`);
                   }
                   const taskRegression = statusRegressionError(
-                    `task ${update.task_index} on wave ${args.wave_number}`,
+                    `task ${update.task_index} on wave ${waveNumber}`,
                     task.status,
                     update.status,
                     args.allow_status_regression ?? false,
@@ -490,7 +590,7 @@ export function createGoopWriteWaveTool(ctx: PluginContext): ToolDefinition {
                   if (taskRegression !== null) throw new Error(taskRegression);
                   ctx.db.setWaveTaskStatus(wave.id, update.task_index, update.status);
                   ctx.db.appendEvent(workflowId, "wave_write", {
-                    wave_number: args.wave_number,
+                    wave_number: waveNumber,
                     task_index: update.task_index,
                     status: update.status,
                     mode: "task_update",
@@ -510,14 +610,12 @@ export function createGoopWriteWaveTool(ctx: PluginContext): ToolDefinition {
 
               for (const item of args.verifications ?? []) {
                 verificationResults.push(
-                  recordVerification(ctx, workflowId, item, defaultWaveId, args.wave_number),
+                  recordVerification(ctx, workflowId, item, defaultWaveId, waveNumber),
                 );
               }
 
               for (const item of args.traceability ?? []) {
-                traceabilityResults.push(
-                  writeTraceability(ctx, workflowId, item, args.wave_number),
-                );
+                traceabilityResults.push(writeTraceability(ctx, workflowId, item, waveNumber));
               }
             });
           } catch (error: unknown) {
@@ -590,10 +688,10 @@ export function createGoopWriteWaveTool(ctx: PluginContext): ToolDefinition {
           args.tasks !== undefined;
 
         ctx.db.runTransaction(() => {
-          let wave = ctx.db.getWave(workflowId, args.wave_number);
+          let wave = ctx.db.getWave(workflowId, waveNumber);
           if (hasWaveWrite) {
             const waveRegression = statusRegressionError(
-              `wave ${args.wave_number}`,
+              `wave ${waveNumber}`,
               wave?.status ?? "pending",
               args.status,
               args.allow_status_regression ?? false,
@@ -601,18 +699,18 @@ export function createGoopWriteWaveTool(ctx: PluginContext): ToolDefinition {
             if (waveRegression !== null) throw new Error(waveRegression);
 
             ctx.db.upsertWave(workflowId, {
-              wave_number: args.wave_number,
+              wave_number: waveNumber,
               title: args.title,
               status: args.status,
               pr_branch: args.pr_branch,
               pr_url: args.pr_url,
             });
-            wave = ctx.db.getWave(workflowId, args.wave_number);
+            wave = ctx.db.getWave(workflowId, waveNumber);
           }
 
           if (wave === null) {
             throw new Error(
-              `No wave ${args.wave_number} found for workflow '${workflowId}'. Use goop_write_wave to create it.`,
+              `No wave ${waveNumber} found for workflow '${workflowId}'. Use goop_write_wave to create it.`,
             );
           }
           defaultWaveId = wave.id;
@@ -622,7 +720,7 @@ export function createGoopWriteWaveTool(ctx: PluginContext): ToolDefinition {
               .getWaveTasks(wave.id)
               .find((candidate) => candidate.task_index === task.task_index);
             const taskRegression = statusRegressionError(
-              `task ${task.task_index} on wave ${args.wave_number}`,
+              `task ${task.task_index} on wave ${waveNumber}`,
               existingTask?.status ?? "pending",
               task.status,
               args.allow_status_regression ?? false,
@@ -644,11 +742,11 @@ export function createGoopWriteWaveTool(ctx: PluginContext): ToolDefinition {
               .find((candidate) => candidate.task_index === args.task_update?.task_index);
             if (task === undefined) {
               throw new Error(
-                `task ${args.task_update.task_index} not found on wave ${args.wave_number}`,
+                `task ${args.task_update.task_index} not found on wave ${waveNumber}`,
               );
             }
             const taskRegression = statusRegressionError(
-              `task ${args.task_update.task_index} on wave ${args.wave_number}`,
+              `task ${args.task_update.task_index} on wave ${waveNumber}`,
               task.status,
               args.task_update.status,
               args.allow_status_regression ?? false,
@@ -658,7 +756,7 @@ export function createGoopWriteWaveTool(ctx: PluginContext): ToolDefinition {
           }
 
           ctx.db.appendEvent(workflowId, "wave_write", {
-            wave_number: args.wave_number,
+            wave_number: waveNumber,
             task_count: args.tasks?.length ?? 0,
             task_index: args.task_update?.task_index ?? null,
             status: args.task_update?.status ?? args.status ?? null,
@@ -668,25 +766,25 @@ export function createGoopWriteWaveTool(ctx: PluginContext): ToolDefinition {
 
           for (const item of args.verifications ?? []) {
             verificationResults.push(
-              recordVerification(ctx, workflowId, item, defaultWaveId, args.wave_number),
+              recordVerification(ctx, workflowId, item, defaultWaveId, waveNumber),
             );
           }
 
           for (const item of args.traceability ?? []) {
-            traceabilityResults.push(writeTraceability(ctx, workflowId, item, args.wave_number));
+            traceabilityResults.push(writeTraceability(ctx, workflowId, item, waveNumber));
           }
         });
         renderSidecars(ctx, workflowId);
 
         if (hasWaveWrite) {
           if (args.tasks !== undefined && args.tasks.length > 0) {
-            mainResult = `Written wave ${args.wave_number} for workflow '${workflowId}' with ${args.tasks.length} task(s).`;
+            mainResult = `Written wave ${waveNumber} for workflow '${workflowId}' with ${args.tasks.length} task(s).`;
           } else {
-            mainResult = `Written wave ${args.wave_number} for workflow '${workflowId}'; existing tasks left unchanged.`;
+            mainResult = `Written wave ${waveNumber} for workflow '${workflowId}'; existing tasks left unchanged.`;
           }
         }
         if (args.task_update !== undefined) {
-          const taskResult = `Updated task ${args.task_update.task_index} on wave ${args.wave_number} to '${args.task_update.status}' for workflow '${workflowId}'.`;
+          const taskResult = `Updated task ${args.task_update.task_index} on wave ${waveNumber} to '${args.task_update.status}' for workflow '${workflowId}'.`;
           mainResult = mainResult.length > 0 ? `${mainResult}\n${taskResult}` : taskResult;
         }
 

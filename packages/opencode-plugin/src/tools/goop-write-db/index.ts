@@ -34,6 +34,17 @@ function isPatchActive(patch: PatchArgs): boolean {
   return patch.old_string !== undefined;
 }
 
+/**
+ * Render the persisted document length for a success message. An explicit
+ * "empty document" label distinguishes an intentional zero-length write
+ * from a bare "0 chars", which reads as though the content vanished. The
+ * caller must be able to tell "I wrote an empty document" apart from
+ * "something went wrong and my content disappeared".
+ */
+function describeWriteLength(len: number): string {
+  return len === 0 ? "empty document" : `${len} chars`;
+}
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -132,6 +143,13 @@ export function createGoopWriteDbTool(ctx: PluginContext): ToolDefinition {
       _context: ToolContext,
     ): Promise<string> {
       try {
+        // Batch/message-parity audit: goop_write_db and goop_blocker were
+        // reviewed for batch-vs-single-path parity defects (batch mode
+        // rejecting valid input, or batch and single paths disagreeing on
+        // what they report). Both already route batch items through the shared
+        // runBatch/formatBatchResult path and report per-item results
+        // consistently with their single-item path, so no parity change was
+        // required. Recorded to prevent re-auditing these two tools.
         if (Array.isArray(args.items) && args.items.length > 0) {
           const workflowId = args.workflow_id ?? ctx.stateManager.getState().activeWorkflowId;
           const result = runBatch(ctx.db, args.items, (item) => {
@@ -188,7 +206,7 @@ export function createGoopWriteDbTool(ctx: PluginContext): ToolDefinition {
           renderSidecars(ctx, workflowId);
           const filename = DOC_TYPE_FILENAMES[args.doc_type];
 
-          return `Patched ${args.doc_type} for workflow '${workflowId}' (${sidecarContent.length} chars, mode: patch). Sidecar: .goopspec/${workflowId}/${filename}`;
+          return `Patched ${args.doc_type} for workflow '${workflowId}' (${describeWriteLength(sidecarContent.length)}, mode: patch). Sidecar: .goopspec/${workflowId}/${filename}`;
         }
 
         if (
@@ -229,7 +247,7 @@ export function createGoopWriteDbTool(ctx: PluginContext): ToolDefinition {
         renderSidecars(ctx, workflowId);
         const filename = DOC_TYPE_FILENAMES[args.doc_type];
 
-        return `Written ${args.doc_type} for workflow '${workflowId}' (${sidecarContent.length} chars, mode: ${mode}). Sidecar: .goopspec/${workflowId}/${filename}`;
+        return `Written ${args.doc_type} for workflow '${workflowId}' (${describeWriteLength(sidecarContent.length)}, mode: ${mode}). Sidecar: .goopspec/${workflowId}/${filename}`;
       } catch (error: unknown) {
         const msg = error instanceof Error ? error.message : String(error);
         return `Error in goop_write_db: ${msg}`;

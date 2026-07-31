@@ -503,7 +503,27 @@ describe("goop_write_wave combinator mode", () => {
     realDb.close();
   });
 
-  it("rejects verifications/traceability in items[] batch mode", async () => {
+  it("reports per-item side-payload writes in items[] batch mode", async () => {
+    const tool = createGoopWriteWaveTool(ctx);
+    const result = await tool.execute(
+      {
+        wave_number: 1,
+        items: [
+          {
+            wave_number: 1,
+            title: "Batch wave",
+            verifications: [{ check_name: "test", status: "pass" }],
+            traceability: [{ requirement_key: "MH1" }],
+          },
+        ],
+      },
+      toolCtx,
+    );
+
+    expect(result).toContain("wrote 1 verification(s) and 1 traceability row(s)");
+  });
+
+  it("rejects top-level verifications alongside items[] without persisting them", async () => {
     const tool = createGoopWriteWaveTool(ctx);
     const result = await tool.execute(
       {
@@ -514,7 +534,25 @@ describe("goop_write_wave combinator mode", () => {
       toolCtx,
     );
 
-    expect(result).toContain("not supported in items[] batch mode");
+    expect(result).toContain("verifications cannot be supplied alongside items[] batch mode");
+    expect(ctx.db.getWave("default", 1)).toBeNull();
+    expect(ctx.db.getVerifications("default", 1)).toHaveLength(0);
+  });
+
+  it("rejects top-level traceability alongside items[] without persisting it", async () => {
+    const tool = createGoopWriteWaveTool(ctx);
+    const result = await tool.execute(
+      {
+        wave_number: 1,
+        items: [{ wave_number: 1, title: "Batch wave" }],
+        traceability: [{ requirement_key: "MH1" }],
+      },
+      toolCtx,
+    );
+
+    expect(result).toContain("traceability cannot be supplied alongside items[] batch mode");
+    expect(ctx.db.getWave("default", 1)).toBeNull();
+    expect(ctx.db.getTraceability("default")).toHaveLength(0);
   });
 
   it("processes verifications and traceability alongside task_updates in one call", async () => {
@@ -719,6 +757,254 @@ describe("goop_write_wave combinator mode", () => {
     const text = typeof result === "string" ? result : String(result);
     expect(text.startsWith("\n")).toBe(false);
     expect(text.startsWith("Verifications:")).toBe(true);
+  });
+});
+
+describe("goop_write_wave multi-item batch targeting and rollback", () => {
+  let ctx: PluginContext;
+  let toolCtx: ToolContext;
+  let cleanup: () => void;
+
+  beforeEach(() => {
+    const env = setupTestEnvironment("goop-write-wave-multi-item");
+    cleanup = env.cleanup;
+    ctx = createMockPluginContext({ testDir: env.testDir, db: env.db });
+    toolCtx = createMockToolContext();
+  });
+
+  afterEach(() => cleanup());
+
+  it("multi-item batch binds each item's traceability to its own wave when row-level wave_number is omitted", async () => {
+    const tool = createGoopWriteWaveTool(ctx);
+    await tool.execute(
+      {
+        wave_number: 1,
+        items: [
+          {
+            wave_number: 1,
+            title: "Wave One",
+            traceability: [{ requirement_key: "MH1", status: "covered" }],
+          },
+          {
+            wave_number: 2,
+            title: "Wave Two",
+            traceability: [{ requirement_key: "MH2", status: "covered" }],
+          },
+        ],
+      },
+      toolCtx,
+    );
+
+    // Read rows back and assert each requirement is bound to its item's wave —
+    // not the other item's. A bug in the inheritance rule silently binds
+    // requirements to the wrong wave and stays invisible until someone audits
+    // traceability.
+    const rows = ctx.db.getTraceability("default");
+    expect(rows).toHaveLength(2);
+
+    const mh1 = rows.find((r) => r.requirement_key === "MH1");
+    const mh2 = rows.find((r) => r.requirement_key === "MH2");
+    expect(mh1?.wave_number).toBe(1);
+    expect(mh2?.wave_number).toBe(2);
+    expect(mh1?.wave_number).not.toBe(2);
+    expect(mh2?.wave_number).not.toBe(1);
+  });
+
+  it("explicit row-level wave_number overrides the inherited item wave_number for traceability in a multi-item batch", async () => {
+    const tool = createGoopWriteWaveTool(ctx);
+    // Pre-create wave 3 so the explicit override target exists.
+    await tool.execute({ wave_number: 3, title: "Override target wave" }, toolCtx);
+
+    await tool.execute(
+      {
+        wave_number: 1,
+        items: [
+          {
+            wave_number: 1,
+            title: "Wave One",
+            traceability: [{ requirement_key: "MH1", wave_number: 3, status: "covered" }],
+          },
+          {
+            wave_number: 2,
+            title: "Wave Two",
+            traceability: [{ requirement_key: "MH2", status: "covered" }],
+          },
+        ],
+      },
+      toolCtx,
+    );
+
+    const rows = ctx.db.getTraceability("default");
+    expect(rows).toHaveLength(2);
+
+    const mh1 = rows.find((r) => r.requirement_key === "MH1");
+    const mh2 = rows.find((r) => r.requirement_key === "MH2");
+    // MH1 explicitly targets wave 3, overriding its item's wave_number 1.
+    expect(mh1?.wave_number).toBe(3);
+    // MH2 inherits its item's wave_number 2.
+    expect(mh2?.wave_number).toBe(2);
+  });
+
+  it("per-item verification omitting wave_id defaults to the enclosing item's wave row id", async () => {
+    const tool = createGoopWriteWaveTool(ctx);
+    await tool.execute(
+      {
+        wave_number: 1,
+        items: [
+          {
+            wave_number: 1,
+            title: "Wave One",
+            verifications: [{ check_name: "test", status: "pass" }],
+          },
+          {
+            wave_number: 2,
+            title: "Wave Two",
+            verifications: [{ check_name: "lint", status: "pass" }],
+          },
+        ],
+      },
+      toolCtx,
+    );
+
+    const wave1 = ctx.db.getWave("default", 1);
+    const wave2 = ctx.db.getWave("default", 2);
+    expect(wave1).not.toBeNull();
+    expect(wave2).not.toBeNull();
+
+    // Assert the persisted row target, not the message text — a message can be
+    // right while the rows are wrong.
+    const verifications = ctx.db.getVerifications("default");
+    expect(verifications).toHaveLength(2);
+
+    const testRow = verifications.find((v) => v.check_name === "test");
+    const lintRow = verifications.find((v) => v.check_name === "lint");
+    expect(testRow?.wave_id).toBe(wave1?.id);
+    expect(lintRow?.wave_id).toBe(wave2?.id);
+    expect(testRow?.wave_id).not.toBe(wave2?.id);
+    expect(lintRow?.wave_id).not.toBe(wave1?.id);
+  });
+
+  it("explicit per-item wave_id overrides the inherited wave row id for a verification", async () => {
+    const tool = createGoopWriteWaveTool(ctx);
+    // Pre-create wave 2 so we can reference its internal row id.
+    await tool.execute({ wave_number: 2, title: "Override target wave" }, toolCtx);
+    const wave2 = ctx.db.getWave("default", 2);
+    expect(wave2).not.toBeNull();
+    const wave2Id = wave2?.id ?? -1;
+    expect(wave2Id).toBeGreaterThan(0);
+
+    await tool.execute(
+      {
+        wave_number: 1,
+        items: [
+          {
+            wave_number: 1,
+            title: "Wave One",
+            verifications: [{ check_name: "test", status: "pass", wave_id: wave2Id }],
+          },
+        ],
+      },
+      toolCtx,
+    );
+
+    const wave1 = ctx.db.getWave("default", 1);
+    const verifications = ctx.db.getVerifications("default");
+    expect(verifications).toHaveLength(1);
+    // The verification must be bound to wave 2's row id (explicit), not wave 1's
+    // (inherited). Asserting the persisted row, not the confirmation message.
+    expect(verifications[0].wave_id).toBe(wave2Id);
+    expect(verifications[0].wave_id).not.toBe(wave1?.id);
+  });
+
+  it("later item failure rolls back earlier items' waves, verifications, and traceability in a multi-item batch", async () => {
+    const tool = createGoopWriteWaveTool(ctx);
+    // Pre-seed wave 2 as terminal so item 2's "pending" status regresses and
+    // throws — a genuine invalid input, not a mock.
+    await tool.execute({ wave_number: 2, title: "Pre-seeded done wave", status: "done" }, toolCtx);
+
+    const result = await tool.execute(
+      {
+        wave_number: 1,
+        items: [
+          {
+            wave_number: 1,
+            title: "Item one",
+            status: "in_progress",
+            verifications: [{ check_name: "test", status: "pass" }],
+            traceability: [{ requirement_key: "MH1", status: "covered" }],
+          },
+          {
+            wave_number: 2,
+            title: "Item two",
+            status: "pending", // regresses wave 2 from "done" to "pending" -> throws
+          },
+        ],
+      },
+      toolCtx,
+    );
+
+    // The batch must report total failure — nothing succeeded.
+    expect(result).toContain("0/2 succeeded");
+    expect(result).toContain("FAIL");
+
+    // Wave 1 was created only inside the batch transaction — rollback must
+    // remove it. Earlier items had already written side-payloads before the
+    // failure, so this proves they were undone.
+    expect(ctx.db.getWave("default", 1)).toBeNull();
+
+    // Wave 2 was pre-seeded outside the batch — it must survive unchanged.
+    const wave2 = ctx.db.getWave("default", 2);
+    expect(wave2).not.toBeNull();
+    expect(wave2?.status).toBe("done");
+
+    // No verifications or traceability rows from the batch may survive.
+    expect(ctx.db.getVerifications("default")).toHaveLength(0);
+    expect(ctx.db.getTraceability("default")).toHaveLength(0);
+  });
+
+  it("rolled-back batch leaves no orphan events for side-payloads written before the failure", async () => {
+    const tool = createGoopWriteWaveTool(ctx);
+    // Pre-seed wave 2 as terminal so item 2's "pending" status regresses and
+    // throws.
+    await tool.execute({ wave_number: 2, title: "Pre-seeded done wave", status: "done" }, toolCtx);
+
+    // Before the batch, only the pre-seed's wave_write event exists.
+    const eventsBefore = ctx.db.getEvents("default");
+    expect(eventsBefore).toHaveLength(1);
+
+    await tool.execute(
+      {
+        wave_number: 1,
+        items: [
+          {
+            wave_number: 1,
+            title: "Item one",
+            status: "in_progress",
+            verifications: [{ check_name: "test", status: "pass" }],
+            traceability: [{ requirement_key: "MH1", status: "covered" }],
+          },
+          {
+            wave_number: 2,
+            title: "Item two",
+            status: "pending", // regresses -> throws
+          },
+        ],
+      },
+      toolCtx,
+    );
+
+    // After the rolled-back batch, the total event count must be unchanged —
+    // events are appended inside the transaction so a rollback leaves none.
+    const eventsAfter = ctx.db.getEvents("default");
+    expect(eventsAfter).toHaveLength(eventsBefore.length);
+
+    // No verification_record or traceability_write events may survive.
+    expect(ctx.db.getEvents("default", "verification_record")).toHaveLength(0);
+    expect(ctx.db.getEvents("default", "traceability_write")).toHaveLength(0);
+
+    // Only the pre-seed's wave_write event remains — the batch's wave_write
+    // for item 1 was rolled back with the rest of the transaction.
+    expect(ctx.db.getEvents("default", "wave_write")).toHaveLength(1);
   });
 });
 
@@ -1498,5 +1784,142 @@ describe("goop_write_wave durability, idempotence, and preservation", () => {
     const result = await readTool.execute({}, toolCtx);
     expect(result).toContain("status: completed");
     expect(result).toContain("Updated title");
+  });
+});
+
+describe("goop_write_wave conditional wave_number", () => {
+  let ctx: PluginContext;
+  let toolCtx: ToolContext;
+  let cleanup: () => void;
+
+  beforeEach(() => {
+    const env = setupTestEnvironment("write-wave-conditional");
+    cleanup = env.cleanup;
+    ctx = createMockPluginContext({ testDir: env.testDir, db: env.db });
+    toolCtx = createMockToolContext();
+  });
+
+  afterEach(() => cleanup());
+
+  it("traceability-only call with no top-level wave_number succeeds when every row carries its own", async () => {
+    const tool = createGoopWriteWaveTool(ctx);
+    // Pre-create the target waves so the rows reference valid waves.
+    await tool.execute({ wave_number: 1, title: "Wave One" }, toolCtx);
+    await tool.execute({ wave_number: 2, title: "Wave Two" }, toolCtx);
+
+    const result = await tool.execute(
+      {
+        traceability: [
+          { requirement_key: "MH1", wave_number: 1, status: "covered" },
+          { requirement_key: "MH2", wave_number: 2, status: "covered" },
+        ],
+      },
+      toolCtx,
+    );
+
+    expect(result).toContain("Traceability:");
+    expect(result).toContain("MH1");
+    expect(result).toContain("MH2");
+
+    // Assert against persisted rows, not the returned string.
+    const rows = ctx.db.getTraceability("default");
+    expect(rows).toHaveLength(2);
+
+    const mh1 = rows.find((r) => r.requirement_key === "MH1");
+    const mh2 = rows.find((r) => r.requirement_key === "MH2");
+    expect(mh1?.wave_number).toBe(1);
+    expect(mh2?.wave_number).toBe(2);
+    // No row should have a null target — the anti-null-target invariant.
+    expect(rows.every((r) => r.wave_number !== null)).toBe(true);
+  });
+
+  it("traceability-only call with no top-level wave_number is rejected when a row omits it, and zero rows are persisted", async () => {
+    const tool = createGoopWriteWaveTool(ctx);
+
+    const result = await tool.execute(
+      {
+        traceability: [
+          { requirement_key: "MH1", wave_number: 1, status: "covered" },
+          { requirement_key: "MH2", status: "covered" }, // omits wave_number
+        ],
+      },
+      toolCtx,
+    );
+
+    expect(result).toContain("Error in goop_write_wave");
+    expect(result).toContain("traceability row 1");
+    expect(result).toContain("MH2");
+    expect(result).toContain("no top-level wave_number was provided");
+
+    // Anti-null-target: zero rows must be persisted — the guard rejects
+    // before any write, so no null-target row can reach the DB.
+    expect(ctx.db.getTraceability("default")).toHaveLength(0);
+  });
+
+  it("wave write with no wave_number is rejected", async () => {
+    const tool = createGoopWriteWaveTool(ctx);
+    const result = await tool.execute({ title: "No wave number" }, toolCtx);
+
+    expect(result).toContain("Error in goop_write_wave");
+    expect(result).toContain("wave_number is required");
+    expect(result).toContain("only traceability-only calls may omit it");
+    expect(ctx.db.getWave("default", 1)).toBeNull();
+  });
+
+  it("task write with no wave_number is rejected", async () => {
+    const tool = createGoopWriteWaveTool(ctx);
+    const result = await tool.execute({ task_update: { task_index: 1, status: "done" } }, toolCtx);
+
+    expect(result).toContain("Error in goop_write_wave");
+    expect(result).toContain("wave_number is required");
+    expect(result).toContain("only traceability-only calls may omit it");
+  });
+
+  it("items[] batch with no wave_number is rejected", async () => {
+    const tool = createGoopWriteWaveTool(ctx);
+    const result = await tool.execute(
+      { items: [{ wave_number: 1, title: "Batch wave" }] },
+      toolCtx,
+    );
+
+    expect(result).toContain("Error in goop_write_wave");
+    expect(result).toContain("wave_number is required");
+    expect(ctx.db.getWave("default", 1)).toBeNull();
+  });
+
+  it("verifications with no wave_number is rejected", async () => {
+    const tool = createGoopWriteWaveTool(ctx);
+    const result = await tool.execute(
+      { verifications: [{ check_name: "test", status: "pass" }] },
+      toolCtx,
+    );
+
+    expect(result).toContain("Error in goop_write_wave");
+    expect(result).toContain("wave_number is required");
+  });
+
+  it("traceability-only with no rows and no wave_number is rejected", async () => {
+    const tool = createGoopWriteWaveTool(ctx);
+    const result = await tool.execute({ traceability: [] }, toolCtx);
+
+    expect(result).toContain("Error in goop_write_wave");
+    expect(result).toContain("wave_number is required");
+    expect(result).toContain("no traceability rows");
+  });
+
+  it("traceability-only call with no top-level wave_number writes traceability_write events", async () => {
+    const tool = createGoopWriteWaveTool(ctx);
+    await tool.execute({ wave_number: 1, title: "Wave One" }, toolCtx);
+
+    await tool.execute(
+      {
+        traceability: [{ requirement_key: "MH1", wave_number: 1, status: "covered" }],
+      },
+      toolCtx,
+    );
+
+    const events = ctx.db.getEvents("default", "traceability_write");
+    expect(events).toHaveLength(1);
+    expect(JSON.parse(events[0].payload).wave_number).toBe(1);
   });
 });

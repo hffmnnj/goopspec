@@ -12,8 +12,7 @@
 import { tool } from "../../core/sdk-compat.js";
 import type { ToolContext, ToolDefinition } from "../../core/sdk-compat.js";
 import type { PluginContext } from "../../core/types.js";
-import type { BatchItemResult, BatchResult } from "../../features/db/batch.js";
-import { formatBatchResult } from "../../features/db/batch.js";
+import { formatBatchResult, runBatch } from "../../features/db/batch.js";
 
 // ---------------------------------------------------------------------------
 // ID generation
@@ -73,6 +72,49 @@ function validateCreateFields(item: NoteFields): { ok: true } | { ok: false; err
     return { ok: false, error: "source_agent is required for new notes" };
   }
   return { ok: true };
+}
+
+// ---------------------------------------------------------------------------
+// Tag normalization
+// ---------------------------------------------------------------------------
+
+/**
+ * Normalize a `tags` value to `string[]`, defending against callers that pass
+ * a JSON-encoded array string or a comma-separated string instead of a native
+ * array.
+ *
+ * - native `string[]` → returned as-is (trimmed, empties dropped)
+ * - JSON-encoded array string (`'["a","b"]'`) → parsed
+ * - comma-separated string (`"a, b"`) → split and trimmed
+ *
+ * Malformed JSON degrades to comma-split rather than throwing. Whitespace-only
+ * entries never become empty tags.
+ */
+function normalizeTags(tags: unknown): string[] {
+  const clean = (entries: unknown[]): string[] =>
+    entries
+      .map((entry) => (typeof entry === "string" ? entry.trim() : ""))
+      .filter((entry) => entry.length > 0);
+
+  if (Array.isArray(tags)) {
+    return clean(tags);
+  }
+  if (typeof tags === "string") {
+    const trimmed = tags.trim();
+    if (trimmed === "") return [];
+    if (trimmed.startsWith("[") && trimmed.endsWith("]")) {
+      try {
+        const parsed = JSON.parse(trimmed);
+        if (Array.isArray(parsed)) {
+          return clean(parsed);
+        }
+      } catch {
+        // Malformed JSON — fall through to comma-split.
+      }
+    }
+    return clean(trimmed.split(","));
+  }
+  return [];
 }
 
 // ---------------------------------------------------------------------------
@@ -142,79 +184,57 @@ export function createGoopSaveNoteTool(ctx: PluginContext): ToolDefinition {
     async execute(args: SaveNoteArgs, _context: ToolContext): Promise<string> {
       try {
         if (Array.isArray(args.items) && args.items.length > 0) {
-          const batchItems: BatchItemResult[] = [];
-          let succeeded = 0;
-          let failed = 0;
-
-          for (const [index, item] of args.items.entries()) {
-            try {
-              if (item.note_id !== undefined) {
-                if (item.old_string === undefined) {
-                  throw new Error("old_string is required when note_id is provided for patch mode");
-                }
-
-                const updateResult = ctx.db.updateNote(item.note_id, {
-                  oldString: item.old_string,
-                  newString: item.new_string ?? "",
-                  replaceAll: item.replace_all ?? false,
-                });
-
-                if (!updateResult.ok) {
-                  throw new Error(updateResult.error ?? "Patch failed");
-                }
-
-                batchItems.push({ index, ok: true, detail: `patched ${item.note_id}` });
-                succeeded++;
-                continue;
+          const result = runBatch(ctx.db, args.items, (item) => {
+            if (item.note_id !== undefined) {
+              if (item.old_string === undefined) {
+                throw new Error("old_string is required when note_id is provided for patch mode");
               }
 
-              const validation = validateCreateFields(item);
-              if (!validation.ok) {
-                throw new Error(validation.error);
-              }
-
-              const itemImportance = item.importance ?? 5;
-              if (itemImportance < 1 || itemImportance > 10) {
-                throw new Error(`importance out of range (${itemImportance})`);
-              }
-
-              const id = generateNoteId();
-              ctx.db.saveNote({
-                id,
-                title: item.title as string,
-                body: item.body as string,
-                tags: JSON.stringify(item.tags as string[]),
-                source_agent: item.source_agent as string,
-                importance: itemImportance,
-                workflow_id: item.workflow_id ?? null,
-                project_id: item.project_id ?? null,
+              const updateResult = ctx.db.updateNote(item.note_id, {
+                oldString: item.old_string,
+                newString: item.new_string ?? "",
+                replaceAll: item.replace_all ?? false,
               });
 
-              batchItems.push({
-                index,
-                ok: true,
-                detail: `saved ${id} (${(item.body as string).length} chars)`,
-              });
-              succeeded++;
-            } catch (error: unknown) {
-              const msg = error instanceof Error ? error.message : String(error);
-              batchItems.push({ index, ok: false, detail: msg });
-              failed++;
+              if (!updateResult.ok) {
+                throw new Error(updateResult.error ?? "Patch failed");
+              }
+
+              return `patched ${item.note_id}`;
             }
-          }
 
-          const result: BatchResult = {
-            total: args.items.length,
-            succeeded,
-            failed,
-            items: batchItems,
-          };
+            const validation = validateCreateFields(item);
+            if (!validation.ok) {
+              throw new Error(validation.error);
+            }
+
+            const tags = normalizeTags(item.tags);
+
+            const itemImportance = item.importance ?? 5;
+            if (itemImportance < 1 || itemImportance > 10) {
+              throw new Error(`importance out of range (${itemImportance})`);
+            }
+
+            const id = generateNoteId();
+            ctx.db.saveNote({
+              id,
+              title: item.title as string,
+              body: item.body as string,
+              tags: JSON.stringify(tags),
+              source_agent: item.source_agent as string,
+              importance: itemImportance,
+              workflow_id: item.workflow_id ?? null,
+              project_id: item.project_id ?? null,
+            });
+
+            return `saved ${id} (${(item.body as string).length} chars)`;
+          });
           return formatBatchResult(result, "save-note");
         }
 
         if (args.note_id !== undefined) {
           if (args.old_string === undefined) {
-            return "Error: old_string is required when note_id is provided for patch mode";
+            return "Error in goop_save_note: old_string is required when note_id is provided for patch mode";
           }
 
           const updateResult = ctx.db.updateNote(args.note_id, {
@@ -224,7 +244,7 @@ export function createGoopSaveNoteTool(ctx: PluginContext): ToolDefinition {
           });
 
           if (!updateResult.ok) {
-            return `Error patching Field Note: ${updateResult.error}`;
+            return `Error in goop_save_note: ${updateResult.error}`;
           }
 
           return `Field Note patched: ${args.note_id}`;
@@ -241,14 +261,16 @@ export function createGoopSaveNoteTool(ctx: PluginContext): ToolDefinition {
 
         const validation = validateCreateFields(args);
         if (!validation.ok) {
-          return `Error: ${validation.error}`;
+          return `Error in goop_save_note: ${validation.error}`;
         }
 
         const importance = args.importance ?? 5;
 
         if (importance < 1 || importance > 10) {
-          return "Error: Importance must be between 1 and 10.";
+          return "Error in goop_save_note: Importance must be between 1 and 10.";
         }
+
+        const tags = normalizeTags(args.tags);
 
         const id = generateNoteId();
 
@@ -256,17 +278,17 @@ export function createGoopSaveNoteTool(ctx: PluginContext): ToolDefinition {
           id,
           title: args.title as string,
           body: args.body as string,
-          tags: JSON.stringify(args.tags as string[]),
+          tags: JSON.stringify(tags),
           source_agent: args.source_agent as string,
           importance,
           workflow_id: args.workflow_id ?? null,
           project_id: args.project_id ?? null,
         });
 
-        return `Field Note saved: ${id}\nTitle: ${args.title}\nTags: ${(args.tags as string[]).join(", ")}\nBody chars: ${(args.body as string).length}`;
+        return `Field Note saved: ${id}\nTitle: ${args.title}\nTags: ${tags.join(", ")}\nBody chars: ${(args.body as string).length}`;
       } catch (error: unknown) {
         const message = error instanceof Error ? error.message : String(error);
-        return `Error saving Field Note: ${message}`;
+        return `Error in goop_save_note: ${message}`;
       }
     },
   });
