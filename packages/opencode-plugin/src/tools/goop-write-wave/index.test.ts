@@ -1347,10 +1347,7 @@ describe("goop_write_wave write integrity", () => {
       toolCtx,
     );
 
-    const result = await writeTool.execute(
-      { wave_number: 1, status: "in_progress" },
-      toolCtx,
-    );
+    const result = await writeTool.execute({ wave_number: 1, status: "in_progress" }, toolCtx);
 
     // The original bug reported "with 0 task(s)" on a metadata-only write,
     // implying tasks were wiped. The response must NOT contain that substring.
