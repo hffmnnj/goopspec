@@ -411,14 +411,6 @@ export function createGoopWriteWaveTool(ctx: PluginContext): ToolDefinition {
           if (ignoredFields.length > 0) {
             return incompatiblePayloadError("items[] batch mode", ignoredFields);
           }
-          if (args.verifications !== undefined || args.traceability !== undefined) {
-            return (
-              "Error in goop_write_wave: verifications and traceability side-payloads are " +
-              "not supported in items[] batch mode; use the single-wave path or call the " +
-              "granular tools directly."
-            );
-          }
-
           const result = runBatch(ctx.db, args.items, (item) => {
             const existingWave = ctx.db.getWave(workflowId, item.wave_number);
             const waveRegression = statusRegressionError(
@@ -440,6 +432,13 @@ export function createGoopWriteWaveTool(ctx: PluginContext): ToolDefinition {
             if (wave === null) {
               throw new Error(`wave ${item.wave_number} not found after upsert`);
             }
+
+            const itemVerificationResults = (item.verifications ?? []).map((verification) =>
+              recordVerification(ctx, workflowId, verification, wave.id, item.wave_number),
+            );
+            const itemTraceabilityResults = (item.traceability ?? []).map((traceability) =>
+              writeTraceability(ctx, workflowId, traceability, item.wave_number),
+            );
 
             for (const task of item.tasks ?? []) {
               const existingTask = ctx.db
@@ -469,7 +468,16 @@ export function createGoopWriteWaveTool(ctx: PluginContext): ToolDefinition {
               timestamp: Date.now(),
             });
 
-            return `wrote wave ${item.wave_number}`;
+            const sidePayloadCounts: string[] = [];
+            if (itemVerificationResults.length > 0) {
+              sidePayloadCounts.push(`${itemVerificationResults.length} verification(s)`);
+            }
+            if (itemTraceabilityResults.length > 0) {
+              sidePayloadCounts.push(`${itemTraceabilityResults.length} traceability row(s)`);
+            }
+            const suffix =
+              sidePayloadCounts.length > 0 ? `; wrote ${sidePayloadCounts.join(" and ")}` : "";
+            return `wrote wave ${item.wave_number}${suffix}`;
           });
           renderSidecars(ctx, workflowId);
           const response = formatBatchResult(result, "write-wave");

@@ -503,18 +503,24 @@ describe("goop_write_wave combinator mode", () => {
     realDb.close();
   });
 
-  it("rejects verifications/traceability in items[] batch mode", async () => {
+  it("reports per-item side-payload writes in items[] batch mode", async () => {
     const tool = createGoopWriteWaveTool(ctx);
     const result = await tool.execute(
       {
         wave_number: 1,
-        items: [{ wave_number: 1, title: "Batch wave" }],
-        verifications: [{ check_name: "test", status: "pass" }],
+        items: [
+          {
+            wave_number: 1,
+            title: "Batch wave",
+            verifications: [{ check_name: "test", status: "pass" }],
+            traceability: [{ requirement_key: "MH1" }],
+          },
+        ],
       },
       toolCtx,
     );
 
-    expect(result).toContain("not supported in items[] batch mode");
+    expect(result).toContain("wrote 1 verification(s) and 1 traceability row(s)");
   });
 
   it("processes verifications and traceability alongside task_updates in one call", async () => {
