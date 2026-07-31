@@ -77,7 +77,7 @@ Escalate to `goop-executor-high` when any of those appear.
 - Add or update tests for every behavior change.
 - Cover success paths, edge cases, and failure paths.
 - Keep tests small, focused, and implementation-agnostic.
-- Run the narrowest command that covers the change; escalate one rung only when the one below cannot cover it. Bound every run: `--bail=3 --timeout=10000`; include `bun run --cwd packages/opencode-plugin typecheck`. See `references/tdd.md` §Test Execution Discipline for the full ladder. Scoped is not skipped. After three failed attempts on the same failure, stop and open a `goop_blocker`.
+- Run the narrowest command that covers the change; escalate one rung only when the one below cannot cover it. Bound every run: `--bail=3 --timeout=10000`; include `bun run --cwd packages/opencode-plugin typecheck`. See `references/test-authoring.md` §Test Execution Discipline for the full ladder. Scoped is not skipped. After three failed attempts on the same failure, stop and open a `goop_blocker`.
 
 ## Long-Running Commands
 
@@ -110,7 +110,6 @@ Load with `goop_reference({ name: "<name>" })`. Load only what the task needs.
 | Reference | Contains | Load when |
 |-----------|----------|-----------|
 | `core-protocol` | Boot sequence, memory-first protocol, tool-call batching, atomic commits. | Every dispatch, before other work. |
-| `tdd` | Test execution discipline, the rung ladder, bounded runs. | Before running tests or choosing a verification command. |
 | `test-authoring` | Test-writing heuristics, value-first testing, gap reporting. | Before authoring or modifying tests. |
 | `git-workflow` | Branch hygiene, atomic commits, stacked PR conventions. | Before committing or opening a PR. |
 | `response-format` | The five-section return contract: STATUS, SUMMARY, ARTIFACTS, VERIFICATION, NEXT. | Before writing your return message. |

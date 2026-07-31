@@ -99,7 +99,7 @@ Order multiple commits from independent to dependent.
 
 ## Pre-Commit Checklist
 
-- [ ] All relevant tests pass (use the narrowest scoped rung per `references/tdd.md`).
+- [ ] All relevant tests pass (use the narrowest scoped rung per `references/test-authoring.md` ## Test Execution Discipline).
 - [ ] No TypeScript/linting errors.
 - [ ] No debug statements left behind.
 - [ ] Commit message is specific and explains why, not just what.

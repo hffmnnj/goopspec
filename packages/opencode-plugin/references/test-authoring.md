@@ -28,9 +28,15 @@ A good test fails when behavior breaks and passes only when behavior is correct 
 
 Deleting (or never writing) a low-signal test is a valid outcome.
 
+## Core Cycle
+
+1. **Red** — write a failing test that describes expected behavior.
+2. **Green** — add minimal code to make it pass.
+3. **Refactor** — improve design while keeping tests green.
+
 ## Speed Discipline
 
-A unit test should be sub-second; a suite you won't run before every commit is too slow for the gate.
+A unit test should be sub-second; a suite you won't run before every commit is too slow.
 
 | Size | May touch | Time limit |
 |------|-----------|------------|
@@ -42,9 +48,23 @@ A unit test should be sub-second; a suite you won't run before every commit is t
 - **Would you wait for this suite before every commit?** If no, a >5 min suite is a defect, not a feature.
 - **What code are you actually running?** Minimize it. Large tests are 28× flakier than small ones (0.5% → 14%).
 
-## Unit vs Integration Boundaries
+## Test Levels
 
-The Pyramid (Fowler/Cohn) and the Testing Trophy (KCD) genuinely disagree on the unit:integration ratio — see `tdd.md` §Test Levels for the distribution. The split is partly definitional: a "unit" to a classicist is smaller than to a JS dev whose unit is a component tree.
+The Pyramid (Fowler/Cohn) and the Testing Trophy (KCD) genuinely disagree on the unit:integration ratio. The split is partly definitional: a "unit" to a classicist is smaller than to a JS dev whose unit is a component tree.
+
+```
+      /\        E2E (Few)
+     /  \
+    /----\      Integration (Some)
+   /      \
+  /--------\    Unit (Many)
+```
+
+| Level | Scope | When to Use |
+|-------|-------|-------------|
+| Unit | Function/module | Always |
+| Integration | Module interactions | When components interact |
+| E2E | Critical user flows | Sparingly, for high-value paths |
 
 **Agreed core** (not in dispute): E2E should be few; confidence-per-test increases as you move up the ladder; don't chase 100% coverage; avoid implementation-detail tests.
 
@@ -58,13 +78,24 @@ The Pyramid (Fowler/Cohn) and the Testing Trophy (KCD) genuinely disagree on the
 
 ## Mocking Discipline
 
-Mock at boundaries only: external APIs, clock, randomness, filesystem, network, email, payment. Use real objects inside the boundary. For Bun mocking snippets, see `tdd.md` §Mocking Patterns.
+Mock at boundaries only: external APIs, clock, randomness, filesystem, network, email, payment. Use real objects inside the boundary.
 
 - **Is the thing you're mocking something you'd never run for real in a test?** If no, prefer the real object.
 - **If the real collaborator changed its contract, would this test still pass?** If yes, it's testing the mock, not the integration.
 - **Are you verifying a collaborator was called, without checking any real output?** That asserts wiring, not behavior — unless the call *is* the behavior (sending an email).
 
 Prefer a **Fake** (working in-memory impl) over a **Mock** (canned expectations): fakes preserve real semantics, mocks assert on scripted ones.
+
+```typescript
+// Function mock
+const mockFetch = mock(() => Promise.resolve({ data: [] }));
+// Module mock (Bun): preserve named exports from the real module
+const real = await import("./database.js");
+mock.module("./database.js", () => ({ ...real, query: mock(() => Promise.resolve([])) }));
+// Time mock
+jest.useFakeTimers();
+jest.advanceTimersByTime(1000);
+```
 
 ## Determinism
 
@@ -96,7 +127,7 @@ Don't assert what the type system guarantees.
 
 ## Anti-Pattern Catalogue
 
-Self-check your test against each before committing.
+Self-check against each before committing.
 
 | # | Smell | Self-check |
 |---|-------|------------|
@@ -117,9 +148,63 @@ Self-check your test against each before committing.
 | 15 | The Test User | Tests use the code unlike real users — implementation coupling |
 | 16 | Snapshot spam | Dozens of snapshots locking in current output |
 
-## Scoped Runs
+## Test Execution Discipline
 
-The rung ladder, bounded-run flags, the three-strikes rule, and the pre-commit checklist all live in `tdd.md` §Test Execution Discipline and §Pre-Commit Checklist — follow them there, do not restate them here. State the rung you ran in your VERIFICATION line.
+Run the narrowest command that covers what you changed. Escalate one rung only when the one below can't.
+
+| Rung | When | Command |
+|------|------|---------|
+| 1. File | One file with a co-located test | `bun test path/to/file.test.ts` |
+| 2. Directory | Several files in one directory, or no co-located test | `bun test packages/opencode-plugin/src/features/x/` |
+| 3. Changed | Shared code under `core/`, `shared/`, or `features/` | `bun test --changed=main` |
+| 4. Package | Broad verification is required | `bun test packages/opencode-plugin/` |
+
+Bound every run: `--bail=3 --timeout=10000`.
+
+**Scoped is not skipped.** Before any commit, every change needs at least one passing rung plus `bun run --cwd packages/opencode-plugin typecheck`. State the rung in VERIFICATION.
+
+**Three strikes.** After three failed attempts on the same failure, stop and open a `goop_blocker`; do not keep retrying.
+
+**Run rung 4 when:** preparing a PR, after merging or rebasing onto `main`, after resolving conflicts, when changing test infrastructure (`test-utils.ts`, `bunfig.toml`), or at the acceptance gate.
+
+`--changed` requires `=` syntax: `--changed=main`; `--changed main` silently degrades to a path filter. `bun test` has no `--filter` flag: use `-t "<regex>"` for test-name matching. `--filter` is a `bun run`/`bun pm` workspace flag; with `bun test`, it silently ignores the flag, runs zero tests, and exits 0: a false pass.
+
+## Coverage as Byproduct
+
+| Type | Typical | Critical Path |
+|------|--------|---------------|
+| Statements | 80% | 95% |
+| Branches | 75% | 90% |
+| Functions | 80% | 95% |
+| Lines | 80% | 95% |
+
+Coverage is a discovery tool, not a KPI.
+
+## Test Organization
+
+Co-locate tests with implementation (`*.test.ts` next to `*.ts`). Group integration and E2E by domain. Keep fixtures near the tests that use them.
+
+## Snapshot and Performance Tests
+
+Use snapshots sparingly for stable output; update only after intentional changes.
+
+Performance tests assert budgets, not micro-optimizations:
+
+```typescript
+it("completes within 100ms", async () => {
+  const start = performance.now();
+  await heavyOperation();
+  expect(performance.now() - start).toBeLessThan(100);
+});
+```
+
+## Pre-Commit Checklist
+
+Before every commit:
+
+1. **Lint** — `bun run --cwd packages/opencode-plugin lint` must exit 0. Don't treat lint as a post-hoc gate — two executors needed `style:` fixup commits from skipping it.
+2. **Typecheck** — `bun run --cwd packages/opencode-plugin typecheck` must exit 0.
+3. **Tests** — Run the narrowest covering rung (see §Test Execution Discipline) with `--bail=3 --timeout=10000`.
 
 ---
 

@@ -108,7 +108,7 @@ Commit discipline: see `references/core-protocol.md` §Atomic Commit Protocol an
 
 ## Verification
 
-Verify behavior with the relevant build/dev command and the narrowest test rung (file → directory → `--changed=main` → package), bounded with `--bail=3 --timeout=10000`. Run `bun run --cwd packages/opencode-plugin typecheck`. Scoped is not skipped. See `references/tdd.md` §Test Execution Discipline. For a11y changes, run available checks.
+Verify behavior with the relevant build/dev command and the narrowest test rung (file → directory → `--changed=main` → package), bounded with `--bail=3 --timeout=10000`. Run `bun run --cwd packages/opencode-plugin typecheck`. Scoped is not skipped. See `references/test-authoring.md` §Test Execution Discipline. For a11y changes, run available checks.
 
 ## Long-Running Commands
 
@@ -127,7 +127,6 @@ Load with `goop_reference({ name: "<name>" })`. Load only what the task needs.
 | `core-protocol` | Boot sequence, memory-first protocol, tool-call batching, atomic commits. | Every dispatch, before other work. |
 | `architecture-design` | Architecture boundaries, module design, cross-cutting concerns. | When designing module boundaries or cross-cutting APIs. |
 | `image-prompting` | Prompting technique for `generate_image`, asset placement. | Before generating an image asset. |
-| `tdd` | Test execution discipline, the rung ladder, bounded runs. | Before running tests or choosing a verification command. |
 | `test-authoring` | Test-writing heuristics, value-first testing, gap reporting. | Before authoring or modifying tests. |
 | `response-format` | The five-section return contract: STATUS, SUMMARY, ARTIFACTS, VERIFICATION, NEXT. | Before writing your return message. |
 | `phase-gates` | Gate semantics, deviation rules, autopilot behavior. | When enforcing a phase gate or handling a deviation. |

@@ -106,7 +106,7 @@ After all waves are drafted:
 Tasks inside a wave may run in parallel when they have no file, resource, or state conflicts. After parallel execution:
 
 1. Verify no conflicts in modified files.
-2. Run the changed rung: `bun test --changed=main --bail=3 --timeout=10000`. See `references/tdd.md` §Test Execution Discipline.
+2. Run the changed rung: `bun test --changed=main --bail=3 --timeout=10000`. See `references/test-authoring.md` ## Test Execution Discipline.
 3. Resolve merge conflicts.
 4. Create a consolidated checkpoint.
 
