@@ -212,21 +212,38 @@ function incompatiblePayloadError(mode: string, fields: string[]): string {
 export function createGoopWriteWaveTool(ctx: PluginContext): ToolDefinition {
   return tool({
     description:
-      "Write or update wave metadata and optional inline wave tasks in GoopSpecDB. " +
+      "Create or partially update wave metadata and optional inline tasks in GoopSpecDB. " +
+      "Omit fields you do not intend to change: omitted values are preserved, while supplied metadata values, including empty strings, overwrite. " +
+      "A tasks[] entry with task_index and status updates that task's status alone. " +
       "Optionally record verifications and traceability rows in the same call.",
     args: {
       wave_number: tool.schema.number(),
-      title: tool.schema.string().optional(),
+      title: tool.schema
+        .string()
+        .optional()
+        .describe("Omit to preserve it; supplied values, including empty strings, overwrite it."),
       status: tool.schema.string().optional(),
-      pr_branch: tool.schema.string().optional(),
-      pr_url: tool.schema.string().optional(),
+      pr_branch: tool.schema
+        .string()
+        .optional()
+        .describe("Omit to preserve it; supplied values, including empty strings, overwrite it."),
+      pr_url: tool.schema
+        .string()
+        .optional()
+        .describe("Omit to preserve it; supplied values, including empty strings, overwrite it."),
       tasks: tool.schema
         .array(
           tool.schema.object({
             task_index: tool.schema.number(),
-            description: tool.schema.string().optional(),
-            agent: tool.schema.string().optional(),
-            status: tool.schema.string().optional(),
+            description: tool.schema
+              .string()
+              .optional()
+              .describe("Omit to preserve existing description."),
+            agent: tool.schema.string().optional().describe("Omit to preserve the existing agent."),
+            status: tool.schema
+              .string()
+              .optional()
+              .describe("With task_index, updates only status."),
           }),
         )
         .optional(),
@@ -242,17 +259,41 @@ export function createGoopWriteWaveTool(ctx: PluginContext): ToolDefinition {
         .array(
           tool.schema.object({
             wave_number: tool.schema.number(),
-            title: tool.schema.string().optional(),
+            title: tool.schema
+              .string()
+              .optional()
+              .describe(
+                "Omit to preserve it; supplied values, including empty strings, overwrite it.",
+              ),
             status: tool.schema.string().optional(),
-            pr_branch: tool.schema.string().optional(),
-            pr_url: tool.schema.string().optional(),
+            pr_branch: tool.schema
+              .string()
+              .optional()
+              .describe(
+                "Omit to preserve it; supplied values, including empty strings, overwrite it.",
+              ),
+            pr_url: tool.schema
+              .string()
+              .optional()
+              .describe(
+                "Omit to preserve it; supplied values, including empty strings, overwrite it.",
+              ),
             tasks: tool.schema
               .array(
                 tool.schema.object({
                   task_index: tool.schema.number(),
-                  description: tool.schema.string().optional(),
-                  agent: tool.schema.string().optional(),
-                  status: tool.schema.string().optional(),
+                  description: tool.schema
+                    .string()
+                    .optional()
+                    .describe("Omit to preserve existing description."),
+                  agent: tool.schema
+                    .string()
+                    .optional()
+                    .describe("Omit to preserve existing agent."),
+                  status: tool.schema
+                    .string()
+                    .optional()
+                    .describe("With task_index, updates only status."),
                 }),
               )
               .optional(),
