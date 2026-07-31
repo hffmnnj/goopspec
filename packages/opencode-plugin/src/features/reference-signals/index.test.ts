@@ -124,8 +124,13 @@ describe("detectReferences", () => {
     expect(result.length).toBe(2);
   });
 
-  it("regression: 'run test' → ['tdd'] (generic test queries still resolve to tdd)", () => {
-    expect(detectReferences("run test")).toEqual(["tdd"]);
+  it("regression: 'run test' → ['tdd', 'test-authoring'] (generic test queries resolve to both)", () => {
+    expect(detectReferences("run test")).toEqual(["tdd", "test-authoring"]);
+  });
+
+  it("regression: test-authoring-intent message yields 'test-authoring'", () => {
+    const result = detectReferences("how do I write a good unit test");
+    expect(result).toContain("test-authoring");
   });
 
   // -------------------------------------------------------------------------
