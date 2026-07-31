@@ -699,6 +699,27 @@ describe("goop_write_wave combinator mode", () => {
     const wave = ctx.db.getWave("default", 2);
     expect(result).toContain(`wave 2 (row id ${wave?.id}).`);
   });
+
+  it("side-payload-only response has no leading blank line", async () => {
+    const tool = createGoopWriteWaveTool(ctx);
+    // Pre-create the wave so the side-payload-only call can resolve it.
+    await tool.execute({ wave_number: 1, title: "Pre-existing wave" }, toolCtx);
+
+    const result = await tool.execute(
+      {
+        wave_number: 1,
+        verifications: [{ check_name: "typecheck", status: "pass" }],
+        traceability: [{ requirement_key: "MH1", status: "covered" }],
+      },
+      toolCtx,
+    );
+
+    // The 185efea fix removed the leading blank line by filtering empty strings
+    // out of sections[]. The response must start with "Verifications:", not "\n".
+    const text = typeof result === "string" ? result : String(result);
+    expect(text.startsWith("\n")).toBe(false);
+    expect(text.startsWith("Verifications:")).toBe(true);
+  });
 });
 
 describe("goop_write_wave status validation", () => {
@@ -1194,6 +1215,195 @@ describe("goop_write_wave write integrity", () => {
     );
 
     expect(result).toContain("task 99 not found on wave 1");
+  });
+
+  // -------------------------------------------------------------------------
+  // Atomicity tripwire: a verification/traceability failure must roll back the
+  // entire single-wave transaction (the 804e1af fix). Without these tests, a
+  // future refactor could silently move side-payload writes back outside the
+  // transaction with nothing to catch it.
+  // -------------------------------------------------------------------------
+
+  it("rolls back wave and task writes when a verification write fails on the single-wave path", async () => {
+    const writeTool = createGoopWriteWaveTool(ctx);
+    // Pre-create the wave so we can assert the update rolls back to the original state.
+    await writeTool.execute(
+      {
+        wave_number: 1,
+        title: "Original title",
+        tasks: [{ task_index: 1, description: "Pre-existing task", status: "pending" }],
+      },
+      toolCtx,
+    );
+
+    // Override insertVerification to throw — simulates a DB-layer failure during
+    // the verification side-payload write on the single-wave path.
+    ctx.db.insertVerification = (() => {
+      throw new Error("simulated verification write failure");
+    }) as GoopSpecDB["insertVerification"];
+
+    const result = await writeTool.execute(
+      {
+        wave_number: 1,
+        title: "Updated title",
+        status: "in_progress",
+        tasks: [
+          { task_index: 1, description: "Updated task", status: "in_progress" },
+          { task_index: 2, description: "New task", status: "pending" },
+        ],
+        verifications: [{ check_name: "typecheck", status: "pass" }],
+      },
+      toolCtx,
+    );
+
+    // The error must surface — not silently succeed.
+    expect(result).toBe("Error in goop_write_wave: simulated verification write failure");
+    // The response must NOT contain side-payload confirmation lines — they were rolled back.
+    expect(result).not.toContain("Verifications:");
+    expect(result).not.toContain("Traceability:");
+
+    // The wave title must have rolled back to the original — the update was undone.
+    const wave = ctx.db.getWave("default", 1);
+    expect(wave).not.toBeNull();
+    expect(wave?.title).toBe("Original title");
+    expect(wave?.status).toBe("pending");
+
+    // The task update must have rolled back — task 1 still has its original state,
+    // and task 2 was never created.
+    const tasks = ctx.db.getWaveTasks(wave?.id ?? -1);
+    expect(tasks.length).toBe(1);
+    expect(tasks[0].description).toBe("Pre-existing task");
+    expect(tasks[0].status).toBe("pending");
+
+    // No verification rows should exist — the insert was rolled back.
+    const verifications = ctx.db.getVerifications("default");
+    expect(verifications.length).toBe(0);
+  });
+
+  it("rolls back wave and task writes when a traceability write fails on the single-wave path", async () => {
+    const writeTool = createGoopWriteWaveTool(ctx);
+    await writeTool.execute(
+      {
+        wave_number: 1,
+        title: "Original title",
+        tasks: [{ task_index: 1, description: "Pre-existing task", status: "pending" }],
+      },
+      toolCtx,
+    );
+
+    ctx.db.upsertTraceability = () => {
+      throw new Error("simulated traceability write failure");
+    };
+
+    const result = await writeTool.execute(
+      {
+        wave_number: 1,
+        title: "Updated title",
+        status: "in_progress",
+        tasks: [
+          { task_index: 1, description: "Updated task", status: "in_progress" },
+          { task_index: 2, description: "New task", status: "pending" },
+        ],
+        traceability: [{ requirement_key: "MH1", status: "covered" }],
+      },
+      toolCtx,
+    );
+
+    expect(result).toBe("Error in goop_write_wave: simulated traceability write failure");
+    expect(result).not.toContain("Verifications:");
+    expect(result).not.toContain("Traceability:");
+
+    const wave = ctx.db.getWave("default", 1);
+    expect(wave).not.toBeNull();
+    expect(wave?.title).toBe("Original title");
+    expect(wave?.status).toBe("pending");
+
+    const tasks = ctx.db.getWaveTasks(wave?.id ?? -1);
+    expect(tasks.length).toBe(1);
+    expect(tasks[0].description).toBe("Pre-existing task");
+    expect(tasks[0].status).toBe("pending");
+
+    const traceability = ctx.db.getTraceability("default");
+    expect(traceability.length).toBe(0);
+  });
+
+  // -------------------------------------------------------------------------
+  // Regression tripwire: the original bug reported "with 0 task(s)" on a
+  // metadata-only write, implying tasks were wiped. This test names the exact
+  // scenario a user hit so a future reader understands the failure it prevents.
+  // -------------------------------------------------------------------------
+
+  it("regression tripwire: metadata-only write on a wave with pre-existing tasks does not report '0 task(s)' and preserves tasks", async () => {
+    const writeTool = createGoopWriteWaveTool(ctx);
+    await writeTool.execute(
+      {
+        wave_number: 1,
+        title: "Seeded wave",
+        tasks: [
+          { task_index: 1, description: "First task", status: "pending" },
+          { task_index: 2, description: "Second task", status: "pending" },
+        ],
+      },
+      toolCtx,
+    );
+
+    const result = await writeTool.execute(
+      { wave_number: 1, status: "in_progress" },
+      toolCtx,
+    );
+
+    // The original bug reported "with 0 task(s)" on a metadata-only write,
+    // implying tasks were wiped. The response must NOT contain that substring.
+    expect(result).not.toContain("0 task(s)");
+    // The exact response must acknowledge that existing tasks were left unchanged.
+    expect(result).toBe("Written wave 1 for workflow 'default'; existing tasks left unchanged.");
+
+    // The tasks must still exist in the DB — not wiped by the metadata-only write.
+    const wave = ctx.db.getWave("default", 1);
+    const tasks = ctx.db.getWaveTasks(wave?.id ?? -1);
+    expect(tasks.length).toBe(2);
+    expect(tasks[0].description).toBe("First task");
+    expect(tasks[1].description).toBe("Second task");
+  });
+
+  // -------------------------------------------------------------------------
+  // Message case coverage: exact-string assertions for the three mutation
+  // messages from 185efea. Existing tests use toContain; these pin the exact
+  // string so a wording change is caught immediately.
+  // -------------------------------------------------------------------------
+
+  it("message: wave write with tasks reports 'with N task(s)' exactly", async () => {
+    const writeTool = createGoopWriteWaveTool(ctx);
+    const result = await writeTool.execute(
+      {
+        wave_number: 1,
+        title: "Message wave",
+        status: "in_progress",
+        tasks: [
+          { task_index: 1, description: "Task 1" },
+          { task_index: 2, description: "Task 2" },
+        ],
+      },
+      toolCtx,
+    );
+    expect(result).toBe("Written wave 1 for workflow 'default' with 2 task(s).");
+  });
+
+  it("message: task_update reports 'Updated task K on wave N to ...' exactly", async () => {
+    const writeTool = createGoopWriteWaveTool(ctx);
+    await writeTool.execute(
+      {
+        wave_number: 1,
+        title: "Seeded wave",
+        tasks: [{ task_index: 1, description: "Task 1", status: "pending" }],
+      },
+      toolCtx,
+    );
+    const result = await writeTool.execute(
+      { wave_number: 1, task_update: { task_index: 1, status: "done" } },
+      toolCtx,
+    );
+    expect(result).toBe("Updated task 1 on wave 1 to 'done' for workflow 'default'.");
   });
 });
 
