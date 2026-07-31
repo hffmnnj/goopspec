@@ -632,6 +632,73 @@ describe("goop_write_wave combinator mode", () => {
     const verifications = ctx.db.getVerifications("default", wave?.id ?? -1);
     expect(verifications.length).toBe(2);
   });
+
+  it("distinguishes traceability rows with the same requirement_key but different task_index", async () => {
+    const tool = createGoopWriteWaveTool(ctx);
+    const result = await tool.execute(
+      {
+        wave_number: 2,
+        title: "Traceability distinction wave",
+        traceability: [
+          { requirement_key: "MH8", task_index: 1, status: "covered" },
+          { requirement_key: "MH8", task_index: 2, status: "covered" },
+        ],
+      },
+      toolCtx,
+    );
+
+    expect(result).toContain("Traceability:");
+    // Each line must uniquely identify the row it wrote — same requirement_key
+    // but different task_index must produce distinguishable confirmation lines.
+    expect(result).toContain("Wrote traceability for MH8 on wave 2 (task 1).");
+    expect(result).toContain("Wrote traceability for MH8 on wave 2 (task 2).");
+
+    const rows = ctx.db.getTraceability("default");
+    expect(rows.length).toBe(2);
+    expect(rows.every((r) => r.requirement_key === "MH8")).toBe(true);
+    expect(rows.map((r) => r.task_index).sort()).toEqual([1, 2]);
+  });
+
+  it("traceability confirmation reports the resolved wave_number, not the context default", async () => {
+    const tool = createGoopWriteWaveTool(ctx);
+    // Create wave 5 so the traceability row can target it by explicit wave_number.
+    await tool.execute({ wave_number: 5, title: "Target wave" }, toolCtx);
+
+    const result = await tool.execute(
+      {
+        wave_number: 3,
+        title: "Context wave",
+        traceability: [
+          { requirement_key: "MH8", wave_number: 5, task_index: 1, status: "covered" },
+        ],
+      },
+      toolCtx,
+    );
+
+    expect(result).toContain("Traceability:");
+    // The item explicitly targets wave 5, overriding the context's wave 3.
+    // The message must report the resolved wave (5), not the context's wave (3).
+    expect(result).toContain("Wrote traceability for MH8 on wave 5 (task 1).");
+    expect(result).not.toContain("Wrote traceability for MH8 on wave 3");
+  });
+
+  it("verification confirmation reports wave_number and internal row id", async () => {
+    const tool = createGoopWriteWaveTool(ctx);
+    const result = await tool.execute(
+      {
+        wave_number: 2,
+        title: "Verification correlation wave",
+        verifications: [{ check_name: "typecheck", status: "pass" }],
+      },
+      toolCtx,
+    );
+
+    expect(result).toContain("Verifications:");
+    // The message must report the human-facing wave_number (not just the
+    // internal row id) so the caller can correlate the confirmation.
+    const wave = ctx.db.getWave("default", 2);
+    expect(result).toContain(`wave 2 (row id ${wave?.id}).`);
+  });
 });
 
 describe("goop_write_wave status validation", () => {

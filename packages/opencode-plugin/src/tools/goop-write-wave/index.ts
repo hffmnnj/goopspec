@@ -77,6 +77,7 @@ function recordVerification(
   workflowId: string,
   item: VerificationPayload,
   defaultWaveId: number,
+  defaultWaveNumber: number,
 ): string {
   const waveId = item.wave_id ?? defaultWaveId;
 
@@ -96,7 +97,8 @@ function recordVerification(
     timestamp: Date.now(),
   });
 
-  return `Recorded ${item.check_name}=${item.status} verification for wave ${waveId}.`;
+  const waveTarget = `wave ${defaultWaveNumber} (row id ${waveId})`;
+  return `Recorded ${item.check_name}=${item.status} verification for ${waveTarget}.`;
 }
 
 function writeTraceability(
@@ -122,7 +124,8 @@ function writeTraceability(
     timestamp: Date.now(),
   });
 
-  return `Wrote traceability for ${item.requirement_key}.`;
+  const taskPart = item.task_index !== undefined ? ` (task ${item.task_index})` : "";
+  return `Wrote traceability for ${item.requirement_key} on wave ${waveNumber}${taskPart}.`;
 }
 
 // ---------------------------------------------------------------------------
@@ -506,7 +509,9 @@ export function createGoopWriteWaveTool(ctx: PluginContext): ToolDefinition {
               }
 
               for (const item of args.verifications ?? []) {
-                verificationResults.push(recordVerification(ctx, workflowId, item, defaultWaveId));
+                verificationResults.push(
+                  recordVerification(ctx, workflowId, item, defaultWaveId, args.wave_number),
+                );
               }
 
               for (const item of args.traceability ?? []) {
@@ -662,7 +667,9 @@ export function createGoopWriteWaveTool(ctx: PluginContext): ToolDefinition {
           });
 
           for (const item of args.verifications ?? []) {
-            verificationResults.push(recordVerification(ctx, workflowId, item, defaultWaveId));
+            verificationResults.push(
+              recordVerification(ctx, workflowId, item, defaultWaveId, args.wave_number),
+            );
           }
 
           for (const item of args.traceability ?? []) {
