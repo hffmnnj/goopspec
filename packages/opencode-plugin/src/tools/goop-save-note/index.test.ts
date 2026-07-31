@@ -347,7 +347,7 @@ describe("goop_save_note tool", () => {
       expect(result).toContain("3/3 succeeded");
     });
 
-    it("continues processing the batch when one item fails validation", async () => {
+    it("rolls back the batch when one item fails validation", async () => {
       const tool = createGoopSaveNoteTool(ctx);
       const result = await tool.execute(
         {
@@ -363,13 +363,13 @@ describe("goop_save_note tool", () => {
         },
         toolCtx,
       );
-      expect(result).toContain("2/3 succeeded");
+      expect(result).toContain("0/3 succeeded");
       expect(result).toContain("FAIL");
       expect(result).toContain("importance out of range");
 
-      // Both valid items persisted despite the middle failure.
+      // No valid items persist after a batch failure.
       const search = ctx.db.searchNotes("Body");
-      expect(search.length).toBe(2);
+      expect(search.length).toBe(0);
     });
 
     it("backward-compat: single-note path works when items absent", async () => {
@@ -501,7 +501,7 @@ describe("goop_save_note tool", () => {
       expect(search[0].title).toBe("Fresh note");
     });
 
-    it("partial success: valid creates persist despite a failed patch", async () => {
+    it("rolls back valid creates when a patch fails", async () => {
       const tool = createGoopSaveNoteTool(ctx);
 
       const batchResult = await tool.execute(
@@ -529,16 +529,14 @@ describe("goop_save_note tool", () => {
         toolCtx,
       );
 
-      expect(batchResult).toContain("2/3 succeeded");
+      expect(batchResult).toContain("0/3 succeeded");
       expect(batchResult).toContain("FAIL");
 
       const firstSearch = ctx.db.searchNotes("first-unique-body-abc");
-      expect(firstSearch.length).toBe(1);
-      expect(firstSearch[0].title).toBe("First note");
+      expect(firstSearch.length).toBe(0);
 
       const thirdSearch = ctx.db.searchNotes("third-unique-body-xyz");
-      expect(thirdSearch.length).toBe(1);
-      expect(thirdSearch[0].title).toBe("Third note");
+      expect(thirdSearch.length).toBe(0);
     });
   });
 
