@@ -96,7 +96,7 @@ Default to `goop-executor-medium` / `goop-executor-frontend-medium` for standard
 | Research / compare options | `goop-researcher` (+ `goop-explorer` in parallel if useful) | |
 | Codebase mapping / pattern detection | `goop-explorer` | |
 | Verification / security audit | `goop-verifier` | |
-| Test authoring / coverage | `goop-tester` | |
+| Test authoring / coverage | `goop-tester` | Authoring/modifying tests → `goop-tester`; mechanical test infra → executor tier. Loads `test-authoring` ref. |
 | Documentation / README | `goop-writer` | |
 | Debugging / root cause | `goop-debugger` | |
 
@@ -229,6 +229,7 @@ Load with `goop_reference({ name: "<name>" })`. Load only what the task needs.
 | `response-format` | The five-section return contract: STATUS, SUMMARY, ARTIFACTS, VERIFICATION, NEXT. | Before writing your return message. |
 | `wiring-checklist` | Handoff Protocol, wiring verification before PR. | Before generating HANDOFF.md or merging a wave. |
 | `task-decomposition` | Wave/task splitting, per-wave questioning gate. | When decomposing work into waves. |
+| `test-authoring` | Test-writing heuristics, value-first testing, gap reporting. | Before authoring or modifying tests. |
 
 ---
 
