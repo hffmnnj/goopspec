@@ -671,9 +671,13 @@ export function createGoopWriteWaveTool(ctx: PluginContext): ToolDefinition {
         });
         renderSidecars(ctx, workflowId);
 
-        mainResult = hasWaveWrite
-          ? `Written wave ${args.wave_number} for workflow '${workflowId}' with ${args.tasks?.length ?? 0} task(s).`
-          : "";
+        if (hasWaveWrite) {
+          if (args.tasks !== undefined && args.tasks.length > 0) {
+            mainResult = `Written wave ${args.wave_number} for workflow '${workflowId}' with ${args.tasks.length} task(s).`;
+          } else {
+            mainResult = `Written wave ${args.wave_number} for workflow '${workflowId}'; existing tasks left unchanged.`;
+          }
+        }
         if (args.task_update !== undefined) {
           const taskResult = `Updated task ${args.task_update.task_index} on wave ${args.wave_number} to '${args.task_update.status}' for workflow '${workflowId}'.`;
           mainResult = mainResult.length > 0 ? `${mainResult}\n${taskResult}` : taskResult;
@@ -681,23 +685,21 @@ export function createGoopWriteWaveTool(ctx: PluginContext): ToolDefinition {
 
         const waveComplete = args.task_update === undefined && isWaveComplete(args.status);
 
-        let response: string;
-        if (verificationResults.length === 0 && traceabilityResults.length === 0) {
-          response = mainResult;
-        } else {
-          const sections = [mainResult];
-          if (verificationResults.length > 0) {
-            sections.push(
-              `Verifications:\n${verificationResults.map((line) => `- ${line}`).join("\n")}`,
-            );
-          }
-          if (traceabilityResults.length > 0) {
-            sections.push(
-              `Traceability:\n${traceabilityResults.map((line) => `- ${line}`).join("\n")}`,
-            );
-          }
-          response = sections.join("\n\n");
+        const sections: string[] = [];
+        if (mainResult.length > 0) {
+          sections.push(mainResult);
         }
+        if (verificationResults.length > 0) {
+          sections.push(
+            `Verifications:\n${verificationResults.map((line) => `- ${line}`).join("\n")}`,
+          );
+        }
+        if (traceabilityResults.length > 0) {
+          sections.push(
+            `Traceability:\n${traceabilityResults.map((line) => `- ${line}`).join("\n")}`,
+          );
+        }
+        const response = sections.join("\n\n");
 
         return waveComplete ? `${response}${WAVE_COMPLETE_COMPACT_REMINDER}` : response;
       } catch (error: unknown) {
