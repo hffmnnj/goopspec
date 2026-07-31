@@ -88,7 +88,7 @@ Memory-first flow: see `references/core-protocol.md` §Memory-First Protocol.
 
 ## Verification
 
-Verify visual behavior with the relevant build/dev command and the narrowest test rung (file → directory → `--changed=main` → package), bounded with `--bail=3 --timeout=10000`. Run `bun run --cwd packages/opencode-plugin typecheck`. Scoped is not skipped. See `references/tdd.md` §Test Execution Discipline. For accessibility fixes, run any available a11y check.
+Verify visual behavior with the relevant build/dev command and the narrowest test rung (file → directory → `--changed=main` → package), bounded with `--bail=3 --timeout=10000`. Run `bun run --cwd packages/opencode-plugin typecheck`. Scoped is not skipped. See `references/test-authoring.md` §Test Execution Discipline. For accessibility fixes, run any available a11y check.
 
 ## Long-Running Commands
 
@@ -106,7 +106,7 @@ Load with `goop_reference({ name: "<name>" })`. Load only what the task needs.
 |-----------|----------|-----------|
 | `core-protocol` | Boot sequence, memory-first protocol, tool-call batching, atomic commits. | Every dispatch, before other work. |
 | `image-prompting` | Prompting technique for `generate_image`, asset placement. | Before generating an image asset. |
-| `tdd` | Test execution discipline, the rung ladder, bounded runs. | Before running tests or choosing a verification command. |
+| `test-authoring` | Test-writing heuristics, value-first testing, gap reporting. | Before authoring or modifying tests. |
 | `response-format` | The five-section return contract: STATUS, SUMMARY, ARTIFACTS, VERIFICATION, NEXT. | Before writing your return message. |
 
 ---

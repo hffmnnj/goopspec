@@ -209,7 +209,7 @@ Boundaries are three-tier guardrails enforced by hooks and configuration.
 
 | Tier | Behavior | Examples |
 |------|----------|----------|
-| **Always** | Automatic, no confirmation | run tests before commit (satisfied by the scoped rung per `references/tdd.md`), atomic commits |
+| **Always** | Automatic, no confirmation | run tests before commit (satisfied by the scoped rung per `references/test-authoring.md` ## Test Execution Discipline), atomic commits |
 | **Ask First** | Requires user confirmation | schema changes, new dependencies, auth changes |
 | **Never** | Prohibited | commit secrets, ignore failures, delete production data |
 
