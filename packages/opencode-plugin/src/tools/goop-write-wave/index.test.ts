@@ -947,6 +947,53 @@ describe("goop_write_wave write integrity", () => {
     expect(ctx.db.getWaveTasks(wave?.id ?? -1)[0].status).toBe("in_progress");
   });
 
+  it("preserves omitted metadata across status, task, and items[] task updates", async () => {
+    const writeTool = createGoopWriteWaveTool(ctx);
+    const metadata = {
+      title: "Metadata must survive",
+      pr_branch: "fix/metadata-preservation",
+      pr_url: "https://example.test/metadata-preservation",
+    };
+
+    await writeTool.execute(
+      {
+        wave_number: 1,
+        ...metadata,
+        tasks: [{ task_index: 1, description: "Existing task", status: "pending" }],
+      },
+      toolCtx,
+    );
+
+    await writeTool.execute({ wave_number: 1, status: "in_progress" }, toolCtx);
+    let wave = ctx.db.getWave("default", 1);
+    expect(wave).toMatchObject(metadata);
+
+    await writeTool.execute(
+      { wave_number: 1, task_update: { task_index: 1, status: "in_progress" } },
+      toolCtx,
+    );
+    wave = ctx.db.getWave("default", 1);
+    expect(wave).toMatchObject(metadata);
+
+    await writeTool.execute(
+      {
+        wave_number: 1,
+        items: [{ wave_number: 1, tasks: [{ task_index: 1, status: "completed" }] }],
+      },
+      toolCtx,
+    );
+    wave = ctx.db.getWave("default", 1);
+    expect(wave).toMatchObject(metadata);
+    expect(ctx.db.getWaveTasks(wave?.id ?? -1)[0].status).toBe("completed");
+
+    await writeTool.execute({ wave_number: 1, title: "", pr_branch: "", pr_url: "" }, toolCtx);
+    expect(ctx.db.getWave("default", 1)).toMatchObject({
+      title: "",
+      pr_branch: "",
+      pr_url: "",
+    });
+  });
+
   it("rejects top-level fields incompatible with batch modes before writing", async () => {
     const writeTool = createGoopWriteWaveTool(ctx);
 
