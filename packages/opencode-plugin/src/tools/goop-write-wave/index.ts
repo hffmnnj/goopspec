@@ -309,6 +309,9 @@ export function createGoopWriteWaveTool(ctx: PluginContext): ToolDefinition {
       },
       _context: ToolContext,
     ): Promise<string> {
+      let verificationResults: string[] = [];
+      let traceabilityResults: string[] = [];
+
       try {
         const workflowId = args.workflow_id ?? ctx.stateManager.getState().activeWorkflowId;
 
@@ -616,6 +619,14 @@ export function createGoopWriteWaveTool(ctx: PluginContext): ToolDefinition {
             mode: args.task_update === undefined ? "wave_upsert" : "wave_and_task_update",
             timestamp: Date.now(),
           });
+
+          for (const item of args.verifications ?? []) {
+            verificationResults.push(recordVerification(ctx, workflowId, item, defaultWaveId));
+          }
+
+          for (const item of args.traceability ?? []) {
+            traceabilityResults.push(writeTraceability(ctx, workflowId, item, args.wave_number));
+          }
         });
         renderSidecars(ctx, workflowId);
 
@@ -628,20 +639,6 @@ export function createGoopWriteWaveTool(ctx: PluginContext): ToolDefinition {
         }
 
         const waveComplete = args.task_update === undefined && isWaveComplete(args.status);
-
-        const verificationResults: string[] = [];
-        if (args.verifications !== undefined && defaultWaveId !== -1) {
-          for (const item of args.verifications) {
-            verificationResults.push(recordVerification(ctx, workflowId, item, defaultWaveId));
-          }
-        }
-
-        const traceabilityResults: string[] = [];
-        if (args.traceability !== undefined) {
-          for (const item of args.traceability) {
-            traceabilityResults.push(writeTraceability(ctx, workflowId, item, args.wave_number));
-          }
-        }
 
         let response: string;
         if (verificationResults.length === 0 && traceabilityResults.length === 0) {
@@ -663,6 +660,8 @@ export function createGoopWriteWaveTool(ctx: PluginContext): ToolDefinition {
 
         return waveComplete ? `${response}${WAVE_COMPLETE_COMPACT_REMINDER}` : response;
       } catch (error: unknown) {
+        verificationResults = [];
+        traceabilityResults = [];
         const msg = error instanceof Error ? error.message : String(error);
         return `Error in goop_write_wave: ${msg}`;
       }
