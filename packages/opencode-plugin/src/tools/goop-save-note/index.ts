@@ -75,6 +75,49 @@ function validateCreateFields(item: NoteFields): { ok: true } | { ok: false; err
 }
 
 // ---------------------------------------------------------------------------
+// Tag normalization
+// ---------------------------------------------------------------------------
+
+/**
+ * Normalize a `tags` value to `string[]`, defending against callers that pass
+ * a JSON-encoded array string or a comma-separated string instead of a native
+ * array.
+ *
+ * - native `string[]` → returned as-is (trimmed, empties dropped)
+ * - JSON-encoded array string (`'["a","b"]'`) → parsed
+ * - comma-separated string (`"a, b"`) → split and trimmed
+ *
+ * Malformed JSON degrades to comma-split rather than throwing. Whitespace-only
+ * entries never become empty tags.
+ */
+function normalizeTags(tags: unknown): string[] {
+  const clean = (entries: unknown[]): string[] =>
+    entries
+      .map((entry) => (typeof entry === "string" ? entry.trim() : ""))
+      .filter((entry) => entry.length > 0);
+
+  if (Array.isArray(tags)) {
+    return clean(tags);
+  }
+  if (typeof tags === "string") {
+    const trimmed = tags.trim();
+    if (trimmed === "") return [];
+    if (trimmed.startsWith("[") && trimmed.endsWith("]")) {
+      try {
+        const parsed = JSON.parse(trimmed);
+        if (Array.isArray(parsed)) {
+          return clean(parsed);
+        }
+      } catch {
+        // Malformed JSON — fall through to comma-split.
+      }
+    }
+    return clean(trimmed.split(","));
+  }
+  return [];
+}
+
+// ---------------------------------------------------------------------------
 // Tool factory
 // ---------------------------------------------------------------------------
 
@@ -165,6 +208,8 @@ export function createGoopSaveNoteTool(ctx: PluginContext): ToolDefinition {
               throw new Error(validation.error);
             }
 
+            const tags = normalizeTags(item.tags);
+
             const itemImportance = item.importance ?? 5;
             if (itemImportance < 1 || itemImportance > 10) {
               throw new Error(`importance out of range (${itemImportance})`);
@@ -175,7 +220,7 @@ export function createGoopSaveNoteTool(ctx: PluginContext): ToolDefinition {
               id,
               title: item.title as string,
               body: item.body as string,
-              tags: JSON.stringify(item.tags as string[]),
+              tags: JSON.stringify(tags),
               source_agent: item.source_agent as string,
               importance: itemImportance,
               workflow_id: item.workflow_id ?? null,
@@ -225,20 +270,22 @@ export function createGoopSaveNoteTool(ctx: PluginContext): ToolDefinition {
           return "Error: Importance must be between 1 and 10.";
         }
 
+        const tags = normalizeTags(args.tags);
+
         const id = generateNoteId();
 
         ctx.db.saveNote({
           id,
           title: args.title as string,
           body: args.body as string,
-          tags: JSON.stringify(args.tags as string[]),
+          tags: JSON.stringify(tags),
           source_agent: args.source_agent as string,
           importance,
           workflow_id: args.workflow_id ?? null,
           project_id: args.project_id ?? null,
         });
 
-        return `Field Note saved: ${id}\nTitle: ${args.title}\nTags: ${(args.tags as string[]).join(", ")}\nBody chars: ${(args.body as string).length}`;
+        return `Field Note saved: ${id}\nTitle: ${args.title}\nTags: ${tags.join(", ")}\nBody chars: ${(args.body as string).length}`;
       } catch (error: unknown) {
         const message = error instanceof Error ? error.message : String(error);
         return `Error saving Field Note: ${message}`;
