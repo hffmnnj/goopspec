@@ -13,11 +13,13 @@
  */
 
 import { isCompleteStatus } from "../../shared/status.js";
-import type { WaveRow, WaveTaskRow } from "./types.js";
+import type { TraceabilityRow, VerificationRow, WaveRow, WaveTaskRow } from "./types.js";
 
 /** Minimal data-source contract required to format waves. */
 export interface WaveDataSource {
   getWaveTasks(waveId: number): WaveTaskRow[];
+  getVerifications(workflowId: string, waveId?: number, waveIds?: number[]): VerificationRow[];
+  getTraceability(workflowId: string): TraceabilityRow[];
 }
 
 function formatWaveTasks(tasks: WaveTaskRow[]): string {
@@ -37,12 +39,47 @@ function formatWaveTasks(tasks: WaveTaskRow[]): string {
   return lines.join("\n");
 }
 
+function formatWaveVerifications(verifications: VerificationRow[]): string {
+  if (verifications.length === 0) {
+    return "";
+  }
+  const lines = verifications.map((v) => {
+    const detail = v.detail ? ` — ${v.detail}` : "";
+    return `- ${v.check_name}: ${v.status}${detail}`;
+  });
+  return `\n\n### Verifications\n${lines.join("\n")}`;
+}
+
+function formatTraceabilityTarget(row: TraceabilityRow): string {
+  const parts: string[] = [];
+  if (row.wave_number !== null) {
+    parts.push(`wave ${row.wave_number}`);
+  }
+  if (row.task_index !== null) {
+    parts.push(`task ${row.task_index}`);
+  }
+  return parts.length > 0 ? parts.join(", ") : "(unassigned)";
+}
+
+function formatWaveTraceability(rows: TraceabilityRow[]): string {
+  if (rows.length === 0) {
+    return "";
+  }
+  const lines = rows.map(
+    (t) => `- ${t.requirement_key} -> ${formatTraceabilityTarget(t)} [${t.status}]`,
+  );
+  return `\n\n### Traceability\n${lines.join("\n")}`;
+}
+
 /**
- * Format a single wave with its tasks.
+ * Format a single wave with its tasks, verifications, and traceability.
  *
  * Both the progress counter and the per-row display are derived from the same
  * `getWaveTasks` result, so the counter can never disagree with the rows
  * printed beside it regardless of how completion is defined.
+ *
+ * Verification and traceability sections are scoped to this wave and rendered
+ * only when rows exist, so a wave with no side-payload data stays clean.
  */
 export function formatWave(dataSource: WaveDataSource, wave: WaveRow): string {
   const tasks = dataSource.getWaveTasks(wave.id);
@@ -65,7 +102,17 @@ export function formatWave(dataSource: WaveDataSource, wave: WaveRow): string {
   lines.push("", "### Tasks");
   lines.push(formatWaveTasks(tasks));
 
-  return lines.join("\n");
+  let result = lines.join("\n");
+
+  const verifications = dataSource.getVerifications(wave.workflow_id, wave.id);
+  result += formatWaveVerifications(verifications);
+
+  const traceability = dataSource
+    .getTraceability(wave.workflow_id)
+    .filter((row) => row.wave_number === wave.wave_number);
+  result += formatWaveTraceability(traceability);
+
+  return result;
 }
 
 /**

@@ -206,3 +206,103 @@ describe("goop_read_wave regression and durability", () => {
     expect(result).toContain("status: completed");
   });
 });
+
+describe("goop_read_wave verification and traceability surfacing", () => {
+  let ctx: PluginContext;
+  let cleanup: () => void;
+
+  beforeEach(() => {
+    const env = setupTestEnvironment("read-wave-surface");
+    cleanup = env.cleanup;
+    ctx = createMockPluginContext({ testDir: env.testDir, db: env.db });
+  });
+
+  afterEach(() => cleanup());
+
+  it("round-trip: verifications and traceability written via items[] are readable via goop_read_wave", async () => {
+    const writeTool = createGoopWriteWaveTool(ctx);
+    await writeTool.execute(
+      {
+        wave_number: 1,
+        items: [
+          {
+            wave_number: 1,
+            title: "Round-trip wave",
+            status: "in_progress",
+            verifications: [
+              { check_name: "typecheck", status: "pass", detail: "No errors" },
+              { check_name: "lint", status: "fail", detail: "2 issues" },
+            ],
+            traceability: [
+              { requirement_key: "MH1", task_index: 1, status: "covered" },
+              { requirement_key: "MH2", status: "pending" },
+            ],
+          },
+        ],
+      },
+      createMockToolContext(),
+    );
+
+    const readTool = createGoopReadWaveTool(ctx);
+    const result = await readTool.execute({}, createMockToolContext());
+
+    // Verifications appear with check name, status, and detail
+    expect(result).toContain("### Verifications");
+    expect(result).toContain("typecheck: pass — No errors");
+    expect(result).toContain("lint: fail — 2 issues");
+
+    // Traceability appears with requirement key and resolved wave/task target
+    expect(result).toContain("### Traceability");
+    expect(result).toContain("MH1 -> wave 1, task 1 [covered]");
+    expect(result).toContain("MH2 -> wave 1 [pending]");
+  });
+
+  it("does not render empty verification or traceability headings for a wave with no side-payload rows", async () => {
+    const workflowId = ctx.stateManager.getState().activeWorkflowId;
+    ctx.db.upsertWave(workflowId, { wave_number: 1, title: "Clean wave", status: "pending" });
+
+    const tool = createGoopReadWaveTool(ctx);
+    const result = await tool.execute({}, createMockToolContext());
+
+    expect(result).toContain("## Wave 1: Clean wave");
+    expect(result).not.toContain("### Verifications");
+    expect(result).not.toContain("### Traceability");
+  });
+
+  it("wave_numbers filter does not leak verifications or traceability from unrequested waves", async () => {
+    const writeTool = createGoopWriteWaveTool(ctx);
+    await writeTool.execute(
+      {
+        wave_number: 1,
+        items: [
+          {
+            wave_number: 1,
+            title: "Wave one",
+            verifications: [{ check_name: "test", status: "pass" }],
+            traceability: [{ requirement_key: "MH1", status: "covered" }],
+          },
+          {
+            wave_number: 2,
+            title: "Wave two",
+            verifications: [{ check_name: "lint", status: "fail" }],
+            traceability: [{ requirement_key: "MH2", status: "pending" }],
+          },
+        ],
+      },
+      createMockToolContext(),
+    );
+
+    const readTool = createGoopReadWaveTool(ctx);
+    const result = await readTool.execute({ wave_numbers: [1] }, createMockToolContext());
+
+    // Wave 1 data appears
+    expect(result).toContain("## Wave 1: Wave one");
+    expect(result).toContain("test: pass");
+    expect(result).toContain("MH1 -> wave 1 [covered]");
+
+    // Wave 2 data does NOT leak
+    expect(result).not.toContain("## Wave 2: Wave two");
+    expect(result).not.toContain("lint: fail");
+    expect(result).not.toContain("MH2");
+  });
+});

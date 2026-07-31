@@ -76,6 +76,33 @@ interface CombinedResult {
 }
 
 /**
+ * An aux payload that carries no meaningful content — an empty object or one
+ * whose every field is absent/null/empty — is treated as omitted, matching
+ * normal optional-field semantics. A payload with some but not all required
+ * fields is genuinely malformed and is rejected as a partial failure (the
+ * chronicle write still reads as successful); it is never treated as absent.
+ */
+function isAuxAdlEffectivelyAbsent(payload: AlsoLogAdlPayload): boolean {
+  return (
+    !payload.type &&
+    !payload.description &&
+    !payload.entry_action &&
+    payload.rule == null &&
+    (!payload.files || payload.files.length === 0)
+  );
+}
+
+function isAuxMemoryEffectivelyAbsent(payload: AlsoSaveMemoryPayload): boolean {
+  return (
+    !payload.title &&
+    !payload.content &&
+    !payload.type &&
+    payload.importance == null &&
+    (!payload.concepts || payload.concepts.length === 0)
+  );
+}
+
+/**
  * Best-effort ADL append. Mirrors `goop_adl` append logic:
  * validate required fields, append to ADL, then dual-write to decisions table.
  */
@@ -244,21 +271,30 @@ export function createGoopAppendChronicleTool(ctx: PluginContext): ToolDefinitio
       try {
         const workflowId = args.workflow_id ?? ctx.stateManager.getState().activeWorkflowId;
 
-        // Auxiliary payloads are only meaningful alongside a single chronicle entry.
-        if (
-          Array.isArray(args.entries) &&
-          args.entries.length > 0 &&
-          (args.alsoLogAdl || args.alsoSaveMemory)
-        ) {
-          return "Error: alsoLogAdl and alsoSaveMemory cannot be used with entries batch.";
-        }
-
         if (Array.isArray(args.entries) && args.entries.length > 0) {
           const result = runBatch(ctx.db, args.entries, (entry) =>
             appendChronicleEntry(ctx, workflowId, entry),
           );
           renderSidecars(ctx, workflowId);
-          return formatBatchResult(result, "append-chronicle");
+
+          const lines = [formatBatchResult(result, "append-chronicle")];
+
+          // Apply aux payloads exactly once for the whole batch — and only
+          // after the batch committed — so a rolled-back batch leaves no
+          // orphaned ADL entry or memory row. Per-entry application would
+          // multiply ADL noise and memory rows, which is the wrong fix.
+          if (result.failed === 0 && (args.alsoLogAdl || args.alsoSaveMemory)) {
+            if (args.alsoLogAdl && !isAuxAdlEffectivelyAbsent(args.alsoLogAdl)) {
+              const adl = appendAuxiliaryAdl(ctx, workflowId, args.alsoLogAdl);
+              lines.push(adl.ok ? "[OK] ADL entry logged." : `[FAIL] ADL: ${adl.error}`);
+            }
+            if (args.alsoSaveMemory && !isAuxMemoryEffectivelyAbsent(args.alsoSaveMemory)) {
+              const memory = await appendAuxiliaryMemory(ctx, args.alsoSaveMemory);
+              lines.push(memory.ok ? "[OK] Memory saved." : `[FAIL] Memory: ${memory.error}`);
+            }
+          }
+
+          return lines.join("\n");
         }
 
         if (args.entry === undefined) {
@@ -272,11 +308,11 @@ export function createGoopAppendChronicleTool(ctx: PluginContext): ToolDefinitio
           chronicle: { ok: true, detail: chronicleDetail },
         };
 
-        if (args.alsoLogAdl) {
+        if (args.alsoLogAdl && !isAuxAdlEffectivelyAbsent(args.alsoLogAdl)) {
           combined.adl = appendAuxiliaryAdl(ctx, workflowId, args.alsoLogAdl);
         }
 
-        if (args.alsoSaveMemory) {
+        if (args.alsoSaveMemory && !isAuxMemoryEffectivelyAbsent(args.alsoSaveMemory)) {
           combined.memory = await appendAuxiliaryMemory(ctx, args.alsoSaveMemory);
         }
 
