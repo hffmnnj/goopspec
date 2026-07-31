@@ -234,7 +234,7 @@ describe("goop_save_note tool", () => {
       toolCtx,
     );
 
-    expect(result).toContain("Error saving Field Note");
+    expect(result).toContain("Error in goop_save_note");
     expect(result).toContain("DB write failed");
   });
 
@@ -347,7 +347,7 @@ describe("goop_save_note tool", () => {
       expect(result).toContain("3/3 succeeded");
     });
 
-    it("continues processing the batch when one item fails validation", async () => {
+    it("rolls back the batch when one item fails validation", async () => {
       const tool = createGoopSaveNoteTool(ctx);
       const result = await tool.execute(
         {
@@ -363,13 +363,13 @@ describe("goop_save_note tool", () => {
         },
         toolCtx,
       );
-      expect(result).toContain("2/3 succeeded");
+      expect(result).toContain("0/3 succeeded");
       expect(result).toContain("FAIL");
       expect(result).toContain("importance out of range");
 
-      // Both valid items persisted despite the middle failure.
+      // No valid items persist after a batch failure.
       const search = ctx.db.searchNotes("Body");
-      expect(search.length).toBe(2);
+      expect(search.length).toBe(0);
     });
 
     it("backward-compat: single-note path works when items absent", async () => {
@@ -501,7 +501,7 @@ describe("goop_save_note tool", () => {
       expect(search[0].title).toBe("Fresh note");
     });
 
-    it("partial success: valid creates persist despite a failed patch", async () => {
+    it("rolls back valid creates when a patch fails", async () => {
       const tool = createGoopSaveNoteTool(ctx);
 
       const batchResult = await tool.execute(
@@ -529,16 +529,14 @@ describe("goop_save_note tool", () => {
         toolCtx,
       );
 
-      expect(batchResult).toContain("2/3 succeeded");
+      expect(batchResult).toContain("0/3 succeeded");
       expect(batchResult).toContain("FAIL");
 
       const firstSearch = ctx.db.searchNotes("first-unique-body-abc");
-      expect(firstSearch.length).toBe(1);
-      expect(firstSearch[0].title).toBe("First note");
+      expect(firstSearch.length).toBe(0);
 
       const thirdSearch = ctx.db.searchNotes("third-unique-body-xyz");
-      expect(thirdSearch.length).toBe(1);
-      expect(thirdSearch[0].title).toBe("Third note");
+      expect(thirdSearch.length).toBe(0);
     });
   });
 
@@ -570,5 +568,272 @@ describe("goop_save_note tool", () => {
     expect(note?.body).toBe("Plain body");
     expect(note?.importance).toBe(6);
     expect(JSON.parse(note?.tags ?? "[]")).toEqual(["plain"]);
+  });
+
+  // -----------------------------------------------------------------------
+  // Tag normalization (defends against string-encoded tags)
+  // -----------------------------------------------------------------------
+
+  describe("tag normalization", () => {
+    function extractId(result: string): string {
+      const match = result.match(/fn_\d{8}_[a-z0-9]+/);
+      return match?.[0] ?? "";
+    }
+
+    describe("single mode", () => {
+      it("accepts a native string[] tags value", async () => {
+        const tool = createGoopSaveNoteTool(ctx);
+        const result = String(
+          await tool.execute(
+            {
+              title: "Native array tags",
+              body: "Body",
+              tags: ["alpha", "beta"],
+              source_agent: "test",
+            },
+            toolCtx,
+          ),
+        );
+
+        expect(result).toContain("Field Note saved:");
+        expect(result).toContain("Tags: alpha, beta");
+
+        const note = ctx.db.getNoteById(extractId(result));
+        expect(JSON.parse(note?.tags ?? "[]")).toEqual(["alpha", "beta"]);
+      });
+
+      it("accepts a JSON-encoded array string for tags", async () => {
+        const tool = createGoopSaveNoteTool(ctx);
+        const result = String(
+          await tool.execute(
+            {
+              title: "JSON string tags",
+              body: "Body",
+              tags: '["alpha","beta"]' as unknown as string[],
+              source_agent: "test",
+            },
+            toolCtx,
+          ),
+        );
+
+        expect(result).toContain("Field Note saved:");
+        expect(result).toContain("Tags: alpha, beta");
+
+        const note = ctx.db.getNoteById(extractId(result));
+        expect(JSON.parse(note?.tags ?? "[]")).toEqual(["alpha", "beta"]);
+      });
+
+      it("accepts a comma-separated string for tags", async () => {
+        const tool = createGoopSaveNoteTool(ctx);
+        const result = String(
+          await tool.execute(
+            {
+              title: "Comma tags",
+              body: "Body",
+              tags: "alpha, beta" as unknown as string[],
+              source_agent: "test",
+            },
+            toolCtx,
+          ),
+        );
+
+        expect(result).toContain("Field Note saved:");
+        expect(result).toContain("Tags: alpha, beta");
+
+        const note = ctx.db.getNoteById(extractId(result));
+        expect(JSON.parse(note?.tags ?? "[]")).toEqual(["alpha", "beta"]);
+      });
+
+      it("does not throw on the success-message path with JSON-string tags (reported crash)", async () => {
+        const tool = createGoopSaveNoteTool(ctx);
+        const result = String(
+          await tool.execute(
+            {
+              title: "Crash repro",
+              body: "Body",
+              tags: '["x","y"]' as unknown as string[],
+              source_agent: "test",
+            },
+            toolCtx,
+          ),
+        );
+
+        // The reported crash was `.join` on a string — must not throw.
+        expect(result).toContain("Field Note saved:");
+        expect(result).toContain("Tags: x, y");
+      });
+
+      it("round-trip: JSON-string tags store identically to native array", async () => {
+        const tool = createGoopSaveNoteTool(ctx);
+
+        const nativeResult = String(
+          await tool.execute(
+            {
+              title: "Native",
+              body: "unique-native-body-rt",
+              tags: ["alpha", "beta"],
+              source_agent: "test",
+            },
+            toolCtx,
+          ),
+        );
+        const nativeNote = ctx.db.getNoteById(extractId(nativeResult));
+
+        const jsonResult = String(
+          await tool.execute(
+            {
+              title: "JSON",
+              body: "unique-json-body-rt",
+              tags: '["alpha","beta"]' as unknown as string[],
+              source_agent: "test",
+            },
+            toolCtx,
+          ),
+        );
+        const jsonNote = ctx.db.getNoteById(extractId(jsonResult));
+
+        // Anti-double-encoding: the stored tags column must be identical.
+        expect(jsonNote?.tags).toBe(nativeNote?.tags);
+        expect(jsonNote?.tags).toBe('["alpha","beta"]');
+      });
+    });
+
+    describe("batch mode", () => {
+      it("accepts a native string[] tags value in batch mode", async () => {
+        const tool = createGoopSaveNoteTool(ctx);
+        const result = String(
+          await tool.execute(
+            {
+              title: "",
+              body: "",
+              tags: [],
+              source_agent: "test",
+              items: [
+                {
+                  title: "Batch native",
+                  body: "batch-native-body-xyz",
+                  tags: ["alpha", "beta"],
+                  source_agent: "test",
+                },
+              ],
+            },
+            toolCtx,
+          ),
+        );
+
+        expect(result).toContain("1/1 succeeded");
+
+        const note = ctx.db.searchNotes("batch-native-body-xyz")[0];
+        expect(JSON.parse(note?.tags ?? "[]")).toEqual(["alpha", "beta"]);
+      });
+
+      it("accepts a JSON-encoded array string for tags in batch mode", async () => {
+        const tool = createGoopSaveNoteTool(ctx);
+        const result = String(
+          await tool.execute(
+            {
+              title: "",
+              body: "",
+              tags: [],
+              source_agent: "test",
+              items: [
+                {
+                  title: "Batch JSON",
+                  body: "batch-json-body-xyz",
+                  tags: '["alpha","beta"]' as unknown as string[],
+                  source_agent: "test",
+                },
+              ],
+            },
+            toolCtx,
+          ),
+        );
+
+        expect(result).toContain("1/1 succeeded");
+
+        const note = ctx.db.searchNotes("batch-json-body-xyz")[0];
+        expect(JSON.parse(note?.tags ?? "[]")).toEqual(["alpha", "beta"]);
+      });
+
+      it("accepts a comma-separated string for tags in batch mode", async () => {
+        const tool = createGoopSaveNoteTool(ctx);
+        const result = String(
+          await tool.execute(
+            {
+              title: "",
+              body: "",
+              tags: [],
+              source_agent: "test",
+              items: [
+                {
+                  title: "Batch comma",
+                  body: "batch-comma-body-xyz",
+                  tags: "alpha, beta" as unknown as string[],
+                  source_agent: "test",
+                },
+              ],
+            },
+            toolCtx,
+          ),
+        );
+
+        expect(result).toContain("1/1 succeeded");
+
+        const note = ctx.db.searchNotes("batch-comma-body-xyz")[0];
+        expect(JSON.parse(note?.tags ?? "[]")).toEqual(["alpha", "beta"]);
+      });
+
+      it("round-trip: batch JSON-string tags store identically to native array", async () => {
+        const tool = createGoopSaveNoteTool(ctx);
+
+        const nativeResult = String(
+          await tool.execute(
+            {
+              title: "",
+              body: "",
+              tags: [],
+              source_agent: "test",
+              items: [
+                {
+                  title: "RT Native",
+                  body: "rt-native-batch-body-xyz",
+                  tags: ["alpha", "beta"],
+                  source_agent: "test",
+                },
+              ],
+            },
+            toolCtx,
+          ),
+        );
+        expect(nativeResult).toContain("1/1 succeeded");
+        const nativeNote = ctx.db.searchNotes("rt-native-batch-body-xyz")[0];
+
+        const jsonResult = String(
+          await tool.execute(
+            {
+              title: "",
+              body: "",
+              tags: [],
+              source_agent: "test",
+              items: [
+                {
+                  title: "RT JSON",
+                  body: "rt-json-batch-body-xyz",
+                  tags: '["alpha","beta"]' as unknown as string[],
+                  source_agent: "test",
+                },
+              ],
+            },
+            toolCtx,
+          ),
+        );
+        expect(jsonResult).toContain("1/1 succeeded");
+        const jsonNote = ctx.db.searchNotes("rt-json-batch-body-xyz")[0];
+
+        // Anti-double-encoding: the stored tags column must be identical.
+        expect(jsonNote?.tags).toBe(nativeNote?.tags);
+        expect(jsonNote?.tags).toBe('["alpha","beta"]');
+      });
+    });
   });
 });

@@ -141,6 +141,16 @@ export function createGoopWriteSectionTool(ctx: PluginContext): ToolDefinition {
         const action = args.action ?? "write";
         const workflowId = args.workflow_id ?? ctx.stateManager.getState().activeWorkflowId;
 
+        // 'delete' is intentionally excluded from batch mode (items[]). The
+        // items[] schema (see args.items above) carries write/patch fields
+        // (content, position, old_string/new_string) and has no per-item
+        // 'action' field, so a delete cannot be expressed per item without
+        // adding an action enum to every item or a separate delete_items[]
+        // array. Delete is also destructive and benefits from being an
+        // explicit, single-section operation, and the batch path's
+        // legacy-content migration + per-item write semantics do not apply to
+        // deletes. Do not "fix" this by silently enabling items[] for delete —
+        // it would be a regression. Delete one section per call instead.
         if (action === "delete") {
           if (Array.isArray(args.items) && args.items.length > 0) {
             return "Error in goop_write_section: action 'delete' does not support items";
@@ -202,11 +212,13 @@ export function createGoopWriteSectionTool(ctx: PluginContext): ToolDefinition {
             position: args.position,
           });
 
-          const sidecarContent = ctx.db.assembleDocument(workflowId, args.doc_type);
+          const sectionContent =
+            ctx.db.getSection(workflowId, args.doc_type, args.section_key)?.content ?? "";
+          const assembledContent = ctx.db.assembleDocument(workflowId, args.doc_type);
           renderSidecars(ctx, workflowId);
           const filename = DOC_TYPE_FILENAMES[args.doc_type];
 
-          return `Patched section '${args.section_key}' for ${args.doc_type} in workflow '${workflowId}' (${sidecarContent.length} assembled chars). Sidecar: .goopspec/${workflowId}/${filename}`;
+          return `Patched section '${args.section_key}' for ${args.doc_type} in workflow '${workflowId}' (section: ${sectionContent.length} chars, assembled document: ${assembledContent.length} chars). Sidecar: .goopspec/${workflowId}/${filename}`;
         }
 
         if (args.content === undefined) {
@@ -220,11 +232,13 @@ export function createGoopWriteSectionTool(ctx: PluginContext): ToolDefinition {
           position: args.position,
         });
 
-        const sidecarContent = ctx.db.assembleDocument(workflowId, args.doc_type);
+        const sectionContent =
+          ctx.db.getSection(workflowId, args.doc_type, args.section_key)?.content ?? "";
+        const assembledContent = ctx.db.assembleDocument(workflowId, args.doc_type);
         renderSidecars(ctx, workflowId);
         const filename = DOC_TYPE_FILENAMES[args.doc_type];
 
-        return `Written section '${args.section_key}' for ${args.doc_type} in workflow '${workflowId}' (${sidecarContent.length} assembled chars). Sidecar: .goopspec/${workflowId}/${filename}`;
+        return `Written section '${args.section_key}' for ${args.doc_type} in workflow '${workflowId}' (section: ${sectionContent.length} chars, assembled document: ${assembledContent.length} chars). Sidecar: .goopspec/${workflowId}/${filename}`;
       } catch (error: unknown) {
         const msg = error instanceof Error ? error.message : String(error);
         return `Error in goop_write_section: ${msg}`;
