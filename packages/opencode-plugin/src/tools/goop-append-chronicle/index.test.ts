@@ -489,4 +489,100 @@ describe("goop_append_chronicle tool", () => {
     const memories = await ctx.memory.search({ query: "Bad importance memory" });
     expect(memories.length).toBe(0);
   });
+
+  // -----------------------------------------------------------------------
+  // 9. Empty aux object treated as omitted (not a failure)
+  // -----------------------------------------------------------------------
+
+  it("treats an empty alsoLogAdl object as omitted, not a failure", async () => {
+    const tool = createGoopAppendChronicleTool(ctx);
+    const entry = "Chronicle with empty ADL.";
+    // An empty object bypasses schema validation at runtime; cast to test it.
+    const result = await tool.execute({ entry, alsoLogAdl: {} as never }, toolCtx);
+
+    // Chronicle succeeded; no ADL line at all (omitted, not failed).
+    expect(result).toBe(`[OK] Chronicle entry appended (${entry.length} chars)`);
+    expect(result).not.toContain("ADL");
+
+    // Chronicle persisted; no ADL entry persisted.
+    expect(ctx.db.getChronicleEvents("default").length).toBe(1);
+    expect(ctx.db.getDecisions({ workflowId: "default" }).length).toBe(0);
+  });
+
+  it("treats an empty alsoSaveMemory object as omitted, not a failure", async () => {
+    const tool = createGoopAppendChronicleTool(ctx);
+    const entry = "Chronicle with empty memory.";
+    const result = await tool.execute({ entry, alsoSaveMemory: {} as never }, toolCtx);
+
+    expect(result).toBe(`[OK] Chronicle entry appended (${entry.length} chars)`);
+    expect(result).not.toContain("Memory");
+
+    expect(ctx.db.getChronicleEvents("default").length).toBe(1);
+    const memories = await ctx.memory.search({ query: "empty memory" });
+    expect(memories.length).toBe(0);
+  });
+
+  it("treats an all-fields-absent alsoLogAdl object as omitted", async () => {
+    const tool = createGoopAppendChronicleTool(ctx);
+    const entry = "Chronicle with nullish ADL fields.";
+    const result = await tool.execute(
+      {
+        entry,
+        alsoLogAdl: {
+          type: undefined,
+          description: undefined,
+          entry_action: undefined,
+          rule: undefined,
+          files: [],
+        } as never,
+      },
+      toolCtx,
+    );
+
+    expect(result).toBe(`[OK] Chronicle entry appended (${entry.length} chars)`);
+    expect(result).not.toContain("ADL");
+    expect(ctx.db.getDecisions({ workflowId: "default" }).length).toBe(0);
+  });
+
+  it("treats empty aux payloads as omitted alongside entries batch", async () => {
+    const tool = createGoopAppendChronicleTool(ctx);
+    const result = await tool.execute(
+      {
+        entries: ["Batch entry one.", "Batch entry two."],
+        alsoLogAdl: {} as never,
+        alsoSaveMemory: {} as never,
+      },
+      toolCtx,
+    );
+
+    // Batch succeeded; no aux lines (omitted, not failed).
+    expect(result).toContain("Batch append-chronicle: 2/2 succeeded");
+    expect(result).not.toContain("ADL");
+    expect(result).not.toContain("Memory");
+
+    expect(ctx.db.getChronicleEvents("default").length).toBe(2);
+    expect(ctx.db.getDecisions({ workflowId: "default" }).length).toBe(0);
+    const memories = await ctx.memory.search({ query: "batch" });
+    expect(memories.length).toBe(0);
+  });
+
+  it("reports partial success for a malformed (non-empty) alsoLogAdl", async () => {
+    const tool = createGoopAppendChronicleTool(ctx);
+    const entry = "Chronicle with malformed ADL.";
+    // Has a type but is missing description/entry_action — genuinely malformed,
+    // not empty, so it must be rejected as a partial failure.
+    const result = await tool.execute(
+      {
+        entry,
+        alsoLogAdl: { type: "decision" } as never,
+      },
+      toolCtx,
+    );
+
+    // Chronicle succeeded; ADL rejected — partial success, not overall failure.
+    expect(result).toContain("[OK] Chronicle entry appended");
+    expect(result).toContain("[FAIL] ADL: Missing ADL 'description'.");
+    expect(ctx.db.getChronicleEvents("default").length).toBe(1);
+    expect(ctx.db.getDecisions({ workflowId: "default" }).length).toBe(0);
+  });
 });
