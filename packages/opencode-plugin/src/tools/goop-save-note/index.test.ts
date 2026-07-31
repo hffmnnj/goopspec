@@ -234,7 +234,7 @@ describe("goop_save_note tool", () => {
       toolCtx,
     );
 
-    expect(result).toContain("Error saving Field Note");
+    expect(result).toContain("Error in goop_save_note");
     expect(result).toContain("DB write failed");
   });
 

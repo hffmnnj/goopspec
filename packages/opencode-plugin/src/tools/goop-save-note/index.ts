@@ -234,7 +234,7 @@ export function createGoopSaveNoteTool(ctx: PluginContext): ToolDefinition {
 
         if (args.note_id !== undefined) {
           if (args.old_string === undefined) {
-            return "Error: old_string is required when note_id is provided for patch mode";
+            return "Error in goop_save_note: old_string is required when note_id is provided for patch mode";
           }
 
           const updateResult = ctx.db.updateNote(args.note_id, {
@@ -244,7 +244,7 @@ export function createGoopSaveNoteTool(ctx: PluginContext): ToolDefinition {
           });
 
           if (!updateResult.ok) {
-            return `Error patching Field Note: ${updateResult.error}`;
+            return `Error in goop_save_note: ${updateResult.error}`;
           }
 
           return `Field Note patched: ${args.note_id}`;
@@ -261,13 +261,13 @@ export function createGoopSaveNoteTool(ctx: PluginContext): ToolDefinition {
 
         const validation = validateCreateFields(args);
         if (!validation.ok) {
-          return `Error: ${validation.error}`;
+          return `Error in goop_save_note: ${validation.error}`;
         }
 
         const importance = args.importance ?? 5;
 
         if (importance < 1 || importance > 10) {
-          return "Error: Importance must be between 1 and 10.";
+          return "Error in goop_save_note: Importance must be between 1 and 10.";
         }
 
         const tags = normalizeTags(args.tags);
@@ -288,7 +288,7 @@ export function createGoopSaveNoteTool(ctx: PluginContext): ToolDefinition {
         return `Field Note saved: ${id}\nTitle: ${args.title}\nTags: ${tags.join(", ")}\nBody chars: ${(args.body as string).length}`;
       } catch (error: unknown) {
         const message = error instanceof Error ? error.message : String(error);
-        return `Error saving Field Note: ${message}`;
+        return `Error in goop_save_note: ${message}`;
       }
     },
   });
