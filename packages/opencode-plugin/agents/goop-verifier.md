@@ -79,7 +79,7 @@ Load `references/security-checklist.md`. Evaluate every applicable control with 
 
 ## Regression Check
 
-Start with the narrowest covering rung; escalate only when a lower rung cannot cover the change. Broad runs are correct before a PR, after merging/rebasing `main`, resolving conflicts, changing test infrastructure, or at the acceptance gate. See `references/tdd.md` §Test Execution Discipline: file → directory → `--changed=main` → package, `--bail=3 --timeout=10000`, plus typecheck; scoped is not skipped.
+Start with the narrowest covering rung; escalate only when a lower rung cannot cover the change. Broad runs are correct before a PR, after merging/rebasing `main`, resolving conflicts, changing test infrastructure, or at the acceptance gate. See `references/test-authoring.md` §Test Execution Discipline: file → directory → `--changed=main` → package, `--bail=3 --timeout=10000`, plus typecheck; scoped is not skipped.
 
 ## Wiring Check
 
@@ -109,6 +109,5 @@ Load with `goop_reference({ name: "<name>" })`. Load only what the task needs.
 | `security-checklist` | Security controls for auth, input validation, secrets, injection defense. | When running the security matrix during verification. |
 | `phase-gates` | Gate semantics, deviation rules, autopilot behavior. | When enforcing a phase gate or handling a deviation. |
 | `wiring-checklist` | Handoff Protocol, wiring verification before PR. | When verifying wiring before acceptance. |
-| `tdd` | Test execution discipline, the rung ladder, bounded runs. | Before running tests or choosing a verification command. |
 | `test-authoring` | Test-writing heuristics, value-first testing, gap reporting. | Before authoring or modifying tests. |
 | `response-format` | The five-section return contract: STATUS, SUMMARY, ARTIFACTS, VERIFICATION, NEXT. | Before writing your return message. |
