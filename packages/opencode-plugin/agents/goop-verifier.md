@@ -110,4 +110,5 @@ Load with `goop_reference({ name: "<name>" })`. Load only what the task needs.
 | `phase-gates` | Gate semantics, deviation rules, autopilot behavior. | When enforcing a phase gate or handling a deviation. |
 | `wiring-checklist` | Handoff Protocol, wiring verification before PR. | When verifying wiring before acceptance. |
 | `tdd` | Test execution discipline, the rung ladder, bounded runs. | Before running tests or choosing a verification command. |
+| `test-authoring` | Test-writing heuristics, value-first testing, gap reporting. | Before authoring or modifying tests. |
 | `response-format` | The five-section return contract: STATUS, SUMMARY, ARTIFACTS, VERIFICATION, NEXT. | Before writing your return message. |

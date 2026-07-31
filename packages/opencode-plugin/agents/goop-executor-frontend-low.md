@@ -107,6 +107,7 @@ Load with `goop_reference({ name: "<name>" })`. Load only what the task needs.
 | `core-protocol` | Boot sequence, memory-first protocol, tool-call batching, atomic commits. | Every dispatch, before other work. |
 | `image-prompting` | Prompting technique for `generate_image`, asset placement. | Before generating an image asset. |
 | `tdd` | Test execution discipline, the rung ladder, bounded runs. | Before running tests or choosing a verification command. |
+| `test-authoring` | Test-writing heuristics, value-first testing, gap reporting. | Before authoring or modifying tests. |
 | `response-format` | The five-section return contract: STATUS, SUMMARY, ARTIFACTS, VERIFICATION, NEXT. | Before writing your return message. |
 
 ---

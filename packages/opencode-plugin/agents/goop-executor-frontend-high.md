@@ -128,6 +128,7 @@ Load with `goop_reference({ name: "<name>" })`. Load only what the task needs.
 | `architecture-design` | Architecture boundaries, module design, cross-cutting concerns. | When designing module boundaries or cross-cutting APIs. |
 | `image-prompting` | Prompting technique for `generate_image`, asset placement. | Before generating an image asset. |
 | `tdd` | Test execution discipline, the rung ladder, bounded runs. | Before running tests or choosing a verification command. |
+| `test-authoring` | Test-writing heuristics, value-first testing, gap reporting. | Before authoring or modifying tests. |
 | `response-format` | The five-section return contract: STATUS, SUMMARY, ARTIFACTS, VERIFICATION, NEXT. | Before writing your return message. |
 | `phase-gates` | Gate semantics, deviation rules, autopilot behavior. | When enforcing a phase gate or handling a deviation. |
 
