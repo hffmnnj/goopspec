@@ -76,14 +76,16 @@ jest.useFakeTimers();
 jest.advanceTimersByTime(1000);
 ```
 
-## Coverage Targets
+## Coverage as Byproduct
 
-| Type | Target | Critical Path |
+| Type | Typical | Critical Path |
 |------|--------|---------------|
 | Statements | 80% | 95% |
 | Branches | 75% | 90% |
 | Functions | 80% | 95% |
 | Lines | 80% | 95% |
+
+Coverage is a discovery tool, not a KPI. See [Test Authoring](test-authoring.md).
 
 ## Test Organization
 
