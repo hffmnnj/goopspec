@@ -407,6 +407,8 @@ export function createGoopWriteWaveTool(ctx: PluginContext): ToolDefinition {
             args.tasks !== undefined ? "tasks" : null,
             args.task_update !== undefined ? "task_update" : null,
             args.task_updates !== undefined ? "task_updates" : null,
+            args.verifications !== undefined ? "verifications" : null,
+            args.traceability !== undefined ? "traceability" : null,
           ].filter((field): field is string => field !== null);
           if (ignoredFields.length > 0) {
             return incompatiblePayloadError("items[] batch mode", ignoredFields);
