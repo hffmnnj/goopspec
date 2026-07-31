@@ -244,21 +244,30 @@ export function createGoopAppendChronicleTool(ctx: PluginContext): ToolDefinitio
       try {
         const workflowId = args.workflow_id ?? ctx.stateManager.getState().activeWorkflowId;
 
-        // Auxiliary payloads are only meaningful alongside a single chronicle entry.
-        if (
-          Array.isArray(args.entries) &&
-          args.entries.length > 0 &&
-          (args.alsoLogAdl || args.alsoSaveMemory)
-        ) {
-          return "Error: alsoLogAdl and alsoSaveMemory cannot be used with entries batch.";
-        }
-
         if (Array.isArray(args.entries) && args.entries.length > 0) {
           const result = runBatch(ctx.db, args.entries, (entry) =>
             appendChronicleEntry(ctx, workflowId, entry),
           );
           renderSidecars(ctx, workflowId);
-          return formatBatchResult(result, "append-chronicle");
+
+          const lines = [formatBatchResult(result, "append-chronicle")];
+
+          // Apply aux payloads exactly once for the whole batch — and only
+          // after the batch committed — so a rolled-back batch leaves no
+          // orphaned ADL entry or memory row. Per-entry application would
+          // multiply ADL noise and memory rows, which is the wrong fix.
+          if (result.failed === 0 && (args.alsoLogAdl || args.alsoSaveMemory)) {
+            if (args.alsoLogAdl) {
+              const adl = appendAuxiliaryAdl(ctx, workflowId, args.alsoLogAdl);
+              lines.push(adl.ok ? "[OK] ADL entry logged." : `[FAIL] ADL: ${adl.error}`);
+            }
+            if (args.alsoSaveMemory) {
+              const memory = await appendAuxiliaryMemory(ctx, args.alsoSaveMemory);
+              lines.push(memory.ok ? "[OK] Memory saved." : `[FAIL] Memory: ${memory.error}`);
+            }
+          }
+
+          return lines.join("\n");
         }
 
         if (args.entry === undefined) {

@@ -302,18 +302,121 @@ describe("goop_append_chronicle tool", () => {
     expect(memories[0].memory.type).toBe("note");
   });
 
-  it("rejects auxiliary payloads with entries batch", async () => {
+  it("applies alsoLogAdl alongside entries batch and persists one ADL entry", async () => {
     const tool = createGoopAppendChronicleTool(ctx);
     const result = await tool.execute(
       {
-        entries: ["Batch entry."],
-        alsoSaveMemory: { title: "Not allowed", content: "x" },
+        entries: ["Entry A.", "Entry B.", "Entry C."],
+        alsoLogAdl: {
+          type: "decision",
+          description: "One ADL entry for the whole batch.",
+          entry_action: "Batch aux test",
+        },
       },
       toolCtx,
     );
 
-    expect(result).toContain("Error");
-    expect(result).toContain("cannot be used with entries batch");
+    expect(result).toContain("Batch append-chronicle: 3/3 succeeded");
+    expect(result).toContain("[OK] ADL entry logged.");
+
+    // All three chronicle entries persisted.
+    expect(ctx.db.getChronicleEvents("default").length).toBe(3);
+
+    // ADL applied exactly once — not once per entry.
+    const adl = ctx.stateManager.getADL();
+    const occurrences = (adl.match(/One ADL entry for the whole batch/g) ?? []).length;
+    expect(occurrences).toBe(1);
+
+    // Decisions table also has exactly one row.
+    const decisions = ctx.db.getDecisions({ workflowId: "default", type: "decision" });
+    expect(decisions.length).toBe(1);
+    expect(decisions[0].description).toBe("One ADL entry for the whole batch.");
+  });
+
+  it("applies alsoSaveMemory alongside entries batch and persists one memory", async () => {
+    const tool = createGoopAppendChronicleTool(ctx);
+    const result = await tool.execute(
+      {
+        entries: ["Batch entry one.", "Batch entry two."],
+        alsoSaveMemory: { title: "Batch memory", content: "Saved with batch." },
+      },
+      toolCtx,
+    );
+
+    expect(result).toContain("Batch append-chronicle: 2/2 succeeded");
+    expect(result).toContain("[OK] Memory saved.");
+
+    // Both chronicle entries persisted.
+    expect(ctx.db.getChronicleEvents("default").length).toBe(2);
+
+    // Memory persisted exactly once for the whole batch.
+    const memories = await ctx.memory.search({ query: "Batch memory" });
+    expect(memories.length).toBe(1);
+    expect(memories[0].memory.title).toBe("Batch memory");
+  });
+
+  it("applies both alsoLogAdl and alsoSaveMemory alongside entries batch", async () => {
+    const tool = createGoopAppendChronicleTool(ctx);
+    const result = await tool.execute(
+      {
+        entries: ["Batch with both."],
+        alsoLogAdl: {
+          type: "observation",
+          description: "Both aux payloads with batch.",
+          entry_action: "Batch both test",
+        },
+        alsoSaveMemory: {
+          title: "Batch both memory",
+          content: "ADL and memory with batch.",
+        },
+      },
+      toolCtx,
+    );
+
+    expect(result).toContain("Batch append-chronicle: 1/1 succeeded");
+    expect(result).toContain("[OK] ADL entry logged.");
+    expect(result).toContain("[OK] Memory saved.");
+
+    // Chronicle persisted.
+    expect(ctx.db.getChronicleEvents("default").length).toBe(1);
+
+    // ADL persisted.
+    expect(ctx.stateManager.getADL()).toContain("Both aux payloads with batch.");
+    const decisions = ctx.db.getDecisions({ workflowId: "default", type: "observation" });
+    expect(decisions.length).toBe(1);
+
+    // Memory persisted.
+    const memories = await ctx.memory.search({ query: "Batch both" });
+    expect(memories.length).toBe(1);
+    expect(memories[0].memory.title).toBe("Batch both memory");
+  });
+
+  it("does not apply aux payloads when the entries batch rolls back", async () => {
+    const tool = createGoopAppendChronicleTool(ctx);
+    const hugeEntry = "x".repeat(1_000_000_000);
+    const result = await tool.execute(
+      {
+        entries: ["OK entry.", hugeEntry],
+        alsoLogAdl: {
+          type: "decision",
+          description: "Should not be logged.",
+          entry_action: "Rollback test",
+        },
+        alsoSaveMemory: { title: "Should not be saved", content: "x" },
+      },
+      toolCtx,
+    );
+
+    // Batch failed and rolled back.
+    expect(result).toContain("Batch append-chronicle: 0/2 succeeded, 2 failed");
+    expect(result).not.toContain("[OK] ADL entry logged.");
+    expect(result).not.toContain("[OK] Memory saved.");
+
+    // No chronicle, no ADL, no memory persisted — no orphaned aux writes.
+    expect(ctx.db.getChronicleEvents("default").length).toBe(0);
+    expect(ctx.stateManager.getADL()).not.toContain("Should not be logged.");
+    const memories = await ctx.memory.search({ query: "Should not be saved" });
+    expect(memories.length).toBe(0);
   });
 
   it("reports partial failure when a sub-write throws", async () => {
