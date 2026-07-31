@@ -51,10 +51,11 @@ packages/opencode-plugin/src/
 ├── test-utils.ts          # Shared test utilities
 └── index.ts               # Plugin entry point
 
-agents/                    # 14 agent markdown definitions
-commands/                  # 9 slash command definitions
-references/                # 19 consolidated reference documents (incl. field-notes-protocol)
-templates/                 # File templates
+packages/opencode-plugin/
+├── agents/                # 14 agent markdown definitions
+├── commands/              # 9 slash command definitions
+├── references/            # 19 consolidated reference documents (incl. field-notes-protocol)
+└── templates/             # File templates
 ```
 
 ## OpenCode V1/V2 Dual Plugin Support
@@ -416,8 +417,12 @@ Three tools for launching, monitoring, and cancelling detached background jobs. 
 
 - **Prefer `items[]` batch mode for multi-write turns.** All four write tools (`goop_write_db`, `goop_write_section`, `goop_write_wave`, `goop_save_note`) now accept an optional `items[]` parameter. When writing more than one doc/section/wave/row/note in a turn, use the batch form to minimize tool calls and wrap writes in a single transaction. Single-item usage is unchanged and still supported.
 
+- **`goop_save_note` batch mode is now atomic.** Previously, `goop_save_note` with `items[]` used a manual loop and could half-succeed — persisting one row of three and reporting the rest failed. As of this stack, all items are wrapped in a single transaction. If you have working assumptions built on the old behaviour (e.g. retry logic for partial failures), update them.
+
+- **`goop_write_wave`'s top-level `wave_number` is conditionally required.** It is required for wave writes, task writes, verifications, and `items[]`. It is omittable only for a traceability-only call where every row carries its own `wave_number`. A traceability-only call where any row omits `wave_number` is rejected rather than persisting a null target.
+
 - **Knowledge lives in `references/`, not `skills/`.** GoopSpec 1.0.0 removed the skills feature. Use `goop_reference` to load the 19 consolidated reference documents (including `field-notes-protocol`).
 
 - **ADL is an append-log, not a document row.** Read it with `goop_adl({ action: "read" })`. `goop_read_db({ doc_type: "adl" })` returns "No adl document found" — the ADL is stored as structured events, not a full document.
 
-- **`goop_write_wave` now accepts `verifications[]` alongside `task_updates[]`.** Both are processed atomically in one transaction. If any task update fails, verifications and traceability writes are rolled back too. This changed in the goopspec-state-integrity workflow; the old behaviour was outright rejection.
+- **`goop_write_wave` batch mode accepts per-item `verifications[]` and `traceability[]`.** Each `items[]` entry can carry its own `verifications[]` and `traceability[]`. A traceability row omitting `wave_number` inherits the enclosing item's wave; an explicit value overrides. A verification omitting `wave_id` defaults to the enclosing item's resolved wave row; an explicit id wins. Everything is written in one transaction — any failure rolls back rows *and* events, so no orphan events survive. Supplying top-level `verifications`/`traceability` **alongside** `items[]` is rejected deliberately, because those payloads would otherwise be silently dropped.
