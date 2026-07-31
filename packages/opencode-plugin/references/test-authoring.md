@@ -1,0 +1,126 @@
+# Test Authoring
+
+Writing tests that catch regressions, not consume budget.
+
+## Why This Exists
+
+More tests ≠ better outcomes. Across six top LLM code agents (Chen et al., arXiv:2602.07900), test-writing intensity correlates with *struggle*, not success — agent-written tests skew ~5× `print` statements over assertions and lean on `assert x is not None` sanity checks. Every rule below is a self-check you run before committing; the remedy for bloated tests must not itself bloat the context budget.
+
+## What Is Worth Testing
+
+Test behavior, not implementation. Implementation details are things callers never see — testing them creates a third user the production code must serve.
+
+- **Name the behavior change that would flip this assertion.** If you can't, delete the test.
+- **If you deleted the SUT, would this test still pass?** If yes, it tests the framework or your mocks, not your code.
+- **Would this assertion fail to compile if the behavior were wrong?** If yes, the type system owns it, not you.
+- **Would a caller be surprised this test exists?** If yes, you're testing structure, not behavior.
+
+Never test the framework, the language, or your own mocks. Don't write a test just to have written one.
+
+## Test-Value Heuristics
+
+A good test fails when behavior breaks and passes only when behavior is correct (the *would-it-fail* test).
+
+- **If you removed this test, would any real regression go uncaught?** If no, deleting it is the right move.
+- **Did you write this to move a coverage number?** If yes, it's coverage-driven — delete it. Coverage is a discovery tool for finding untested code, never a KPI or gate.
+- **Is the test hard to write?** That signals bad interface design — fix the interface, don't mock harder.
+- **Is the change trivial wiring the type system or linter already covers?** Skip it. "I get paid for code that works, not for tests." — Beck.
+
+Deleting, or never writing, a low-signal test is a valid and good outcome.
+
+## Speed Discipline
+
+A unit test should be sub-second; a suite you won't run before every commit is too slow to live in the gate.
+
+| Size | May touch | Time limit |
+|------|-----------|------------|
+| Small (≈unit) | No network, disk, DB, threads, sleeps | 60s |
+| Medium (≈integration) | localhost DB/files, single machine | 300s |
+| Large (≈E2E) | Real network, external systems | 900s+ |
+
+- **Does this test touch the network, disk, or a real DB?** If yes, it's not a unit test — push it down the size ladder.
+- **Would you wait for this suite before every commit?** If no, a >5 min suite is a defect, not a feature.
+- **What code are you actually running?** Minimize it. Large tests are 28× flakier than small ones (0.5% → 14%).
+
+## Unit vs Integration Boundaries
+
+The Pyramid (Fowler/Cohn: many unit, few E2E) and the Testing Trophy (KCD: "mostly integration") genuinely disagree on the unit:integration ratio. The split is partly definitional — a "unit" to a classicist is smaller than a "unit" to a JS dev whose unit is a component tree.
+
+**Agreed core** (not in dispute): E2E should be few; confidence-per-test increases as you move up the ladder; don't chase 100% coverage; avoid implementation-detail tests.
+
+**When integration or E2E is justified:**
+- A unit test mocks so much it can only prove the mocks work — promote it.
+- The integration *is* the risk (components must compose; a bug crosses module boundaries).
+- The behavior is only observable end-to-end (a critical user flow).
+
+- **Does this unit test mock so much it proves only the mocks?** Promote to integration.
+- **Is the integration test doing what a unit test could?** Demote it (ice-cream cone).
+
+## Mocking Discipline
+
+Mock at boundaries only: external APIs, clock, randomness, filesystem, network, email, payment. Use real objects inside the boundary. For Bun mocking snippets, see `tdd.md` §Mocking Patterns.
+
+- **Is the thing you're mocking something you'd never run for real in a test?** If no, prefer the real object.
+- **If the real collaborator changed its contract, would this test still pass?** If yes, it's testing the mock, not the integration.
+- **Are you verifying a collaborator was called, without checking any real output?** That asserts wiring, not behavior — unless the call *is* the behavior (sending an email).
+
+Prefer a **Fake** (working in-memory impl) over a **Mock** (canned expectations): fakes preserve real semantics, mocks assert on scripted ones.
+
+## Determinism
+
+A flaky test is a bug — in the test or in production. ~1/6 of flakes that trace to a code change are real production bugs.
+
+| Source | Fix |
+|--------|-----|
+| Wall-clock time / dates | Inject a fake clock; freeze time |
+| Randomness (`Math.random`, UUIDs) | Seeded RNG; assert on structure, not exact values |
+| Test ordering / shared state | Full teardown per test; no shared mutable fixtures |
+| Network / external services | Mock or Fake at the boundary; never real network in Small |
+| `sleep()` / fixed waits | Poll-with-timeout; await promise resolution; no sleeps in Small |
+| Async races | Await all microtasks; deterministic schedulers; no real threads in unit tests |
+| Filesystem / DB residue | Per-test temp dirs; in-memory DB reset |
+
+- **Run this test 10× with no code change.** Any variation? It's flaky — quarantine and fix the root cause.
+- **Are you auto-retrying flaky tests?** Retry is a stopgap while fixing, not a fix. A reliably failing test beats a flaky one.
+
+## Assertion Quality
+
+Few strong assertions beat many weak ones. One *logical* assertion per test — a failure should point at one cause.
+
+- **If this test fails, does the message name the broken behavior?** "expected true, received false" is too weak — use "checkout should reject empty cart, got accepted".
+- **Is your only check `assert x is not None`?** That's a precondition, not an assertion — you've written a probe, not a test.
+- **If the test fails, is the cause obvious?** If you can't tell which assert broke (Assertion Roulette), split the test.
+- **Does this snapshot encode intended behavior or just current output?** If the latter, it locks in whatever's there now — review every diff deliberately.
+
+Don't assert what the type system already guarantees.
+
+## Anti-Pattern Catalogue
+
+Self-check your test against each before committing.
+
+| # | Smell | Self-check |
+|---|-------|------------|
+| 1 | Testing private methods | Does the test reach into internals callers never use? |
+| 2 | Assertion Roulette | Many asserts, failure won't say which — split it |
+| 3 | Mystery Guest | Depends on shared fixture the reader can't see — inline it |
+| 4 | Excessive Setup | Dozens of fixture lines before the act — extract or shrink |
+| 5 | Tautological test | Asserts a constant, or the mock returns what it was told — can never fail |
+| 6 | Coverage-driven testing | Written to move a number, not to catch a regression |
+| 7 | Testing the mock/framework | Asserts the tool behaves, not the SUT |
+| 8 | Fragile Test | Breaks on refactor that preserves behavior |
+| 9 | Erratic Test | Passes sometimes, fails sometimes — same code |
+| 10 | Slow Tests | Suite too slow to run before every commit |
+| 11 | Test Code Duplication | Same setup/asserts repeated — extract a helper |
+| 12 | Test Logic in Production | Production branches only exercised in tests |
+| 13 | Conditional Test Logic | Test has if/else — some paths never run |
+| 14 | Ice-cream cone | Many E2E, few unit — inverted pyramid |
+| 15 | The Test User | Tests use the code unlike real users — implementation coupling |
+| 16 | Snapshot spam | Dozens of snapshots locking in current output |
+
+## Scoped Runs
+
+The rung ladder, bounded-run flags, the three-strikes rule, and the pre-commit checklist all live in `tdd.md` §Test Execution Discipline and §Pre-Commit Checklist — follow them there, do not restate them here. State the rung you ran in your VERIFICATION line.
+
+---
+
+*Test Authoring v1.0 — GoopSpec Reference*
