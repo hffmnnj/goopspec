@@ -408,4 +408,56 @@ describe("goop_write_db tool", () => {
       expect(ctx.db.getDocument("default", "spec")?.content).toBe("# New");
     });
   });
+
+  // -----------------------------------------------------------------------
+  // Message accuracy — write size reporting
+  // -----------------------------------------------------------------------
+
+  describe("message accuracy (write size reporting)", () => {
+    it("a zero-length write reports 'empty document' and not the bare '0 chars' form", async () => {
+      const tool = createGoopWriteDbTool(ctx);
+      const result = await tool.execute({ doc_type: "spec", content: "" }, toolCtx);
+
+      expect(result).toContain("empty document");
+      // The negative assertion pins the fix: the old code rendered a bare
+      // "(0 chars, ...)" which reads as though the content vanished.
+      expect(result).not.toContain("0 chars");
+    });
+
+    it("a non-empty write reports the persisted char count", async () => {
+      const content = "# Spec body content";
+      const tool = createGoopWriteDbTool(ctx);
+      const result = await tool.execute({ doc_type: "spec", content }, toolCtx);
+
+      expect(result).toContain(`${content.length} chars`);
+      expect(result).not.toContain("empty document");
+    });
+
+    it("a patch reports the resulting char count on the patch path", async () => {
+      ctx.db.upsertDocument("default", "spec", "Hello world");
+
+      const tool = createGoopWriteDbTool(ctx);
+      const result = await tool.execute(
+        { doc_type: "spec", old_string: "world", new_string: "GoopSpec" },
+        toolCtx,
+      );
+
+      const patched = ctx.db.getDocument("default", "spec")?.content ?? "";
+      expect(result).toContain("mode: patch");
+      expect(result).toContain(`${patched.length} chars`);
+    });
+
+    it("a patch that empties the document reports 'empty document', not '0 chars'", async () => {
+      ctx.db.upsertDocument("default", "spec", "remove me");
+
+      const tool = createGoopWriteDbTool(ctx);
+      const result = await tool.execute(
+        { doc_type: "spec", old_string: "remove me", new_string: "" },
+        toolCtx,
+      );
+
+      expect(result).toContain("empty document");
+      expect(result).not.toContain("0 chars");
+    });
+  });
 });

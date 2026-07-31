@@ -438,4 +438,55 @@ describe("goop_write_section tool", () => {
       expect(ctx.db.getSection("default", "spec", "overview")?.content).toBe("# New");
     });
   });
+
+  // -----------------------------------------------------------------------
+  // Message accuracy — write size reporting
+  // -----------------------------------------------------------------------
+
+  describe("message accuracy (write size reporting)", () => {
+    it("reports the section length and assembled-document length as distinct labelled numbers", async () => {
+      // Pre-existing large section so the assembled document is much bigger
+      // than the section being written.
+      const largeContent = `# Large Existing Section\n\n${"x".repeat(500)}`;
+      ctx.db.upsertSection("default", "spec", "big", largeContent, 0);
+
+      const smallContent = "# Tiny";
+      const tool = createGoopWriteSectionTool(ctx);
+      const result = await tool.execute(
+        { doc_type: "spec", section_key: "small", content: smallContent, position: 10 },
+        toolCtx,
+      );
+
+      // The section just written — what the caller actually wrote
+      expect(result).toContain(`section: ${smallContent.length} chars`);
+      // The full assembled document — labelled distinctly
+      const assembled = ctx.db.assembleDocument("default", "spec");
+      expect(result).toContain(`assembled document: ${assembled.length} chars`);
+      // The old form reported a single bare number as "assembled chars"
+      expect(result).not.toContain("assembled chars");
+      // The two numbers must differ; otherwise the test proves nothing about
+      // which length is reported.
+      expect(assembled.length).not.toBe(smallContent.length);
+    });
+
+    it("patch path reports the section length and assembled-document length as distinct labelled numbers", async () => {
+      const largeContent = `# Large Existing Section\n\n${"x".repeat(500)}`;
+      ctx.db.upsertSection("default", "spec", "big", largeContent, 0);
+      ctx.db.upsertSection("default", "spec", "target", "Hello world", 10);
+
+      const tool = createGoopWriteSectionTool(ctx);
+      const result = await tool.execute(
+        { doc_type: "spec", section_key: "target", old_string: "world", new_string: "GoopSpec" },
+        toolCtx,
+      );
+
+      const patchedSection = ctx.db.getSection("default", "spec", "target")?.content ?? "";
+      const assembled = ctx.db.assembleDocument("default", "spec");
+
+      expect(result).toContain(`section: ${patchedSection.length} chars`);
+      expect(result).toContain(`assembled document: ${assembled.length} chars`);
+      expect(result).not.toContain("assembled chars");
+      expect(assembled.length).not.toBe(patchedSection.length);
+    });
+  });
 });
