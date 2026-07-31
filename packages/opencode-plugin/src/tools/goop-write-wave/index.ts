@@ -40,6 +40,8 @@ interface WavePayload {
   pr_branch?: string;
   pr_url?: string;
   tasks?: InlineWaveTask[];
+  verifications?: VerificationPayload[];
+  traceability?: TraceabilityPayload[];
 }
 
 interface BulkTaskStatusUpdate {
@@ -300,6 +302,38 @@ export function createGoopWriteWaveTool(ctx: PluginContext): ToolDefinition {
                 }),
               )
               .optional(),
+            verifications: tool.schema
+              .array(
+                tool.schema.object({
+                  check_name: tool.schema.enum(VERIFICATION_CHECK_NAMES),
+                  status: tool.schema.enum(VERIFICATION_RESULT_STATUSES),
+                  detail: tool.schema.string().optional(),
+                  wave_id: tool.schema
+                    .number()
+                    .optional()
+                    .describe("Internal wave row id (not wave_number)"),
+                }),
+              )
+              .optional()
+              .describe(
+                "Records verification rows for this item's wave inside the batch transaction.",
+              ),
+            traceability: tool.schema
+              .array(
+                tool.schema.object({
+                  requirement_key: tool.schema.string(),
+                  wave_number: tool.schema
+                    .number()
+                    .optional()
+                    .describe("Omit to inherit the enclosing item's wave_number."),
+                  task_index: tool.schema.number().optional(),
+                  status: tool.schema.string().optional(),
+                }),
+              )
+              .optional()
+              .describe(
+                "Writes traceability rows for this item's wave inside the batch transaction.",
+              ),
           }),
         )
         .optional(),
