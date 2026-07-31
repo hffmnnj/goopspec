@@ -4,18 +4,18 @@ Writing tests that catch regressions, not consume budget.
 
 ## Why This Exists
 
-More tests ≠ better outcomes. Across six top LLM code agents (Chen et al., arXiv:2602.07900), test-writing intensity correlates with *struggle*, not success — agent-written tests skew ~5× `print` statements over assertions and lean on `assert x is not None` sanity checks. Every rule below is a self-check you run before committing; the remedy for bloated tests must not itself bloat the context budget.
+More tests ≠ better outcomes. Across six top LLM code agents (Chen et al., arXiv:2602.07900), test-writing intensity correlates with *struggle*, not success — agent-written tests skew ~5× `print` statements over assertions and lean on `assert x is not None` sanity checks. Every rule is a pre-commit self-check; the remedy must not bloat the budget.
 
 ## What Is Worth Testing
 
-Test behavior, not implementation. Implementation details are things callers never see — testing them creates a third user the production code must serve.
+Test behavior, not implementation. Implementation details are things callers never see — testing them creates a third user the code must serve.
 
 - **Name the behavior change that would flip this assertion.** If you can't, delete the test.
 - **If you deleted the SUT, would this test still pass?** If yes, it tests the framework or your mocks, not your code.
 - **Would this assertion fail to compile if the behavior were wrong?** If yes, the type system owns it, not you.
 - **Would a caller be surprised this test exists?** If yes, you're testing structure, not behavior.
 
-Never test the framework, the language, or your own mocks. Don't write a test just to have written one.
+Never test the framework, language, or your own mocks. Don't write a test just to have written one.
 
 ## Test-Value Heuristics
 
@@ -26,11 +26,11 @@ A good test fails when behavior breaks and passes only when behavior is correct 
 - **Is the test hard to write?** That signals bad interface design — fix the interface, don't mock harder.
 - **Is the change trivial wiring the type system or linter already covers?** Skip it. "I get paid for code that works, not for tests." — Beck.
 
-Deleting, or never writing, a low-signal test is a valid and good outcome.
+Deleting (or never writing) a low-signal test is a valid outcome.
 
 ## Speed Discipline
 
-A unit test should be sub-second; a suite you won't run before every commit is too slow to live in the gate.
+A unit test should be sub-second; a suite you won't run before every commit is too slow for the gate.
 
 | Size | May touch | Time limit |
 |------|-----------|------------|
@@ -44,7 +44,7 @@ A unit test should be sub-second; a suite you won't run before every commit is t
 
 ## Unit vs Integration Boundaries
 
-The Pyramid (Fowler/Cohn: many unit, few E2E) and the Testing Trophy (KCD: "mostly integration") genuinely disagree on the unit:integration ratio. The split is partly definitional — a "unit" to a classicist is smaller than a "unit" to a JS dev whose unit is a component tree.
+The Pyramid (Fowler/Cohn) and the Testing Trophy (KCD) genuinely disagree on the unit:integration ratio — see `tdd.md` §Test Levels for the distribution. The split is partly definitional: a "unit" to a classicist is smaller than to a JS dev whose unit is a component tree.
 
 **Agreed core** (not in dispute): E2E should be few; confidence-per-test increases as you move up the ladder; don't chase 100% coverage; avoid implementation-detail tests.
 
@@ -81,7 +81,7 @@ A flaky test is a bug — in the test or in production. ~1/6 of flakes that trac
 | Filesystem / DB residue | Per-test temp dirs; in-memory DB reset |
 
 - **Run this test 10× with no code change.** Any variation? It's flaky — quarantine and fix the root cause.
-- **Are you auto-retrying flaky tests?** Retry is a stopgap while fixing, not a fix. A reliably failing test beats a flaky one.
+- **Are you auto-retrying flaky tests?** Retry is a stopgap, not a fix. A reliably failing test beats a flaky one.
 
 ## Assertion Quality
 
@@ -92,7 +92,7 @@ Few strong assertions beat many weak ones. One *logical* assertion per test — 
 - **If the test fails, is the cause obvious?** If you can't tell which assert broke (Assertion Roulette), split the test.
 - **Does this snapshot encode intended behavior or just current output?** If the latter, it locks in whatever's there now — review every diff deliberately.
 
-Don't assert what the type system already guarantees.
+Don't assert what the type system guarantees.
 
 ## Anti-Pattern Catalogue
 
