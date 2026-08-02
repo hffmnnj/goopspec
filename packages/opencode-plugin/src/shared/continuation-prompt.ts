@@ -134,6 +134,7 @@ export function collectContinuationDetail(
       }));
     } catch (error) {
       logError("continuation prompt could not collect current-wave metadata", error);
+      return undefined;
     }
 
     return {
