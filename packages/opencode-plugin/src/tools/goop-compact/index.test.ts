@@ -528,4 +528,275 @@ describe("createGoopCompactTool", () => {
     expect(ctx.pendingCompactions.get(otherSessionID)?.status).toBe("queued");
     consoleSpy.mockRestore();
   });
+
+  it("populates current-wave task, blocker, and PR metadata from the DB", async () => {
+    const sessionID = "session-wave-metadata";
+    const nextStep = "Continue after compaction with full context.";
+
+    const env = setupTestEnvironment("goop-compact-wave-metadata");
+    const { createStateManager } = await import("../../features/state-manager/index.js");
+    const realStateManager = createStateManager({ projectDir: env.testDir, db: env.db });
+    realStateManager.updateWorkflow({
+      phase: "execute",
+      mode: "standard",
+      depth: "standard",
+      interviewComplete: true,
+      specLocked: true,
+      acceptanceConfirmed: false,
+      currentWave: 2,
+      totalWaves: 4,
+      autopilot: true,
+      lazyAutopilot: true,
+    });
+
+    env.db.upsertWave("default", {
+      wave_number: 2,
+      title: "Wave 2: Implementation",
+      status: "in_progress",
+      pr_branch: "feat/compaction-continuation-prompt",
+      pr_url: "https://github.com/example/repo/pull/123",
+    });
+
+    const wave = env.db.getWave("default", 2);
+    if (!wave) throw new Error("Test setup failed: wave not found");
+
+    env.db.upsertWaveTask({
+      wave_id: wave.id,
+      workflow_id: "default",
+      task_index: 0,
+      description: "Extend snapshot type",
+      agent: "goop-executor-medium",
+      status: "in_progress",
+    });
+    env.db.upsertWaveTask({
+      wave_id: wave.id,
+      workflow_id: "default",
+      task_index: 1,
+      description: "Build formatter",
+      agent: "goop-executor-high",
+      status: "pending",
+    });
+
+    env.db.upsertBlocker("default", {
+      description: "DB schema migration needed",
+      severity: "high",
+      status: "open",
+      wave_id: wave.id,
+    });
+    env.db.upsertBlocker("default", {
+      description: "Type mismatch in types.ts",
+      severity: "medium",
+      status: "open",
+    });
+    env.db.upsertBlocker("default", {
+      description: "Already resolved",
+      severity: "low",
+      status: "resolved",
+    });
+
+    const realCtx = createMockPluginContext({
+      testDir: env.testDir,
+      db: env.db,
+      stateManager: realStateManager,
+    });
+    setCompactionClient(realCtx, {
+      session: { messages: modelMessages, summarize: mock(async () => ({ data: true })) },
+    });
+
+    await createGoopCompactTool(realCtx).execute(
+      { next_step: nextStep },
+      createMockToolContext({ sessionID }),
+    );
+
+    const snapshot = realCtx.compactionHandoff.get(sessionID);
+    expect(snapshot).toBeDefined();
+    expect(snapshot?.currentWaveTitle).toBe("Wave 2: Implementation");
+    expect(snapshot?.currentWaveStatus).toBe("in_progress");
+    expect(snapshot?.prBranch).toBe("feat/compaction-continuation-prompt");
+    expect(snapshot?.prUrl).toBe("https://github.com/example/repo/pull/123");
+
+    expect(snapshot?.tasks).toHaveLength(2);
+    expect(snapshot?.tasks?.[0]).toEqual({
+      index: 0,
+      description: "Extend snapshot type",
+      status: "in_progress",
+      agent: "goop-executor-medium",
+    });
+    expect(snapshot?.tasks?.[1]).toEqual({
+      index: 1,
+      description: "Build formatter",
+      status: "pending",
+      agent: "goop-executor-high",
+    });
+
+    expect(snapshot?.openBlockers).toHaveLength(2);
+    expect(snapshot?.openBlockers).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          severity: "high",
+          description: "DB schema migration needed",
+        }),
+        expect.objectContaining({
+          severity: "medium",
+          description: "Type mismatch in types.ts",
+        }),
+      ]),
+    );
+    expect(snapshot?.openBlockers?.every((b) => b.description !== "Already resolved")).toBeTrue();
+
+    env.cleanup();
+  });
+
+  it("bounds tasks to 8 and open blockers to 5 in the snapshot", async () => {
+    const sessionID = "session-bounded-metadata";
+    const nextStep = "Resume with bounded context.";
+
+    const env = setupTestEnvironment("goop-compact-bounded");
+    const { createStateManager } = await import("../../features/state-manager/index.js");
+    const realStateManager = createStateManager({ projectDir: env.testDir, db: env.db });
+    realStateManager.updateWorkflow({
+      phase: "execute",
+      currentWave: 1,
+      totalWaves: 3,
+      interviewComplete: true,
+      specLocked: true,
+    });
+
+    env.db.upsertWave("default", { wave_number: 1, title: "Wave 1", status: "in_progress" });
+    const wave = env.db.getWave("default", 1);
+    if (!wave) throw new Error("Test setup failed: wave not found");
+
+    for (let i = 0; i < 10; i++) {
+      env.db.upsertWaveTask({
+        wave_id: wave.id,
+        workflow_id: "default",
+        task_index: i,
+        description: `Task ${i}`,
+        status: i < 5 ? "done" : "pending",
+      });
+    }
+    for (let i = 0; i < 7; i++) {
+      env.db.upsertBlocker("default", {
+        description: `Blocker ${i}`,
+        severity: "medium",
+        status: "open",
+      });
+    }
+
+    const realCtx = createMockPluginContext({
+      testDir: env.testDir,
+      db: env.db,
+      stateManager: realStateManager,
+    });
+    setCompactionClient(realCtx, {
+      session: { messages: modelMessages, summarize: mock(async () => ({ data: true })) },
+    });
+
+    await createGoopCompactTool(realCtx).execute(
+      { next_step: nextStep },
+      createMockToolContext({ sessionID }),
+    );
+
+    const snapshot = realCtx.compactionHandoff.get(sessionID);
+    expect(snapshot).toBeDefined();
+    expect(snapshot?.tasks).toHaveLength(8);
+    expect(snapshot?.openBlockers).toHaveLength(5);
+
+    env.cleanup();
+  });
+
+  it("produces undefined optional fields when the DB has no wave data", async () => {
+    const sessionID = "session-empty-db";
+    const nextStep = "Resume with minimal context.";
+
+    const env = setupTestEnvironment("goop-compact-empty-db");
+    const { createStateManager } = await import("../../features/state-manager/index.js");
+    const realStateManager = createStateManager({ projectDir: env.testDir, db: env.db });
+    realStateManager.updateWorkflow({
+      phase: "execute",
+      currentWave: 1,
+      totalWaves: 3,
+      interviewComplete: true,
+      specLocked: true,
+    });
+
+    const realCtx = createMockPluginContext({
+      testDir: env.testDir,
+      db: env.db,
+      stateManager: realStateManager,
+    });
+    setCompactionClient(realCtx, {
+      session: { messages: modelMessages, summarize: mock(async () => ({ data: true })) },
+    });
+
+    await createGoopCompactTool(realCtx).execute(
+      { next_step: nextStep },
+      createMockToolContext({ sessionID }),
+    );
+
+    const snapshot = realCtx.compactionHandoff.get(sessionID);
+    expect(snapshot).toBeDefined();
+    expect(snapshot?.currentWaveTitle).toBeUndefined();
+    expect(snapshot?.currentWaveStatus).toBeUndefined();
+    expect(snapshot?.tasks).toBeUndefined();
+    expect(snapshot?.openBlockers).toBeUndefined();
+    expect(snapshot?.prBranch).toBeUndefined();
+    expect(snapshot?.prUrl).toBeUndefined();
+    expect(snapshot?.workflowId).toBe("default");
+    expect(snapshot?.currentWave).toBe(1);
+    expect(snapshot?.nextStep).toBe(nextStep);
+
+    env.cleanup();
+  });
+
+  it("produces a valid core snapshot when DB accessors throw", async () => {
+    const sessionID = "session-throwing-db";
+    const nextStep = "Resume despite DB failure.";
+
+    const env = setupTestEnvironment("goop-compact-throwing-db");
+    const { createStateManager } = await import("../../features/state-manager/index.js");
+    const realStateManager = createStateManager({ projectDir: env.testDir, db: env.db });
+    realStateManager.updateWorkflow({
+      phase: "execute",
+      currentWave: 2,
+      totalWaves: 4,
+      interviewComplete: true,
+      specLocked: true,
+    });
+
+    const realCtx = createMockPluginContext({
+      testDir: env.testDir,
+      db: env.db,
+      stateManager: realStateManager,
+    });
+    setCompactionClient(realCtx, {
+      session: { messages: modelMessages, summarize: mock(async () => ({ data: true })) },
+    });
+
+    const dbSpy = spyOn(realCtx.db, "getWaves").mockImplementation(() => {
+      throw new Error("database is locked");
+    });
+    const consoleSpy = spyOn(console, "error").mockImplementation(() => {});
+
+    await createGoopCompactTool(realCtx).execute(
+      { next_step: nextStep },
+      createMockToolContext({ sessionID }),
+    );
+
+    const snapshot = realCtx.compactionHandoff.get(sessionID);
+    expect(snapshot).toBeDefined();
+    expect(snapshot?.workflowId).toBe("default");
+    expect(snapshot?.currentWave).toBe(2);
+    expect(snapshot?.nextStep).toBe(nextStep);
+    expect(snapshot?.currentWaveTitle).toBeUndefined();
+    expect(snapshot?.currentWaveStatus).toBeUndefined();
+    expect(snapshot?.tasks).toBeUndefined();
+    expect(snapshot?.openBlockers).toBeUndefined();
+    expect(snapshot?.prBranch).toBeUndefined();
+    expect(snapshot?.prUrl).toBeUndefined();
+
+    dbSpy.mockRestore();
+    consoleSpy.mockRestore();
+    env.cleanup();
+  });
 });
