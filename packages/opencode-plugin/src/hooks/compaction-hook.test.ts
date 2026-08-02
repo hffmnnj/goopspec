@@ -505,7 +505,7 @@ describe("buildWorkflowSurvivalBlock", () => {
 // ---------------------------------------------------------------------------
 
 describe("createCompactionHook", () => {
-  it("pushes context block onto output.context (not output.prompt)", async () => {
+  it("sets a continuation prompt and leaves output.context empty", async () => {
     const ctx = createMockPluginContext({
       state: {
         activeWorkflowId: "feat-auth",
@@ -527,11 +527,9 @@ describe("createCompactionHook", () => {
     const output: { context: string[]; prompt?: string } = { context: [] };
     await handler?.({ sessionID: "s1" }, output);
 
-    expect(output.context.length).toBeGreaterThan(0);
-    expect(output.context[0]).toContain("feat-auth");
-    expect(output.context[0]).toContain("EXECUTE");
-    // Must NOT set prompt
-    expect(output.prompt).toBeUndefined();
+    expect(output.prompt).toContain("feat-auth");
+    expect(output.prompt).toContain("execute");
+    expect(output.context).toHaveLength(0);
   });
 
   it("includes and clears the declared next step for its session", async () => {
@@ -550,9 +548,7 @@ describe("createCompactionHook", () => {
     const output: { context: string[]; prompt?: string } = { context: [] };
     await hooks["experimental.session.compacting"]?.({ sessionID: "session-a" }, output);
 
-    expect(output.context.join("\n")).toContain(
-      "IMMEDIATE NEXT STEP (declared before compaction): Run the focused hook tests.",
-    );
+    expect(output.prompt).toContain("1. Run the focused hook tests.");
     expect(ctx.compactionHandoff.get("session-a")).toBeUndefined();
     expect(ctx.pendingCompactions.has("session-a")).toBeFalse();
 
@@ -560,7 +556,7 @@ describe("createCompactionHook", () => {
       context: [],
     };
     await hooks["experimental.session.compacting"]?.({ sessionID: "session-a" }, secondOutput);
-    expect(secondOutput.context.join("\n")).not.toContain("IMMEDIATE NEXT STEP");
+    expect(secondOutput.prompt).not.toContain("Run the focused hook tests.");
   });
 
   it("does not use a handoff declared for another session", async () => {
@@ -627,10 +623,10 @@ describe("createCompactionHook", () => {
     const output: { context: string[]; prompt?: string } = { context: [] };
     await hooks["experimental.session.compacting"]?.({ sessionID: "s1" }, output);
 
-    const joined = output.context.join("\n");
+    const joined = output.prompt ?? "";
     expect(joined).toContain("AUTOPILOT ACTIVE");
     expect(joined).toContain("Continue to the next phase immediately");
-    expect(joined).toContain("Do NOT warn about context length or token limits");
+    expect(joined).toContain("Do not warn about context limits or suggest a new session");
   });
 
   it("does not push empty block when workflow is missing", async () => {
@@ -648,7 +644,7 @@ describe("createCompactionHook", () => {
     expect(output.context).toHaveLength(0);
   });
 
-  it("does not throw when output.context is undefined (defensive guard)", async () => {
+  it("does not touch an undefined output.context", async () => {
     const ctx = createMockPluginContext({
       state: {
         activeWorkflowId: "feat-auth",
@@ -671,11 +667,9 @@ describe("createCompactionHook", () => {
     const output = {} as { context: string[]; prompt?: string };
     await handler?.({ sessionID: "s1" }, output);
 
-    // Should have initialised context and pushed the block
-    expect(Array.isArray(output.context)).toBe(true);
-    expect(output.context.length).toBeGreaterThan(0);
-    expect(output.context[0]).toContain("feat-auth");
-    expect(output.context[0]).toContain("EXECUTE");
+    expect(output.context).toBeUndefined();
+    expect(output.prompt).toContain("feat-auth");
+    expect(output.prompt).toContain("execute");
   });
 
   it("gracefully handles errors without throwing", async () => {

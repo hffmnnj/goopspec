@@ -1,18 +1,22 @@
 /**
  * Compaction Hook — preserves GoopSpec workflow state across session compaction.
  *
- * Uses the `experimental.session.compacting` hook to push a survival block
- * onto `output.context` (string[]). This ensures the post-compaction model
- * knows the active workflow, phase, wave progress, autopilot directives,
- * and where to find key documents.
+ * Uses the `experimental.session.compacting` hook to replace `output.prompt`
+ * with a bounded continuation prompt. This ensures the post-compaction model
+ * receives the active workflow, phase, wave progress, and next action.
  *
- * CRITICAL: pushes to `output.context` (appended to default compaction prompt).
- * Does NOT set `output.prompt` (that would replace the default prompt entirely).
+ * If no valid workflow can be resolved, the hook stands down without mutating
+ * either output field.
  *
  * @module hooks/compaction-hook
  */
 
 import type { CompactionHandoffSnapshot, PluginContext } from "../core/types.js";
+import {
+  type WorkflowContinuationDetail,
+  buildContinuationPrompt,
+  collectContinuationDetail,
+} from "../shared/continuation-prompt.js";
 import { log, logError } from "../shared/logger.js";
 import { clearCompactionHaltState } from "./compaction-halt/index.js";
 import type { HookFactory, Hooks } from "./types.js";
@@ -254,9 +258,9 @@ export function buildWorkflowSurvivalBlock(
 // ---------------------------------------------------------------------------
 
 /**
- * Create the compaction hook that preserves workflow state across compaction.
+ * Create the compaction hook that replaces the default continuation prompt.
  *
- * Pushes the survival block onto `output.context` (never sets `output.prompt`).
+ * It leaves both output fields unchanged when workflow state is unavailable.
  */
 export const createCompactionHook: HookFactory = (ctx: PluginContext): Partial<Hooks> => {
   const handler = safeHandler(
@@ -268,7 +272,6 @@ export const createCompactionHook: HookFactory = (ctx: PluginContext): Partial<H
       const sessionID = input.sessionID;
       const rawHandoff = sessionID ? ctx.compactionHandoff.get(sessionID) : undefined;
       const snapshot = isCompactionHandoffSnapshot(rawHandoff) ? rawHandoff : undefined;
-      const nextStep = snapshot?.nextStep;
 
       if (rawHandoff === undefined) {
         logError(
@@ -285,20 +288,26 @@ export const createCompactionHook: HookFactory = (ctx: PluginContext): Partial<H
         clearCompactionHaltState(sessionID);
       }
 
-      let block: string;
       try {
-        block = buildWorkflowSurvivalBlock(ctx, snapshot, nextStep);
-      } catch (error) {
-        logError("compaction survival block failed; continuing without it", error);
-        return;
-      }
-
-      if (block.trim().length > 0) {
-        if (!Array.isArray(output.context)) {
-          output.context = [];
-          log("compaction output.context was absent, initialising");
+        let detail: WorkflowContinuationDetail | undefined;
+        if (snapshot) {
+          const reconciliation = reconcileActiveWorkflowBinding(ctx, snapshot.workflowId);
+          detail = collectContinuationDetail(
+            ctx,
+            reconciliation.workflowId === snapshot.workflowId ? snapshot : undefined,
+          );
+        } else {
+          detail = collectContinuationDetail(ctx);
         }
-        output.context.push(block);
+
+        if (detail === undefined) return;
+
+        const prompt = buildContinuationPrompt(detail);
+        if (!prompt.trim()) return;
+
+        output.prompt = prompt;
+      } catch (error) {
+        logError("compaction continuation prompt failed; continuing without it", error);
       }
     },
   );
