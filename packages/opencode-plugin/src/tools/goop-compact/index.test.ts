@@ -280,7 +280,8 @@ describe("createGoopCompactTool", () => {
     expect(handlerSnapshot?.branch).toBeUndefined();
     expect(handlerSnapshot?.nextStep).toBe(nextStep);
     expect(typeof handlerSnapshot?.capturedAtMs).toBe("number");
-    expect(output.context.join("\n")).toContain(nextStep);
+    expect(output.prompt).toContain(`1. ${nextStep}`);
+    expect(output.context).toHaveLength(0);
     expect(ctx.compactionHandoff.has(sessionID)).toBeFalse();
   });
 
