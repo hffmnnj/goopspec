@@ -75,6 +75,24 @@ describe("registerToolsV2()", () => {
     expect(registrations).toHaveLength(38);
   });
 
+  it("omits goop_compact when client.session exists but summarize is not a function (NFR4)", async () => {
+    const ctx = createMockPluginContext();
+    contexts.push(ctx);
+    // The capability gate checks typeof client.session.summarize === "function".
+    // A session object without summarize must still be treated as incapable.
+    Object.defineProperty(ctx.sdk, "client", {
+      configurable: true,
+      value: { session: {} },
+    });
+    const registrations: V2ToolDefinition[] = [];
+
+    await registerToolsV2(createRuntimeContext(registrations), ctx);
+
+    const names = registrations.map((definition) => definition.name);
+    expect(names).not.toContain("goop_compact");
+    expect(names).toContain("goop_status");
+  });
+
   it("converts goop_status arguments with Zod's native JSON Schema support", () => {
     const ctx = createMockPluginContext();
     contexts.push(ctx);

@@ -1,6 +1,6 @@
 import { describe, expect, it, spyOn } from "bun:test";
 import { createMockPluginContext, setupTestEnvironment } from "../test-utils.js";
-import { createHooks, mergeHooks, registerHookFactory } from "./index.js";
+import { DEFAULT_HOOK_FACTORIES, createHooks, mergeHooks, registerHookFactory } from "./index.js";
 import type { HookFactory, Hooks } from "./types.js";
 
 // ---------------------------------------------------------------------------
@@ -267,6 +267,29 @@ describe("registerHookFactory", () => {
       await hooks.event?.({ event: { type: "test" } as never });
 
       expect(registered).toBe(true);
+    } finally {
+      cleanup();
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// AD7 boundary — experimental.compaction.autocontinue deferral
+// ---------------------------------------------------------------------------
+
+describe("DEFAULT_HOOK_FACTORIES — AD7 boundary", () => {
+  it("no factory registers experimental.compaction.autocontinue (SPEC AD7)", () => {
+    const { testDir, cleanup } = setupTestEnvironment("ad7-autocontinue");
+    try {
+      const ctx = createMockPluginContext({ testDir });
+
+      for (const factory of DEFAULT_HOOK_FACTORIES) {
+        const partial = factory(ctx);
+        // SPEC AD7: experimental.compaction.autocontinue is deliberately NOT
+        // implemented. If this assertion fails, a factory was added that
+        // registers the autocontinue hook — revisit AD7 before doing so.
+        expect(partial["experimental.compaction.autocontinue"]).toBeUndefined();
+      }
     } finally {
       cleanup();
     }
