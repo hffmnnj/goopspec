@@ -86,6 +86,62 @@ describe("continuation prompt", () => {
     );
   });
 
+  it("prioritizes recent user instructions and the last explicit task direction for snapshots and live state", () => {
+    const snapshotPrompt = buildContinuationPrompt(collectContinuationDetail(ctx, fullSnapshot())!);
+
+    ctx = createMockPluginContext({
+      testDir: ctx.sdk.directory,
+      db: ctx.db,
+      state: {
+        activeWorkflowId: "live-workflow",
+        workflows: {
+          "live-workflow": createDefaultWorkflowState({ currentWave: 1, totalWaves: 2 }),
+        },
+      },
+    });
+    const livePrompt = buildContinuationPrompt(collectContinuationDetail(ctx)!);
+
+    for (const prompt of [snapshotPrompt, livePrompt]) {
+      expect(prompt).toContain("most recent user instructions");
+      expect(prompt).toContain("last explicit task direction");
+    }
+  });
+
+  it("retains both the anchored baseline and no-verbatim-reproduction directives", () => {
+    const prompt = buildContinuationPrompt(collectContinuationDetail(ctx, fullSnapshot())!);
+
+    expect(prompt).toContain(
+      "use it as the anchored baseline: preserve still-true details, drop stale ones, and merge new facts.",
+    );
+    expect(prompt).toContain(
+      "Never reproduce an earlier GoopSpec continuation brief verbatim; use it only as the anchored baseline.",
+    );
+  });
+
+  it("requires authoritative live-state re-queries through both workflow tools", () => {
+    const prompt = buildContinuationPrompt(collectContinuationDetail(ctx, fullSnapshot())!);
+
+    expect(prompt).toContain("workspace and GoopSpecDB persist and are authoritative");
+    expect(prompt).toContain("`goop_status`");
+    expect(prompt).toContain("`goop_read_db`");
+  });
+
+  it("prohibits tool use during continuation-brief generation", () => {
+    const prompt = buildContinuationPrompt(collectContinuationDetail(ctx, fullSnapshot())!);
+
+    expect(prompt).toContain("No tools are available or should be invoked on this turn");
+  });
+
+  it("keeps the frozen formatter caps unchanged", async () => {
+    const source = await Bun.file(new URL("./continuation-prompt.ts", import.meta.url)).text();
+
+    expect(MAX_CONTINUATION_PROMPT_CHARS).toBe(10_000);
+    expect(source).toMatch(/const MAX_TEXT_CHARS = 340;/);
+    expect(source).toMatch(/const MAX_IDENTIFIER_CHARS = 160;/);
+    expect(source).toMatch(/const MAX_TASKS = 8;/);
+    expect(source).toMatch(/const MAX_BLOCKERS = 5;/);
+  });
+
   it("collects live state and guarded current-wave data without a snapshot", () => {
     const workflowId = "live-workflow";
     ctx.db.upsertWave(workflowId, {
