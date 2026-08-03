@@ -7,6 +7,7 @@ import {
   setupTestEnvironment,
 } from "../test-utils.js";
 import {
+  buildDbContextBlock,
   buildFieldNotesBlock,
   buildMemoryBlock,
   buildStateBlock,
@@ -35,7 +36,50 @@ describe("estimateTokens", () => {
 });
 
 // ---------------------------------------------------------------------------
-// buildStateBlock
+// buildDbContextBlock
+// ---------------------------------------------------------------------------
+
+describe("buildDbContextBlock", () => {
+  it("lists the document inventory and a concise tool pointer, without restating tool descriptions", () => {
+    const { testDir, cleanup } = setupTestEnvironment("db-context-block");
+    try {
+      const ctx = createMockPluginContext({ testDir });
+      ctx.db.upsertDocument("feat-auth", "spec", "# Spec");
+      clearDocTypeCache();
+
+      const block = buildDbContextBlock(ctx, "feat-auth");
+
+      expect(block).toContain("<goopspec_db>");
+      expect(block).toContain("</goopspec_db>");
+      expect(block).toContain("## Workflow Documents (feat-auth)");
+      expect(block).toContain("- spec");
+      // Pointer, not a restated description — no per-tool argument lists.
+      expect(block).toContain("goop_read_db");
+      expect(block).not.toContain("## DB Tools Available");
+      expect(block).not.toContain("doc_type, workflow_id?");
+      expect(block).not.toContain("renders markdown sidecar automatically");
+    } finally {
+      cleanup();
+    }
+  });
+
+  it("reports no documents yet when the workflow has none", () => {
+    const { testDir, cleanup } = setupTestEnvironment("db-context-block-empty");
+    try {
+      const ctx = createMockPluginContext({ testDir });
+      clearDocTypeCache();
+
+      const block = buildDbContextBlock(ctx, "brand-new");
+
+      expect(block).toContain("(no documents yet — use goop_write_db to create them)");
+    } finally {
+      cleanup();
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// DB context block
 // ---------------------------------------------------------------------------
 
 describe("buildStateBlock", () => {
@@ -215,6 +259,9 @@ describe("createSystemTransformHook", () => {
       expect(injected).toContain("phase: execute");
       expect(injected).toContain("spec_locked: true");
       expect(injected).toContain("wave_progress: 2/5");
+      // Single canonical state block — the markdown "## CURRENT STATE"
+      // variant is no longer duplicated into the phase rules block.
+      expect(injected).not.toContain("## CURRENT STATE");
     } finally {
       cleanup();
     }

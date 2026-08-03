@@ -169,6 +169,13 @@ export function buildPhaseEnforcement(phase: WorkflowPhase): string {
 
 /**
  * Build a compact state summary for system prompt injection.
+ *
+ * Not consumed by the live injection path — kept as a standalone, tested
+ * formatter for direct/manual use. The canonical, always-injected state
+ * block is `buildStateBlock` in `src/hooks/system-transform.ts`, which
+ * already carries the full union of fields (including `interviewComplete`
+ * and `autopilot`, which this markdown variant omits). Consolidating on a
+ * single injected block avoids the two representations drifting apart.
  */
 export function buildStateContext(workflow: WorkflowState, workflowId: string): string {
   const lines: string[] = [
@@ -196,14 +203,16 @@ export function buildStateContext(workflow: WorkflowState, workflowId: string): 
 }
 
 /**
- * Build the complete enforcement context (state + phase rules).
+ * Build the phase enforcement context for system prompt injection.
  *
- * This is the primary entry point for the system-transform hook.
+ * This is the primary entry point for the system-transform hook's phase
+ * rules block. It previously also prepended a `## CURRENT STATE` block
+ * (via `buildStateContext`), duplicating the `<goopspec_state>` block that
+ * `buildStateBlock` (system-transform.ts) injects separately — the same
+ * workflow state was appearing twice, in two different formats, in every
+ * system message. Workflow state now has exactly one canonical source, so
+ * this function returns phase rules only.
  */
-export function buildEnforcementContext(workflow: WorkflowState, workflowId: string): string {
-  const stateBlock = buildStateContext(workflow, workflowId);
-  const phaseBlock = buildPhaseEnforcement(workflow.phase);
-
-  if (!phaseBlock) return stateBlock;
-  return `${stateBlock}\n\n${phaseBlock}`;
+export function buildEnforcementContext(workflow: WorkflowState): string {
+  return buildPhaseEnforcement(workflow.phase);
 }

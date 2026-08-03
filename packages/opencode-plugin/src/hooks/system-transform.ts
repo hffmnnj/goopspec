@@ -111,11 +111,14 @@ export function buildStateBlock(workflow: WorkflowState, workflowId: string): st
 /**
  * Build phase enforcement rules block.
  *
- * Delegates to the enforcement subsystem's `buildEnforcementContext` which
- * produces MUST DO / MUST NOT DO rules for the current phase.
+ * Delegates to the enforcement subsystem's `buildEnforcementContext`, which
+ * returns MUST DO / MUST NOT DO / required-documents rules for the current
+ * phase only. Workflow state is not repeated here — `buildStateBlock` above
+ * is the single canonical `<goopspec_state>` source for every field both
+ * formats used to carry.
  */
-export function buildPhaseRulesBlock(workflow: WorkflowState, workflowId: string): string {
-  return buildEnforcementContext(workflow, workflowId);
+export function buildPhaseRulesBlock(workflow: WorkflowState): string {
+  return buildEnforcementContext(workflow);
 }
 
 /**
@@ -177,8 +180,14 @@ export function buildFieldNotesBlock(notes: FieldNoteRow[], tokenBudget: number)
 // ---------------------------------------------------------------------------
 
 /**
- * Build a `<goopspec_db>` context block listing available DB tools and
- * the document inventory for the active workflow.
+ * Build a `<goopspec_db>` context block listing the document inventory for
+ * the active workflow, plus a pointer to the DB tools.
+ *
+ * Tool names, arguments, and behavior are already fully described by their
+ * own MCP tool schemas — restating them here duplicated four tool
+ * descriptions on every LLM call. Only the workflow-specific fact (which
+ * documents exist right now) isn't available anywhere else, so that's all
+ * this block carries.
  *
  * Returns an empty string when the DB is unavailable or throws — the
  * system-transform hook must never crash due to DB issues.
@@ -207,14 +216,10 @@ export function buildDbContextBlock(ctx: PluginContext, workflowId: string): str
 
   return [
     "<goopspec_db>",
-    "## DB Tools Available",
-    "- goop_read_db(doc_type, workflow_id?) — read a workflow document (spec, blueprint, chronicle, adl, handoff, requirements, research)",
-    "- goop_write_db(doc_type, content, workflow_id?) — write/update a workflow document; renders markdown sidecar automatically",
-    "- goop_save_note(title, body, tags, source_agent, importance, workflow_id?, project_id?) — save a Field Note (persists across projects)",
-    "- goop_search_notes(query, tags?, project_id?, workflow_id?, limit?) — search Field Notes with FTS + tag matching",
-    "",
     `## Workflow Documents (${workflowId})`,
     docInventory,
+    "",
+    "See goop_read_db / goop_write_db / goop_save_note / goop_search_notes tool schemas for usage.",
     "</goopspec_db>",
   ].join("\n");
 }
@@ -250,7 +255,7 @@ export function createSystemTransformHook(ctx: PluginContext): Partial<Hooks> {
       const stateBlock = buildStateBlock(workflow, workflowId);
 
       // 2. Phase rules — always injected
-      const phaseRulesBlock = buildPhaseRulesBlock(workflow, workflowId);
+      const phaseRulesBlock = buildPhaseRulesBlock(workflow);
 
       // 3. DB context block — lists available DB tools and doc inventory
       let dbBlock = "";
