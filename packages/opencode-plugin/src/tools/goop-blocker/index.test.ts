@@ -327,6 +327,59 @@ describe("goop_blocker tool", () => {
     expect(openBlockers[0].status).toBe("open");
   });
 
+  // -----------------------------------------------------------------------
+  // Ambiguity rejection (W4.T3 — top-level operation fields alongside items[])
+  // -----------------------------------------------------------------------
+
+  it("rejects a meaningful top-level action alongside items[], with zero mutation", async () => {
+    const blockerTool = createGoopBlockerTool(ctx);
+
+    const result = await blockerTool.execute(
+      {
+        action: "open",
+        description: "Leaked top-level open",
+        items: [{ action: "open", description: "Batch A" }],
+      },
+      toolCtx,
+    );
+
+    expect(result).toContain("Error in goop_blocker");
+    expect(result).toContain("action");
+    expect(result).toContain("items[]");
+    expect(ctx.db.getBlockers("default").length).toBe(0);
+  });
+
+  it("rejects a meaningful top-level description alongside items[], with zero mutation", async () => {
+    const blockerTool = createGoopBlockerTool(ctx);
+
+    const result = await blockerTool.execute(
+      {
+        description: "Leaked description",
+        items: [{ action: "open", description: "Batch A" }],
+      },
+      toolCtx,
+    );
+
+    expect(result).toContain("Error in goop_blocker");
+    expect(result).toContain("description");
+    expect(ctx.db.getBlockers("default").length).toBe(0);
+  });
+
+  it("still accepts workflow_id alongside items[] because it is genuinely consumed as the default", async () => {
+    const blockerTool = createGoopBlockerTool(ctx);
+
+    const result = await blockerTool.execute(
+      {
+        workflow_id: "custom-wf",
+        items: [{ action: "open", description: "Scoped blocker" }],
+      },
+      toolCtx,
+    );
+
+    expect(result).toContain("1/1 succeeded");
+    expect(ctx.db.getBlockers("custom-wf", "open")).toHaveLength(1);
+  });
+
   it("surfaces the completed-wave warning in batch items[] mode", async () => {
     ctx.db.upsertWave("default", { wave_number: 1, status: "completed" });
     const blockerTool = createGoopBlockerTool(ctx);

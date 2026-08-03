@@ -541,6 +541,96 @@ describe("goop_save_note tool", () => {
   });
 
   // -----------------------------------------------------------------------
+  // Ambiguity rejection (W4.T3 — note-specific mirror of resolveWriteMode())
+  // -----------------------------------------------------------------------
+
+  describe("ambiguity rejection", () => {
+    it("rejects note_id + a meaningful create field together, with zero mutation", async () => {
+      const tool = createGoopSaveNoteTool(ctx);
+      const createResult = await tool.execute(
+        { title: "Original", body: "alpha beta", tags: ["p"], source_agent: "agent" },
+        toolCtx,
+      );
+      const noteId = String(createResult).match(/fn_\d{8}_[a-z0-9]+/)?.[0] ?? "";
+
+      const result = await tool.execute(
+        {
+          note_id: noteId,
+          title: "Should not apply",
+          old_string: "beta",
+          new_string: "BETA",
+        },
+        toolCtx,
+      );
+
+      expect(result).toContain("Error in goop_save_note");
+      expect(result).toContain("title");
+      expect(result).toContain("cannot be supplied alongside note_id");
+      expect(ctx.db.getNoteById(noteId)?.body).toBe("alpha beta");
+      expect(ctx.db.getNoteById(noteId)?.title).toBe("Original");
+    });
+
+    it("rejects old_string without note_id even when create fields are also present, with zero mutation", async () => {
+      const tool = createGoopSaveNoteTool(ctx);
+      const result = await tool.execute(
+        {
+          title: "Would-be note",
+          body: "Body",
+          tags: ["t"],
+          source_agent: "agent",
+          old_string: "x",
+          new_string: "y",
+        },
+        toolCtx,
+      );
+
+      expect(result).toContain("Error in goop_save_note");
+      expect(result).toContain("old_string");
+      expect(result).toContain("supplied without note_id");
+      expect(ctx.db.searchNotes("Would-be note")).toEqual([]);
+    });
+
+    it("rejects a batch item that supplies note_id and a meaningful create field, rolling back the batch", async () => {
+      const tool = createGoopSaveNoteTool(ctx);
+      const createResult = await tool.execute(
+        { title: "Batch target", body: "alpha beta", tags: ["p"], source_agent: "agent" },
+        toolCtx,
+      );
+      const noteId = String(createResult).match(/fn_\d{8}_[a-z0-9]+/)?.[0] ?? "";
+
+      const result = await tool.execute(
+        {
+          title: "",
+          body: "",
+          tags: [],
+          source_agent: "agent",
+          items: [
+            { title: "Fresh", body: "Fresh body", tags: ["n"], source_agent: "agent" },
+            { note_id: noteId, body: "Should not apply", old_string: "beta", new_string: "BETA" },
+          ],
+        },
+        toolCtx,
+      );
+
+      expect(result).toContain("0/2 succeeded");
+      expect(result).toContain("cannot be supplied alongside note_id");
+      expect(ctx.db.searchNotes("Fresh body")).toEqual([]);
+      expect(ctx.db.getNoteById(noteId)?.body).toBe("alpha beta");
+    });
+
+    it("names both valid shapes in the note_id conflict rejection message", async () => {
+      const tool = createGoopSaveNoteTool(ctx);
+      const result = await tool.execute(
+        { note_id: "fn_20260618_missing0001", title: "conflict", old_string: "x" },
+        toolCtx,
+      );
+
+      expect(result).toContain("create");
+      expect(result).toContain("patch");
+    });
+  });
+
+  // -----------------------------------------------------------------------
   // Backward compatibility
   // -----------------------------------------------------------------------
 

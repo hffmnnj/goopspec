@@ -1454,6 +1454,37 @@ describe("goop_write_wave write integrity", () => {
     expect(ctx.db.getWave("default", 2)?.status).toBe("pending");
   });
 
+  // W4.T3 audit: goop_write_wave is the reference implementation and was
+  // audited for the same silent-precedence pattern found in the sibling
+  // write tools. task_update (singular) and task_updates[] (bulk) are the
+  // one place a caller could plausibly send both by mistake; the tool
+  // already guards this via the same ignoredFields mechanism proven above,
+  // it was simply untested for this exact pair. No production change was
+  // needed — this test closes the coverage gap.
+  it("rejects task_update alongside task_updates[], with zero mutation", async () => {
+    const writeTool = createGoopWriteWaveTool(ctx);
+    await writeTool.execute(
+      {
+        wave_number: 3,
+        title: "Both-modes wave",
+        tasks: [{ task_index: 1, description: "Task" }],
+      },
+      toolCtx,
+    );
+
+    const result = await writeTool.execute(
+      {
+        wave_number: 3,
+        task_update: { task_index: 1, status: "in_progress" },
+        task_updates: [{ task_index: 1, status: "done" }],
+      },
+      toolCtx,
+    );
+
+    expect(result).toContain("task_update cannot be supplied alongside task_updates batch mode");
+    expect(ctx.db.getWaveTasks(ctx.db.getWave("default", 3)?.id ?? -1)[0].status).toBe("pending");
+  });
+
   it("rejects terminal status regressions unless explicitly overridden", async () => {
     const writeTool = createGoopWriteWaveTool(ctx);
     await writeTool.execute(
