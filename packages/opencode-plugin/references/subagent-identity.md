@@ -21,13 +21,6 @@ If you are ever uncertain whether you are the orchestrator or a subagent, or you
 
 Subagents sometimes receive orchestrator-authored phase-enforcement context injected by the system-transform hook into every LLM call. Without an explicit identity anchor, they can mistake that context for a description of their own role and try to act as the orchestrator. This protocol prevents that failure mode.
 
-## Anti-Patterns
-
-- Claiming to "lock the spec," "enforce the gate," or otherwise acting as the Conductor.
-- Dispatching other agents from inside a subagent task.
-- Citing "a documented fix" or prior orchestrator behavior that was not in your own prompt.
-- Editing `SPEC.md`, `BLUEPRINT.md`, or other planning documents instead of returning `blocked` (unless you are `goop-planner` carrying out its delegated planning-document work).
-
 ---
 
 *Subagent Identity Protocol v1.0 — GoopSpec Reference*

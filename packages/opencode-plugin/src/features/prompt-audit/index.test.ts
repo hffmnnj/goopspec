@@ -136,18 +136,28 @@ describe("auditPromptSurfaces (real tree)", () => {
     expect(commands.bytes).toBe(25_547);
   });
 
-  it("references: 19 files, 161,459 bytes", () => {
+  it("references: 19 files, 161,458 bytes", () => {
+    // Wave 3 Task 3.1 consolidated core-protocol.md, dispatch-patterns.md, and
+    // subagent-identity.md (added one Prompt Authoring Rules section, offset
+    // by removing duplicated material from the other two files). Net effect:
+    // -1 byte vs the Wave 1 baseline of 161,459 — a non-increase, per MH6.
     const references = report.directories.find((d) => d.directory === "references")!;
     expect(references.files).toBe(19);
-    expect(references.bytes).toBe(161_459);
+    expect(references.bytes).toBe(161_458);
   });
 
-  it("total absolute-language hits are 394 (Wave 1 documented method)", () => {
+  it("total absolute-language hits are 396 (post Wave 3 Task 3.1)", () => {
     // SPEC assumption A5: research-phase count (394) and spec count (396)
     // differ by measurement method. The Wave 1 audit re-measures with one
     // documented method (\b(?:must|never|always|critical|only)\b, gi) and
-    // that method governs all later comparisons. This method yields 394.
-    expect(report.totalAbsoluteHits).toBe(394);
+    // that method governed all comparisons through Wave 2, yielding 394.
+    // Wave 3 Task 3.1's Prompt Authoring Rules section names the literal
+    // keywords MUST/NEVER/ALWAYS/CRITICAL/ONLY as the words to reserve for
+    // true invariants, which the whole-word census counts even inside
+    // backticks; dispatch-patterns.md's own trims offset most, but not all,
+    // of that. Net: 394 -> 396, coincidentally matching the original SPEC
+    // baseline figure (a coincidence of method, not a reversion of A5).
+    expect(report.totalAbsoluteHits).toBe(396);
   });
 
   it("per-file tokens are consistent with chars via estimateTokens", () => {
