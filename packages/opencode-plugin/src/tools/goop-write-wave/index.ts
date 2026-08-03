@@ -17,6 +17,12 @@ import {
   runBatch,
 } from "../../features/db/batch.js";
 import { TASK_STATUSES, WAVE_STATUSES, normalizeStatus } from "../../features/db/types.js";
+import {
+  VERIFICATION_RESULT_STATUSES,
+  type VerificationResultStatus,
+  isWaveVerified,
+  toDbVerificationStatus,
+} from "../../features/enforcement/verifier-stage.js";
 import { WAVE_COMPLETE_COMPACT_REMINDER, isWaveComplete } from "../../shared/compact-reminder.js";
 import { renderSidecars } from "../../shared/render-sidecars.js";
 import { isCompleteStatus } from "../../shared/status.js";
@@ -52,12 +58,9 @@ interface BulkTaskStatusUpdate {
 const VERIFICATION_CHECK_NAMES = ["typecheck", "test", "lint", "custom"] as const;
 type VerificationCheckName = (typeof VERIFICATION_CHECK_NAMES)[number];
 
-const VERIFICATION_RESULT_STATUSES = ["pass", "fail", "skip"] as const;
-type VerificationStatus = (typeof VERIFICATION_RESULT_STATUSES)[number];
-
 interface VerificationPayload {
   check_name: VerificationCheckName;
-  status: VerificationStatus;
+  status: VerificationResultStatus;
   detail?: string;
   /** Internal row id of the target wave (not the human-facing wave_number). */
   wave_id?: number;
@@ -83,10 +86,21 @@ function recordVerification(
 ): string {
   const waveId = item.wave_id ?? defaultWaveId;
 
+  // Normalise the tool's pass|fail|skip vocabulary to the DB's canonical
+  // passed|failed|skipped vocabulary at this single insertion seam. Payloads
+  // are already zod-enum-validated against VERIFICATION_RESULT_STATUSES, so
+  // this only fails defensively (e.g. a future enum drift).
+  const dbStatus = toDbVerificationStatus(item.status);
+  if (dbStatus === undefined) {
+    throw new Error(
+      `invalid verification status '${item.status}' for wave ${defaultWaveNumber}; expected one of ${VERIFICATION_RESULT_STATUSES.join(", ")}`,
+    );
+  }
+
   const verificationId = ctx.db.insertVerification(workflowId, {
     wave_id: waveId,
     check_name: item.check_name,
-    status: item.status,
+    status: dbStatus,
     detail: item.detail,
   });
 
@@ -94,7 +108,7 @@ function recordVerification(
     verification_id: verificationId,
     wave_id: waveId ?? null,
     check_name: item.check_name,
-    status: item.status,
+    status: dbStatus,
     detail: item.detail ?? null,
     timestamp: Date.now(),
   });
@@ -216,6 +230,33 @@ function incompatiblePayloadError(mode: string, fields: string[]): string {
 }
 
 // ---------------------------------------------------------------------------
+// Wave-completion verification gate
+// ---------------------------------------------------------------------------
+
+/** incompatiblePayloadError-style single actionable message; thrown (not
+ * returned) so the caller's enclosing transaction rolls back atomically. */
+function waveNotVerifiedMessage(waveNumber: number): string {
+  return `wave ${waveNumber} cannot be marked complete: no passing or explicit-skip verification is recorded. Dispatch goop-wave-verifier for wave ${waveNumber}, record a pass or skip verification row via this tool's verifications[] argument, then retry this completion.`;
+}
+
+/** No-op unless `status` is a complete status. Reads rows *after* this call's
+ * own verifications[] are inserted, so same-call evidence counts. Throws to
+ * roll back the whole transaction — no partial writes on denial. */
+function assertWaveVerifiedForCompletion(
+  ctx: PluginContext,
+  workflowId: string,
+  waveNumber: number,
+  waveId: number,
+  status: string | undefined,
+): void {
+  if (!isWaveComplete(status)) return;
+  const rows = ctx.db.getVerifications(workflowId, waveId);
+  if (!isWaveVerified(rows)) {
+    throw new Error(waveNotVerifiedMessage(waveNumber));
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Tool factory
 // ---------------------------------------------------------------------------
 
@@ -225,7 +266,10 @@ export function createGoopWriteWaveTool(ctx: PluginContext): ToolDefinition {
       "Create or partially update wave metadata and optional inline tasks in GoopSpecDB. " +
       "Omit fields you do not intend to change: omitted values are preserved, while supplied metadata values, including empty strings, overwrite. " +
       "A tasks[] entry with task_index and status updates that task's status alone. " +
-      "Optionally record verifications and traceability rows in the same call.",
+      "Optionally record verifications and traceability rows in the same call. " +
+      "A wave cannot transition to a complete status (done/completed) without at least one " +
+      "passing or explicit-skip verification row for that wave — record one via verifications[] " +
+      "in this call or a prior one.",
     args: {
       wave_number: tool.schema
         .number()
@@ -500,6 +544,14 @@ export function createGoopWriteWaveTool(ctx: PluginContext): ToolDefinition {
               writeTraceability(ctx, workflowId, traceability, item.wave_number),
             );
 
+            assertWaveVerifiedForCompletion(
+              ctx,
+              workflowId,
+              item.wave_number,
+              wave.id,
+              item.status,
+            );
+
             for (const task of item.tasks ?? []) {
               const existingTask = ctx.db
                 .getWaveTasks(wave.id)
@@ -772,6 +824,10 @@ export function createGoopWriteWaveTool(ctx: PluginContext): ToolDefinition {
 
           for (const item of args.traceability ?? []) {
             traceabilityResults.push(writeTraceability(ctx, workflowId, item, waveNumber));
+          }
+
+          if (hasWaveWrite) {
+            assertWaveVerifiedForCompletion(ctx, workflowId, waveNumber, wave.id, args.status);
           }
         });
         renderSidecars(ctx, workflowId);
