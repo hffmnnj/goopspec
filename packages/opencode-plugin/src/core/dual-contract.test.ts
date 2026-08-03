@@ -366,6 +366,42 @@ describe("dual-contract parity", () => {
     expect(v1Resolution.warning).toBeUndefined();
   });
 
+  it("produces the same supported thinking-level set for equivalent V1 and real-shape V2 host payloads", () => {
+    // Redacted from the observed live OpenCode host catalog shape: the host
+    // publishes `reasoning:true` + `reasoning_options:[{type:"effort",...}]`
+    // with no `variants`. The V1 SDK contract publishes the same conceptual
+    // effort ladder under `capabilities.reasoning:true` + `options.<key>:[...]`.
+    // Both shapes flow through the shared `resolveCapabilities` extractor; this
+    // parity assertion guarantees V1 and V2 agents on the same provider see
+    // the same supported set, regardless of which contract surfaced the data.
+    const REAL_LEVELS = ["none", "low", "medium", "high", "xhigh", "max"] as const;
+
+    const realShapeV2HostPayload = {
+      reasoning: true,
+      reasoning_options: [{ type: "effort", values: [...REAL_LEVELS] }],
+    };
+
+    const equivalentV1HostPayload = {
+      capabilities: { reasoning: true },
+      options: { reasoningEffort: [...REAL_LEVELS] },
+    };
+
+    const v2Capabilities = resolveCapabilities(realShapeV2HostPayload);
+    const v1Capabilities = resolveCapabilities(equivalentV1HostPayload);
+
+    expect(v2Capabilities.supported).toEqual([...REAL_LEVELS]);
+    expect(v1Capabilities.supported).toEqual([...REAL_LEVELS]);
+    // Set equality is the parity contract: order may differ between sources,
+    // but the supported set must not.
+    expect(new Set(v2Capabilities.supported)).toEqual(new Set(v1Capabilities.supported));
+
+    // Every canonical GoopSpec label resolves on both contracts.
+    for (const label of ["none", "low", "medium", "high", "xhigh"] as const) {
+      expect(resolveThinkingValue(label, v2Capabilities).apply).not.toBeNull();
+      expect(resolveThinkingValue(label, v1Capabilities).apply).not.toBeNull();
+    }
+  });
+
   it("produces equivalent applied values for the same thinking config and compatible model", async () => {
     const env = setupTestEnvironment("dual-thinking-parity");
     const globalConfigPath = process.env.GOOPSPEC_GLOBAL_CONFIG_PATH;

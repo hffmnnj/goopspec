@@ -441,4 +441,79 @@ describe("createAgentRegistrationHook", () => {
       cleanup();
     }
   });
+
+  it("preserves the provider default when V1 catalog exposes only the real-shape effort options", async () => {
+    // Redacted from the observed live OpenCode host catalog shape: the model
+    // publishes `reasoning:true` + `reasoning_options:[{type:"effort",...}]`
+    // and no `capabilities.reasoning` + `options` structure. The shared
+    // `resolveCapabilities` classifies this as a V2 id-only match
+    // (`raw.source === "v2"`, `variants: []`), so the supported set IS
+    // populated, but `getVerifiedV1RequestOption` only resolves when
+    // `raw.source === "v1"` — it returns undefined here. The V1 `chat.params`
+    // hook therefore cannot apply the level and emits the "no unambiguous V1
+    // request option" diagnostic, preserving the provider default. The agent
+    // still runs; only the thinking level is not applied on the V1 contract.
+    // The V2 adapter handles the same shape via the string apply path
+    // (see hooks-v2.ts and dual-contract.test.ts parity coverage).
+    const { testDir, cleanup } = setupTestEnvironment("agent-reg-v1-real-shape");
+    const errors: string[] = [];
+    const originalError = console.error;
+    const origGlobalPath = process.env.GOOPSPEC_GLOBAL_CONFIG_PATH;
+    try {
+      process.env.GOOPSPEC_GLOBAL_CONFIG_PATH = join(testDir, "no-global-config.json");
+      writeFileSync(
+        join(testDir, "goopspec.json"),
+        JSON.stringify({ agentThinkingLevels: { orchestrator: "high" } }),
+        "utf-8",
+      );
+      console.error = (...args: unknown[]) => errors.push(args.map(String).join(" "));
+
+      const ctx = createMockPluginContext({ testDir });
+      const hooks = createAgentRegistrationHook(ctx);
+      const output = { temperature: 0, topP: 0, topK: 0, maxOutputTokens: undefined, options: {} };
+
+      await withProviderCatalog(
+        ctx,
+        {
+          providers: [
+            {
+              id: "anthropic",
+              models: {
+                "claude-opus-4-6": {
+                  reasoning: true,
+                  reasoning_options: [
+                    { type: "effort", values: ["none", "low", "medium", "high", "xhigh", "max"] },
+                  ],
+                },
+              },
+            },
+          ],
+        },
+        async () => {
+          await hooks["chat.params"]?.(
+            {
+              sessionID: "session",
+              agent: "goop-orchestrator",
+              model: { providerID: "anthropic", id: "claude-opus-4-6" } as never,
+              provider: {} as never,
+              message: {} as never,
+            },
+            output,
+          );
+        },
+      );
+
+      // The level is supported but not V1-applicable: options stay empty.
+      expect(output.options).toEqual({});
+      expect(errors.some((entry) => entry.includes("no unambiguous V1 request option"))).toBe(true);
+    } finally {
+      console.error = originalError;
+      if (origGlobalPath === undefined) {
+        Reflect.deleteProperty(process.env, "GOOPSPEC_GLOBAL_CONFIG_PATH");
+      } else {
+        process.env.GOOPSPEC_GLOBAL_CONFIG_PATH = origGlobalPath;
+      }
+      cleanup();
+    }
+  });
 });
