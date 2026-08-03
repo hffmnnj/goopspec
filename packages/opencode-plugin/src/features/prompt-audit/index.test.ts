@@ -236,7 +236,7 @@ describe("auditPromptSurfaces (real tree)", () => {
     expect(commands.bytes).toBe(26_318);
   });
 
-  it("references: 19 files, 161,350 bytes", () => {
+  it("references: 19 files, 164,672 bytes", () => {
     // Wave 3 Task 3.1 consolidated core-protocol.md, dispatch-patterns.md, and
     // subagent-identity.md (added one Prompt Authoring Rules section, offset
     // by removing duplicated material from the other two files). Net effect:
@@ -298,9 +298,22 @@ describe("auditPromptSurfaces (real tree)", () => {
     // removed the "after high-risk changes" guidance. Net: 162,326 ->
     // 162,648 bytes (+322), absolute hits 199 -> 200 (+1: "acceptance-only"),
     // bold spans unchanged at 532.
+    //
+    // The wave-verifier-gating workflow's Wave 5 Task 2 documented the wave
+    // verification gate as a first-class execute gate: phase-gates.md gained
+    // a Wave Verification row in the gate-overview table and a Wave
+    // Verification Gate section (tasks complete -> wave-scoped verifier
+    // evidence -> bounded remediation -> non-failing effective evidence
+    // before completion, with acceptance remaining a distinct final
+    // whole-workflow audit), and wiring-checklist.md tightened its
+    // verification item to the current/effective per-check row and added an
+    // acceptance-visibility item. Net: 162,648 -> 164,672 bytes (+2,024),
+    // absolute hits 200 -> 202 (+2: the "never implements fixes" role
+    // invariant and the "inspect/report-only" boundary, both true invariants
+    // shared with dispatch-patterns.md), bold spans 532 -> 542 (+10).
     const references = report.directories.find((d) => d.directory === "references")!;
     expect(references.files).toBe(19);
-    expect(references.bytes).toBe(162_648);
+    expect(references.bytes).toBe(164_672);
   });
 
   it("total absolute-language hits are 299 (Wave 1 role plumbing plus the Wave 3 execution gate)", () => {
@@ -393,7 +406,14 @@ describe("auditPromptSurfaces (real tree)", () => {
     // matching clarification added zero new hits (its wording reuses the
     // file's existing "only"/"never" vocabulary without a new match) —
     // lifting the total from 308 to 309.
-    expect(report.totalAbsoluteHits).toBe(309);
+    //
+    // The wave-verifier-gating workflow's Wave 5 Task 2 documented the wave
+    // verification gate as a first-class execute gate: +2 in references
+    // (phase-gates.md's Wave Verification Gate section — the "never
+    // implements fixes" role invariant and the "inspect/report-only"
+    // boundary, both true invariants shared with dispatch-patterns.md) —
+    // lifting the total from 309 to 311.
+    expect(report.totalAbsoluteHits).toBe(311);
   });
 
   it("per-file tokens are consistent with chars via estimateTokens", () => {

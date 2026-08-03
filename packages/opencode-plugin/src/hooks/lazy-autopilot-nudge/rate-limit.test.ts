@@ -227,11 +227,7 @@ describe("lazy autopilot nudge rate-limit", () => {
   // -------------------------------------------------------------------------
 
   it("builds a fingerprint that ends with the verification digest slot", () => {
-    const fp = buildNudgeFingerprint(
-      baseCtx,
-      "default",
-      baseCtx.stateManager.getActiveWorkflow(),
-    );
+    const fp = buildNudgeFingerprint(baseCtx, "default", baseCtx.stateManager.getActiveWorkflow());
     // No verification rows seeded in beforeEach -> slot is "none".
     expect(fp).toMatch(/\|v:none$/);
   });

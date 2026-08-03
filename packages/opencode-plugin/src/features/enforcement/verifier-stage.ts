@@ -19,13 +19,13 @@ const ACCEPT_ONLY_ROLE = "verifier";
 const EXECUTE_ONLY_ROLE = "wave-verifier";
 
 export interface VerifierDispatchCheck {
-	/**
-	 * Arbitrary string, not just {@link AgentRole} — the caller derives this
-	 * from a delegated agent name and may not normalize it. Undefined or
-	 * unrecognized values are treated as undetermined and allowed.
-	 */
-	role: string | undefined;
-	phase: WorkflowPhase;
+  /**
+   * Arbitrary string, not just {@link AgentRole} — the caller derives this
+   * from a delegated agent name and may not normalize it. Undefined or
+   * unrecognized values are treated as undetermined and allowed.
+   */
+  role: string | undefined;
+  phase: WorkflowPhase;
 }
 
 /**
@@ -34,28 +34,28 @@ export interface VerifierDispatchCheck {
  * fails OPEN so unrelated delegations are never blocked by this predicate.
  */
 export function isVerifierDispatchAllowed({
-	role,
-	phase,
+  role,
+  phase,
 }: VerifierDispatchCheck): ValidationResult {
-	if (role === ACCEPT_ONLY_ROLE) {
-		return phase === "accept"
-			? { allowed: true }
-			: {
-					allowed: false,
-					reason: `verifier is acceptance-only; dispatch wave-verifier during execute (current phase: ${phase}).`,
-				};
-	}
+  if (role === ACCEPT_ONLY_ROLE) {
+    return phase === "accept"
+      ? { allowed: true }
+      : {
+          allowed: false,
+          reason: `verifier is acceptance-only; dispatch wave-verifier during execute (current phase: ${phase}).`,
+        };
+  }
 
-	if (role === EXECUTE_ONLY_ROLE) {
-		return phase === "execute"
-			? { allowed: true }
-			: {
-					allowed: false,
-					reason: `wave-verifier is execute-only; dispatch verifier during accept (current phase: ${phase}).`,
-				};
-	}
+  if (role === EXECUTE_ONLY_ROLE) {
+    return phase === "execute"
+      ? { allowed: true }
+      : {
+          allowed: false,
+          reason: `wave-verifier is execute-only; dispatch verifier during accept (current phase: ${phase}).`,
+        };
+  }
 
-	return { allowed: true };
+  return { allowed: true };
 }
 
 // ---------------------------------------------------------------------------
@@ -65,23 +65,20 @@ export function isVerifierDispatchAllowed({
 /** `goop_write_wave`'s `verifications[]` vocabulary, distinct from the DB's
  * stored {@link VerificationStatus} (which also has a transient `"pending"`). */
 export const VERIFICATION_RESULT_STATUSES = ["pass", "fail", "skip"] as const;
-export type VerificationResultStatus =
-	(typeof VERIFICATION_RESULT_STATUSES)[number];
+export type VerificationResultStatus = (typeof VERIFICATION_RESULT_STATUSES)[number];
 
 export const VERIFICATION_RESULT_TO_DB_STATUS: Readonly<
-	Record<VerificationResultStatus, VerificationStatus>
+  Record<VerificationResultStatus, VerificationStatus>
 > = {
-	pass: "passed",
-	fail: "failed",
-	skip: "skipped",
+  pass: "passed",
+  fail: "failed",
+  skip: "skipped",
 };
 
 /** Returns `undefined` for input outside {@link VERIFICATION_RESULT_STATUSES}
  * rather than throwing — callers decide how to surface an invalid input. */
-export function toDbVerificationStatus(
-	status: string,
-): VerificationStatus | undefined {
-	return VERIFICATION_RESULT_TO_DB_STATUS[status as VerificationResultStatus];
+export function toDbVerificationStatus(status: string): VerificationStatus | undefined {
+  return VERIFICATION_RESULT_TO_DB_STATUS[status as VerificationResultStatus];
 }
 
 // Re-exported so consumers don't need a second import from features/db/types.js.
@@ -93,13 +90,13 @@ export type { VerificationStatus };
 // ---------------------------------------------------------------------------
 
 export interface VerifiedRowLike {
-	/** Recency key. `id` is `INTEGER PRIMARY KEY AUTOINCREMENT` on the
-	 * append-only `verifications` table, so it is strictly increasing in
-	 * insertion order — sorted here rather than trusted from caller order. */
-	id: number;
-	/** The logical check this row reports on (e.g. `"test"`, `"typecheck"`). */
-	check_name: string;
-	status: VerificationStatus;
+  /** Recency key. `id` is `INTEGER PRIMARY KEY AUTOINCREMENT` on the
+   * append-only `verifications` table, so it is strictly increasing in
+   * insertion order — sorted here rather than trusted from caller order. */
+  id: number;
+  /** The logical check this row reports on (e.g. `"test"`, `"typecheck"`). */
+  check_name: string;
+  status: VerificationStatus;
 }
 
 /**
@@ -111,19 +108,19 @@ export interface VerifiedRowLike {
  * `"skipped"` effective row satisfies the gate as an auditable escape.
  */
 export function isWaveVerified(rows: readonly VerifiedRowLike[]): boolean {
-	if (rows.length === 0) return false;
+  if (rows.length === 0) return false;
 
-	const latestByCheck = new Map<string, VerifiedRowLike>();
-	for (const row of rows) {
-		const existing = latestByCheck.get(row.check_name);
-		if (existing === undefined || row.id > existing.id) {
-			latestByCheck.set(row.check_name, row);
-		}
-	}
+  const latestByCheck = new Map<string, VerifiedRowLike>();
+  for (const row of rows) {
+    const existing = latestByCheck.get(row.check_name);
+    if (existing === undefined || row.id > existing.id) {
+      latestByCheck.set(row.check_name, row);
+    }
+  }
 
-	if (latestByCheck.size === 0) return false;
-	for (const row of latestByCheck.values()) {
-		if (row.status === "failed") return false;
-	}
-	return true;
+  if (latestByCheck.size === 0) return false;
+  for (const row of latestByCheck.values()) {
+    if (row.status === "failed") return false;
+  }
+  return true;
 }
