@@ -84,6 +84,10 @@ After all waves are drafted:
 2. If the user chooses per-wave review, iterate each wave with options: **Approve Wave**, **Request More Research**, **Clarify Scope**.
 3. Only finalize the blueprint when every wave is approved.
 
+### Autopilot Behavior
+
+Under `autopilot` or `lazyAutopilot`, skip the interactive per-wave review entirely: automatically select "Approve All" and finalize the blueprint without waiting for user input. Log the auto-approval to ADL via `goop_adl`. This mirrors the plan→execute contract-gate skip described in `references/phase-gates.md` §Autopilot Behavior — lazy autopilot never pauses for this gate.
+
 ## Depth Tiers
 
 | Tier | Discuss | Plan | Research | Agents | Token Impact |

@@ -87,6 +87,8 @@ Stop and wait for user input only for:
 
 On a Rule 4 trigger, decide autonomously using best judgment (do not pause to ask the user). Log the full rationale to ADL via `goop_adl` for every such call, including the rule number, the issue, the decision made, the reasoning, and the affected files.
 
+No other checkpoint is a valid reason to stop and wait in lazy autopilot — this includes wave-to-wave transitions, the per-wave blueprint review gate (see `task-decomposition.md` §Post-Wave Review Gate), checkpoint saves, and routine deviation handling. Only the two hard stops above (credentials/secrets; destructive/irreversible operations) and the acceptance gate's explicit merge-offer reply qualify.
+
 ### Lazy Autopilot Nudge (Runtime Enforcement)
 
 Pausing during the execute phase under lazy autopilot is disallowed except for the enumerated hard stops (credentials/secrets, destructive operations). This is now **runtime-enforced by an injected nudge**, not prose alone.
