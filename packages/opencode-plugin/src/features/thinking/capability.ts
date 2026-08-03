@@ -69,6 +69,58 @@ function collectOptionValues(value: unknown, values: Set<string>, depth = 0): vo
   }
 }
 
+/**
+ * Collects string ids from `reasoning_options` entries. Prefers entries whose
+ * `type` is `"effort"`; only when no effort entry exists does it fall back to
+ * string values across all entries. Numeric fields are ignored because only
+ * string values can map to thinking levels.
+ */
+function collectReasoningOptionIds(rawOptions: unknown, values: Set<string>): void {
+  if (!Array.isArray(rawOptions)) return;
+
+  const effort = new Set<string>();
+  const fallback = new Set<string>();
+
+  for (const entry of rawOptions) {
+    if (!isRecord(entry)) continue;
+
+    const target = entry.type === "effort" ? effort : fallback;
+    collectOptionValues(entry.values, target);
+  }
+
+  const chosen = effort.size > 0 ? effort : fallback;
+  for (const value of chosen) values.add(value);
+}
+
+/**
+ * Collects ids from object-map `variants` (e.g. `{ high: { ... } }`). Only the
+ * keys are significant here: headerless or partial entries still declare a
+ * supported id, and no request headers or bodies are fabricated. Array variants
+ * are handled separately by `getV2Variants`.
+ */
+function collectObjectMapVariantIds(rawVariants: unknown, values: Set<string>): void {
+  if (!isRecord(rawVariants)) return;
+
+  for (const [key, entry] of Object.entries(rawVariants)) {
+    if (!isRecord(entry)) continue;
+    const trimmed = key.trim();
+    if (trimmed.length > 0) values.add(trimmed);
+  }
+}
+
+/**
+ * Collects supported ids from id-only V2 shapes (`reasoning_options` and
+ * object-map `variants`) when no full array variants are present. The returned
+ * ids carry no request encoding; callers that need a variant object must look
+ * elsewhere. Numerics and malformed entries are ignored.
+ */
+function getV2IdOnlySupported(source: Record<string, unknown>): string[] {
+  const values = new Set<string>();
+  collectReasoningOptionIds(source.reasoning_options, values);
+  collectObjectMapVariantIds(source.variants, values);
+  return [...values];
+}
+
 function getV1Capabilities(source: Record<string, unknown>): CapabilityResult {
   if (
     !isRecord(source.capabilities) ||
@@ -104,6 +156,14 @@ export function resolveCapabilities(source: unknown): CapabilityResult {
       return {
         supported: [...new Set(variants.map((variant) => variant.id))],
         raw: { source: "v2", variants },
+      };
+    }
+
+    const idOnlySupported = getV2IdOnlySupported(source);
+    if (idOnlySupported.length > 0) {
+      return {
+        supported: idOnlySupported,
+        raw: { source: "v2", variants: [] },
       };
     }
 
