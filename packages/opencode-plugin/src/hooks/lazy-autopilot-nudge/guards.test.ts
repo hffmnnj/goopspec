@@ -397,7 +397,7 @@ describe("lazy autopilot nudge guards", () => {
     expect(result.reason).toEqual({ kind: "kill-switch-off" });
   });
 
-  it("positive path: allows the nudge when all nine guards pass", () => {
+  it("positive path: allows the nudge when all guards pass", () => {
     const ctx = createMockPluginContext({ testDir });
     const result = evaluateNudgeGuards(ctx, baseInput());
 

@@ -60,7 +60,7 @@ When lazy autopilot is active during the execute phase, a runtime nudge fires af
 
 ### Suppression Guards
 
-The nudge is suppressed by nine guards (see `src/hooks/lazy-autopilot-nudge/guards.ts`): lazy autopilot disabled, wrong phase, pending compaction, awaiting acceptance, high-severity blocker, hard-stop question (credentials/destructive), mid-work (last message not from assistant), rate-limited, and kill-switch off.
+The nudge is suppressed by eleven discriminated guards — see `references/phase-gates.md` §Suppression Guards (Eleven Discriminated Reasons) for the authoritative table and `src/hooks/lazy-autopilot-nudge/guards.ts` for the implementation. Do not restate the count or the list here; if the guard set changes, update `phase-gates.md` only, so this doc can't drift out of sync again.
 
 ### Rate Limit
 
