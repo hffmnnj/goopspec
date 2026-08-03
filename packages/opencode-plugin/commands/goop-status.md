@@ -2,6 +2,9 @@
 name: goop-status
 description: Show current GoopSpec workflow status and next step
 agent: orchestrator
+phase: any
+requires: none
+next-step: "Follow the suggested next command based on current state"
 ---
 
 # /goop-status

@@ -2,6 +2,9 @@
 name: goop-help
 description: List GoopSpec commands, workflow phases, and agents
 agent: orchestrator
+phase: any
+requires: none
+next-step: "Run /goop-discuss to begin, or /goop-status to see where you are"
 ---
 
 # /goop-help

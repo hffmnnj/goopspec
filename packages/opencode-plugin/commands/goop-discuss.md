@@ -4,6 +4,7 @@ description: Capture user vision through the six-category discovery interview
 agent: orchestrator
 argument-hint: "[workflow-id]"
 phase: discuss
+requires: none
 next-step: "When discovery is complete, run /goop-plan"
 next-command: /goop-plan
 alternatives:

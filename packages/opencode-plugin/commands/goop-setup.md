@@ -2,6 +2,9 @@
 name: goop-setup
 description: Initialize or reconfigure GoopSpec for this project
 agent: orchestrator
+phase: setup
+requires: none
+next-step: "Run /goop-discuss to start your first workflow"
 ---
 
 # /goop-setup
