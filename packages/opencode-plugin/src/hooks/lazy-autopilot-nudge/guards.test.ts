@@ -2,6 +2,7 @@ import { mkdirSync, symlinkSync } from "node:fs";
 import { join } from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
+import { WORKFLOW_PHASES } from "../../core/constants.js";
 import { createMockPluginContext, setupTestEnvironment } from "../../test-utils.js";
 import {
   ALLOWED,
@@ -55,6 +56,32 @@ describe("lazy autopilot nudge guards", () => {
     expect(result.suppressed).toBe(true);
     expect(result.reason).toEqual({ kind: "wrong-phase", phase: "plan" });
   });
+
+  // -------------------------------------------------------------------------
+  // G2 phase-eligibility pin (SPEC Decision 1, settled under Rule 4).
+  // Execute is the only phase where autonomous nudging is safe; every other
+  // WorkflowPhase may be waiting on a deliberate user gate (discuss/plan/
+  // accept) or have no active workflow (idle). Parameterising over
+  // WORKFLOW_PHASES means any future silent widening — adding a new allowed
+  // phase or flipping an existing one to pass — fails this test in CI.
+  // -------------------------------------------------------------------------
+
+  for (const phase of WORKFLOW_PHASES) {
+    if (phase === "execute") {
+      it(`G2 pin: allows the nudge in the ${phase} phase`, () => {
+        const ctx = createMockPluginContext({ testDir });
+        const result = evaluateNudgeGuards(ctx, baseInput({ phase }));
+        expect(result).toEqual(ALLOWED);
+      });
+    } else {
+      it(`G2 pin: suppresses the nudge in the ${phase} phase with a typed wrong-phase reason`, () => {
+        const ctx = createMockPluginContext({ testDir });
+        const result = evaluateNudgeGuards(ctx, baseInput({ phase }));
+        expect(result.suppressed).toBe(true);
+        expect(result.reason).toEqual({ kind: "wrong-phase", phase });
+      });
+    }
+  }
 
   it("G3: suppresses when a compaction is queued", () => {
     const ctx = createMockPluginContext({ testDir });

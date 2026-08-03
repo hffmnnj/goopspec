@@ -221,6 +221,12 @@ export function evaluateNudgeGuards(ctx: PluginContext, input: NudgeGuardInput):
     return suppress({ kind: "lazy-autopilot-disabled" });
   }
 
+  // G2: Execute-only phase eligibility is intentional and retained (SPEC
+  // Decision 1, settled under Rule 4). Non-execute phases — idle, discuss,
+  // plan, accept — may be waiting on a deliberate user gate; nudging through
+  // them would bypass human checkpoints. Phase-gate policy is explicitly out
+  // of scope; the D1/D3 defects account for the reported injection failures
+  // without widening phase eligibility. Pinned by guards.test.ts.
   if (input.phase !== "execute") {
     return suppress({ kind: "wrong-phase", phase: input.phase });
   }
