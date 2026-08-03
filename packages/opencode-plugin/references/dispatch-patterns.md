@@ -72,8 +72,9 @@ Do not pass full conversation history, verbose logs, unrelated files, or complet
 | Deep UI design / UI architecture | `goop-executor-frontend-high` | — |
 | Research | `goop-researcher` | `goop-explorer` |
 | Exploration | `goop-explorer` | — |
-| Verification | `goop-verifier` | `goop-tester` |
-| Testing | `goop-tester` | `goop-verifier` |
+| Wave verification (execute) | `goop-wave-verifier` | — |
+| Acceptance verification (accept) | `goop-verifier` | `goop-tester` |
+| Testing | `goop-tester` | — |
 | Debugging | `goop-debugger` | `goop-executor-high` |
 | Documentation | `goop-writer` | orchestrator |
 
@@ -169,7 +170,8 @@ Default model assignments optimize cost and quality per task.
 | `goop-executor-frontend-high` | quality reasoning | Design-sensitive UI, component architecture |
 | `goop-researcher` | broad knowledge | Deep research, synthesis |
 | `goop-explorer` | fast lightweight | Codebase mapping, pattern detection |
-| `goop-verifier` | strong code | Spec compliance, security audit |
+| `goop-wave-verifier` | strong code | Wave-scoped execute verification, evidence rows |
+| `goop-verifier` | strong code | Acceptance-gate spec compliance, security audit |
 | `goop-tester` | cost-effective code | Test writing, QA |
 | `goop-debugger` | strong code | Hypothesis testing, root cause |
 | `goop-writer` | strong writing | Documentation, structured writing |
@@ -179,7 +181,7 @@ Users can override models in `goopspec.json` under `models`.
 
 ## Verification Dispatch
 
-Use `goop-verifier` at acceptance gates and after high-risk changes. At the accept gate, prefer [`goop_acceptance_audit`](tool-reference.md) — it replaces the 3-call blocker+verification+wave-read sequence with a single read-only call returning combined `{blockers, verifications, waves}`. A verification report should check:
+Wave verification during execute is a `goop-wave-verifier` job, scoped to one wave at a time (see `agents/goop-wave-verifier.md`). `goop-verifier` is acceptance-only: it runs at the accept gate and at no other stage. At the accept gate, prefer [`goop_acceptance_audit`](tool-reference.md) — it replaces the 3-call blocker+verification+wave-read sequence with a single read-only call returning combined `{blockers, verifications, waves}`. A verification report should check:
 
 | Area | What to Confirm |
 |------|-----------------|

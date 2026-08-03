@@ -47,6 +47,66 @@ describe("createAgentRegistrationHook", () => {
     }
   });
 
+  it("registers goop-wave-verifier via the shared roster and resolves its high thinking level", async () => {
+    const { testDir, cleanup } = setupTestEnvironment("agent-reg-wave-verifier");
+    const originalGlobalPath = process.env.GOOPSPEC_GLOBAL_CONFIG_PATH;
+    try {
+      process.env.GOOPSPEC_GLOBAL_CONFIG_PATH = join(testDir, "no-global-config.json");
+      const ctx = createMockPluginContext({ testDir });
+      const hooks = createAgentRegistrationHook(ctx);
+
+      const config: SdkConfig = {};
+      await hooks.config?.(config);
+
+      // V1 config registration surfaces wave-verifier from the shared agents/
+      // roster — no adapter-specific branch is involved.
+      expect(config.agent?.["goop-wave-verifier"]).toBeDefined();
+      expect(config.agent?.["goop-wave-verifier"]?.model).toBe("anthropic/claude-sonnet-4-6");
+
+      // chat.params resolves the role through the shared AGENT_ROLES registry
+      // (getGoopRole) and applies DEFAULT_THINKING_LEVELS["wave-verifier"],
+      // which derives to "high" because wave-verifier is not a medium role.
+      const output = { temperature: 0, topP: 0, topK: 0, maxOutputTokens: undefined, options: {} };
+      await withProviderCatalog(
+        ctx,
+        {
+          providers: [
+            {
+              id: "anthropic",
+              models: {
+                "claude-sonnet-4-6": {
+                  capabilities: { reasoning: true },
+                  options: { reasoningEffort: ["low", "high"] },
+                },
+              },
+            },
+          ],
+        },
+        async () => {
+          await hooks["chat.params"]?.(
+            {
+              sessionID: "session",
+              agent: "goop-wave-verifier",
+              model: { providerID: "anthropic", id: "claude-sonnet-4-6" } as never,
+              provider: {} as never,
+              message: {} as never,
+            },
+            output,
+          );
+        },
+      );
+
+      expect(output.options).toEqual({ reasoningEffort: "high" });
+    } finally {
+      if (originalGlobalPath === undefined) {
+        Reflect.deleteProperty(process.env, "GOOPSPEC_GLOBAL_CONFIG_PATH");
+      } else {
+        process.env.GOOPSPEC_GLOBAL_CONFIG_PATH = originalGlobalPath;
+      }
+      cleanup();
+    }
+  });
+
   it("does not overwrite an existing agent entry", async () => {
     const { testDir, cleanup } = setupTestEnvironment("agent-reg-override");
     try {

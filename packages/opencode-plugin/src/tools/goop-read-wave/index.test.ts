@@ -180,7 +180,16 @@ describe("goop_read_wave regression and durability", () => {
   it("durability: top-level status write is reflected by a subsequent read", async () => {
     const writeTool = createGoopWriteWaveTool(ctx);
     await writeTool.execute(
-      { wave_number: 1, title: "Status wave", status: "complete" },
+      {
+        wave_number: 1,
+        title: "Status wave",
+        status: "complete",
+        // Wave-completion gate (Wave 2) requires at least one passing or
+        // explicit-skip verification row before a wave can transition to a
+        // complete status. The durability scenario is a completed wave, so it
+        // carries completion evidence.
+        verifications: [{ check_name: "test", status: "pass" }],
+      },
       createMockToolContext(),
     );
 
@@ -195,7 +204,14 @@ describe("goop_read_wave regression and durability", () => {
     await writeTool.execute(
       {
         wave_number: 1,
-        items: [{ wave_number: 1, title: "Items wave", status: "complete" }],
+        items: [
+          {
+            wave_number: 1,
+            title: "Items wave",
+            status: "complete",
+            verifications: [{ check_name: "test", status: "pass" }],
+          },
+        ],
       },
       createMockToolContext(),
     );
@@ -246,10 +262,13 @@ describe("goop_read_wave verification and traceability surfacing", () => {
     const readTool = createGoopReadWaveTool(ctx);
     const result = await readTool.execute({}, createMockToolContext());
 
-    // Verifications appear with check name, status, and detail
+    // Verifications appear with check name, status, and detail. The read side
+    // renders the DB's canonical status vocabulary (passed/failed/skipped),
+    // not the tool-input vocabulary (pass/fail/skip) — recordVerification
+    // normalises at the insertion seam.
     expect(result).toContain("### Verifications");
-    expect(result).toContain("typecheck: pass — No errors");
-    expect(result).toContain("lint: fail — 2 issues");
+    expect(result).toContain("typecheck: passed — No errors");
+    expect(result).toContain("lint: failed — 2 issues");
 
     // Traceability appears with requirement key and resolved wave/task target
     expect(result).toContain("### Traceability");
@@ -297,12 +316,12 @@ describe("goop_read_wave verification and traceability surfacing", () => {
 
     // Wave 1 data appears
     expect(result).toContain("## Wave 1: Wave one");
-    expect(result).toContain("test: pass");
+    expect(result).toContain("test: passed");
     expect(result).toContain("MH1 -> wave 1 [covered]");
 
     // Wave 2 data does NOT leak
     expect(result).not.toContain("## Wave 2: Wave two");
-    expect(result).not.toContain("lint: fail");
+    expect(result).not.toContain("lint: failed");
     expect(result).not.toContain("MH2");
   });
 });

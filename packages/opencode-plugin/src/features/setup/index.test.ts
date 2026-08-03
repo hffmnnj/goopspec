@@ -274,12 +274,14 @@ describe("setup feature", () => {
         "executor-frontend-high",
         "planner",
         "verifier",
+        "wave-verifier",
         "researcher",
         "explorer",
         "debugger",
         "tester",
         "writer",
       ];
+      expect(roles.length, "hardcoded roster must track AGENT_ROLES").toBe(AGENT_ROLES.length);
       for (const role of roles) {
         expect(DEFAULT_MODEL_MAP[role as keyof typeof DEFAULT_MODEL_MAP]).toBeDefined();
       }
@@ -352,6 +354,8 @@ describe("setup feature", () => {
         const expected = role === "explorer" || role === "researcher" ? "medium" : "high";
         expect(DEFAULT_THINKING_LEVELS[role]).toBe(expected);
       }
+      // wave-verifier is a non-exploring role and must derive `high`.
+      expect(DEFAULT_THINKING_LEVELS["wave-verifier"]).toBe("high");
     });
 
     it("getEffectiveThinkingLevels returns built-in defaults with no config", () => {

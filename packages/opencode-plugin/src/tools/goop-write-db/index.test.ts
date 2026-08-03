@@ -460,4 +460,339 @@ describe("goop_write_db tool", () => {
       expect(result).not.toContain("0 chars");
     });
   });
+
+  // -----------------------------------------------------------------------
+  // Positive fixture inventory — valid call shapes (W4 Task 1)
+  //
+  // Locks every currently-valid goop_write_db call shape as a passing
+  // fixture in one self-contained block, so Wave 4 Task 2/3 runtime
+  // validation tightening cannot silently break a working caller. These
+  // fixtures assert the CURRENT behaviour; they are not a spec of the
+  // intended behaviour. Some shapes are individually covered by dedicated
+  // tests above — repeated here as a single contract surface.
+  // -----------------------------------------------------------------------
+
+  describe("positive fixture inventory — valid call shapes (W4.T1)", () => {
+    it("SHAPE: full-document write (doc_type + content)", async () => {
+      const tool = createGoopWriteDbTool(ctx);
+      const result = await tool.execute({ doc_type: "spec", content: "# Inventory Spec" }, toolCtx);
+      expect(result).toContain("Written spec");
+      expect(ctx.db.getDocument("default", "spec")?.content).toBe("# Inventory Spec");
+    });
+
+    it("SHAPE: append mode (doc_type + content + mode: 'append')", async () => {
+      ctx.db.upsertDocument("default", "spec", "# Base");
+      const tool = createGoopWriteDbTool(ctx);
+      const result = await tool.execute(
+        { doc_type: "spec", content: "# Appended", mode: "append" },
+        toolCtx,
+      );
+      expect(result).toContain("mode: append");
+      expect(ctx.db.getDocument("default", "spec")?.content).toBe("# Base\n\n# Appended");
+    });
+
+    it("SHAPE: patch mode (doc_type + old_string + new_string, single match)", async () => {
+      ctx.db.upsertDocument("default", "spec", "Hello world");
+      const tool = createGoopWriteDbTool(ctx);
+      const result = await tool.execute(
+        { doc_type: "spec", old_string: "world", new_string: "GoopSpec" },
+        toolCtx,
+      );
+      expect(result).toContain("mode: patch");
+      expect(ctx.db.getDocument("default", "spec")?.content).toBe("Hello GoopSpec");
+    });
+
+    it("SHAPE: replace-all patch (doc_type + old_string + new_string + replace_all: true)", async () => {
+      ctx.db.upsertDocument("default", "spec", "foo bar foo baz foo");
+      const tool = createGoopWriteDbTool(ctx);
+      const result = await tool.execute(
+        { doc_type: "spec", old_string: "foo", new_string: "qux", replace_all: true },
+        toolCtx,
+      );
+      expect(result).toContain("mode: patch");
+      expect(ctx.db.getDocument("default", "spec")?.content).toBe("qux bar qux baz qux");
+    });
+
+    it("SHAPE: items[] batch (mixed create + patch items)", async () => {
+      ctx.db.upsertDocument("default", "spec", "Hello world");
+      const tool = createGoopWriteDbTool(ctx);
+      const result = await tool.execute(
+        {
+          doc_type: "spec",
+          content: "",
+          items: [
+            { doc_type: "spec", old_string: "world", new_string: "GoopSpec" },
+            { doc_type: "blueprint", content: "# Blueprint" },
+          ],
+        },
+        toolCtx,
+      );
+      expect(result).toContain("2/2 succeeded");
+      expect(ctx.db.getDocument("default", "spec")?.content).toBe("Hello GoopSpec");
+      expect(ctx.db.getDocument("default", "blueprint")?.content).toBe("# Blueprint");
+    });
+
+    it("SHAPE: blank-document patch workaround (old_string: '' on an empty document)", async () => {
+      // CURRENT behaviour: an absent/empty document resolves to '' and
+      // patchContent('', '', newString) returns ok with matchCount -1, which
+      // falls through every guard so new_string becomes the full document
+      // content. This is the workaround observed during discovery. Locked
+      // here so Wave 4 Task 2/3 must decide deliberately whether to keep or
+      // reject it rather than silently changing the outcome.
+      const tool = createGoopWriteDbTool(ctx);
+      const result = await tool.execute(
+        { doc_type: "spec", old_string: "", new_string: "# Written via empty-old-string patch" },
+        toolCtx,
+      );
+      expect(result).toContain("mode: patch");
+      expect(ctx.db.getDocument("default", "spec")?.content).toBe(
+        "# Written via empty-old-string patch",
+      );
+    });
+  });
+
+  // -----------------------------------------------------------------------
+  // Ambiguous/invalid write-mode combinations (W4.T2) — one-shot rejection,
+  // zero mutation. Mirrors the four rules in shared/write-mode.ts.
+  // -----------------------------------------------------------------------
+
+  describe("rejects ambiguous write-mode combinations (W4.T2)", () => {
+    it("rule 1: rejects meaningful content and old_string together, and does not mutate", async () => {
+      ctx.db.upsertDocument("default", "spec", "Hello world");
+
+      const tool = createGoopWriteDbTool(ctx);
+      const result = await tool.execute(
+        { doc_type: "spec", content: "# Full replacement", old_string: "world", new_string: "x" },
+        toolCtx,
+      );
+
+      expect(result).toContain("Error in goop_write_db");
+      expect(result).toContain("content and old_string cannot be supplied together");
+      expect(result).toContain("Valid call shapes");
+      expect(ctx.db.getDocument("default", "spec")?.content).toBe("Hello world");
+    });
+
+    it("rule 2: rejects new_string without old_string, and does not mutate", async () => {
+      ctx.db.upsertDocument("default", "spec", "Hello world");
+
+      const tool = createGoopWriteDbTool(ctx);
+      const result = await tool.execute(
+        { doc_type: "spec", content: "# Should not be written", new_string: "x" },
+        toolCtx,
+      );
+
+      expect(result).toContain("Error in goop_write_db");
+      expect(result).toContain("new_string");
+      expect(result).toContain("supplied without old_string");
+      expect(ctx.db.getDocument("default", "spec")?.content).toBe("Hello world");
+    });
+
+    it("rule 2: rejects replace_all without old_string, and does not mutate", async () => {
+      ctx.db.upsertDocument("default", "spec", "Hello world");
+
+      const tool = createGoopWriteDbTool(ctx);
+      const result = await tool.execute(
+        { doc_type: "spec", content: "# Should not be written", replace_all: true },
+        toolCtx,
+      );
+
+      expect(result).toContain("Error in goop_write_db");
+      expect(result).toContain("replace_all");
+      expect(ctx.db.getDocument("default", "spec")?.content).toBe("Hello world");
+    });
+
+    it('rule 3: rejects mode: "append" combined with old_string, and does not mutate', async () => {
+      ctx.db.upsertDocument("default", "spec", "Hello world");
+
+      const tool = createGoopWriteDbTool(ctx);
+      const result = await tool.execute(
+        { doc_type: "spec", old_string: "world", new_string: "GoopSpec", mode: "append" },
+        toolCtx,
+      );
+
+      expect(result).toContain("Error in goop_write_db");
+      expect(result).toContain('mode: "append"');
+      expect(ctx.db.getDocument("default", "spec")?.content).toBe("Hello world");
+    });
+
+    it("rule 4: rejects meaningful content alongside items[], and does not mutate any document", async () => {
+      ctx.db.upsertDocument("default", "spec", "Hello world");
+
+      const tool = createGoopWriteDbTool(ctx);
+      const result = await tool.execute(
+        {
+          doc_type: "spec",
+          content: "# Real top-level content",
+          items: [{ doc_type: "blueprint", content: "# Blueprint" }],
+        },
+        toolCtx,
+      );
+
+      expect(result).toContain("Error in goop_write_db");
+      expect(result).toContain("content");
+      expect(result).toContain("items[]");
+      expect(ctx.db.getDocument("default", "spec")?.content).toBe("Hello world");
+      expect(ctx.db.getDocument("default", "blueprint")).toBeNull();
+    });
+
+    it("rule 4: rejects old_string alongside items[], and does not mutate any document", async () => {
+      ctx.db.upsertDocument("default", "spec", "Hello world");
+
+      const tool = createGoopWriteDbTool(ctx);
+      const result = await tool.execute(
+        {
+          doc_type: "spec",
+          old_string: "world",
+          new_string: "GoopSpec",
+          items: [{ doc_type: "blueprint", content: "# Blueprint" }],
+        },
+        toolCtx,
+      );
+
+      expect(result).toContain("Error in goop_write_db");
+      expect(result).toContain("old_string");
+      expect(result).toContain("items[]");
+      expect(ctx.db.getDocument("default", "spec")?.content).toBe("Hello world");
+      expect(ctx.db.getDocument("default", "blueprint")).toBeNull();
+    });
+
+    it("rule 4: rejects mode alongside items[], and does not mutate any document", async () => {
+      const tool = createGoopWriteDbTool(ctx);
+      const result = await tool.execute(
+        {
+          doc_type: "spec",
+          mode: "append",
+          items: [{ doc_type: "blueprint", content: "# Blueprint" }],
+        },
+        toolCtx,
+      );
+
+      expect(result).toContain("Error in goop_write_db");
+      expect(result).toContain("mode");
+      expect(result).toContain("items[]");
+      expect(ctx.db.getDocument("default", "blueprint")).toBeNull();
+    });
+
+    it("rule 4: does NOT reject empty-string content alongside items[] (documented neutral placeholder)", async () => {
+      const tool = createGoopWriteDbTool(ctx);
+      const result = await tool.execute(
+        {
+          doc_type: "spec",
+          content: "",
+          items: [{ doc_type: "blueprint", content: "# Blueprint" }],
+        },
+        toolCtx,
+      );
+
+      expect(result).toContain("1/1 succeeded");
+      expect(ctx.db.getDocument("default", "blueprint")?.content).toBe("# Blueprint");
+    });
+
+    it("per-item validation: rejects a batch item that mixes content and old_string, rolling back the whole batch", async () => {
+      ctx.db.upsertDocument("default", "spec", "Original spec");
+
+      const tool = createGoopWriteDbTool(ctx);
+      const result = await tool.execute(
+        {
+          doc_type: "spec",
+          content: "",
+          items: [
+            { doc_type: "blueprint", content: "# Should be rolled back" },
+            { doc_type: "spec", content: "# Ambiguous", old_string: "Original", new_string: "x" },
+          ],
+        },
+        toolCtx,
+      );
+
+      expect(result).toContain("Batch write-db");
+      expect(result).toContain("0/2 succeeded");
+      // The first item's write must not survive despite validating fine on
+      // its own — the whole batch transaction rolls back on any item error.
+      expect(ctx.db.getDocument("default", "blueprint")).toBeNull();
+      expect(ctx.db.getDocument("default", "spec")?.content).toBe("Original spec");
+    });
+
+    it("per-item validation: rejects a batch item with new_string but no old_string", async () => {
+      const tool = createGoopWriteDbTool(ctx);
+      const result = await tool.execute(
+        {
+          doc_type: "spec",
+          content: "",
+          items: [{ doc_type: "spec", content: "# Doc", new_string: "x" }],
+        },
+        toolCtx,
+      );
+
+      expect(result).toContain("0/1 succeeded");
+      expect(result).toContain("supplied without old_string");
+      expect(ctx.db.getDocument("default", "spec")).toBeNull();
+    });
+  });
+
+  // -----------------------------------------------------------------------
+  // Retry-loop regression (W4.T4) — the one-shot error must differ from the
+  // prior silent-patch success so an agent cannot loop on the identical
+  // payload. Pin the runtime guarantee from W4.T2 (shared/write-mode.ts):
+  // the formerly-ambiguous call surfaces a single actionable message, performs
+  // no mutation, and yields a deterministic result on retry.
+  // -----------------------------------------------------------------------
+
+  describe("one-shot error prevents an identical retry loop (W4.T4)", () => {
+    it("returns an actionable error that differs from the prior silent-patch success", async () => {
+      // The incident this wave exists to prevent: an agent supplies BOTH
+      // content (intending a full-document write) AND old_string (because a
+      // host-side schema defect, or a confused model, marked it required).
+      // Before W4.T2, `isPatchActive(old_string)` silently chose patch mode,
+      // ignored content, and returned a "Patched ..." success — so the agent
+      // saw a success-shaped result, its full write never landed, and
+      // re-issuing the identical payload produced the identical misleading
+      // success forever.
+      ctx.db.upsertDocument("default", "spec", "Hello world");
+
+      const tool = createGoopWriteDbTool(ctx);
+      const payload = {
+        doc_type: "spec" as const,
+        content: "# Full document I intended to write",
+        old_string: "world",
+        new_string: "GoopSpec",
+      };
+      const result = await tool.execute(payload, toolCtx);
+
+      // (1) The output is an error, not a success-looking result. The
+      //     contrast with the prior "Patched ... / Sidecar: ..." path is
+      //     what breaks the loop — an agent can no longer mistake silence
+      //     for success.
+      expect(result).toContain("Error in goop_write_db");
+      expect(result).not.toContain("Patched");
+      expect(result).not.toContain("Written");
+      expect(result).not.toContain("Sidecar");
+
+      // (2) It names BOTH conflicting fields, so the agent knows exactly
+      //     what to drop without guessing.
+      expect(result).toContain("content");
+      expect(result).toContain("old_string");
+      expect(result).toContain("content and old_string cannot be supplied together");
+
+      // (3) It names the valid call shapes, so the agent has a concrete
+      //     correction rather than a generic "invalid input" that invites
+      //     an identical retry with rearranged whitespace.
+      expect(result).toContain("Valid call shapes");
+      expect(result).toContain("full write/append");
+      expect(result).toContain("patch");
+      expect(result).toContain("batch");
+
+      // (4) No mutation occurred — a retry with a corrected payload starts
+      //     from the original document state, not a half-applied patch.
+      expect(ctx.db.getDocument("default", "spec")?.content).toBe("Hello world");
+
+      // (5) Determinism: re-issuing the identical payload yields the
+      //     identical actionable error. This is the retry-loop guarantee —
+      //     the agent cannot stumble into a different (success-shaped)
+      //     outcome by repeating the bad call. The error is stable and
+      //     terminal until the agent actually changes the payload.
+      const retried = await tool.execute(payload, toolCtx);
+      expect(retried).toBe(result);
+      expect(ctx.db.getDocument("default", "spec")?.content).toBe("Hello world");
+    });
+  });
 });

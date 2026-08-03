@@ -440,6 +440,102 @@ describe("goop_write_section tool", () => {
   });
 
   // -----------------------------------------------------------------------
+  // Ambiguity rejection (W4.T3 — shared cause with goop_write_db)
+  // -----------------------------------------------------------------------
+
+  describe("ambiguity rejection", () => {
+    it("rejects content + old_string supplied together, with zero mutation", async () => {
+      ctx.db.upsertSection("default", "spec", "overview", "Original");
+
+      const tool = createGoopWriteSectionTool(ctx);
+      const result = await tool.execute(
+        {
+          doc_type: "spec",
+          section_key: "overview",
+          content: "# New",
+          old_string: "old",
+          new_string: "new",
+        },
+        toolCtx,
+      );
+
+      expect(result).toContain("Error in goop_write_section");
+      expect(result).toContain("content and old_string cannot be supplied together");
+      expect(ctx.db.getSection("default", "spec", "overview")?.content).toBe("Original");
+    });
+
+    it("rejects new_string supplied without old_string, with zero mutation", async () => {
+      const tool = createGoopWriteSectionTool(ctx);
+      const result = await tool.execute(
+        { doc_type: "spec", section_key: "overview", content: "# Doc", new_string: "x" },
+        toolCtx,
+      );
+
+      expect(result).toContain("Error in goop_write_section");
+      expect(result).toContain("new_string");
+      expect(result).toContain("supplied without old_string");
+      expect(ctx.db.getSection("default", "spec", "overview")).toBeNull();
+    });
+
+    it("rejects meaningful old_string alongside items[], with zero mutation", async () => {
+      const tool = createGoopWriteSectionTool(ctx);
+      const result = await tool.execute(
+        {
+          doc_type: "spec",
+          section_key: "",
+          old_string: "leaked",
+          items: [{ doc_type: "spec", section_key: "intro", content: "# Intro" }],
+        },
+        toolCtx,
+      );
+
+      expect(result).toContain("Error in goop_write_section");
+      expect(result).toContain("old_string");
+      expect(result).toContain("items[]");
+      expect(ctx.db.getSection("default", "spec", "intro")).toBeNull();
+    });
+
+    it("rejects an item that supplies both content and old_string, rolling back the whole batch", async () => {
+      const tool = createGoopWriteSectionTool(ctx);
+      const result = await tool.execute(
+        {
+          doc_type: "spec",
+          section_key: "",
+          content: "",
+          items: [
+            { doc_type: "spec", section_key: "intro", content: "# Intro" },
+            {
+              doc_type: "spec",
+              section_key: "conflict",
+              content: "# New",
+              old_string: "old",
+              new_string: "new",
+            },
+          ],
+        },
+        toolCtx,
+      );
+
+      expect(result).toContain("0/2 succeeded");
+      expect(result).toContain("content and old_string cannot be supplied together");
+      // Batch is atomic — the valid first item must not have persisted either.
+      expect(ctx.db.getSection("default", "spec", "intro")).toBeNull();
+    });
+
+    it("names both valid shapes in the rejection message", async () => {
+      const tool = createGoopWriteSectionTool(ctx);
+      const result = await tool.execute(
+        { doc_type: "spec", section_key: "overview", content: "# New", old_string: "old" },
+        toolCtx,
+      );
+
+      expect(result).toContain("full write/append");
+      expect(result).toContain("patch");
+      expect(result).toContain("batch");
+    });
+  });
+
+  // -----------------------------------------------------------------------
   // Message accuracy — write size reporting
   // -----------------------------------------------------------------------
 
@@ -487,6 +583,91 @@ describe("goop_write_section tool", () => {
       expect(result).toContain(`assembled document: ${assembled.length} chars`);
       expect(result).not.toContain("assembled chars");
       expect(assembled.length).not.toBe(patchedSection.length);
+    });
+  });
+
+  // -----------------------------------------------------------------------
+  // Positive fixture inventory — valid call shapes (W4 Task 1)
+  //
+  // goop_write_section has no `mode` field and no append semantics — a
+  // section write always replaces the section content. The generic
+  // "append mode" shape is therefore N/A and omitted. All other generic
+  // shapes apply. The blank-document patch workaround applies because an
+  // absent section resolves to '' via getSection(...)?.content ?? '', and
+  // patchContent('', '', newString) succeeds with matchCount -1.
+  // -----------------------------------------------------------------------
+
+  describe("positive fixture inventory — valid call shapes (W4.T1)", () => {
+    it("SHAPE: section create (doc_type + section_key + content)", async () => {
+      const tool = createGoopWriteSectionTool(ctx);
+      const result = await tool.execute(
+        { doc_type: "spec", section_key: "inv", content: "# Inventory Section" },
+        toolCtx,
+      );
+      expect(result).toContain("Written section 'inv'");
+      expect(ctx.db.getSection("default", "spec", "inv")?.content).toBe("# Inventory Section");
+    });
+
+    it("SHAPE: patch mode (section + old_string + new_string, single match)", async () => {
+      ctx.db.upsertSection("default", "spec", "inv", "Hello world");
+      const tool = createGoopWriteSectionTool(ctx);
+      const result = await tool.execute(
+        { doc_type: "spec", section_key: "inv", old_string: "world", new_string: "GoopSpec" },
+        toolCtx,
+      );
+      expect(result).toContain("Patched section 'inv'");
+      expect(ctx.db.getSection("default", "spec", "inv")?.content).toBe("Hello GoopSpec");
+    });
+
+    it("SHAPE: replace-all patch (section + old_string + new_string + replace_all: true)", async () => {
+      ctx.db.upsertSection("default", "spec", "inv", "foo bar foo baz foo");
+      const tool = createGoopWriteSectionTool(ctx);
+      const result = await tool.execute(
+        {
+          doc_type: "spec",
+          section_key: "inv",
+          old_string: "foo",
+          new_string: "qux",
+          replace_all: true,
+        },
+        toolCtx,
+      );
+      expect(result).toContain("Patched section 'inv'");
+      expect(ctx.db.getSection("default", "spec", "inv")?.content).toBe("qux bar qux baz qux");
+    });
+
+    it("SHAPE: items[] batch (mixed create + patch items)", async () => {
+      ctx.db.upsertSection("default", "spec", "inv", "Hello world");
+      const tool = createGoopWriteSectionTool(ctx);
+      const result = await tool.execute(
+        {
+          doc_type: "spec",
+          section_key: "",
+          content: "",
+          items: [
+            { doc_type: "spec", section_key: "inv", old_string: "world", new_string: "GoopSpec" },
+            { doc_type: "spec", section_key: "plan", content: "# Plan" },
+          ],
+        },
+        toolCtx,
+      );
+      expect(result).toContain("2/2 succeeded");
+      expect(ctx.db.getSection("default", "spec", "inv")?.content).toBe("Hello GoopSpec");
+      expect(ctx.db.getSection("default", "spec", "plan")?.content).toBe("# Plan");
+    });
+
+    it("SHAPE: blank-document patch workaround (old_string: '' on an absent section)", async () => {
+      // CURRENT behaviour: an absent section resolves to '' and
+      // patchContent('', '', newString) succeeds with matchCount -1, so
+      // new_string becomes the section content. Locked here so Wave 4
+      // Task 2/3 must decide deliberately.
+      const tool = createGoopWriteSectionTool(ctx);
+      const result = await tool.execute(
+        { doc_type: "spec", section_key: "fresh", old_string: "", new_string: "# Via empty patch" },
+        toolCtx,
+      );
+      expect(result).toContain("Patched section 'fresh'");
+      expect(ctx.db.getSection("default", "spec", "fresh")?.content).toBe("# Via empty patch");
     });
   });
 });

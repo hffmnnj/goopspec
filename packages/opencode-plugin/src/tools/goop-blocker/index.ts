@@ -203,6 +203,20 @@ export function createGoopBlockerTool(ctx: PluginContext): ToolDefinition {
         const workflowId = args.workflow_id ?? ctx.stateManager.getState().activeWorkflowId;
 
         if (Array.isArray(args.items) && args.items.length > 0) {
+          // workflow_id is excluded: it is genuinely used as the per-item default below.
+          const ignoredFields = [
+            args.action !== undefined ? "action" : null,
+            args.description !== undefined ? "description" : null,
+            args.severity !== undefined ? "severity" : null,
+            args.wave_id !== undefined ? "wave_id" : null,
+            args.id !== undefined ? "id" : null,
+            args.resolution !== undefined ? "resolution" : null,
+            args.status !== undefined ? "status" : null,
+          ].filter((field): field is string => field !== null);
+          if (ignoredFields.length > 0) {
+            return `Error in goop_blocker: ${ignoredFields.join(", ")} cannot be supplied alongside items[]: batch mode uses only the per-item fields inside items[], so top-level operation fields would be silently ignored.`;
+          }
+
           const touchedWorkflows = new Set<string>();
           const result = runBatch(ctx.db, args.items, (item) => {
             const itemWorkflowId = item.workflow_id ?? workflowId;

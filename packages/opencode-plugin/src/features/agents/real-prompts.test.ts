@@ -8,7 +8,7 @@ import {
   type RealCommandPrompt,
 } from "./real-prompts.test-support.js";
 
-const EXPECTED_AGENT_FILES = 14;
+const EXPECTED_AGENT_FILES = 15;
 const EXPECTED_COMMAND_FILES = 9;
 
 const BUILTIN_TOOLS = new Set([
@@ -87,6 +87,14 @@ function toolGrants(agent: RealAgentPrompt): string[] {
 describe("real agent prompt directory", () => {
   it("contains exactly the shipped agent file count", () => {
     expect(agents, "agents/*.md file count changed").toHaveLength(EXPECTED_AGENT_FILES);
+  });
+
+  it("ships the wave-verifier agent as goop-wave-verifier.md", () => {
+    const waveVerifier = agents.find((agent) => agent.file === "goop-wave-verifier.md");
+    expect(waveVerifier, "goop-wave-verifier.md is missing from agents/*.md").toBeDefined();
+    expect(waveVerifier?.parsed?.name, "goop-wave-verifier.md did not parse to name goop-wave-verifier").toBe(
+      "goop-wave-verifier",
+    );
   });
 
   for (const agent of agents) {

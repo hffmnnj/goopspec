@@ -101,11 +101,11 @@ describe("measureDirectory", () => {
     expect(r.perFile).toEqual([]);
   });
 
-  it("rolls up the real agents directory with 14 markdown files", () => {
+  it("rolls up the real agents directory with 15 markdown files", () => {
     const r = measureDirectory("agents", packageRoot);
     expect(r.directory).toBe("agents");
-    expect(r.files).toBe(14);
-    expect(r.perFile.length).toBe(14);
+    expect(r.files).toBe(15);
+    expect(r.perFile.length).toBe(15);
     expect(r.chars).toBe(r.perFile.reduce((s, f) => s + f.chars, 0));
     expect(r.bytes).toBe(r.perFile.reduce((s, f) => s + f.bytes, 0));
     expect(r.boldSpans).toBe(r.perFile.reduce((s, f) => s + f.boldSpans, 0));
@@ -123,7 +123,7 @@ describe("auditPromptSurfaces (real tree)", () => {
     expect(report.directories.map((d) => d.directory)).toEqual([...PROMPT_DIRECTORIES]);
   });
 
-  it("agents: 14 files, 76,962 bytes, 127 bold spans", () => {
+  it("agents: 15 files, 82,324 bytes, 137 bold spans", () => {
     // Wave 3 Task 3.2 consolidated agents/goop-orchestrator.md (the largest
     // single prompt) around the Task 3.1 pointer targets in core-protocol.md,
     // dispatch-patterns.md, and phase-gates.md: 17,207 -> 9,807 bytes
@@ -159,13 +159,44 @@ describe("auditPromptSurfaces (real tree)", () => {
     // identity, branch, source-write, acceptance, and state-mutation
     // invariants preserved. The immutable Wave 1 baseline remains in
     // RESEARCH.md.
+    //
+    // The wave-verifier-gating workflow's Wave 1 role plumbing added
+    // agents/goop-wave-verifier.md (a new, wave-scoped-only agent contract)
+    // on top of this Wave 4 baseline: 14 files, 76,962 bytes, 127 bold
+    // spans -> 15 files, 82,100 bytes, 137 bold spans (+5,138 bytes, +10
+    // bold spans, exactly the new file's own measurements). No existing
+    // agent file changed. A same-wave follow-up fix aligned the new file's
+    // prompt with the shared boot-pointer and delegation-prohibition
+    // invariants (added a Mandatory First Steps section and an explicit
+    // "Do not" prefix): 82,100 -> 82,324 bytes (+224), bold spans and
+    // absolute-language hits unchanged. The immutable Wave 1 baseline
+    // (99,822 bytes, 14 files) remains in RESEARCH.md and predates both
+    // this addition and the Wave 3/4 consolidation passes.
+    //
+    // The wave-verifier-gating workflow's Wave 3 Task 2 split the two
+    // verifier roles across the delegation surface: agents/goop-orchestrator.md
+    // gained goop-wave-verifier in the task()-reachable list plus a
+    // stage-bound verification-dispatch paragraph (+514 bytes, +2 abs), and
+    // agents/goop-verifier.md now states acceptance-only with a
+    // cross-reference to goop-wave-verifier (+273 bytes, +2 abs). Net:
+    // 82,324 -> 83,111 bytes, absolute hits 66 -> 70, bold spans unchanged
+    // at 137.
+    //
+    // The wave-verifier-gating workflow's Wave 3 Task 4 (Rule 4 remediation:
+    // latest-per-check_name verification gate) documented in
+    // agents/goop-wave-verifier.md that re-verifying a check records a new
+    // append-only row rather than replacing the old one, and that the wave
+    // gate reads each check's latest row. Net: 83,111 -> 83,373 bytes
+    // (+262), absolute hits unchanged at 70 (the added sentence uses
+    // "persist forever" and "instead of", not a must/never/always/critical/
+    // only judgment word), bold spans unchanged at 137.
     const agents = report.directories.find((d) => d.directory === "agents")!;
-    expect(agents.files).toBe(14);
-    expect(agents.bytes).toBe(76_962);
-    expect(agents.boldSpans).toBe(127);
+    expect(agents.files).toBe(15);
+    expect(agents.bytes).toBe(83_373);
+    expect(agents.boldSpans).toBe(137);
   });
 
-  it("commands: 9 files, 24,702 bytes", () => {
+  it("commands: 9 files, 25,890 bytes", () => {
     // Wave 4 Task 4.1 reconciled the nine command docs against the
     // runtime-injected phase rules: trimmed anti-pattern/prohibition lists
     // to command-specific material (removing items the injected phase
@@ -175,12 +206,37 @@ describe("auditPromptSurfaces (real tree)", () => {
     // goop-plan.md. Net effect: 25,547 -> 24,702 bytes; absolute-language
     // hits 34 -> 32; bold spans 68 -> 58. The immutable Wave 1 baseline
     // remains in RESEARCH.md.
+    //
+    // The wave-verifier-gating workflow's Wave 3 Task 1 inserted the wave
+    // verification gate into goop-execute.md (dispatch goop-wave-verifier
+    // after the per-wave task loop, bounded remediation cycle, runtime
+    // gate reference): 24,702 -> 25,890 bytes (+1,188); absolute hits
+    // 32 -> 34 (+2: the gate's "inspect-only" role boundary and the
+    // "never implements fixes" verifier invariant — both true role
+    // invariants per dispatch-patterns.md).
+    //
+    // The wave-verifier-gating workflow's Wave 3 Task 2 corrected the agent
+    // roster in goop-help.md: 13 -> 14 specialized agents (the canonical
+    // 15-role roster minus the orchestrator), added goop-wave-verifier with
+    // a stage boundary, and made goop-verifier acceptance-only. Net:
+    // 25,890 -> 26,092 bytes (+202), absolute hits 34 -> 38 (+4: the
+    // "never implements fixes" role invariant, the "acceptance-only" scope,
+    // the "inspect/report-only" boundary, and the "never implements"
+    // delegate statement).
+    //
+    // The wave-verifier-gating workflow's Wave 3 Task 4 (Rule 4 remediation:
+    // latest-per-check_name verification gate) corrected goop-execute.md's
+    // wave-completion gate description, which pinned the superseded
+    // "zero fail rows ever" reading, to the append-only latest-per-check
+    // rule the runtime now enforces. Net: 26,092 -> 26,318 bytes (+226),
+    // absolute hits 38 -> 39 (+1: "never deleted or edited" — a true
+    // data-integrity invariant, not a judgment call).
     const commands = report.directories.find((d) => d.directory === "commands")!;
     expect(commands.files).toBe(9);
-    expect(commands.bytes).toBe(24_702);
+    expect(commands.bytes).toBe(26_318);
   });
 
-  it("references: 19 files, 161,350 bytes", () => {
+  it("references: 19 files, 164,672 bytes", () => {
     // Wave 3 Task 3.1 consolidated core-protocol.md, dispatch-patterns.md, and
     // subagent-identity.md (added one Prompt Authoring Rules section, offset
     // by removing duplicated material from the other two files). Net effect:
@@ -225,12 +281,42 @@ describe("auditPromptSurfaces (real tree)", () => {
     // Net effect: 160,716 -> 161,350 bytes (+634, still below the 161,459
     // Wave 1 baseline), absolute hits 202 -> 198 (-4), bold spans 526 ->
     // 530. The non-increase bar relative to the Wave 1 baseline holds.
+    //
+    // The wave-verifier-gating workflow's Wave 3 Task 1 aligned boundary/
+    // handoff guidance with the runtime verification gate: wiring-checklist
+    // gained a verification-gate checklist item and a handoff rule ("never
+    // substitutes for the recorded gate" — one absolute hit), and
+    // task-decomposition's update-wave section and anti-pattern now cite the
+    // runtime predicate isWaveVerified. Net effect: 161,350 -> 162,326 bytes
+    // (+976), absolute hits 198 -> 199 (+1), bold spans 530 -> 532.
+    //
+    // The wave-verifier-gating workflow's Wave 3 Task 2 made goop-verifier
+    // acceptance-only in dispatch-patterns.md: the selection table gained a
+    // Wave-verification (execute) row pointing at goop-wave-verifier and
+    // dropped goop-verifier as the testing fallback, the model-profile table
+    // gained goop-wave-verifier, and the Verification Dispatch section
+    // removed the "after high-risk changes" guidance. Net: 162,326 ->
+    // 162,648 bytes (+322), absolute hits 199 -> 200 (+1: "acceptance-only"),
+    // bold spans unchanged at 532.
+    //
+    // The wave-verifier-gating workflow's Wave 5 Task 2 documented the wave
+    // verification gate as a first-class execute gate: phase-gates.md gained
+    // a Wave Verification row in the gate-overview table and a Wave
+    // Verification Gate section (tasks complete -> wave-scoped verifier
+    // evidence -> bounded remediation -> non-failing effective evidence
+    // before completion, with acceptance remaining a distinct final
+    // whole-workflow audit), and wiring-checklist.md tightened its
+    // verification item to the current/effective per-check row and added an
+    // acceptance-visibility item. Net: 162,648 -> 164,672 bytes (+2,024),
+    // absolute hits 200 -> 202 (+2: the "never implements fixes" role
+    // invariant and the "inspect/report-only" boundary, both true invariants
+    // shared with dispatch-patterns.md), bold spans 532 -> 542 (+10).
     const references = report.directories.find((d) => d.directory === "references")!;
     expect(references.files).toBe(19);
-    expect(references.bytes).toBe(161_350);
+    expect(references.bytes).toBe(164_672);
   });
 
-  it("total absolute-language hits are 286 (post Wave 4 Task 4.3 follow-up)", () => {
+  it("total absolute-language hits are 299 (Wave 1 role plumbing plus the Wave 3 execution gate)", () => {
     // SPEC assumption A5: research-phase count (394) and spec count (396)
     // differ by measurement method. The Wave 1 audit re-measures with one
     // documented method (\b(?:must|never|always|critical|only)\b, gi) and
@@ -286,7 +372,48 @@ describe("auditPromptSurfaces (real tree)", () => {
     // 18 -> 15 (-3: "Only", "never", "always"), dispatch-patterns.md
     // 19 -> 18 (-1: "must"). Total: 290 -> 286. The immutable Wave 1
     // baseline (394) remains in RESEARCH.md.
-    expect(report.totalAbsoluteHits).toBe(286);
+    //
+    // The wave-verifier-gating workflow's Wave 1 role plumbing adds the
+    // new `wave-verifier` role as agents/goop-wave-verifier.md on top of
+    // this Wave 4 baseline. That file contributes 10 absolute-language
+    // hits of its own (it states explicit MUST/NEVER contract
+    // obligations), lifting the total from 286 to 296. The +10 delta is a
+    // property of the added role's prompt, not a regression of the Wave 4
+    // consolidation work.
+    //
+    // The wave-verifier-gating workflow's Wave 3 Task 1 added the execute
+    // wave verification gate: +2 hits in commands/goop-execute.md
+    // (inspect-only role boundary, never-implements-fixes invariant) and
+    // +1 in references/wiring-checklist.md (handoff never substitutes for
+    // the recorded gate) — all true invariants, lifting the total from 296
+    // to 299.
+    //
+    // The wave-verifier-gating workflow's Wave 3 Task 2 (doc restriction
+    // sweep) added the two-verifier stage boundary across the delegation
+    // surfaces: +1 in references/dispatch-patterns.md (acceptance-only),
+    // +2 in agents/goop-orchestrator.md (never-implements-fixes role
+    // invariant, acceptance-only), +2 in agents/goop-verifier.md
+    // (acceptance-gate-only scope, acceptance-only), +4 in commands/
+    // goop-help.md (never-implements-fixes role invariant, acceptance-only,
+    // inspect/report-only boundary, delegate-never statement) — lifting the
+    // total from 299 to 308.
+    //
+    // The wave-verifier-gating workflow's Wave 3 Task 4 (Rule 4
+    // remediation: latest-per-check_name verification gate) corrected
+    // commands/goop-execute.md's wave-completion gate description to the
+    // append-only latest-per-check rule: +1 ("never deleted or edited" — a
+    // true data-integrity invariant). agents/goop-wave-verifier.md's
+    // matching clarification added zero new hits (its wording reuses the
+    // file's existing "only"/"never" vocabulary without a new match) —
+    // lifting the total from 308 to 309.
+    //
+    // The wave-verifier-gating workflow's Wave 5 Task 2 documented the wave
+    // verification gate as a first-class execute gate: +2 in references
+    // (phase-gates.md's Wave Verification Gate section — the "never
+    // implements fixes" role invariant and the "inspect/report-only"
+    // boundary, both true invariants shared with dispatch-patterns.md) —
+    // lifting the total from 309 to 311.
+    expect(report.totalAbsoluteHits).toBe(311);
   });
 
   it("per-file tokens are consistent with chars via estimateTokens", () => {

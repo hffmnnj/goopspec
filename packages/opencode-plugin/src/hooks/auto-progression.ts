@@ -17,6 +17,7 @@
  */
 
 import type { PluginContext } from "../core/types.js";
+import { isWaveVerified } from "../features/enforcement/verifier-stage.js";
 import { isCompleteStatus } from "../shared/status.js";
 import type { HookFactory, Hooks } from "./types.js";
 import { safeHandler } from "./utils.js";
@@ -52,6 +53,18 @@ export const createAutoProgressionHook: HookFactory = (ctx: PluginContext): Part
     ).length;
 
     if (!isCompleteStatus(finalWave.status) || completedTaskCount !== finalWaveTasks.length) return;
+
+    // Task completion alone is not sufficient — the final wave must also
+    // carry at least one passing or explicit-skip verification row. Guidance
+    // names the exact next dispatch so lazy autopilot keeps moving.
+    const verificationRows = ctx.db.getVerifications(
+      ctx.stateManager.getActiveWorkflowId(),
+      finalWave.id,
+    );
+    if (!isWaveVerified(verificationRows)) {
+      output.output += `\n\n---\n## Blocked: execute → accept\nFinal wave ${finalWave.wave_number} tasks are complete, but no passing or explicit-skip verification is recorded for it. Dispatch goop-wave-verifier for wave ${finalWave.wave_number}, record a pass or skip verification row (goop_write_wave verifications[]), then retry.\n`;
+      return;
+    }
 
     // Transition execute → accept
     try {
