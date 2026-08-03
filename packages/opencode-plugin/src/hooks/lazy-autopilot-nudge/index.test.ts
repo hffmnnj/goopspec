@@ -646,6 +646,68 @@ describe("lazy autopilot nudge", () => {
     expect(ctx.pendingLazyAutopilotNudges.has("sess-non-orchestrator")).toBe(false);
   });
 
+  // -------------------------------------------------------------------------
+  // Wave 2 Task 2.3: End-to-end dispatch regression for the agent-identity
+  // guard. The dispatch body hard-codes agent: 'goop-orchestrator' in the
+  // promptAsync request (index.ts:187). Without the guard, a nudge fired on
+  // a session whose last assistant turn ran under any non-orchestrator agent
+  // would force-switch that session's agent. Each row below proves the guard
+  // prevents that: a fully otherwise-eligible session (execute phase, lazy
+  // autopilot on, top-level session, same project directory, assistant last
+  // turn, no hard-stop, no blockers, no compaction) yields ZERO promptAsync
+  // calls when the final assistant message's `mode` is a non-orchestrator
+  // agent name. This is the regression that matters most.
+  // -------------------------------------------------------------------------
+
+  it.each([
+    "goop-planner",
+    "goop-executor-high",
+    "goop-executor-frontend-medium",
+    "goop-researcher",
+    "goop-verifier",
+    "goop-explorer",
+    "my-custom-user-agent",
+  ])(
+    "end-to-end: non-orchestrator agent %s on an otherwise eligible session yields zero promptAsync calls",
+    async (agentMode) => {
+      const ctx = makeExecuteContext(testDir);
+      const promptAsync = mock(async () => undefined);
+      Object.assign(ctx.sdk.client, {
+        session: {
+          messages: mock(async () => [{ info: { role: "assistant", mode: agentMode } }]),
+          get: mock(async () => ({ directory: testDir })),
+          promptAsync,
+        },
+      });
+
+      await dispatchLazyAutopilotNudge(ctx, `sess-${agentMode}`);
+      await Promise.resolve();
+
+      expect(promptAsync).not.toHaveBeenCalled();
+      expect(ctx.pendingLazyAutopilotNudges.has(`sess-${agentMode}`)).toBe(false);
+    },
+  );
+
+  it("end-to-end: indeterminate agent identity (mode absent) on an otherwise eligible session yields zero promptAsync calls", async () => {
+    const ctx = makeExecuteContext(testDir);
+    const promptAsync = mock(async () => undefined);
+    Object.assign(ctx.sdk.client, {
+      session: {
+        // AssistantMessage.mode is absent — lastAssistantAgent() returns
+        // { status: "unknown" } and the guard fails closed.
+        messages: mock(async () => [{ info: { role: "assistant" } }]),
+        get: mock(async () => ({ directory: testDir })),
+        promptAsync,
+      },
+    });
+
+    await dispatchLazyAutopilotNudge(ctx, "sess-indeterminate");
+    await Promise.resolve();
+
+    expect(promptAsync).not.toHaveBeenCalled();
+    expect(ctx.pendingLazyAutopilotNudges.has("sess-indeterminate")).toBe(false);
+  });
+
   it("D3 characterisation (KNOWN DEFECT, inverted by Wave 3 Task 3.1): a second dispatch is blocked by the pending system-transform latch while it remains unconsumed", async () => {
     const ctx = makeExecuteContext(testDir);
     const errorSpy = spyOn(console, "error").mockImplementation(() => {});

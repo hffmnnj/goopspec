@@ -7,6 +7,7 @@ import { createMockPluginContext, setupTestEnvironment } from "../../test-utils.
 import {
   ALLOWED,
   type NudgeGuardInput,
+  type NudgeGuardResult,
   type NudgeRateLimitCheck,
   evaluateNudgeGuards,
 } from "./guards.js";
@@ -294,57 +295,143 @@ describe("lazy autopilot nudge guards", () => {
   });
 
   // -------------------------------------------------------------------------
-  // Agent identity guard (Wave 2 Task 2.1). Positioned after the G2a subagent
-  // check and before the G2b directory check. Fails closed: an indeterminate
-  // identity is suppressed identically to a known-wrong one, because the
-  // dispatch body force-sets agent: 'goop-orchestrator' and would otherwise
-  // hijack an innocent session's agent.
+  // Agent identity guard matrix (Wave 2 Task 2.3). Table-driven proof of the
+  // eligibility boundary introduced by Task 2.1. The guard sits after the
+  // G2a subagent check and before the G2b directory check. Fails closed: an
+  // indeterminate identity is suppressed identically to a known-wrong one,
+  // because the dispatch body force-sets agent: 'goop-orchestrator' and would
+  // otherwise hijack an innocent session's agent.
+  //
+  // isOrchestrator() (../utils.js) matches three naming patterns via
+  // case-insensitive substring: "orchestrator", "goop-orchestrator",
+  // "goopspec-orchestrator". Every other known agent — including all sibling
+  // GoopSpec roles and arbitrary user-defined agents — is suppressed with
+  // reason "not-orchestrator" and the observed name for diagnosis. An
+  // indeterminate identity (status "unknown" or the field absent entirely)
+  // is suppressed with reason "unknown".
   // -------------------------------------------------------------------------
 
-  it("agent identity guard: allows a known orchestrator identity", () => {
-    const ctx = createMockPluginContext({ testDir });
-    const result = evaluateNudgeGuards(
-      ctx,
-      baseInput({ agent: { status: "known", agent: "goop-orchestrator" } }),
-    );
-
-    expect(result).toEqual(ALLOWED);
-  });
-
-  it("agent identity guard: allows orchestrator-pattern identities via isOrchestrator()", () => {
-    const ctx = createMockPluginContext({ testDir });
-    for (const agent of ["orchestrator", "goopspec-orchestrator"]) {
-      const result = evaluateNudgeGuards(ctx, baseInput({ agent: { status: "known", agent } }));
-      expect(result).toEqual(ALLOWED);
-    }
-  });
-
-  it("agent identity guard: suppresses a known non-orchestrator agent with the observed name", () => {
-    const ctx = createMockPluginContext({ testDir });
-    const result = evaluateNudgeGuards(
-      ctx,
-      baseInput({ agent: { status: "known", agent: "goop-executor-high" } }),
-    );
-
-    expect(result).toEqual({
-      suppressed: true,
-      reason: {
-        kind: "agent-not-eligible",
-        reason: "not-orchestrator",
-        agent: "goop-executor-high",
+  const agentIdentityCases: Array<{
+    label: string;
+    agent: NudgeGuardInput["agent"];
+    expected: NudgeGuardResult;
+  }> = [
+    // Allowed: the three orchestrator naming patterns isOrchestrator() matches.
+    {
+      label: "goop-orchestrator",
+      agent: { status: "known", agent: "goop-orchestrator" },
+      expected: ALLOWED,
+    },
+    {
+      label: "orchestrator",
+      agent: { status: "known", agent: "orchestrator" },
+      expected: ALLOWED,
+    },
+    {
+      label: "goopspec-orchestrator",
+      agent: { status: "known", agent: "goopspec-orchestrator" },
+      expected: ALLOWED,
+    },
+    // Suppressed: known non-orchestrator GoopSpec agent roles.
+    {
+      label: "goop-planner",
+      agent: { status: "known", agent: "goop-planner" },
+      expected: {
+        suppressed: true,
+        reason: { kind: "agent-not-eligible", reason: "not-orchestrator", agent: "goop-planner" },
       },
-    });
-  });
+    },
+    {
+      label: "goop-executor-high",
+      agent: { status: "known", agent: "goop-executor-high" },
+      expected: {
+        suppressed: true,
+        reason: {
+          kind: "agent-not-eligible",
+          reason: "not-orchestrator",
+          agent: "goop-executor-high",
+        },
+      },
+    },
+    {
+      label: "goop-executor-frontend-medium",
+      agent: { status: "known", agent: "goop-executor-frontend-medium" },
+      expected: {
+        suppressed: true,
+        reason: {
+          kind: "agent-not-eligible",
+          reason: "not-orchestrator",
+          agent: "goop-executor-frontend-medium",
+        },
+      },
+    },
+    {
+      label: "goop-researcher",
+      agent: { status: "known", agent: "goop-researcher" },
+      expected: {
+        suppressed: true,
+        reason: {
+          kind: "agent-not-eligible",
+          reason: "not-orchestrator",
+          agent: "goop-researcher",
+        },
+      },
+    },
+    {
+      label: "goop-verifier",
+      agent: { status: "known", agent: "goop-verifier" },
+      expected: {
+        suppressed: true,
+        reason: { kind: "agent-not-eligible", reason: "not-orchestrator", agent: "goop-verifier" },
+      },
+    },
+    {
+      label: "goop-explorer",
+      agent: { status: "known", agent: "goop-explorer" },
+      expected: {
+        suppressed: true,
+        reason: { kind: "agent-not-eligible", reason: "not-orchestrator", agent: "goop-explorer" },
+      },
+    },
+    // Suppressed: arbitrary user-defined agent name.
+    {
+      label: "user-defined agent",
+      agent: { status: "known", agent: "my-custom-helper" },
+      expected: {
+        suppressed: true,
+        reason: {
+          kind: "agent-not-eligible",
+          reason: "not-orchestrator",
+          agent: "my-custom-helper",
+        },
+      },
+    },
+    // Suppressed: indeterminate identity — fail closed (reason "unknown").
+    {
+      label: "indeterminate (status unknown)",
+      agent: { status: "unknown" },
+      expected: {
+        suppressed: true,
+        reason: { kind: "agent-not-eligible", reason: "unknown" },
+      },
+    },
+    {
+      label: "absent (undefined)",
+      agent: undefined,
+      expected: {
+        suppressed: true,
+        reason: { kind: "agent-not-eligible", reason: "unknown" },
+      },
+    },
+  ];
 
-  it("agent identity guard: fails closed when the identity is indeterminate", () => {
-    const ctx = createMockPluginContext({ testDir });
-    const result = evaluateNudgeGuards(ctx, baseInput({ agent: { status: "unknown" } }));
-
-    expect(result).toEqual({
-      suppressed: true,
-      reason: { kind: "agent-not-eligible", reason: "unknown" },
+  for (const { label, agent, expected } of agentIdentityCases) {
+    it(`agent identity guard matrix: ${label} → ${expected.suppressed ? "suppressed" : "allowed"}`, () => {
+      const ctx = createMockPluginContext({ testDir });
+      const result = evaluateNudgeGuards(ctx, baseInput({ agent }));
+      expect(result).toEqual(expected);
     });
-  });
+  }
 
   it("G5: suppresses when an unresolved high-severity blocker exists", () => {
     const ctx = createMockPluginContext({ testDir });
