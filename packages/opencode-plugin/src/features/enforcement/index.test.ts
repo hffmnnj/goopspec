@@ -510,19 +510,19 @@ describe("phase-context", () => {
   });
 
   describe("buildEnforcementContext", () => {
-    it("combines state and phase enforcement", () => {
+    it("returns phase enforcement rules only — state is single-sourced elsewhere", () => {
       const wf = createDefaultWorkflowState({ phase: "execute", specLocked: true });
-      const output = buildEnforcementContext(wf, "feat-auth");
-      expect(output).toContain("## CURRENT STATE");
+      const output = buildEnforcementContext(wf);
       expect(output).toContain("## PHASE ENFORCEMENT: EXECUTE");
+      // No longer duplicates workflow state — that lives solely in
+      // buildStateBlock's <goopspec_state> block (system-transform.ts).
+      expect(output).not.toContain("## CURRENT STATE");
     });
 
-    it("returns state-only when phase has no enforcement", () => {
-      // All phases have enforcement, but test the structure
+    it("matches buildPhaseEnforcement(workflow.phase) exactly", () => {
       const wf = createDefaultWorkflowState({ phase: "idle" });
-      const output = buildEnforcementContext(wf, "default");
-      expect(output).toContain("## CURRENT STATE");
-      expect(output).toContain("## PHASE ENFORCEMENT: IDLE");
+      const output = buildEnforcementContext(wf);
+      expect(output).toBe(buildPhaseEnforcement("idle"));
     });
   });
 });

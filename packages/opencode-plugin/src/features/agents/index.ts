@@ -35,6 +35,12 @@ export interface LoadedCommand {
   template: string;
   description?: string;
   agent?: string;
+  /** Workflow phase this command belongs to (e.g. `discuss`, `plan`, `execute`). */
+  phase?: string;
+  /** State precondition required before the command can run (e.g. `spec_locked`). */
+  requires?: string;
+  /** Human-readable guidance for what to do after the command completes. */
+  nextStep?: string;
 }
 
 /** Raw nested frontmatter map used for the supported `permission:` shape. */
@@ -304,6 +310,10 @@ export function parseCommandMarkdown(raw: string): LoadedCommand | null {
     cmd.agent = AGENT_ALIASES[meta.agent] ?? meta.agent;
   }
 
+  if (typeof meta.phase === "string") cmd.phase = meta.phase;
+  if (typeof meta.requires === "string") cmd.requires = meta.requires;
+  if (typeof meta["next-step"] === "string") cmd.nextStep = meta["next-step"];
+
   return cmd;
 }
 
@@ -327,8 +337,15 @@ export function loadCommandConfigs(
         const raw = readFileSync(join(commandsDir, file), "utf-8");
         const parsed = parseCommandMarkdown(raw);
         if (parsed) {
-          const { name, ...rest } = parsed;
-          commands[name] = rest;
+          // Only template/description/agent are part of the OpenCode
+          // Config.command contract; phase/requires/nextStep are retained on
+          // LoadedCommand for validation but not registered with the host.
+          const entry: { template: string; description?: string; agent?: string } = {
+            template: parsed.template,
+          };
+          if (parsed.description) entry.description = parsed.description;
+          if (parsed.agent) entry.agent = parsed.agent;
+          commands[parsed.name] = entry;
         }
       } catch {
         // Skip a single unreadable/malformed command file.

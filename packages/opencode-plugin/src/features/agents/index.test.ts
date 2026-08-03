@@ -3,7 +3,13 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { setupTestEnvironment } from "../../test-utils.js";
-import { loadAgentConfigs, parseAgentMarkdown, parseFrontmatter } from "./index.js";
+import {
+  loadAgentConfigs,
+  loadCommandConfigs,
+  parseAgentMarkdown,
+  parseCommandMarkdown,
+  parseFrontmatter,
+} from "./index.js";
 
 const SAMPLE = `---
 name: goop-sample
@@ -157,5 +163,109 @@ describe("loadAgentConfigs", () => {
 
   it("returns an empty map for a missing directory", () => {
     expect(loadAgentConfigs("/no/such/agents/dir")).toEqual({});
+  });
+});
+
+describe("parseCommandMarkdown", () => {
+  const FULL_COMMAND = `---
+name: goop-example
+description: An example command
+agent: orchestrator
+phase: execute
+requires: spec_locked
+next-step: "When done, run /goop-accept"
+---
+# Example
+
+Body text.`;
+
+  it("retains phase, requires, and next-step from frontmatter", () => {
+    const result = parseCommandMarkdown(FULL_COMMAND);
+    expect(result).not.toBeNull();
+    expect(result?.name).toBe("goop-example");
+    expect(result?.description).toBe("An example command");
+    expect(result?.agent).toBe("goop-orchestrator");
+    expect(result?.phase).toBe("execute");
+    expect(result?.requires).toBe("spec_locked");
+    expect(result?.nextStep).toBe("When done, run /goop-accept");
+  });
+
+  it("leaves phase, requires, and next-step undefined when absent", () => {
+    const result = parseCommandMarkdown("---\nname: minimal\n---\nbody");
+    expect(result).not.toBeNull();
+    expect(result?.phase).toBeUndefined();
+    expect(result?.requires).toBeUndefined();
+    expect(result?.nextStep).toBeUndefined();
+  });
+
+  it("returns null when there is no frontmatter", () => {
+    expect(parseCommandMarkdown("# Just a heading\n")).toBeNull();
+  });
+
+  it("returns null when name is missing", () => {
+    expect(parseCommandMarkdown("---\ndescription: x\n---\nbody")).toBeNull();
+  });
+
+  it("returns null when the body is empty", () => {
+    expect(parseCommandMarkdown("---\nname: empty\n---\n")).toBeNull();
+  });
+
+  it("resolves the orchestrator agent alias", () => {
+    const result = parseCommandMarkdown("---\nname: c\nagent: orchestrator\n---\nbody");
+    expect(result?.agent).toBe("goop-orchestrator");
+  });
+
+  it("preserves a non-alias agent value", () => {
+    const result = parseCommandMarkdown("---\nname: c\nagent: goop-tester\n---\nbody");
+    expect(result?.agent).toBe("goop-tester");
+  });
+});
+
+describe("loadCommandConfigs", () => {
+  it("loads every .md command in a directory", () => {
+    const { testDir, cleanup } = setupTestEnvironment("commands-load");
+    try {
+      const dir = join(testDir, "commands");
+      mkdirSync(dir, { recursive: true });
+      writeFileSync(
+        join(dir, "goop-example.md"),
+        "---\nname: goop-example\ndescription: x\nagent: orchestrator\nphase: execute\nrequires: spec_locked\nnext-step: done\n---\nbody",
+      );
+      writeFileSync(join(dir, "other.md"), "---\nname: other\n---\nhi");
+      writeFileSync(join(dir, "notes.txt"), "ignored");
+
+      const commands = loadCommandConfigs(dir);
+      expect(Object.keys(commands).sort()).toEqual(["goop-example", "other"]);
+    } finally {
+      cleanup();
+    }
+  });
+
+  it("registers only template/description/agent, not phase/requires/nextStep", () => {
+    const { testDir, cleanup } = setupTestEnvironment("commands-fields");
+    try {
+      const dir = join(testDir, "commands");
+      mkdirSync(dir, { recursive: true });
+      writeFileSync(
+        join(dir, "goop-example.md"),
+        "---\nname: goop-example\ndescription: x\nagent: orchestrator\nphase: execute\nrequires: spec_locked\nnext-step: done\n---\nbody",
+      );
+
+      const commands = loadCommandConfigs(dir);
+      const entry = commands["goop-example"];
+      expect(entry).toBeDefined();
+      expect(entry.template).toBe("body");
+      expect(entry.description).toBe("x");
+      expect(entry.agent).toBe("goop-orchestrator");
+      expect((entry as Record<string, unknown>).phase).toBeUndefined();
+      expect((entry as Record<string, unknown>).requires).toBeUndefined();
+      expect((entry as Record<string, unknown>).nextStep).toBeUndefined();
+    } finally {
+      cleanup();
+    }
+  });
+
+  it("returns an empty map for a missing directory", () => {
+    expect(loadCommandConfigs("/no/such/commands/dir")).toEqual({});
   });
 });
