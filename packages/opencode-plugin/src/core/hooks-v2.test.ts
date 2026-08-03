@@ -511,6 +511,98 @@ describe("registerHooksV2()", () => {
     env.cleanup();
   });
 
+  it("applies a configured goop-* thinking level end-to-end via a real-shape reasoning_options catalog and changes the variant when the config changes (wiring Pattern 4)", async () => {
+    // End-to-end wiring proof for the live host capability shape that caused
+    // the original defect (fn_20260803_pia9pfxi): the catalog publishes
+    // `reasoning:true` + `reasoning_options:[{type:"effort",values:[...]}]`
+    // with no `variants` field. A configured `agentThinkingLevels` value for a
+    // `goop-*` role must reach the V2 consumer and set `agent.model.variant`
+    // WITHOUT a preserve-default warning, and changing the configured level
+    // must change the applied variant. No headers/body are fabricated.
+    const env = setupTestEnvironment("v2-thinking-wiring-real-shape");
+    const ctx = createMockPluginContext({ testDir: env.testDir, db: env.db });
+    contexts.push(ctx);
+    writeFileSync(
+      join(ctx.sdk.directory, "goopspec.json"),
+      JSON.stringify({ agentThinkingLevels: { "executor-medium": "medium" } }),
+    );
+    const agent: V2AgentInfo = {
+      id: "goop-executor-medium",
+      model: { providerID: "openai", id: "gpt-5.6-sol" },
+      request: { headers: { "x-existing": "keep" }, body: { existing: true } },
+    };
+    const catalog: V2CatalogDraft = {
+      provider: {
+        list: () => [
+          {
+            provider: { id: "openai" },
+            models: new Map([
+              [
+                "gpt-5.6-sol",
+                catalogModel({
+                  reasoning: true,
+                  reasoning_options: [
+                    { type: "effort", values: ["none", "low", "medium", "high", "xhigh", "max"] },
+                  ],
+                }),
+              ],
+            ]),
+          },
+        ],
+      },
+    };
+    const agents: V2AgentDraft = {
+      list: () => [agent],
+      update: (_id, update) => update(agent),
+    };
+    const registrations: Registrations = {
+      agentTransforms: 0,
+      catalogTransforms: 0,
+      agentReloads: 0,
+      catalogReloads: 0,
+    };
+    const errorSpy = spyOn(console, "error").mockImplementation(() => {});
+
+    const hooks = await registerHooksV2(
+      createRuntimeContext(registrations, { agent: agents, catalog }),
+      ctx,
+    );
+
+    // (a) The configured "medium" reaches the consumer and sets the variant,
+    // with no preserve-default warning and no fabricated headers/body.
+    expect(agent.model?.variant).toBe("medium");
+    expect(agent.request.headers).toEqual({ "x-existing": "keep" });
+    expect(agent.request.body).toEqual({ existing: true });
+    expect(
+      errorSpy.mock.calls
+        .map((c) => String(c[0] ?? ""))
+        .some((m) => m.includes("preserving the provider default")),
+    ).toBe(false);
+
+    // (b) Changing the configured level to "high" changes the applied variant
+    // (both levels are in the supported set), still with no warning and no
+    // fabricated headers/body.
+    writeFileSync(
+      join(ctx.sdk.directory, "goopspec.json"),
+      JSON.stringify({ agentThinkingLevels: { "executor-medium": "high" } }),
+    );
+    await hooks.reloadThinkingLevels();
+
+    expect(agent.model?.variant).toBe("high");
+    expect(registrations.catalogTransforms).toBe(2);
+    expect(registrations.agentTransforms).toBe(2);
+    expect(agent.request.headers).toEqual({ "x-existing": "keep" });
+    expect(agent.request.body).toEqual({ existing: true });
+    expect(
+      errorSpy.mock.calls
+        .map((c) => String(c[0] ?? ""))
+        .some((m) => m.includes("preserving the provider default")),
+    ).toBe(false);
+
+    errorSpy.mockRestore();
+    env.cleanup();
+  });
+
   it("emits the preserve-default warning and leaves the agent unchanged for an unsupported level", async () => {
     const env = setupTestEnvironment("v2-thinking-unsupported");
     const ctx = createMockPluginContext({ testDir: env.testDir, db: env.db });
