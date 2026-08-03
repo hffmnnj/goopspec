@@ -123,7 +123,7 @@ describe("auditPromptSurfaces (real tree)", () => {
     expect(report.directories.map((d) => d.directory)).toEqual([...PROMPT_DIRECTORIES]);
   });
 
-  it("agents: 15 files, 82,100 bytes, 137 bold spans", () => {
+  it("agents: 15 files, 82,324 bytes, 137 bold spans", () => {
     // Wave 3 Task 3.2 consolidated agents/goop-orchestrator.md (the largest
     // single prompt) around the Task 3.1 pointer targets in core-protocol.md,
     // dispatch-patterns.md, and phase-gates.md: 17,207 -> 9,807 bytes
@@ -165,12 +165,16 @@ describe("auditPromptSurfaces (real tree)", () => {
     // on top of this Wave 4 baseline: 14 files, 76,962 bytes, 127 bold
     // spans -> 15 files, 82,100 bytes, 137 bold spans (+5,138 bytes, +10
     // bold spans, exactly the new file's own measurements). No existing
-    // agent file changed. The immutable Wave 1 baseline (99,822 bytes,
-    // 14 files) remains in RESEARCH.md and predates both this addition and
-    // the Wave 3/4 consolidation passes.
+    // agent file changed. A same-wave follow-up fix aligned the new file's
+    // prompt with the shared boot-pointer and delegation-prohibition
+    // invariants (added a Mandatory First Steps section and an explicit
+    // "Do not" prefix): 82,100 -> 82,324 bytes (+224), bold spans and
+    // absolute-language hits unchanged. The immutable Wave 1 baseline
+    // (99,822 bytes, 14 files) remains in RESEARCH.md and predates both
+    // this addition and the Wave 3/4 consolidation passes.
     const agents = report.directories.find((d) => d.directory === "agents")!;
     expect(agents.files).toBe(15);
-    expect(agents.bytes).toBe(82_100);
+    expect(agents.bytes).toBe(82_324);
     expect(agents.boldSpans).toBe(137);
   });
 
