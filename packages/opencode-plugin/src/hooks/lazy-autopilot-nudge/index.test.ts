@@ -578,7 +578,8 @@ describe("lazy autopilot nudge", () => {
   // FALSIFIED. Wave 2 (Tasks 2.1/2.2) fixed D1 by adding the fail-closed
   // agent-identity guard and wiring `lastAssistantAgent()`'s reading of
   // `AssistantMessage.mode` into dispatch — the permissive test below is
-  // updated accordingly. D3 remains an open characterisation for Wave 3.
+  // updated accordingly. D3 was repaired in Wave 3 Task 3.1 (see the
+  // regression test below).
   // -------------------------------------------------------------------------
 
   it("D1 signal (LOAD-BEARING FOR WAVE 2): session.messages() final assistant message carries AssistantMessage.mode as the agent-identity signal (SDK 1.18.3)", () => {
@@ -708,13 +709,13 @@ describe("lazy autopilot nudge", () => {
     expect(ctx.pendingLazyAutopilotNudges.has("sess-indeterminate")).toBe(false);
   });
 
-  it("D3 characterisation (KNOWN DEFECT, inverted by Wave 3 Task 3.1): a second dispatch is blocked by the pending system-transform latch while it remains unconsumed", async () => {
+  it("D3 regression (was KNOWN DEFECT, fixed Wave 3 Task 3.1): a later idle is evaluated instead of being starved by an unconsumed system-transform fallback", async () => {
     const ctx = makeExecuteContext(testDir);
     const errorSpy = spyOn(console, "error").mockImplementation(() => {});
     try {
       // Track SDK access itself (not just session.messages, which is never
       // called on this branch -- promptAsync is checked BEFORE messages at
-      // index.ts:103-104) to prove no further host interaction happens.
+      // index.ts:103-104) to prove real host interaction happens on retry.
       let sessionAccessCount = 0;
       const session = { messages: mock(async () => []) };
       Object.defineProperty(ctx.sdk.client, "session", {
@@ -736,13 +737,10 @@ describe("lazy autopilot nudge", () => {
       // un-consumed (no experimental.chat.system.transform call has fired).
       await dispatchLazyAutopilotNudge(ctx, "sess-latch");
 
-      // KNOWN DEFECT (D3): the early return at index.ts:93 sees the still-
-      // pending map entry and blocks the second dispatch before it ever
-      // touches ctx.sdk.client.session again -- zero further SDK calls. A
-      // genuinely later idle event on this session is starved until some
-      // system-transform call happens to consume the latch, which may never
-      // occur. Wave 3 Task 3.1 inverts this.
-      expect(sessionAccessCount).toBe(1);
+      // FIXED (D3): an unconsumed system-transform fallback is stale, not an
+      // in-flight dispatch, so it no longer blocks the top-of-function guard.
+      // The retry re-consults the host instead of being starved forever.
+      expect(sessionAccessCount).toBe(2);
       expect(ctx.pendingLazyAutopilotNudges.get("sess-latch")).toEqual({
         status: "queued",
         source: "system-transform",
