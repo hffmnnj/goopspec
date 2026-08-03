@@ -41,7 +41,7 @@ For workflow path resolution:
 - Resolve `workflowId` from `goop_state({ action: "get" })` before reading or writing workflow docs.
 - Read workflow docs via `goop_read_db({ doc_type: "..." })`.
 - Write workflow docs via `goop_write_db({ doc_type: "...", content: "..." })`; the tool renders the sidecar automatically.
-- `config.json` and `memory.db` are always global files.
+- `config.json` and `memory.db` are global files.
 
 ## DB-as-State Durability Guarantees
 
@@ -70,7 +70,7 @@ This snapshot is stored in the in-process `compactionHandoff` map keyed by sessi
 
 ### Pre-Flush Before Compaction
 
-Before queuing, `goop_compact` performs a pre-flush: it calls `stateManager.setState(stateManager.getState())` to persist any in-memory changes, then compares the cached state against the persisted state via `detectDivergence()`. If fields diverge, a warning is emitted listing the divergent fields. This is diagnostic only — compaction proceeds regardless.
+Before queuing, `goop_compact` performs a pre-flush: it calls `stateManager.setState(stateManager.getState())` to persist any in-memory changes, then compares the cached state against the persisted state via `detectDivergence()`. If fields diverge, a warning is emitted listing the divergent fields. This is diagnostic — compaction proceeds regardless.
 
 ### V1-Only Limitation
 
@@ -122,17 +122,17 @@ The system-transform hook also injects high-importance, workflow-scoped Field No
 
 ## Prompt Authoring Rules
 
-Shared cross-model strategy for every prompt surface: agents, commands, references, runtime injection. State each rule once; reserve absolutes for true invariants; lead with outcomes; scope verification. Subtraction is default — additions must name the requirement served.
+Shared cross-model strategy for every prompt surface: agents, commands, references, runtime injection. State each rule once; reserve absolutes for true invariants; lead with outcomes; scope verification. Subtraction is default — additions name the requirement served.
 
 **Precedence:** runtime injection > agent file > command doc > reference > tool description. A rule lives once, at its owning layer; lower layers point to it, not restate it — divergent restatement is contradiction, not redundancy.
 
 **Absolutes:** reserve `MUST`/`NEVER`/`ALWAYS`/`CRITICAL`/`ONLY` for true gates, safety/security boundaries, and role invariants (`dispatch-patterns.md`, `subagent-identity.md`). Judgment calls are decision rules with stated conditions.
 
-**Outcome-first:** state goal, success criteria, stop condition over step-by-step choreography; keep explicit ordering only where a gate depends on sequence.
+**Outcome-first:** state goal, success criteria, stop condition over step-by-step choreography; keep explicit ordering where a gate depends on sequence.
 
 **One autonomy policy per role:** each agent file states its safe-action/confirmation-boundary policy once — no scattered "ask first" repeats.
 
-**Batching, stated once:** batch independent tool calls into one turn; prefer a tool's batch payload (`items[]`, `doc_types`, `wave_numbers`) over repeated calls; serialize only on data dependency. §Tool-Call Batching below carries the example.
+**Batching, stated once:** batch independent tool calls into one turn; prefer a tool's batch payload (`items[]`, `doc_types`, `wave_numbers`) over repeated calls; serialize on data dependency. §Tool-Call Batching below carries the example.
 
 **Preserved:** XML-tagged sections, role clarity, the response envelope, scoped verification, and delegation boundaries are shared ground between models. This rule set is model-agnostic and makes no deterministic-quality claim.
 
@@ -140,7 +140,7 @@ Shared cross-model strategy for every prompt surface: agents, commands, referenc
 
 The shared rule is stated once in §Prompt Authoring Rules above; this section is the worked example.
 
-**Narrative or sequential ordering in a plan is NOT the same as a data dependency.** If tool call B does not consume tool call A's output, batch them together in the same message — even if B logically follows A in your plan. Only call tools sequentially when a later call genuinely needs an earlier call's result.
+**Narrative or sequential ordering in a plan is NOT the same as a data dependency.** If tool call B does not consume tool call A's output, batch them together in the same message — even if B logically follows A in your plan. Call tools sequentially when a later call genuinely needs an earlier call's result.
 
 ### Worked Example
 
@@ -166,7 +166,7 @@ Message 2: goop_state({ action: "set-autopilot", autopilot: true, lazy: true })
 Single message: goop_state({ action: "create-workflow", workflowId: "my-workflow", activate: true })
 ```
 
-(The `activate` flag already collapses create + switch into one call — see `tool-reference.md`. Never issue `create-workflow` followed by a separate `set-active-workflow` call for the same ID; the two-call form above is the anti-pattern, not a fallback.)
+(The `activate` flag already collapses create + switch into one call — see `tool-reference.md`. Do not issue `create-workflow` followed by a separate `set-active-workflow` call for the same ID; the two-call form above is the anti-pattern, not a fallback.)
 
 ```
 Single message, two parallel tool calls:
@@ -183,7 +183,7 @@ If you are unsure whether a prior state-mutating call took effect, verify explic
 
 ## Agent Boot Sequence
 
-**Recommended path:** [`goop_boot`](tool-reference.md) (documented in `tool-reference.md`) can combine state, optional doc reads, Field Note search, memory search, and reference load into a single call. It loads documents only when you explicitly pass `doc_types` matching your role's default below (or more). New agent work should prefer `goop_boot` for efficiency. The granular step-by-step sequence remains valid and is useful when an agent needs fine control over which pieces to fetch.
+**Recommended path:** [`goop_boot`](tool-reference.md) (documented in `tool-reference.md`) can combine state, optional doc reads, Field Note search, memory search, and reference load into a single call. It loads documents when you explicitly pass `doc_types` matching your role's default below (or more). New agent work should prefer `goop_boot` for efficiency. The granular step-by-step sequence remains valid and is useful when an agent needs fine control over which pieces to fetch.
 
 Before doing work, every subagent must:
 
@@ -192,14 +192,14 @@ Before doing work, every subagent must:
 
 | Role / Context | Default document load |
 |---|---|
-| Orchestrator @ `/goop-discuss` start | None — zero documents of any kind (state only) |
+| Orchestrator @ `/goop-discuss` start | None — zero documents of any kind (state) |
 | Orchestrator @ other phases | None as a "boot default" — uses the explicit, phase-specific reads already defined in each command doc (e.g. `/goop-plan` step 1 reads `requirements`) |
-| Planner | `requirements` only |
-| Executors (all six tiers) | Current assigned wave/task via `goop_read_wave` only — no spec/blueprint document by default |
+| Planner | `requirements` |
+| Executors (all six tiers) | Current assigned wave/task via `goop_read_wave` — no spec/blueprint document by default |
 | Verifier | `spec` + `chronicle` |
 | Researcher / Explorer / Debugger / Tester / Writer | None by default — role-appropriate ad hoc reads as needed |
 
-These are DEFAULTS ONLY. Any additional document is always one explicit direct tool call away (`goop_read_db`, `goop_read_section`, or `goop_boot` with explicit `doc_types`). This is not a capability removal.
+These are DEFAULTS ONLY. Any additional document is one explicit direct tool call away (`goop_read_db`, `goop_read_section`, or `goop_boot` with explicit `doc_types`). This is not a capability removal.
 
 3. `goop_read_wave({ wave_numbers: [N, ...] })` — load wave/task context (use the active workflow by default; omit `wave_numbers` to read all waves)
 4. `goop_search_notes({ query: "[task context]" })` — check Field Notes for prior research. If a snippet is relevant but insufficient, use `note_id` (when the ID is already known from the snippet) or `full: true` (when re-issuing the query) to retrieve the complete body — see `field-notes-protocol.md` (Enhanced Retrieval) for full guidance.

@@ -4,29 +4,29 @@ Writing tests that catch regressions, not consume budget.
 
 ## Why This Exists
 
-More tests ≠ better outcomes. Across six top LLM code agents (Chen et al., arXiv:2602.07900), test-writing intensity correlates with *struggle*, not success — agent-written tests skew ~5× `print` statements over assertions and lean on `assert x is not None` sanity checks. Every rule is a pre-commit self-check; the remedy must not bloat the budget.
+More tests ≠ better outcomes. Every rule below is a pre-commit self-check against low-signal tests — assertions that probe rather than verify, coverage that moves a number rather than catch a regression. The remedy is discipline, not volume.
 
 ## What Is Worth Testing
 
-Test behavior, not implementation. Implementation details are things callers never see — testing them creates a third user the code must serve.
+Test behavior, not implementation. Implementation details are things callers don't see — testing them creates a third user the code must serve.
 
 - **Name the behavior change that would flip this assertion.** If you can't, delete the test.
 - **If you deleted the SUT, would this test still pass?** If yes, it tests the framework or your mocks, not your code.
 - **Would this assertion fail to compile if the behavior were wrong?** If yes, the type system owns it, not you.
 - **Would a caller be surprised this test exists?** If yes, you're testing structure, not behavior.
 
-Never test the framework, language, or your own mocks. Don't write a test just to have written one.
+Don't test the framework, language, or your own mocks. Don't write a test just to have written one.
 
 ## Test-Value Heuristics
 
-A good test fails when behavior breaks and passes only when behavior is correct (the *would-it-fail* test).
+A good test fails when behavior breaks and passes when behavior is correct (the *would-it-fail* test).
 
 - **If you removed this test, would any real regression go uncaught?** If no, deleting it is the right move.
-- **Did you write this to move a coverage number?** If yes, it's coverage-driven — delete it. Coverage is a discovery tool for finding untested code, never a KPI or gate.
+- **Did you write this to move a coverage number?** If yes, it's coverage-driven — delete it. Coverage is a discovery tool for finding untested code, not a KPI or gate.
 - **Is the test hard to write?** That signals bad interface design — fix the interface, don't mock harder.
 - **Is the change trivial wiring the type system or linter already covers?** Skip it. "I get paid for code that works, not for tests." — Beck.
 
-Deleting (or never writing) a low-signal test is a valid outcome.
+Deleting (or not writing) a low-signal test is a valid outcome.
 
 ## Core Cycle
 
@@ -62,7 +62,7 @@ The Pyramid (Fowler/Cohn) and the Testing Trophy (KCD) genuinely disagree on the
 
 | Level | Scope | When to Use |
 |-------|-------|-------------|
-| Unit | Function/module | Always |
+| Unit | Function/module | Default |
 | Integration | Module interactions | When components interact |
 | E2E | Critical user flows | Sparingly, for high-value paths |
 
@@ -78,7 +78,7 @@ The Pyramid (Fowler/Cohn) and the Testing Trophy (KCD) genuinely disagree on the
 
 ## Mocking Discipline
 
-Mock at boundaries only: external APIs, clock, randomness, filesystem, network, email, payment. Use real objects inside the boundary.
+Mock at boundaries: external APIs, clock, randomness, filesystem, network, email, payment. Use real objects inside the boundary.
 
 - **Is the thing you're mocking something you'd never run for real in a test?** If no, prefer the real object.
 - **If the real collaborator changed its contract, would this test still pass?** If yes, it's testing the mock, not the integration.
@@ -150,7 +150,7 @@ Self-check against each before committing.
 
 ## Test Execution Discipline
 
-Run the narrowest command that covers what you changed. Escalate one rung only when the one below can't.
+Run the narrowest command that covers what you changed. Escalate one rung when the one below can't.
 
 | Rung | When | Command |
 |------|------|---------|

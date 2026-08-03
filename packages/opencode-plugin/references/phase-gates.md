@@ -43,7 +43,7 @@ All bypasses must be logged via `goop_adl`.
 
 ### Quick Mode Self-Edit Carve-Out
 
-`/goop-quick` permits the orchestrator to make narrow self-edits without delegating, but only when all five conditions in `commands/goop-quick.md` "Self-Edit Authority" are met: single file, `.goopspec/` or config-root scope, under 5 lines, no logic implications, quick-mode-only. This does **not** weaken the Spec gate, the Acceptance gate, or the general rule that the orchestrator never implements anything beyond those five conditions. `spec_locked == true` and explicit user acceptance remain absolute and never bypassable.
+`/goop-quick` permits the orchestrator to make narrow self-edits without delegating, but when all five conditions in `commands/goop-quick.md` "Self-Edit Authority" are met: single file, `.goopspec/` or config-root scope, under 5 lines, no logic implications, quick-mode-only. This does **not** weaken the Spec gate, the Acceptance gate, or the general rule that the orchestrator never implements anything beyond those five conditions. `spec_locked == true` and explicit user acceptance remain absolute and never bypassable.
 
 ## Autopilot Behavior
 
@@ -72,7 +72,7 @@ All bypasses and rule applications must be appended via `goop_adl` with the rule
 
 #### Regular Autopilot
 
-Stop and wait for user input only for:
+Stop and wait for user input for:
 
 1. Rule 4 architectural decisions.
 2. Credentials or secrets.
@@ -80,14 +80,14 @@ Stop and wait for user input only for:
 
 #### Lazy Autopilot
 
-Stop and wait for user input only for:
+Stop and wait for user input for:
 
 1. Credentials or secrets.
 2. Destructive, irreversible operations.
 
 On a Rule 4 trigger, decide autonomously using best judgment (do not pause to ask the user). Log the full rationale to ADL via `goop_adl` for every such call, including the rule number, the issue, the decision made, the reasoning, and the affected files.
 
-No other checkpoint is a valid reason to stop and wait in lazy autopilot — this includes wave-to-wave transitions, the per-wave blueprint review gate (see `task-decomposition.md` §Post-Wave Review Gate), checkpoint saves, and routine deviation handling. Only the two hard stops above (credentials/secrets; destructive/irreversible operations) and the acceptance gate's explicit merge-offer reply qualify.
+No other checkpoint is a valid reason to stop and wait in lazy autopilot — this includes wave-to-wave transitions, the per-wave blueprint review gate (see `task-decomposition.md` §Post-Wave Review Gate), checkpoint saves, and routine deviation handling. The two hard stops above (credentials/secrets; destructive/irreversible operations) and the acceptance gate's explicit merge-offer reply qualify.
 
 ### Lazy Autopilot Nudge (Runtime Enforcement)
 
@@ -121,7 +121,7 @@ The nudge is suppressed when any of these conditions are true. All guards evalua
 
 - **Cap**: defaults to 5 consecutive nudges without progress.
 - **Cooldown**: defaults to 30,000ms between nudges.
-- **Progress fingerprint**: `<phase>|<currentWave>|<task-status-digest>` where the digest is a comma-separated list of `task_index:status` for every task in the current wave (or `none` if no wave row exists). The consecutive counter resets only when this fingerprint changes.
+- **Progress fingerprint**: `<phase>|<currentWave>|<task-status-digest>` where the digest is a comma-separated list of `task_index:status` for every task in the current wave (or `none` if no wave row exists). The consecutive counter resets when this fingerprint changes.
 - **Abandonment**: when the cap is reached with no progress change, the nudge stops and surfaces a user-visible message: "Autonomous continuation stopped: the session received multiple lazy-autopilot nudges without making progress. The loop was broken deliberately to avoid repeated interruptions; continue manually when you are ready."
 - **Config kill switch**: set `lazyAutopilotNudge.enabled: false` in `goopspec.json` to disable the nudge entirely.
 
@@ -141,11 +141,9 @@ Never announce a transition in text without actually calling the tool. Announcin
 
 ### `currentWave` Semantics
 
-`currentWave` means **the wave currently in progress**, 1-based; `0` means no wave has started. It does **NOT** mean "N waves are complete". That misreading caused premature auto-progression to the accept phase (the exact defect the goopspec-state-integrity workflow was built to fix).
+`currentWave` does **NOT** mean "N waves are complete" — that misreading caused premature auto-progression to the accept phase (the exact defect the goopspec-state-integrity workflow was built to fix). For the calling convention (`0` = no wave started, `update-wave(N, total)` = "Wave N in progress"), see `task-decomposition.md` §update-wave Calling Convention.
 
-- `update-wave(N, total)` records "Wave N is now in progress", not "N waves are done".
-- Wave completion is determined from the `waves` and `wave_tasks` records, not from this counter.
-- Auto-progression reads final-wave status and task completion counts, not counter equality.
+Auto-progression reads final-wave status and task completion counts from the `waves` and `wave_tasks` records, not counter equality.
 
 ### Manual-Override Latch
 
@@ -157,11 +155,11 @@ A forced phase transition (`goop_state({ action: "transition", force: true })`) 
 
 ### Fail-Closed Guard Blast Radius
 
-When a task introduces a guard that fails closed on newly-required data, the blast radius covers **every existing test mock** that never supplied that data. Scoped test runs cannot see this by construction — it is only caught by a full-suite run.
+When a task introduces a guard that fails closed on newly-required data, the blast radius covers **every existing test mock** that did not supply that data. Scoped test runs cannot see this by construction — it is caught by a full-suite run.
 
 This actually happened in the goopspec-state-integrity workflow (Wave 4): a fail-closed session-metadata guard broke two tests outside the scoped directory whose mocks predated the metadata requirement. The fix was adding the missing mock data (a test fix, not a product fix — fail-closed is the specified behaviour).
 
-**Mitigation:** when dispatching a task that introduces a fail-closed guard on newly-required data, state the blast radius up front. The wave-boundary full-suite gate is the only reliable catch.
+**Mitigation:** when dispatching a task that introduces a fail-closed guard on newly-required data, state the blast radius up front. The wave-boundary full-suite gate is the reliable catch.
 
 ## Four-Rule Deviation System
 
@@ -185,7 +183,7 @@ Log every deviation with:
 
 ## Blocker Hygiene
 
-Blockers are opened by agents calling `goop_blocker` — there is no auto-blocker mechanism. Because the tool is the only entry point, the boundary is where misuse is caught.
+Blockers are opened by agents calling `goop_blocker` — there is no auto-blocker mechanism. Because the tool is the entry point, the boundary is where misuse is caught.
 
 ### Don't open blockers against completed waves
 
@@ -203,7 +201,7 @@ The warning is non-blocking by design: a late-discovered regression or an accept
 
 - Pass `wave_id` as the **wave number** (the human-facing number, e.g. `3` for wave 3), not the internal row id.
 - Omit `wave_id` for workflow-level blockers that aren't tied to a specific wave.
-- The warning only fires when the wave **exists and is complete**. A non-existent wave number produces no warning (the blocker is opened as-is).
+- The warning fires when the wave **exists and is complete**. A non-existent wave number produces no warning (the blocker is opened as-is).
 
 ## Boundary System
 

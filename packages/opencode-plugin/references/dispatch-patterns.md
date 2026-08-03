@@ -21,7 +21,7 @@ The orchestrator coordinates and delegates. It never implements.
 | "Quickly fix" anything inline | No exceptions |
 | Paste implementation logic into a message | Still writing code |
 
-**Narrow exception — Quick mode self-edit only:** The orchestrator may make trivial self-edits without delegating when ALL five conditions in `commands/goop-quick.md` (Self-Edit Authority) are met: single file, `.goopspec/` or config-root scope only, under 5 lines, no logic implications, and only inside `/goop-quick` mode. Outside those five conditions, every prohibition in this table remains fully in force.
+**Narrow exception — Quick mode self-edit:** The orchestrator may make trivial self-edits without delegating when ALL five conditions in `commands/goop-quick.md` (Self-Edit Authority) are met. Outside those five conditions, every prohibition in this table remains fully in force.
 
 ### Permitted Orchestrator Actions
 
@@ -113,12 +113,12 @@ Start ─┼─ Task B ─┼─ Merge
 
 All parallel agents must target the same branch. Never dispatch agents to different branches simultaneously.
 
-Wave branches are sequential — Wave N must be fully merged before Wave N+1 is created. Within a wave, parallel tasks share the wave's single branch.
+Wave branches are sequential — one wave is actively worked on at a time. Within a wave, parallel tasks share the wave's single branch. The branch base for Wave N+1 depends on the merge state of preceding-wave PRs; see `references/pr-creation.md` §Stacked Branch Rule for the conditional rule.
 
 | Allowed | Forbidden |
 |---------|-----------|
 | 3 agents on `feat/auth-tokens` in parallel | Agent A on `feat/auth`, Agent B on `feat/db` simultaneously |
-| Wave 1 merged, then Wave 2 branch created | Wave 1 and Wave 2 branches both open at the same time |
+| Stacked wave branches (Wave 2 from Wave 1's unmerged branch, both PRs open) | Parallel agents dispatched to different wave branches simultaneously |
 
 ### Background Dispatch
 

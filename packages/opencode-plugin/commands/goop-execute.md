@@ -62,25 +62,11 @@ When lazy autopilot is active during the execute phase, a runtime nudge fires af
 
 The nudge is suppressed by eleven discriminated guards — see `references/phase-gates.md` §Suppression Guards (Eleven Discriminated Reasons) for the authoritative table and `src/hooks/lazy-autopilot-nudge/guards.ts` for the implementation. Do not restate the count or the list here; if the guard set changes, update `phase-gates.md` only, so this doc can't drift out of sync again.
 
-### Rate Limit
+### Rate Limit and Kill Switch
 
-- **Cap**: 5 consecutive nudges without progress (configurable via `lazyAutopilotNudge.cap`).
-- **Cooldown**: 30,000ms between nudges (configurable via `lazyAutopilotNudge.cooldownMs`).
-- **Progress fingerprint**: `<phase>|<currentWave>|<task-status-digest>`. The consecutive counter resets only when this fingerprint changes.
-- **Abandonment**: after the cap with no progress, the nudge stops and surfaces a user-visible message. The loop is broken deliberately to avoid repeated interruptions.
-
-### Config Kill Switch
-
-Set `lazyAutopilotNudge.enabled: false` in `goopspec.json` to disable the nudge entirely.
-
-### V1-Only Limitation
-
-The lazy autopilot nudge is **V1-only**. V2 does not expose the `event` hook that the nudge dispatcher depends on. Under V2, the nudge is inert and logs the limitation once at startup.
+Tunable keys in `goopspec.json`: `lazyAutopilotNudge.cap`, `lazyAutopilotNudge.cooldownMs`, `lazyAutopilotNudge.enabled` (kill switch). Defaults, progress fingerprint, abandonment, and the V1-only limitation are in `references/phase-gates.md` §Rate Limit and Abandonment and §V1-Only Limitation.
 
 ## Anti-patterns
 
-- Skip the spec lock gate.
-- Let the orchestrator write implementation files.
 - Use `update-wave` to mark a wave complete instead of recording the wave currently in progress.
-- Announce `/goop-accept` without calling `mcp_slashcommand`.
 - Wait for a wave's PR to merge before starting the next wave — stack instead.

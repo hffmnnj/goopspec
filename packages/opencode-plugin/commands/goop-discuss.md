@@ -69,9 +69,6 @@ mcp_slashcommand({ command: "/goop-plan" })
 - Reusing or appending to the current active workflow instead of creating a new one.
 - Repeating `create-workflow`/`set-active-workflow` calls, or regenerating the workflowId, after a call already returned success. Verify with `goop_status` or `goop_state({ action: "get" })` if genuinely uncertain — never blindly retry a successful mutation.
 - Starting work on `main` or the previous workflow's branch.
-- Skipping branch creation before file writes.
-- Skip the six discovery categories.
 - Start writing files before the workflow is bound and the branch is checked out.
-- Announce a transition without calling `mcp_slashcommand`.
 - Loading any document (via `goop_boot`, `goop_read_db`, or any other tool) at discovery start — stale planning content from any workflow is irrelevant to a fresh discovery.
 - Write REQUIREMENTS.md without a `## Atomic PR Strategy` section.

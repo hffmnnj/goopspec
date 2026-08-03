@@ -123,7 +123,7 @@ describe("auditPromptSurfaces (real tree)", () => {
     expect(report.directories.map((d) => d.directory)).toEqual([...PROMPT_DIRECTORIES]);
   });
 
-  it("agents: 14 files, 76,992 bytes, 127 bold spans", () => {
+  it("agents: 14 files, 76,962 bytes, 127 bold spans", () => {
     // Wave 3 Task 3.2 consolidated agents/goop-orchestrator.md (the largest
     // single prompt) around the Task 3.1 pointer targets in core-protocol.md,
     // dispatch-patterns.md, and phase-gates.md: 17,207 -> 9,807 bytes
@@ -150,29 +150,87 @@ describe("auditPromptSurfaces (real tree)", () => {
     // 99,822 -> 76,992 bytes, a decrease per MH6's agents-category-must-
     // decrease bar. Bold spans: 275 -> 127 (well under the 200 bar).
     // The immutable Wave 1 baseline (99,822 bytes) remains in RESEARCH.md.
+    //
+    // Wave 4 Task 4.3 converted six non-invariant judgment-call absolutes in
+    // agents/goop-orchestrator.md to conditional phrasing (state-only boot
+    // scope, image-generation scope, low-tier usage condition, parallel-
+    // research branch condition, hard-stop count): 76,992 -> 76,962 bytes,
+    // 62 -> 56 absolute hits, 127 bold spans unchanged. All gate, safety,
+    // identity, branch, source-write, acceptance, and state-mutation
+    // invariants preserved. The immutable Wave 1 baseline remains in
+    // RESEARCH.md.
     const agents = report.directories.find((d) => d.directory === "agents")!;
     expect(agents.files).toBe(14);
-    expect(agents.bytes).toBe(76_992);
+    expect(agents.bytes).toBe(76_962);
     expect(agents.boldSpans).toBe(127);
   });
 
-  it("commands: 9 files, 25,547 bytes", () => {
+  it("commands: 9 files, 24,702 bytes", () => {
+    // Wave 4 Task 4.1 reconciled the nine command docs against the
+    // runtime-injected phase rules: trimmed anti-pattern/prohibition lists
+    // to command-specific material (removing items the injected phase
+    // block or phase-gates.md already owns), replaced duplicated nudge
+    // gate prose in goop-execute.md with a pointer to phase-gates.md, and
+    // resolved the contract-gate/autopilot precedence ambiguity in
+    // goop-plan.md. Net effect: 25,547 -> 24,702 bytes; absolute-language
+    // hits 34 -> 32; bold spans 68 -> 58. The immutable Wave 1 baseline
+    // remains in RESEARCH.md.
     const commands = report.directories.find((d) => d.directory === "commands")!;
     expect(commands.files).toBe(9);
-    expect(commands.bytes).toBe(25_547);
+    expect(commands.bytes).toBe(24_702);
   });
 
-  it("references: 19 files, 161,458 bytes", () => {
+  it("references: 19 files, 161,350 bytes", () => {
     // Wave 3 Task 3.1 consolidated core-protocol.md, dispatch-patterns.md, and
     // subagent-identity.md (added one Prompt Authoring Rules section, offset
     // by removing duplicated material from the other two files). Net effect:
     // -1 byte vs the Wave 1 baseline of 161,459 — a non-increase, per MH6.
+    //
+    // Wave 4 Task 4.2 reconciled the five on-demand references against
+    // core-protocol.md's Prompt Authoring Rules: trimmed the currentWave
+    // overlap between phase-gates.md and task-decomposition.md to a pointer,
+    // replaced task-decomposition's restated test command with a pointer to
+    // test-authoring.md, removed response-format.md's "Why This Replaces XML"
+    // rationale, dropped test-authoring.md's model-conditional citation, and
+    // pointed enforcement-system.md's injection/troubleshooting sections at
+    // core-protocol.md and phase-gates.md. Net effect: 161,458 -> 160,972
+    // bytes (-486), absolute hits 237 -> 236, bold spans 528 -> 526. The
+    // immutable Wave 1 baseline (161,459) remains in RESEARCH.md.
+    //
+    // Wave 4 Task 4.3 converted 34 non-invariant judgment-call absolutes to
+    // conditional phrasing and trimmed two cross-layer duplicates across
+    // four reference files: core-protocol.md (12 conversions: always/only/
+    // must/never judgment calls in boot defaults, batching rules, prompt
+    // authoring rules), phase-gates.md (10: only/never judgment calls in
+    // autopilot stops, nudge rate-limit, fail-closed blast radius, blocker
+    // hygiene), test-authoring.md (8: never/only/always judgment calls in
+    // test heuristics, mocking discipline, test-level guidance, execution
+    // ladder), dispatch-patterns.md (3: trimmed restated quick-mode self-
+    // edit conditions to a pointer to commands/goop-quick.md per precedence
+    // command > reference), and pr-creation.md (1: trimmed restated single-
+    // branch parallelism rule to a pointer to dispatch-patterns.md). Net
+    // effect: 160,972 -> 160,716 bytes (-256), absolute hits 236 -> 202,
+    // bold spans 526 -> 526. All gate, safety, identity, branch, source-
+    // write, acceptance, and state-mutation invariants preserved. The
+    // immutable Wave 1 baseline remains in RESEARCH.md.
+    //
+    // Wave 4 Task 4.3 follow-up corrected a branch-base contradiction between
+    // pr-creation.md and dispatch-patterns.md: the unconditional "never
+    // create Wave N+1 from main; always stack it" and "Wave N must be fully
+    // merged before Wave N+1 is created" rules contradicted the supported
+    // stacked-PR contract and the merged-PR flow. Replaced with a conditional
+    // branch-base rule in pr-creation.md §Stacked Branch Rule (stacked PR
+    // when preceding wave PR unmerged; branch from updated origin/main when
+    // all preceding waves merged) and pointed dispatch-patterns.md at it.
+    // Net effect: 160,716 -> 161,350 bytes (+634, still below the 161,459
+    // Wave 1 baseline), absolute hits 202 -> 198 (-4), bold spans 526 ->
+    // 530. The non-increase bar relative to the Wave 1 baseline holds.
     const references = report.directories.find((d) => d.directory === "references")!;
     expect(references.files).toBe(19);
-    expect(references.bytes).toBe(161_458);
+    expect(references.bytes).toBe(161_350);
   });
 
-  it("total absolute-language hits are 333 (post Wave 3 Task 3.3)", () => {
+  it("total absolute-language hits are 286 (post Wave 4 Task 4.3 follow-up)", () => {
     // SPEC assumption A5: research-phase count (394) and spec count (396)
     // differ by measurement method. The Wave 1 audit re-measures with one
     // documented method (\b(?:must|never|always|critical|only)\b, gi) and
@@ -190,9 +248,45 @@ describe("auditPromptSurfaces (real tree)", () => {
     // and repeated emphasis dropped agents' absolute-language hits from
     // 118 to 62 (-56), taking the workflow-wide total to 333. The <=300
     // bar is a workflow-wide target; Wave 4 (commands/references) will
-    // trim the remaining 271 hits (34 commands + 237 references). The
-    // immutable Wave 1 baseline (394) remains in RESEARCH.md.
-    expect(report.totalAbsoluteHits).toBe(333);
+    // trim the remaining hits. Wave 4 Task 4.1 reconciled the command
+    // docs: removing two abs hits (one "must-have" in goop-plan.md, one
+    // "Only" header in goop-execute.md replaced by a pointer) took
+    // commands 34 -> 32 and the workflow-wide total 333 -> 331. References
+    // trimming is a separate task. The immutable Wave 1 baseline (394)
+    // remains in RESEARCH.md.
+    //
+    // Wave 4 Task 4.2 dropped one absolute hit from test-authoring.md's
+    // "Why This Exists" (removed the model-conditional citation and the
+    // "must not bloat the budget" phrasing), taking references 237 -> 236
+    // and the workflow-wide total 331 -> 330. The other four references
+    // kept their true-invariant absolutes (gate labels, severity names,
+    // config tier names, spec terms) intact.
+    //
+    // Wave 4 Task 4.3 converted 40 non-invariant judgment-call absolutes
+    // to conditional phrasing and trimmed two cross-layer duplicates:
+    // agents/goop-orchestrator.md 62 -> 56 (-6), references/core-protocol.md
+    // 34 -> 22 (-12), references/phase-gates.md 32 -> 22 (-10), references/
+    // test-authoring.md 26 -> 18 (-8), references/dispatch-patterns.md
+    // 22 -> 19 (-3, trimmed restated quick-mode conditions to pointer),
+    // references/pr-creation.md 19 -> 18 (-1, trimmed restated single-
+    // branch rule to pointer). Commands unchanged at 32. Total:
+    // 330 -> 290, meeting the <=300 bar. All surviving absolutes are
+    // true invariants (gate, safety, identity, branch, source-write,
+    // acceptance, state-mutation) or domain terminology (must-have,
+    // critical-path, severity names, config keys, V1-only). The immutable
+    // Wave 1 baseline (394) remains in RESEARCH.md.
+    //
+    // Wave 4 Task 4.3 follow-up corrected a branch-base contradiction:
+    // pr-creation.md's unconditional "never create Wave N+1 from main;
+    // always stack it" and dispatch-patterns.md's "Wave N must be fully
+    // merged before Wave N+1 is created" contradicted the stacked-PR
+    // contract. Replaced with a conditional branch-base rule (stacked PR
+    // when preceding wave PR unmerged; from updated origin/main when all
+    // preceding waves merged). Removed 4 more absolute hits: pr-creation.md
+    // 18 -> 15 (-3: "Only", "never", "always"), dispatch-patterns.md
+    // 19 -> 18 (-1: "must"). Total: 290 -> 286. The immutable Wave 1
+    // baseline (394) remains in RESEARCH.md.
+    expect(report.totalAbsoluteHits).toBe(286);
   });
 
   it("per-file tokens are consistent with chars via estimateTokens", () => {
