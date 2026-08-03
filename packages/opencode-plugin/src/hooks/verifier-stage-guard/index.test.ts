@@ -6,7 +6,8 @@ import {
   createMockPluginContext,
   setupTestEnvironment,
 } from "../../test-utils.js";
-import { DEFAULT_HOOK_FACTORIES } from "../index.js";
+import { DEFAULT_HOOK_FACTORIES, createHooks } from "../index.js";
+import type { HookFactory } from "../types.js";
 import { IntentionalToolDenialError } from "../utils.js";
 import { createVerifierStageGuardHook, verifierStageGuardHookFactory } from "./index.js";
 
@@ -306,6 +307,117 @@ describe("createVerifierStageGuardHook", () => {
       guardHandler({ tool: "task", sessionID: "s1", callID: "c1" }, taskArgs("goop-verifier")),
     ).resolves.toBeUndefined();
     expect(consoleSpy).toHaveBeenCalledTimes(1);
+    consoleSpy.mockRestore();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Merged-pipeline integration: the guard dispatched through the real
+// createHooks() chain, not the isolated single-hook handler above.
+//
+// The single-hook matrix proves the predicate decides correctly; these tests
+// prove the decision survives the full merge: the guard is wired into
+// DEFAULT_HOOK_FACTORIES, its IntentionalToolDenialError propagates through
+// chainHandlers + safeHandler on denial, and a sibling hook's ordinary error
+// is still swallowed (graceful degradation) while the deliberate denial is not.
+// ---------------------------------------------------------------------------
+
+describe("merged pipeline integration: verifier stage guard through createHooks()", () => {
+  let cleanup: () => void;
+
+  afterEach(() => {
+    cleanup?.();
+  });
+
+  function ctxAtPhase(phase: WorkflowPhase): PluginContext {
+    const env = setupTestEnvironment(`verifier-guard-merged-${phase}`);
+    cleanup = env.cleanup;
+    return createMockPluginContext({ testDir: env.testDir, state: stateAtPhase(phase) });
+  }
+
+  describe("goop-verifier timing (accept-only) through the merged pipeline", () => {
+    for (const phase of ALL_PHASES) {
+      const shouldDeny = phase !== "accept";
+
+      it(`${shouldDeny ? "denies" : "permits"} goop-verifier in ${phase} via createHooks`, async () => {
+        const ctx = ctxAtPhase(phase);
+        const hooks = createHooks(ctx, [...DEFAULT_HOOK_FACTORIES]);
+        const before = hooks["tool.execute.before"];
+        if (!before) throw new Error("merged tool.execute.before not defined");
+
+        const call = before(
+          { tool: "task", sessionID: "s1", callID: "c1" },
+          taskArgs("goop-verifier"),
+        );
+
+        if (shouldDeny) {
+          await expect(call).rejects.toThrow(IntentionalToolDenialError);
+        } else {
+          await expect(call).resolves.toBeUndefined();
+        }
+      });
+    }
+  });
+
+  describe("goop-wave-verifier timing (execute-only) through the merged pipeline", () => {
+    for (const phase of ALL_PHASES) {
+      const shouldDeny = phase !== "execute";
+
+      it(`${shouldDeny ? "denies" : "permits"} goop-wave-verifier in ${phase} via createHooks`, async () => {
+        const ctx = ctxAtPhase(phase);
+        const hooks = createHooks(ctx, [...DEFAULT_HOOK_FACTORIES]);
+        const before = hooks["tool.execute.before"];
+        if (!before) throw new Error("merged tool.execute.before not defined");
+
+        const call = before(
+          { tool: "task", sessionID: "s1", callID: "c1" },
+          taskArgs("goop-wave-verifier"),
+        );
+
+        if (shouldDeny) {
+          await expect(call).rejects.toThrow(IntentionalToolDenialError);
+        } else {
+          await expect(call).resolves.toBeUndefined();
+        }
+      });
+    }
+  });
+
+  it("swallows a sibling hook's ordinary error but propagates the guard's denial", async () => {
+    // The one sentinel exception to "a hook error must never crash OpenCode":
+    // safeHandler rethrows IntentionalToolDenialError and swallows everything
+    // else. A sibling throwing a plain Error must not abort the chain, while
+    // the guard's deliberate denial must still reach the caller.
+    const siblingErrorFactory: HookFactory = () => ({
+      "tool.execute.before": async () => {
+        throw new Error("sibling hook exploded");
+      },
+    });
+
+    const consoleSpy = spyOn(console, "error").mockImplementation(() => {});
+
+    // Permitted dispatch (goop-wave-verifier in execute) + a sibling that
+    // throws a plain Error: the merged pipeline resolves — the sibling's
+    // error is swallowed by safeHandler and the guard permits the call.
+    const permitCtx = ctxAtPhase("execute");
+    const permitHooks = createHooks(permitCtx, [...DEFAULT_HOOK_FACTORIES, siblingErrorFactory]);
+    const permitBefore = permitHooks["tool.execute.before"];
+    if (!permitBefore) throw new Error("merged tool.execute.before not defined");
+    await expect(
+      permitBefore({ tool: "task", sessionID: "s1", callID: "c1" }, taskArgs("goop-wave-verifier")),
+    ).resolves.toBeUndefined();
+
+    // Forbidden dispatch (goop-verifier in plan): the guard's
+    // IntentionalToolDenialError propagates through the merged chain and the
+    // sibling never runs (the chain aborts on the sentinel).
+    const denyCtx = ctxAtPhase("plan");
+    const denyHooks = createHooks(denyCtx, [...DEFAULT_HOOK_FACTORIES, siblingErrorFactory]);
+    const denyBefore = denyHooks["tool.execute.before"];
+    if (!denyBefore) throw new Error("merged tool.execute.before not defined");
+    await expect(
+      denyBefore({ tool: "task", sessionID: "s1", callID: "c1" }, taskArgs("goop-verifier")),
+    ).rejects.toThrow(IntentionalToolDenialError);
+
     consoleSpy.mockRestore();
   });
 });

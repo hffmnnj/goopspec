@@ -765,6 +765,11 @@ describe("GoopSpec 5-phase integration", () => {
             { task_index: 2, description: "Second", status: "complete" },
             { task_index: 3, description: "Last", status: "pending" },
           ],
+          // The wave-completion gate (Wave 2) requires completion evidence
+          // before a wave can transition to a complete status; this write
+          // represents a verified-but-still-in-progress-tasks intermediate
+          // state, so it carries a passing verification row.
+          verifications: [{ check_name: "test", status: "pass", detail: "integration" }],
         },
         toolContext,
       );
