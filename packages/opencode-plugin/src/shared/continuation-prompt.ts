@@ -134,6 +134,7 @@ export function collectContinuationDetail(
       }));
     } catch (error) {
       logError("continuation prompt could not collect current-wave metadata", error);
+      return undefined;
     }
 
     return {
@@ -242,6 +243,9 @@ export function buildContinuationPrompt(detail: WorkflowContinuationDetail): str
     "- Use terse bullets. Preserve exact file paths, commands, and identifiers.",
     "- Do not mention summarizing or compaction.",
     "- If an earlier GoopSpec continuation brief appears in the history, use it as the anchored baseline: preserve still-true details, drop stale ones, and merge new facts.",
+    "- Never reproduce an earlier GoopSpec continuation brief verbatim; use it only as the anchored baseline.",
+    "- The workspace and GoopSpecDB persist and are authoritative: re-query with `goop_status` and `goop_read_db`, not this brief alone.",
+    "- No tools are available or should be invoked on this turn; reply with brief text only.",
     "",
     "## Objective",
     "- Preserve the active workflow handoff and the immediate safe action.",
@@ -252,6 +256,7 @@ export function buildContinuationPrompt(detail: WorkflowContinuationDetail): str
     "",
     "## Important Details",
     "- Preserve factual workflow state exactly as provided above.",
+    "- Put the most recent user instructions and last explicit task direction here near-verbatim, above older details; preserve exact identifiers, paths, and commands.",
     "",
     "## Work State",
     "### Completed",
