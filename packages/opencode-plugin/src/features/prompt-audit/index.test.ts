@@ -172,9 +172,18 @@ describe("auditPromptSurfaces (real tree)", () => {
     // absolute-language hits unchanged. The immutable Wave 1 baseline
     // (99,822 bytes, 14 files) remains in RESEARCH.md and predates both
     // this addition and the Wave 3/4 consolidation passes.
+    //
+    // The wave-verifier-gating workflow's Wave 3 Task 2 split the two
+    // verifier roles across the delegation surface: agents/goop-orchestrator.md
+    // gained goop-wave-verifier in the task()-reachable list plus a
+    // stage-bound verification-dispatch paragraph (+514 bytes, +2 abs), and
+    // agents/goop-verifier.md now states acceptance-only with a
+    // cross-reference to goop-wave-verifier (+273 bytes, +2 abs). Net:
+    // 82,324 -> 83,111 bytes, absolute hits 66 -> 70, bold spans unchanged
+    // at 137.
     const agents = report.directories.find((d) => d.directory === "agents")!;
     expect(agents.files).toBe(15);
-    expect(agents.bytes).toBe(82_324);
+    expect(agents.bytes).toBe(83_111);
     expect(agents.boldSpans).toBe(137);
   });
 
@@ -196,9 +205,18 @@ describe("auditPromptSurfaces (real tree)", () => {
     // 32 -> 34 (+2: the gate's "inspect-only" role boundary and the
     // "never implements fixes" verifier invariant — both true role
     // invariants per dispatch-patterns.md).
+    //
+    // The wave-verifier-gating workflow's Wave 3 Task 2 corrected the agent
+    // roster in goop-help.md: 13 -> 14 specialized agents (the canonical
+    // 15-role roster minus the orchestrator), added goop-wave-verifier with
+    // a stage boundary, and made goop-verifier acceptance-only. Net:
+    // 25,890 -> 26,092 bytes (+202), absolute hits 34 -> 38 (+4: the
+    // "never implements fixes" role invariant, the "acceptance-only" scope,
+    // the "inspect/report-only" boundary, and the "never implements"
+    // delegate statement).
     const commands = report.directories.find((d) => d.directory === "commands")!;
     expect(commands.files).toBe(9);
-    expect(commands.bytes).toBe(25_890);
+    expect(commands.bytes).toBe(26_092);
   });
 
   it("references: 19 files, 161,350 bytes", () => {
@@ -254,9 +272,18 @@ describe("auditPromptSurfaces (real tree)", () => {
     // task-decomposition's update-wave section and anti-pattern now cite the
     // runtime predicate isWaveVerified. Net effect: 161,350 -> 162,326 bytes
     // (+976), absolute hits 198 -> 199 (+1), bold spans 530 -> 532.
+    //
+    // The wave-verifier-gating workflow's Wave 3 Task 2 made goop-verifier
+    // acceptance-only in dispatch-patterns.md: the selection table gained a
+    // Wave-verification (execute) row pointing at goop-wave-verifier and
+    // dropped goop-verifier as the testing fallback, the model-profile table
+    // gained goop-wave-verifier, and the Verification Dispatch section
+    // removed the "after high-risk changes" guidance. Net: 162,326 ->
+    // 162,648 bytes (+322), absolute hits 199 -> 200 (+1: "acceptance-only"),
+    // bold spans unchanged at 532.
     const references = report.directories.find((d) => d.directory === "references")!;
     expect(references.files).toBe(19);
-    expect(references.bytes).toBe(162_326);
+    expect(references.bytes).toBe(162_648);
   });
 
   it("total absolute-language hits are 299 (Wave 1 role plumbing plus the Wave 3 execution gate)", () => {
@@ -330,7 +357,17 @@ describe("auditPromptSurfaces (real tree)", () => {
     // +1 in references/wiring-checklist.md (handoff never substitutes for
     // the recorded gate) — all true invariants, lifting the total from 296
     // to 299.
-    expect(report.totalAbsoluteHits).toBe(299);
+    //
+    // The wave-verifier-gating workflow's Wave 3 Task 2 (doc restriction
+    // sweep) added the two-verifier stage boundary across the delegation
+    // surfaces: +1 in references/dispatch-patterns.md (acceptance-only),
+    // +2 in agents/goop-orchestrator.md (never-implements-fixes role
+    // invariant, acceptance-only), +2 in agents/goop-verifier.md
+    // (acceptance-gate-only scope, acceptance-only), +4 in commands/
+    // goop-help.md (never-implements-fixes role invariant, acceptance-only,
+    // inspect/report-only boundary, delegate-never statement) — lifting the
+    // total from 299 to 308.
+    expect(report.totalAbsoluteHits).toBe(308);
   });
 
   it("per-file tokens are consistent with chars via estimateTokens", () => {

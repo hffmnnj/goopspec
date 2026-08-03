@@ -52,7 +52,7 @@ packages/opencode-plugin/src/
 └── index.ts               # Plugin entry point
 
 packages/opencode-plugin/
-├── agents/                # 14 agent markdown definitions
+├── agents/                # 15 agent markdown definitions
 ├── commands/              # 9 slash command definitions
 ├── references/            # 19 consolidated reference documents (incl. field-notes-protocol)
 └── templates/             # File templates
@@ -286,7 +286,7 @@ Defined in `src/core/constants.ts` (lines 140-146):
 | Role(s) | Default Level |
 |---------|---------------|
 | `explorer`, `researcher` | `medium` |
-| All other `AGENT_ROLES` (12 roles) | `high` |
+| All other `AGENT_ROLES` (13 roles) | `high` |
 
 Defaults derive from the canonical `AGENT_ROLES` list, so any new role added to the list automatically gets a safe default.
 
