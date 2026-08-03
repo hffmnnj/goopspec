@@ -123,11 +123,18 @@ describe("auditPromptSurfaces (real tree)", () => {
     expect(report.directories.map((d) => d.directory)).toEqual([...PROMPT_DIRECTORIES]);
   });
 
-  it("agents: 14 files, 99,822 bytes, 275 bold spans", () => {
+  it("agents: 14 files, 92,422 bytes, 241 bold spans", () => {
+    // Wave 3 Task 3.2 consolidated agents/goop-orchestrator.md (the largest
+    // single prompt) around the Task 3.1 pointer targets in core-protocol.md,
+    // dispatch-patterns.md, and phase-gates.md: 17,207 -> 9,807 bytes
+    // (-43.0%), 60 -> 26 bold spans, all Wave 2 semantic invariants intact.
+    // Net effect on this category: 99,822 -> 92,422 bytes, a decrease per
+    // MH6's agents-category-must-decrease acceptance bar. The immutable
+    // Wave 1 baseline (99,822 bytes) remains recorded in RESEARCH.md.
     const agents = report.directories.find((d) => d.directory === "agents")!;
     expect(agents.files).toBe(14);
-    expect(agents.bytes).toBe(99_822);
-    expect(agents.boldSpans).toBe(275);
+    expect(agents.bytes).toBe(92_422);
+    expect(agents.boldSpans).toBe(241);
   });
 
   it("commands: 9 files, 25,547 bytes", () => {
@@ -146,18 +153,19 @@ describe("auditPromptSurfaces (real tree)", () => {
     expect(references.bytes).toBe(161_458);
   });
 
-  it("total absolute-language hits are 396 (post Wave 3 Task 3.1)", () => {
+  it("total absolute-language hits are 390 (post Wave 3 Task 3.2)", () => {
     // SPEC assumption A5: research-phase count (394) and spec count (396)
     // differ by measurement method. The Wave 1 audit re-measures with one
     // documented method (\b(?:must|never|always|critical|only)\b, gi) and
     // that method governed all comparisons through Wave 2, yielding 394.
-    // Wave 3 Task 3.1's Prompt Authoring Rules section names the literal
-    // keywords MUST/NEVER/ALWAYS/CRITICAL/ONLY as the words to reserve for
-    // true invariants, which the whole-word census counts even inside
-    // backticks; dispatch-patterns.md's own trims offset most, but not all,
-    // of that. Net: 394 -> 396, coincidentally matching the original SPEC
-    // baseline figure (a coincidence of method, not a reversion of A5).
-    expect(report.totalAbsoluteHits).toBe(396);
+    // Wave 3 Task 3.1's Prompt Authoring Rules section named the literal
+    // keywords MUST/NEVER/ALWAYS/CRITICAL/ONLY, raising the total to 396.
+    // Wave 3 Task 3.2 consolidated agents/goop-orchestrator.md — removing
+    // duplicated MUST NOT DO / hard-stop prose in favor of pointers to
+    // phase-gates.md and core-protocol.md dropped its own hits 26 -> 20,
+    // taking the workflow-wide total to 390 (below the SPEC's 396 baseline
+    // and its <=300 bar-trajectory, not a regression).
+    expect(report.totalAbsoluteHits).toBe(390);
   });
 
   it("per-file tokens are consistent with chars via estimateTokens", () => {
