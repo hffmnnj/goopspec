@@ -123,17 +123,24 @@ describe("auditPromptSurfaces (real tree)", () => {
     expect(report.directories.map((d) => d.directory)).toEqual([...PROMPT_DIRECTORIES]);
   });
 
-  it("agents: 14 files, 92,422 bytes, 241 bold spans", () => {
+  it("agents: 14 files, 92,505 bytes, 241 bold spans", () => {
     // Wave 3 Task 3.2 consolidated agents/goop-orchestrator.md (the largest
     // single prompt) around the Task 3.1 pointer targets in core-protocol.md,
     // dispatch-patterns.md, and phase-gates.md: 17,207 -> 9,807 bytes
     // (-43.0%), 60 -> 26 bold spans, all Wave 2 semantic invariants intact.
-    // Net effect on this category: 99,822 -> 92,422 bytes, a decrease per
-    // MH6's agents-category-must-decrease acceptance bar. The immutable
-    // Wave 1 baseline (99,822 bytes) remains recorded in RESEARCH.md.
+    // A verifier-found follow-up removed one remaining runtime-duplicated
+    // prohibition (the "Never write code" bullet paraphrased the execute
+    // phase's MUST-NOT-DO rule from phase-context.ts) in favor of a bare
+    // pointer to dispatch-patterns.md's Prohibited Orchestrator Actions
+    // table, landing at 9,890 bytes for this one file (+83 bytes vs the
+    // first pass, since the pointer sentence is longer than the phrase it
+    // replaced, but the duplicated rule itself is gone). Net effect on this
+    // category across both passes: 99,822 -> 92,505 bytes, still a decrease
+    // per MH6's agents-category-must-decrease bar. The immutable Wave 1
+    // baseline (99,822 bytes) remains recorded in RESEARCH.md.
     const agents = report.directories.find((d) => d.directory === "agents")!;
     expect(agents.files).toBe(14);
-    expect(agents.bytes).toBe(92_422);
+    expect(agents.bytes).toBe(92_505);
     expect(agents.boldSpans).toBe(241);
   });
 
@@ -153,7 +160,7 @@ describe("auditPromptSurfaces (real tree)", () => {
     expect(references.bytes).toBe(161_458);
   });
 
-  it("total absolute-language hits are 390 (post Wave 3 Task 3.2)", () => {
+  it("total absolute-language hits are 389 (post Wave 3 Task 3.2 follow-up)", () => {
     // SPEC assumption A5: research-phase count (394) and spec count (396)
     // differ by measurement method. The Wave 1 audit re-measures with one
     // documented method (\b(?:must|never|always|critical|only)\b, gi) and
@@ -163,9 +170,13 @@ describe("auditPromptSurfaces (real tree)", () => {
     // Wave 3 Task 3.2 consolidated agents/goop-orchestrator.md — removing
     // duplicated MUST NOT DO / hard-stop prose in favor of pointers to
     // phase-gates.md and core-protocol.md dropped its own hits 26 -> 20,
-    // taking the workflow-wide total to 390 (below the SPEC's 396 baseline
-    // and its <=300 bar-trajectory, not a regression).
-    expect(report.totalAbsoluteHits).toBe(390);
+    // taking the workflow-wide total to 390. A verifier-found follow-up
+    // removed the remaining "Never write code" bullet, which restated the
+    // execute phase's runtime MUST-NOT rule from phase-context.ts, in favor
+    // of a bare pointer to dispatch-patterns.md; that single "never" hit
+    // drops the total to 389 (below the SPEC's 396 baseline and its <=300
+    // bar-trajectory, not a regression).
+    expect(report.totalAbsoluteHits).toBe(389);
   });
 
   it("per-file tokens are consistent with chars via estimateTokens", () => {

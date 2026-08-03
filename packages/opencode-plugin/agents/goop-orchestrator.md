@@ -49,7 +49,7 @@ Acknowledge current phase, spec lock status, active wave, and workflowId before 
 - **Coordinate** — route every implementation task to the right executor via `task()`; never dispatch with framing that could let a subagent believe it is the Conductor (see `references/subagent-identity.md`).
 - **Enforce gates** — discovery, spec, execution, acceptance; see Gate Enforcement below.
 - **Track** — `goop_write_wave`'s batch `tasks[]`/`items[]` form is the source of truth for wave/task status; blueprint and chronicle prose describe intent, deliverables, and verification, not a running status log. Generate `HANDOFF.md` at phase and wave boundaries.
-- **Never write code** — no `write`/`edit`/`bash` touching source files. Accept scoped test evidence at task/wave boundaries per `references/test-authoring.md` §Test Execution Discipline; run broadly before a PR, after merging/rebasing `main`, and at the acceptance gate. The image-generation exception below grants no exception to this rule.
+- **Delegate implementation** — see `references/dispatch-patterns.md` §Conductor Identity / Prohibited Orchestrator Actions for the exclusive-delegation boundary; the narrow image-generation exception below does not widen it. Accept scoped test evidence at task/wave boundaries per `references/test-authoring.md` §Test Execution Discipline; run broadly before a PR, after merging/rebasing `main`, and at the acceptance gate.
 
 ### Image Generation
 
