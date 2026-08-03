@@ -72,7 +72,7 @@ describe("lazy autopilot nudge", () => {
     const session = {
       _client: {},
       model: { providerID: "openai", modelID: "gpt-5.3-codex" },
-      messages: mock(async () => [{ info: { role: "assistant" } }]),
+      messages: mock(async () => [{ info: { role: "assistant", mode: "goop-orchestrator" } }]),
       get: mock(async () => ({ directory: testDir })),
       promptAsync(input: unknown): Promise<void> {
         if (this._client === undefined) throw new TypeError("detached this");
@@ -170,7 +170,12 @@ describe("lazy autopilot nudge", () => {
       Object.assign(ctx.sdk.client, {
         session: {
           messages: mock(async () => ({
-            data: [{ info: { role: "assistant" }, parts: [{ type: "text", text }] }],
+            data: [
+              {
+                info: { role: "assistant", mode: "goop-orchestrator" },
+                parts: [{ type: "text", text }],
+              },
+            ],
           })),
           get: mock(async () => ({ directory: testDir })),
           promptAsync,
@@ -207,7 +212,7 @@ describe("lazy autopilot nudge", () => {
     const promptAsync = mock(async () => undefined);
     Object.assign(ctx.sdk.client, {
       session: {
-        messages: mock(async () => [{ info: { role: "assistant" } }]),
+        messages: mock(async () => [{ info: { role: "assistant", mode: "goop-orchestrator" } }]),
         get: mock(async () => ({ directory: testDir })),
         promptAsync,
       },
@@ -236,7 +241,12 @@ describe("lazy autopilot nudge", () => {
       Object.assign(ctx.sdk.client, {
         session: {
           messages: mock(async () => ({
-            data: [{ info: { role: "assistant" }, parts: [{ type: "text", text: "ready" }] }],
+            data: [
+              {
+                info: { role: "assistant", mode: "goop-orchestrator" },
+                parts: [{ type: "text", text: "ready" }],
+              },
+            ],
           })),
           get: mock(async () => ({ directory: testDir })),
           promptAsync,
@@ -273,7 +283,12 @@ describe("lazy autopilot nudge", () => {
       Object.assign(ctx.sdk.client, {
         session: {
           messages: mock(async () => ({
-            data: [{ info: { role: "assistant" }, parts: [{ type: "text", text: "ready" }] }],
+            data: [
+              {
+                info: { role: "assistant", mode: "goop-orchestrator" },
+                parts: [{ type: "text", text: "ready" }],
+              },
+            ],
           })),
           get: mock(async () => ({ directory: testDir })),
           promptAsync,
@@ -304,7 +319,7 @@ describe("lazy autopilot nudge", () => {
       const promptAsync = mock(() => Promise.reject(new Error("host unavailable")));
       Object.assign(ctx.sdk.client, {
         session: {
-          messages: mock(async () => [{ info: { role: "assistant" } }]),
+          messages: mock(async () => [{ info: { role: "assistant", mode: "goop-orchestrator" } }]),
           get: mock(async () => ({ directory: testDir })),
           promptAsync,
         },
@@ -329,7 +344,7 @@ describe("lazy autopilot nudge", () => {
       const promptAsync = mock(() => Promise.reject(new Error("temporary host failure")));
       Object.assign(ctx.sdk.client, {
         session: {
-          messages: mock(async () => [{ info: { role: "assistant" } }]),
+          messages: mock(async () => [{ info: { role: "assistant", mode: "goop-orchestrator" } }]),
           get: mock(async () => ({ directory: testDir })),
           promptAsync,
         },
@@ -423,7 +438,7 @@ describe("lazy autopilot nudge", () => {
     const calls: unknown[] = [];
     Object.assign(ctx.sdk.client, {
       session: {
-        messages: mock(async () => [{ info: { role: "assistant" } }]),
+        messages: mock(async () => [{ info: { role: "assistant", mode: "goop-orchestrator" } }]),
         get: mock(async () => ({ directory: testDir })),
         promptAsync(input: unknown): Promise<void> {
           calls.push(input);
@@ -497,7 +512,7 @@ describe("lazy autopilot nudge", () => {
     const promptAsync = mock(async () => undefined);
     Object.assign(ctx.sdk.client, {
       session: {
-        messages: mock(async () => [{ info: { role: "assistant" } }]),
+        messages: mock(async () => [{ info: { role: "assistant", mode: "goop-orchestrator" } }]),
         get: mock(async () => ({ directory: otherProject })),
         promptAsync,
       },
@@ -555,11 +570,15 @@ describe("lazy autopilot nudge", () => {
   );
 
   // -------------------------------------------------------------------------
-  // Wave 1 Task 1: D1/D3 characterisation only (green baseline, no fixes).
-  // Inspection findings: SessionInfo.agent (types.ts:373) is declared but
-  // never assigned by production code; NudgeGuardInput (guards.ts:103-115)
-  // has no identity field; orchestrator-enforcement.ts's claim that
-  // session.agent "is set during plugin initialisation" is FALSIFIED.
+  // Wave 1 Task 1 found D1 (agent-identity gap) and D3 (fallback latch) via
+  // characterisation. Inspection findings: SessionInfo.agent (types.ts:373)
+  // is declared but never assigned by production code; NudgeGuardInput
+  // (guards.ts:103-115) had no identity field; orchestrator-enforcement.ts's
+  // claim that session.agent "is set during plugin initialisation" was
+  // FALSIFIED. Wave 2 (Tasks 2.1/2.2) fixed D1 by adding the fail-closed
+  // agent-identity guard and wiring `lastAssistantAgent()`'s reading of
+  // `AssistantMessage.mode` into dispatch — the permissive test below is
+  // updated accordingly. D3 remains an open characterisation for Wave 3.
   // -------------------------------------------------------------------------
 
   it("D1 signal (LOAD-BEARING FOR WAVE 2): session.messages() final assistant message carries AssistantMessage.mode as the agent-identity signal (SDK 1.18.3)", () => {
@@ -601,15 +620,14 @@ describe("lazy autopilot nudge", () => {
     // no fallback wiring through chat.message is needed for Wave 2.
   });
 
-  it("D1 characterisation (KNOWN DEFECT, permissive): a non-orchestrator session (mode: build) still reaches dispatch because no guard checks agent identity", async () => {
+  it("D1 fix (Wave 2 Task 2.2): a non-orchestrator session (mode: build) no longer reaches dispatch", async () => {
     const ctx = makeExecuteContext(testDir);
     const calls: unknown[] = [];
     Object.assign(ctx.sdk.client, {
       session: {
         // Final assistant message belongs to a "build" mode turn, not
-        // goop-orchestrator -- but neither NudgeGuardInput nor
-        // evaluateNudgeGuards reads agent/mode identity today (D1), so this
-        // is treated identically to a genuine orchestrator session.
+        // goop-orchestrator. `lastAssistantAgent()` reads `info.mode` and the
+        // agent-identity guard now suppresses this before promptAsync.
         messages: mock(async () => [{ info: { role: "assistant", mode: "build" } }]),
         get: mock(async () => ({ directory: testDir })),
         promptAsync(input: unknown): Promise<void> {
@@ -622,10 +640,10 @@ describe("lazy autopilot nudge", () => {
     await dispatchLazyAutopilotNudge(ctx, "sess-non-orchestrator");
     await Promise.resolve();
 
-    // KNOWN DEFECT (D1): dispatch proceeds and injects an orchestrator nudge
-    // even though the session's last turn ran under mode="build". Wave 2
-    // must invert this by gating on the `mode` signal above.
-    expect(calls).toHaveLength(1);
+    // D1 FIXED: dispatch is suppressed and does not inject an orchestrator
+    // nudge into a session whose last turn ran under mode="build".
+    expect(calls).toHaveLength(0);
+    expect(ctx.pendingLazyAutopilotNudges.has("sess-non-orchestrator")).toBe(false);
   });
 
   it("D3 characterisation (KNOWN DEFECT, inverted by Wave 3 Task 3.1): a second dispatch is blocked by the pending system-transform latch while it remains unconsumed", async () => {

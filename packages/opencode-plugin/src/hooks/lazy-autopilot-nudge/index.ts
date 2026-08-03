@@ -11,6 +11,7 @@ import {
   type NudgeGuardInput,
   type NudgeSessionMetadata,
   evaluateNudgeGuards,
+  lastAssistantAgent,
   lastAssistantMessageText,
   lastMessageRole,
 } from "./guards.js";
@@ -151,6 +152,7 @@ export async function dispatchLazyAutopilotNudge(
       phase: workflow.phase,
       lazyAutopilot: workflow.lazyAutopilot,
       acceptanceConfirmed: workflow.acceptanceConfirmed,
+      agent: lastAssistantAgent(response),
       lastMessages: response,
       lastAssistantText: lastAssistantMessageText(response),
       rateLimitCheck: createNudgeRateLimitCheck(ctx, nudgeConfig),

@@ -163,6 +163,38 @@ export function lastMessageRole(messages: unknown): string | undefined {
 }
 
 /**
+ * Extract the identity of the agent behind the session's final turn.
+ *
+ * `AssistantMessage.mode` (verified against `@opencode-ai/sdk` 1.18.3,
+ * `dist/gen/types.gen.d.ts:98-110`) is a REQUIRED `string` field carrying the
+ * agent name (e.g. `"goop-orchestrator"`, `"build"`) and is already present
+ * in the exact `{ data: [{ info, parts }] }` / bare-array envelope this hook
+ * reads via `lastMessageRole`/`lastAssistantMessageText` — no new SDK call is
+ * needed (see Field Note fn_20260802_gdckcep3). Mirrors those helpers' shape
+ * tolerance: any unexpected or missing `mode` deliberately returns the
+ * indeterminate `NudgeAgentIdentity` variant rather than throwing, so
+ * `evaluateNudgeGuards` can fail closed exactly as it does for `unknown`.
+ */
+export function lastAssistantAgent(messages: unknown): NudgeAgentIdentity {
+  const response =
+    messages !== null && typeof messages === "object"
+      ? (messages as { data?: unknown })
+      : undefined;
+  const entries = Array.isArray(messages)
+    ? messages
+    : Array.isArray(response?.data)
+      ? response.data
+      : undefined;
+  const last = entries?.at(-1);
+  if (last === null || typeof last !== "object") return { status: "unknown" };
+
+  const mode = (last as { info?: { mode?: unknown } }).info?.mode;
+  return typeof mode === "string" && mode.length > 0
+    ? { status: "known", agent: mode }
+    : { status: "unknown" };
+}
+
+/**
  * Extract text parts from the final SDK message without trusting its shape.
  * SessionMessagesResponse entries are `{ info, parts }`; unknown or malformed
  * responses deliberately produce no hard-stop text rather than throwing.
