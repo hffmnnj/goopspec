@@ -120,9 +120,25 @@ The system-transform hook also injects high-importance, workflow-scoped Field No
 
 **Deduplication:** `memory_save` accepts an optional `deduplicate` flag (default `false`). When set to `true`, the save path checks for a near-duplicate memory using normalized token overlap; if a match is strong enough, it soft-updates the existing entry (higher of the two importances, refreshed timestamp) and returns it instead of inserting a new row. No entry is ever deleted. When the flag is absent or `false`, behavior is identical to before.
 
+## Prompt Authoring Rules
+
+Shared cross-model strategy for every prompt surface: agents, commands, references, runtime injection. State each rule once; reserve absolutes for true invariants; lead with outcomes; scope verification. Subtraction is default — additions must name the requirement served.
+
+**Precedence:** runtime injection > agent file > command doc > reference > tool description. A rule lives once, at its owning layer; lower layers point to it, not restate it — divergent restatement is contradiction, not redundancy.
+
+**Absolutes:** reserve `MUST`/`NEVER`/`ALWAYS`/`CRITICAL`/`ONLY` for true gates, safety/security boundaries, and role invariants (`dispatch-patterns.md`, `subagent-identity.md`). Judgment calls are decision rules with stated conditions.
+
+**Outcome-first:** state goal, success criteria, stop condition over step-by-step choreography; keep explicit ordering only where a gate depends on sequence.
+
+**One autonomy policy per role:** each agent file states its safe-action/confirmation-boundary policy once — no scattered "ask first" repeats.
+
+**Batching, stated once:** batch independent tool calls into one turn; prefer a tool's batch payload (`items[]`, `doc_types`, `wave_numbers`) over repeated calls; serialize only on data dependency. §Tool-Call Batching below carries the example.
+
+**Preserved:** XML-tagged sections, role clarity, the response envelope, scoped verification, and delegation boundaries are shared ground between models. This rule set is model-agnostic and makes no deterministic-quality claim.
+
 ## Tool-Call Batching
 
-For maximum efficiency, whenever you need multiple independent operations, invoke all relevant tools simultaneously in a single message rather than sequentially. For example, when reading 3 documents, issue 3 read calls in parallel.
+The shared rule is stated once in §Prompt Authoring Rules above; this section is the worked example.
 
 **Narrative or sequential ordering in a plan is NOT the same as a data dependency.** If tool call B does not consume tool call A's output, batch them together in the same message — even if B logically follows A in your plan. Only call tools sequentially when a later call genuinely needs an earlier call's result.
 

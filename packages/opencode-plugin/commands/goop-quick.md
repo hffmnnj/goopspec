@@ -3,6 +3,7 @@ name: goop-quick
 description: Fast-track a small, well-defined task
 agent: orchestrator
 phase: quick
+requires: none
 next-step: "Confirm completion with the user"
 ---
 

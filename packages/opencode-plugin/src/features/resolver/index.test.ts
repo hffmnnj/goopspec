@@ -1,9 +1,60 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
-import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { createResourceResolver, defaultReferencePaths } from "./index.js";
+
+interface ReferencePointer {
+  name: string;
+  rawPointer: string;
+  sourceFile: string;
+}
+
+/**
+ * Extract only the two runtime-supported pointer syntaxes. Placeholder names
+ * such as `<name>` are documentation examples, not live pointers.
+ */
+function extractReferencePointers(content: string, sourceFile: string): ReferencePointer[] {
+  const pointers: ReferencePointer[] = [];
+  const invocationPattern = /goop_reference\s*\(\s*\{\s*name\s*:\s*(["'`])([^"'`]+)\1\s*\}\s*\)/g;
+  const pathPattern = /references\/[A-Za-z0-9][A-Za-z0-9_-]*\.md/g;
+
+  for (const match of content.matchAll(invocationPattern)) {
+    const name = match[2];
+    if (name.startsWith("<") && name.endsWith(">")) continue;
+    pointers.push({ name, rawPointer: match[0], sourceFile });
+  }
+
+  for (const match of content.matchAll(pathPattern)) {
+    const rawPointer = match[0];
+    pointers.push({ name: rawPointer.slice("references/".length, -3), rawPointer, sourceFile });
+  }
+
+  return pointers;
+}
+
+function readPromptFiles(directory: string): Array<{ content: string; sourceFile: string }> {
+  return readdirSync(directory)
+    .filter((fileName) => fileName.endsWith(".md"))
+    .sort()
+    .map((fileName) => ({
+      content: readFileSync(join(directory, fileName), "utf-8"),
+      sourceFile: join(directory, fileName),
+    }));
+}
+
+function findUnresolvedPointers(
+  pointers: ReferencePointer[],
+  resolver: ReturnType<typeof createResourceResolver>,
+): string[] {
+  return pointers
+    .filter((pointer) => resolver.resolve("reference", pointer.name) === null)
+    .map(
+      (pointer) =>
+        `${pointer.sourceFile}: ${pointer.rawPointer} -> missing reference '${pointer.name}'`,
+    );
+}
 
 // ---------------------------------------------------------------------------
 // Test scaffold
@@ -38,6 +89,73 @@ beforeEach(() => {
 });
 
 afterEach(cleanup);
+
+// ---------------------------------------------------------------------------
+// Real prompt reference pointers
+// ---------------------------------------------------------------------------
+
+describe("real prompt reference pointers", () => {
+  const packageRoot = join(import.meta.dir, "../../..");
+  const agentsDir = join(packageRoot, "agents");
+  const commandsDir = join(packageRoot, "commands");
+  const referencesDir = join(packageRoot, "references");
+
+  it("extracts goop_reference name pointers with supported quote and spacing variants", () => {
+    const pointers = extractReferencePointers(
+      'goop_reference({name:\'core-protocol\'}) and goop_reference( { name : "git-workflow" } )',
+      "synthetic.md",
+    );
+
+    expect(pointers.map((pointer) => pointer.name)).toEqual(["core-protocol", "git-workflow"]);
+    expect(pointers[0].rawPointer).toBe("goop_reference({name:'core-protocol'})");
+  });
+
+  it("extracts references markdown paths and excludes placeholder examples", () => {
+    const pointers = extractReferencePointers(
+      'See `references/phase-gates.md`; load with goop_reference({ name: "<name>" }).',
+      "synthetic.md",
+    );
+
+    expect(pointers).toEqual([
+      { name: "phase-gates", rawPointer: "references/phase-gates.md", sourceFile: "synthetic.md" },
+    ]);
+  });
+
+  it("detects a deliberately broken pointer with source and target diagnostics", () => {
+    const resolver = createResourceResolver({ referencesDir });
+    const failures = findUnresolvedPointers(
+      [
+        {
+          name: "does-not-exist",
+          rawPointer: 'goop_reference({ name: "does-not-exist" })',
+          sourceFile: "synthetic-agent.md",
+        },
+      ],
+      resolver,
+    );
+
+    expect(failures).toEqual([
+      "synthetic-agent.md: goop_reference({ name: \"does-not-exist\" }) -> missing reference 'does-not-exist'",
+    ]);
+  });
+
+  it("resolves every live pointer in all real agent and command prose", () => {
+    const promptFiles = [...readPromptFiles(agentsDir), ...readPromptFiles(commandsDir)];
+    const pointers = promptFiles.flatMap(({ content, sourceFile }) =>
+      extractReferencePointers(content, sourceFile),
+    );
+    const resolver = createResourceResolver({ referencesDir });
+    const failures = findUnresolvedPointers(pointers, resolver);
+
+    if (failures.length > 0) {
+      throw new Error(`Dangling reference pointers:\n${failures.join("\n")}`);
+    }
+
+    expect(promptFiles).toHaveLength(23);
+    expect(pointers.length).toBeGreaterThan(0);
+    expect(new Set(pointers.map((pointer) => pointer.name)).size).toBeGreaterThan(0);
+  });
+});
 
 // ---------------------------------------------------------------------------
 // resolve()
