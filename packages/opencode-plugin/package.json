@@ -19,7 +19,8 @@
     "test": "bun test",
     "lint": "biome check src",
     "lint:fix": "biome check --write src",
-    "format": "biome format --write src"
+    "format": "biome format --write src",
+    "prompt-report": "bun run src/features/prompt-audit/report.ts"
   },
   "keywords": [
     "opencode",
