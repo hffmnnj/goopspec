@@ -150,16 +150,21 @@ function catalogKey(providerID: string, modelID: string): string {
   return `${providerID}\u0000${modelID}`;
 }
 
-function captureCatalogCapabilities(
-  draft: V2CatalogDraft,
-  capabilitiesByModel: Map<string, CapabilityResult>,
-): void {
-  capabilitiesByModel.clear();
+/**
+ * Builds a fresh capability snapshot from the catalog draft. Returns a new
+ * Map instead of mutating a shared one in place: the caller swaps the shared
+ * reference only after this returns, so a reentrant reader (an agent
+ * transform racing a catalog refresh) always sees a complete snapshot —
+ * the previous one or the new one, never a transiently emptied map.
+ */
+function captureCatalogCapabilities(draft: V2CatalogDraft): Map<string, CapabilityResult> {
+  const next = new Map<string, CapabilityResult>();
   for (const record of draft.provider.list()) {
     for (const [modelID, model] of record.models) {
-      capabilitiesByModel.set(catalogKey(record.provider.id, modelID), resolveCapabilities(model));
+      next.set(catalogKey(record.provider.id, modelID), resolveCapabilities(model));
     }
   }
+  return next;
 }
 
 function applyThinkingLevelsToAgents(
@@ -186,8 +191,18 @@ function applyThinkingLevelsToAgents(
       continue;
     }
 
-    if (typeof resolution.apply === "string") continue;
-    const variant = resolution.apply;
+    const apply = resolution.apply;
+    if (typeof apply === "string") {
+      // Id-only V2 match: the host published no request encoding for this
+      // level. Set only the variant id and let the host build the request —
+      // never fabricate headers/body for a string resolution.
+      draft.update(candidate.id, (agent) => {
+        if (agent.model) agent.model.variant = apply;
+      });
+      continue;
+    }
+
+    const variant = apply;
     draft.update(candidate.id, (agent) => {
       agent.request.headers = { ...agent.request.headers, ...variant.headers };
       agent.request.body = { ...agent.request.body, ...variant.body };
@@ -212,26 +227,31 @@ async function registerThinkingLevelAgentTransform(
     return async () => {};
   }
 
-  const capabilitiesByModel = new Map<string, CapabilityResult>();
-  try {
+  // Holds the current capability snapshot by reference. `refresh` replaces
+  // the reference wholesale rather than clearing-then-repopulating the same
+  // Map in place, so a reentrant reader always observes a complete snapshot.
+  const capabilities: { current: ReadonlyMap<string, CapabilityResult> } = {
+    current: new Map(),
+  };
+
+  const refresh = async (): Promise<void> => {
     await catalogCapability.transform((draft) => {
-      captureCatalogCapabilities(draft, capabilitiesByModel);
+      capabilities.current = captureCatalogCapabilities(draft);
     });
     await agentCapability.transform((draft) => {
-      applyThinkingLevelsToAgents(draft, ctx, capabilitiesByModel);
+      applyThinkingLevelsToAgents(draft, ctx, capabilities.current);
     });
+  };
+
+  try {
+    await refresh();
   } catch (error) {
     logError("V2 thinking-level agent transform registration failed", error);
   }
 
   return async (): Promise<void> => {
     try {
-      await catalogCapability.transform((draft) => {
-        captureCatalogCapabilities(draft, capabilitiesByModel);
-      });
-      await agentCapability.transform((draft) => {
-        applyThinkingLevelsToAgents(draft, ctx, capabilitiesByModel);
-      });
+      await refresh();
       if (typeof catalogCapability.reload === "function") await catalogCapability.reload();
       if (typeof agentCapability.reload === "function") await agentCapability.reload();
     } catch (error) {
