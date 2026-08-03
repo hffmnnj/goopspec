@@ -130,10 +130,10 @@ describe("auditPromptSurfaces (real tree)", () => {
     expect(agents.boldSpans).toBe(275);
   });
 
-  it("commands: 9 files, 25,229 bytes", () => {
+  it("commands: 9 files, 25,547 bytes", () => {
     const commands = report.directories.find((d) => d.directory === "commands")!;
     expect(commands.files).toBe(9);
-    expect(commands.bytes).toBe(25_229);
+    expect(commands.bytes).toBe(25_547);
   });
 
   it("references: 19 files, 161,459 bytes", () => {
