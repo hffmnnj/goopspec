@@ -231,9 +231,9 @@ describe("buildModelPreferenceMap", () => {
     }
   });
 
-  it("returns preferences for all 14 roles", () => {
+  it("returns preferences for all 15 roles", () => {
     const map = buildModelPreferenceMap();
-    expect(Object.keys(map).length).toBe(14);
+    expect(Object.keys(map).length).toBe(15);
     for (const role of AGENT_ROLES) {
       expect(map[role]).toBeDefined();
       expect(map[role].preferred).toBe(DEFAULT_MODEL_MAP[role]);

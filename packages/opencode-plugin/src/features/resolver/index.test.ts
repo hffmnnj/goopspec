@@ -151,7 +151,7 @@ describe("real prompt reference pointers", () => {
       throw new Error(`Dangling reference pointers:\n${failures.join("\n")}`);
     }
 
-    expect(promptFiles).toHaveLength(23);
+    expect(promptFiles).toHaveLength(24);
     expect(pointers.length).toBeGreaterThan(0);
     expect(new Set(pointers.map((pointer) => pointer.name)).size).toBeGreaterThan(0);
   });

@@ -101,11 +101,11 @@ describe("measureDirectory", () => {
     expect(r.perFile).toEqual([]);
   });
 
-  it("rolls up the real agents directory with 14 markdown files", () => {
+  it("rolls up the real agents directory with 15 markdown files", () => {
     const r = measureDirectory("agents", packageRoot);
     expect(r.directory).toBe("agents");
-    expect(r.files).toBe(14);
-    expect(r.perFile.length).toBe(14);
+    expect(r.files).toBe(15);
+    expect(r.perFile.length).toBe(15);
     expect(r.chars).toBe(r.perFile.reduce((s, f) => s + f.chars, 0));
     expect(r.bytes).toBe(r.perFile.reduce((s, f) => s + f.bytes, 0));
     expect(r.boldSpans).toBe(r.perFile.reduce((s, f) => s + f.boldSpans, 0));
@@ -123,7 +123,7 @@ describe("auditPromptSurfaces (real tree)", () => {
     expect(report.directories.map((d) => d.directory)).toEqual([...PROMPT_DIRECTORIES]);
   });
 
-  it("agents: 14 files, 76,962 bytes, 127 bold spans", () => {
+  it("agents: 15 files, 82,100 bytes, 137 bold spans", () => {
     // Wave 3 Task 3.2 consolidated agents/goop-orchestrator.md (the largest
     // single prompt) around the Task 3.1 pointer targets in core-protocol.md,
     // dispatch-patterns.md, and phase-gates.md: 17,207 -> 9,807 bytes
@@ -159,10 +159,19 @@ describe("auditPromptSurfaces (real tree)", () => {
     // identity, branch, source-write, acceptance, and state-mutation
     // invariants preserved. The immutable Wave 1 baseline remains in
     // RESEARCH.md.
+    //
+    // The wave-verifier-gating workflow's Wave 1 role plumbing added
+    // agents/goop-wave-verifier.md (a new, wave-scoped-only agent contract)
+    // on top of this Wave 4 baseline: 14 files, 76,962 bytes, 127 bold
+    // spans -> 15 files, 82,100 bytes, 137 bold spans (+5,138 bytes, +10
+    // bold spans, exactly the new file's own measurements). No existing
+    // agent file changed. The immutable Wave 1 baseline (99,822 bytes,
+    // 14 files) remains in RESEARCH.md and predates both this addition and
+    // the Wave 3/4 consolidation passes.
     const agents = report.directories.find((d) => d.directory === "agents")!;
-    expect(agents.files).toBe(14);
-    expect(agents.bytes).toBe(76_962);
-    expect(agents.boldSpans).toBe(127);
+    expect(agents.files).toBe(15);
+    expect(agents.bytes).toBe(82_100);
+    expect(agents.boldSpans).toBe(137);
   });
 
   it("commands: 9 files, 24,702 bytes", () => {
@@ -230,7 +239,7 @@ describe("auditPromptSurfaces (real tree)", () => {
     expect(references.bytes).toBe(161_350);
   });
 
-  it("total absolute-language hits are 286 (post Wave 4 Task 4.3 follow-up)", () => {
+  it("total absolute-language hits are 296 (Wave 1 role plumbing added wave-verifier.md)", () => {
     // SPEC assumption A5: research-phase count (394) and spec count (396)
     // differ by measurement method. The Wave 1 audit re-measures with one
     // documented method (\b(?:must|never|always|critical|only)\b, gi) and
@@ -286,7 +295,15 @@ describe("auditPromptSurfaces (real tree)", () => {
     // 18 -> 15 (-3: "Only", "never", "always"), dispatch-patterns.md
     // 19 -> 18 (-1: "must"). Total: 290 -> 286. The immutable Wave 1
     // baseline (394) remains in RESEARCH.md.
-    expect(report.totalAbsoluteHits).toBe(286);
+    //
+    // The wave-verifier-gating workflow's Wave 1 role plumbing adds the
+    // new `wave-verifier` role as agents/goop-wave-verifier.md on top of
+    // this Wave 4 baseline. That file contributes 10 absolute-language
+    // hits of its own (it states explicit MUST/NEVER contract
+    // obligations), lifting the total from 286 to 296. The +10 delta is a
+    // property of the added role's prompt, not a regression of the Wave 4
+    // consolidation work.
+    expect(report.totalAbsoluteHits).toBe(296);
   });
 
   it("per-file tokens are consistent with chars via estimateTokens", () => {
