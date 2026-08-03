@@ -327,6 +327,59 @@ describe("goop_blocker tool", () => {
     expect(openBlockers[0].status).toBe("open");
   });
 
+  // -----------------------------------------------------------------------
+  // Ambiguity rejection (W4.T3 — top-level operation fields alongside items[])
+  // -----------------------------------------------------------------------
+
+  it("rejects a meaningful top-level action alongside items[], with zero mutation", async () => {
+    const blockerTool = createGoopBlockerTool(ctx);
+
+    const result = await blockerTool.execute(
+      {
+        action: "open",
+        description: "Leaked top-level open",
+        items: [{ action: "open", description: "Batch A" }],
+      },
+      toolCtx,
+    );
+
+    expect(result).toContain("Error in goop_blocker");
+    expect(result).toContain("action");
+    expect(result).toContain("items[]");
+    expect(ctx.db.getBlockers("default").length).toBe(0);
+  });
+
+  it("rejects a meaningful top-level description alongside items[], with zero mutation", async () => {
+    const blockerTool = createGoopBlockerTool(ctx);
+
+    const result = await blockerTool.execute(
+      {
+        description: "Leaked description",
+        items: [{ action: "open", description: "Batch A" }],
+      },
+      toolCtx,
+    );
+
+    expect(result).toContain("Error in goop_blocker");
+    expect(result).toContain("description");
+    expect(ctx.db.getBlockers("default").length).toBe(0);
+  });
+
+  it("still accepts workflow_id alongside items[] because it is genuinely consumed as the default", async () => {
+    const blockerTool = createGoopBlockerTool(ctx);
+
+    const result = await blockerTool.execute(
+      {
+        workflow_id: "custom-wf",
+        items: [{ action: "open", description: "Scoped blocker" }],
+      },
+      toolCtx,
+    );
+
+    expect(result).toContain("1/1 succeeded");
+    expect(ctx.db.getBlockers("custom-wf", "open")).toHaveLength(1);
+  });
+
   it("surfaces the completed-wave warning in batch items[] mode", async () => {
     ctx.db.upsertWave("default", { wave_number: 1, status: "completed" });
     const blockerTool = createGoopBlockerTool(ctx);
@@ -349,5 +402,87 @@ describe("goop_blocker tool", () => {
     expect(result).toContain("[1] OK: Opened blocker #");
 
     expect(ctx.db.getBlockers("default", "open").length).toBe(2);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Positive fixture inventory — valid call shapes (W4 Task 1)
+//
+// goop_blocker is an action-based lifecycle tool, structurally distinct
+// from the content-document tools. It has no `content`, `mode`,
+// `old_string`, `new_string`, or `replace_all` fields. The generic shapes:
+//   - "full-document write" → action: 'open' (the create analog)
+//   - "append mode" → N/A. No `mode`/content fields.
+//   - "patch mode" → N/A. No patch fields; lifecycle transitions use
+//     action: 'resolve' (which upserts with status: 'resolved'), not
+//     substring patching.
+//   - "replace-all patch" → N/A.
+//   - "items[] batch" → applies.
+//   - "blank-document patch workaround" → N/A.
+//
+// The tool's OWN valid shapes are action: open / resolve / list, plus the
+// items[] batch combining them. All are locked below.
+// ---------------------------------------------------------------------------
+
+describe("goop_blocker positive fixture inventory — valid call shapes (W4.T1)", () => {
+  let ctx: PluginContext;
+  let toolCtx: ToolContext;
+  let cleanup: () => void;
+
+  beforeEach(() => {
+    const env = setupTestEnvironment("goop-blocker-inventory");
+    cleanup = env.cleanup;
+    ctx = createMockPluginContext({ testDir: env.testDir, db: env.db });
+    toolCtx = createMockToolContext();
+  });
+
+  afterEach(() => cleanup());
+
+  it("SHAPE: action open (action + description + optional severity)", async () => {
+    const tool = createGoopBlockerTool(ctx);
+    const result = await tool.execute(
+      { action: "open", description: "Inventory blocker", severity: "medium" },
+      toolCtx,
+    );
+    expect(result).toContain("Opened blocker #");
+    expect(ctx.db.getBlockers("default", "open")).toHaveLength(1);
+  });
+
+  it("SHAPE (tool-specific): action resolve (action + id + resolution)", async () => {
+    const tool = createGoopBlockerTool(ctx);
+    await tool.execute({ action: "open", description: "To resolve" }, toolCtx);
+    const id = ctx.db.getBlockers("default", "open")[0].id;
+
+    const result = await tool.execute(
+      { action: "resolve", id, resolution: "Resolved in inventory" },
+      toolCtx,
+    );
+    expect(result).toContain(`Resolved blocker #${id}`);
+    expect(ctx.db.getBlockers("default", "resolved")).toHaveLength(1);
+  });
+
+  it("SHAPE (tool-specific): action list (action + optional status filter)", async () => {
+    const tool = createGoopBlockerTool(ctx);
+    await tool.execute({ action: "open", description: "Listed blocker" }, toolCtx);
+
+    const result = await tool.execute({ action: "list", status: "open" }, toolCtx);
+    expect(result).toContain("# Blockers");
+    expect(result).toContain("Listed blocker");
+  });
+
+  it("SHAPE: items[] batch (mixed open + list)", async () => {
+    const tool = createGoopBlockerTool(ctx);
+    const result = await tool.execute(
+      {
+        items: [
+          { action: "open", description: "Batch A" },
+          { action: "open", description: "Batch B" },
+          { action: "list", status: "open" },
+        ],
+      },
+      toolCtx,
+    );
+    expect(result).toContain("3/3 succeeded");
+    expect(ctx.db.getBlockers("default", "open")).toHaveLength(2);
   });
 });

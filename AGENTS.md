@@ -248,6 +248,15 @@ export function createMyHook(ctx: PluginContext) {
 8. **Minimal comments** - Only document non-obvious logic.
 9. **Atomic commits** - Keep changes focused and small.
 
+## Stage-Gated Verification
+
+Verification is split across two inspect-only roles, gated by lifecycle stage:
+
+- `goop-wave-verifier` — execute phase, scoped to one wave at a time. Inspects the wave and records verification rows via `goop_write_wave` `verifications[]`; it never implements fixes. Gaps go back to the correctly tiered executor for remediation, then the wave is re-verified.
+- `goop-verifier` — acceptance only. Runs at the accept gate as the final whole-workflow audit against the spec; it is not dispatched during execute.
+
+A wave does not complete, and execute does not progress to accept, while the wave's effective verification evidence is missing or failing.
+
 ## Agent Thinking Levels
 
 GoopSpec supports per-role reasoning-effort configuration through plain-text labels. The system resolves each label against the live OpenCode model catalog — never a hard-coded budget table.
@@ -281,7 +290,7 @@ Input is case-insensitive and normalized to canonical lowercase. Unknown labels 
 
 ### Built-in Role Defaults
 
-Defined in `src/core/constants.ts` (lines 140-146):
+Defined in `src/core/constants.ts` (lines 140-146). The canonical `AGENT_ROLES` list has 15 roles; the defaults below are derived from it:
 
 | Role(s) | Default Level |
 |---------|---------------|
