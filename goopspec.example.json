@@ -76,6 +76,10 @@
     "goop-verifier": {
       "model": "anthropic/claude-sonnet-4-6",
       "temperature": 0.1
+    },
+    "goop-wave-verifier": {
+      "model": "anthropic/claude-sonnet-4-6",
+      "temperature": 0.1
     }
   }
 }

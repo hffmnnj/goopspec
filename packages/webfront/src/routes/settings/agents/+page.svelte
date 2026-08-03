@@ -26,7 +26,7 @@
     {
       id: 'medium',
       title: 'Medium tier',
-      roles: ['executor-medium', 'executor-frontend-low', 'executor-low', 'verifier']
+      roles: ['executor-medium', 'executor-frontend-low', 'executor-low', 'verifier', 'wave-verifier']
     },
     {
       id: 'specialized',
@@ -46,6 +46,7 @@
     'executor-frontend-high': 'anthropic/claude-opus-4-6',
     planner: 'anthropic/claude-opus-4-6',
     verifier: 'anthropic/claude-sonnet-4-6',
+    'wave-verifier': 'anthropic/claude-sonnet-4-6',
     researcher: 'anthropic/claude-sonnet-4-6',
     explorer: 'anthropic/claude-sonnet-4-6',
     debugger: 'anthropic/claude-sonnet-4-6',
