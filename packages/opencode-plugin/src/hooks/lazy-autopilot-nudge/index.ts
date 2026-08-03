@@ -32,7 +32,9 @@ let didLogPromptAsyncUnavailable = false;
 function logPromptAsyncUnavailable(): void {
   if (didLogPromptAsyncUnavailable) return;
   didLogPromptAsyncUnavailable = true;
-  logError("Lazy autopilot nudge is best-effort: session.promptAsync is unavailable on this host");
+  logError(
+    "Lazy autopilot nudge: session.promptAsync is unavailable on this host; queuing the system-transform fallback for the next eligible turn (retried on later idle if unconsumed)",
+  );
 }
 
 function clearNudge(ctx: PluginContext, sessionID: string): void {
@@ -91,7 +93,15 @@ export async function dispatchLazyAutopilotNudge(
   ctx: PluginContext,
   sessionID: string,
 ): Promise<void> {
-  if (!sessionID || ctx.pendingLazyAutopilotNudges.has(sessionID)) return;
+  if (!sessionID) return;
+
+  // D3: an unconsumed "system-transform" entry is a stale fallback, not
+  // active work, so it must not latch out every later idle forever. Only
+  // "prompt-async" sourced entries (mid-fetch "queued" or promptAsync
+  // "in-flight") represent dispatch actually in progress and still block a
+  // concurrent attempt, preserving the single-dispatch invariant.
+  const existingPending = ctx.pendingLazyAutopilotNudges.get(sessionID);
+  if (existingPending && existingPending.source !== "system-transform") return;
 
   const nudgeConfig = resolveLazyAutopilotNudgeConfig(loadMergedConfig(ctx.sdk.directory));
   if (!nudgeConfig.enabled) return;
@@ -139,6 +149,15 @@ export async function dispatchLazyAutopilotNudge(
                 ? ("get-failed" as const)
                 : ("get-unavailable" as const),
           };
+    if (sessionMetadata.status === "unavailable") {
+      const detail =
+        sessionMetadata.reason === "get-unavailable"
+          ? "is unavailable on this host"
+          : sessionMetadata.reason === "get-failed"
+            ? "failed on this host"
+            : "returned indeterminate data";
+      logError(`Lazy autopilot nudge: session.get ${detail}; session scope cannot be verified`);
+    }
     if (lastMessageRole(response) !== "assistant") {
       clearNudge(ctx, sessionID);
       return;
@@ -170,7 +189,21 @@ export async function dispatchLazyAutopilotNudge(
     }
 
     const livePending = ctx.pendingLazyAutopilotNudges.get(sessionID);
-    if (!livePending || livePending.status !== "queued" || livePending.source !== "prompt-async") {
+    if (livePending !== pending) {
+      // Our own slot was replaced or removed while messages/session were
+      // being fetched (event-handler session cleanup, or a later idle that
+      // legitimately reclaimed a stale fallback per the guard above).
+      // Whatever now occupies it belongs to another owner or to nothing --
+      // clearing it here would either destroy state we do not own or be a
+      // harmless no-op, so leave it alone either way.
+      return;
+    }
+    if (pending.status !== "queued" || pending.source !== "prompt-async") {
+      // Defensive: nothing else mutates this exact object in place before
+      // this point, so this should be unreachable. Clear it explicitly
+      // rather than leaving a malformed entry no later idle would ever
+      // re-evaluate.
+      clearNudge(ctx, sessionID);
       return;
     }
 
@@ -230,3 +263,8 @@ export const lazyAutopilotNudgeHookFactory: HookFactory = (ctx: PluginContext): 
 
 /** Exported for event-handler lifecycle cleanup (MH8). */
 export { clearNudgeRateLimitState };
+
+/** Test-only: reset the promptAsync-unavailable log deduplication flag. */
+export function __resetPromptAsyncUnavailableLog(): void {
+  didLogPromptAsyncUnavailable = false;
+}

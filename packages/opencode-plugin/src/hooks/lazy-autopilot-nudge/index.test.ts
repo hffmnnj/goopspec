@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, mock, spyOn } from "bun:te
 import { createMockPluginContext, setupTestEnvironment } from "../../test-utils.js";
 import {
   LAZY_AUTOPILOT_NUDGE_TEXT,
+  __resetPromptAsyncUnavailableLog,
   dispatchLazyAutopilotNudge,
   lazyAutopilotNudgeHookFactory,
 } from "./index.js";
@@ -58,6 +59,7 @@ describe("lazy autopilot nudge", () => {
     cleanup = env.cleanup;
     testDir = env.testDir;
     __clearNudgeRateLimitState();
+    __resetPromptAsyncUnavailableLog();
   });
 
   afterEach(() => cleanup());
@@ -128,6 +130,7 @@ describe("lazy autopilot nudge", () => {
 
   it("does not nudge when session metadata lookup fails", async () => {
     const ctx = makeExecuteContext(testDir);
+    const errorSpy = spyOn(console, "error").mockImplementation(() => {});
     const promptAsync = mock(async () => undefined);
     Object.assign(ctx.sdk.client, {
       session: {
@@ -141,6 +144,7 @@ describe("lazy autopilot nudge", () => {
     await Promise.resolve();
 
     expect(promptAsync).not.toHaveBeenCalled();
+    errorSpy.mockRestore();
   });
 
   it("does not nudge when the last message is from the user", async () => {
@@ -527,6 +531,7 @@ describe("lazy autopilot nudge", () => {
 
   it("fail-closed: suppresses when session.get is unavailable on the host", async () => {
     const ctx = makeExecuteContext(testDir);
+    const errorSpy = spyOn(console, "error").mockImplementation(() => {});
     const promptAsync = mock(async () => undefined);
     Object.assign(ctx.sdk.client, {
       session: {
@@ -541,6 +546,7 @@ describe("lazy autopilot nudge", () => {
 
     expect(promptAsync).not.toHaveBeenCalled();
     expect(ctx.pendingLazyAutopilotNudges.has("sess-no-get")).toBe(false);
+    errorSpy.mockRestore();
   });
 
   it.each([
@@ -552,6 +558,7 @@ describe("lazy autopilot nudge", () => {
     "fail-closed: suppresses when session.get returns indeterminate data (%s)",
     async (_label, getSessionValue: unknown) => {
       const ctx = makeExecuteContext(testDir);
+      const errorSpy = spyOn(console, "error").mockImplementation(() => {});
       const promptAsync = mock(async () => undefined);
       Object.assign(ctx.sdk.client, {
         session: {
@@ -566,6 +573,7 @@ describe("lazy autopilot nudge", () => {
 
       expect(promptAsync).not.toHaveBeenCalled();
       expect(ctx.pendingLazyAutopilotNudges.has("sess-invalid-response")).toBe(false);
+      errorSpy.mockRestore();
     },
   );
 
@@ -578,7 +586,8 @@ describe("lazy autopilot nudge", () => {
   // FALSIFIED. Wave 2 (Tasks 2.1/2.2) fixed D1 by adding the fail-closed
   // agent-identity guard and wiring `lastAssistantAgent()`'s reading of
   // `AssistantMessage.mode` into dispatch — the permissive test below is
-  // updated accordingly. D3 remains an open characterisation for Wave 3.
+  // updated accordingly. D3 was repaired in Wave 3 Task 3.1 (see the
+  // regression test below).
   // -------------------------------------------------------------------------
 
   it("D1 signal (LOAD-BEARING FOR WAVE 2): session.messages() final assistant message carries AssistantMessage.mode as the agent-identity signal (SDK 1.18.3)", () => {
@@ -708,13 +717,13 @@ describe("lazy autopilot nudge", () => {
     expect(ctx.pendingLazyAutopilotNudges.has("sess-indeterminate")).toBe(false);
   });
 
-  it("D3 characterisation (KNOWN DEFECT, inverted by Wave 3 Task 3.1): a second dispatch is blocked by the pending system-transform latch while it remains unconsumed", async () => {
+  it("D3 regression (was KNOWN DEFECT, fixed Wave 3 Task 3.1): a later idle is evaluated instead of being starved by an unconsumed system-transform fallback", async () => {
     const ctx = makeExecuteContext(testDir);
     const errorSpy = spyOn(console, "error").mockImplementation(() => {});
     try {
       // Track SDK access itself (not just session.messages, which is never
       // called on this branch -- promptAsync is checked BEFORE messages at
-      // index.ts:103-104) to prove no further host interaction happens.
+      // index.ts:103-104) to prove real host interaction happens on retry.
       let sessionAccessCount = 0;
       const session = { messages: mock(async () => []) };
       Object.defineProperty(ctx.sdk.client, "session", {
@@ -736,13 +745,10 @@ describe("lazy autopilot nudge", () => {
       // un-consumed (no experimental.chat.system.transform call has fired).
       await dispatchLazyAutopilotNudge(ctx, "sess-latch");
 
-      // KNOWN DEFECT (D3): the early return at index.ts:93 sees the still-
-      // pending map entry and blocks the second dispatch before it ever
-      // touches ctx.sdk.client.session again -- zero further SDK calls. A
-      // genuinely later idle event on this session is starved until some
-      // system-transform call happens to consume the latch, which may never
-      // occur. Wave 3 Task 3.1 inverts this.
-      expect(sessionAccessCount).toBe(1);
+      // FIXED (D3): an unconsumed system-transform fallback is stale, not an
+      // in-flight dispatch, so it no longer blocks the top-of-function guard.
+      // The retry re-consults the host instead of being starved forever.
+      expect(sessionAccessCount).toBe(2);
       expect(ctx.pendingLazyAutopilotNudges.get("sess-latch")).toEqual({
         status: "queued",
         source: "system-transform",
@@ -750,5 +756,69 @@ describe("lazy autopilot nudge", () => {
     } finally {
       errorSpy.mockRestore();
     }
+  });
+
+  // -------------------------------------------------------------------------
+  // Wave 3 Task 2 (MH4): Honest degradation diagnostics. Behavior-focused
+  // coverage for the promptAsync-absent, session.get-unavailable, and
+  // session.get-failed diagnostic messages. Tests assert the observable
+  // log output, not mock internals.
+  // -------------------------------------------------------------------------
+
+  it("logs an honest promptAsync-unavailable diagnostic that describes the retryable system-transform fallback without implying delivery", async () => {
+    const ctx = makeExecuteContext(testDir);
+    const errorSpy = spyOn(console, "error").mockImplementation(() => {});
+    Object.assign(ctx.sdk.client, { session: { messages: mock(async () => []) } });
+
+    await dispatchLazyAutopilotNudge(ctx, "sess-promptasync-diag");
+
+    const logged = errorSpy.mock.calls.map((c) => String(c[0] ?? ""));
+    const diag = logged.find((m) => m.includes("promptAsync is unavailable"));
+    expect(diag).toBeDefined();
+    expect(diag).not.toContain("best-effort");
+    expect(diag).toContain("system-transform fallback");
+    expect(diag).toContain("retried");
+    errorSpy.mockRestore();
+  });
+
+  it("logs a distinct session.get-unavailable diagnostic visible without debug mode", async () => {
+    const ctx = makeExecuteContext(testDir);
+    const errorSpy = spyOn(console, "error").mockImplementation(() => {});
+    Object.assign(ctx.sdk.client, {
+      session: {
+        messages: mock(async () => [{ info: { role: "assistant" } }]),
+        promptAsync: mock(async () => undefined),
+      },
+    });
+
+    await dispatchLazyAutopilotNudge(ctx, "sess-get-unavail-diag");
+    await Promise.resolve();
+
+    const logged = errorSpy.mock.calls.map((c) => String(c[0] ?? ""));
+    const diag = logged.find((m) => m.includes("session.get") && m.includes("unavailable"));
+    expect(diag).toBeDefined();
+    expect(diag).toContain("session scope cannot be verified");
+    errorSpy.mockRestore();
+  });
+
+  it("logs a distinct session.get-failed diagnostic visible without debug mode", async () => {
+    const ctx = makeExecuteContext(testDir);
+    const errorSpy = spyOn(console, "error").mockImplementation(() => {});
+    Object.assign(ctx.sdk.client, {
+      session: {
+        messages: mock(async () => [{ info: { role: "assistant" } }]),
+        get: mock(() => Promise.reject(new Error("session lookup failed"))),
+        promptAsync: mock(async () => undefined),
+      },
+    });
+
+    await dispatchLazyAutopilotNudge(ctx, "sess-get-failed-diag");
+    await Promise.resolve();
+
+    const logged = errorSpy.mock.calls.map((c) => String(c[0] ?? ""));
+    const diag = logged.find((m) => m.includes("session.get") && m.includes("failed"));
+    expect(diag).toBeDefined();
+    expect(diag).toContain("session scope cannot be verified");
+    errorSpy.mockRestore();
   });
 });
