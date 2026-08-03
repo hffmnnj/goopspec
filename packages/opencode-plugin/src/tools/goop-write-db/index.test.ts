@@ -728,4 +728,71 @@ describe("goop_write_db tool", () => {
       expect(ctx.db.getDocument("default", "spec")).toBeNull();
     });
   });
+
+  // -----------------------------------------------------------------------
+  // Retry-loop regression (W4.T4) — the one-shot error must differ from the
+  // prior silent-patch success so an agent cannot loop on the identical
+  // payload. Pin the runtime guarantee from W4.T2 (shared/write-mode.ts):
+  // the formerly-ambiguous call surfaces a single actionable message, performs
+  // no mutation, and yields a deterministic result on retry.
+  // -----------------------------------------------------------------------
+
+  describe("one-shot error prevents an identical retry loop (W4.T4)", () => {
+    it("returns an actionable error that differs from the prior silent-patch success", async () => {
+      // The incident this wave exists to prevent: an agent supplies BOTH
+      // content (intending a full-document write) AND old_string (because a
+      // host-side schema defect, or a confused model, marked it required).
+      // Before W4.T2, `isPatchActive(old_string)` silently chose patch mode,
+      // ignored content, and returned a "Patched ..." success — so the agent
+      // saw a success-shaped result, its full write never landed, and
+      // re-issuing the identical payload produced the identical misleading
+      // success forever.
+      ctx.db.upsertDocument("default", "spec", "Hello world");
+
+      const tool = createGoopWriteDbTool(ctx);
+      const payload = {
+        doc_type: "spec" as const,
+        content: "# Full document I intended to write",
+        old_string: "world",
+        new_string: "GoopSpec",
+      };
+      const result = await tool.execute(payload, toolCtx);
+
+      // (1) The output is an error, not a success-looking result. The
+      //     contrast with the prior "Patched ... / Sidecar: ..." path is
+      //     what breaks the loop — an agent can no longer mistake silence
+      //     for success.
+      expect(result).toContain("Error in goop_write_db");
+      expect(result).not.toContain("Patched");
+      expect(result).not.toContain("Written");
+      expect(result).not.toContain("Sidecar");
+
+      // (2) It names BOTH conflicting fields, so the agent knows exactly
+      //     what to drop without guessing.
+      expect(result).toContain("content");
+      expect(result).toContain("old_string");
+      expect(result).toContain("content and old_string cannot be supplied together");
+
+      // (3) It names the valid call shapes, so the agent has a concrete
+      //     correction rather than a generic "invalid input" that invites
+      //     an identical retry with rearranged whitespace.
+      expect(result).toContain("Valid call shapes");
+      expect(result).toContain("full write/append");
+      expect(result).toContain("patch");
+      expect(result).toContain("batch");
+
+      // (4) No mutation occurred — a retry with a corrected payload starts
+      //     from the original document state, not a half-applied patch.
+      expect(ctx.db.getDocument("default", "spec")?.content).toBe("Hello world");
+
+      // (5) Determinism: re-issuing the identical payload yields the
+      //     identical actionable error. This is the retry-loop guarantee —
+      //     the agent cannot stumble into a different (success-shaped)
+      //     outcome by repeating the bad call. The error is stable and
+      //     terminal until the agent actually changes the payload.
+      const retried = await tool.execute(payload, toolCtx);
+      expect(retried).toBe(result);
+      expect(ctx.db.getDocument("default", "spec")?.content).toBe("Hello world");
+    });
+  });
 });
