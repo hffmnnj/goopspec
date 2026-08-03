@@ -156,10 +156,19 @@ describe("auditPromptSurfaces (real tree)", () => {
     expect(agents.boldSpans).toBe(127);
   });
 
-  it("commands: 9 files, 25,547 bytes", () => {
+  it("commands: 9 files, 24,702 bytes", () => {
+    // Wave 4 Task 4.1 reconciled the nine command docs against the
+    // runtime-injected phase rules: trimmed anti-pattern/prohibition lists
+    // to command-specific material (removing items the injected phase
+    // block or phase-gates.md already owns), replaced duplicated nudge
+    // gate prose in goop-execute.md with a pointer to phase-gates.md, and
+    // resolved the contract-gate/autopilot precedence ambiguity in
+    // goop-plan.md. Net effect: 25,547 -> 24,702 bytes; absolute-language
+    // hits 34 -> 32; bold spans 68 -> 58. The immutable Wave 1 baseline
+    // remains in RESEARCH.md.
     const commands = report.directories.find((d) => d.directory === "commands")!;
     expect(commands.files).toBe(9);
-    expect(commands.bytes).toBe(25_547);
+    expect(commands.bytes).toBe(24_702);
   });
 
   it("references: 19 files, 161,458 bytes", () => {
@@ -172,7 +181,7 @@ describe("auditPromptSurfaces (real tree)", () => {
     expect(references.bytes).toBe(161_458);
   });
 
-  it("total absolute-language hits are 333 (post Wave 3 Task 3.3)", () => {
+  it("total absolute-language hits are 331 (post Wave 4 Task 4.1)", () => {
     // SPEC assumption A5: research-phase count (394) and spec count (396)
     // differ by measurement method. The Wave 1 audit re-measures with one
     // documented method (\b(?:must|never|always|critical|only)\b, gi) and
@@ -190,9 +199,13 @@ describe("auditPromptSurfaces (real tree)", () => {
     // and repeated emphasis dropped agents' absolute-language hits from
     // 118 to 62 (-56), taking the workflow-wide total to 333. The <=300
     // bar is a workflow-wide target; Wave 4 (commands/references) will
-    // trim the remaining 271 hits (34 commands + 237 references). The
-    // immutable Wave 1 baseline (394) remains in RESEARCH.md.
-    expect(report.totalAbsoluteHits).toBe(333);
+    // trim the remaining hits. Wave 4 Task 4.1 reconciled the command
+    // docs: removing two abs hits (one "must-have" in goop-plan.md, one
+    // "Only" header in goop-execute.md replaced by a pointer) took
+    // commands 34 -> 32 and the workflow-wide total 333 -> 331. References
+    // trimming is a separate task. The immutable Wave 1 baseline (394)
+    // remains in RESEARCH.md.
+    expect(report.totalAbsoluteHits).toBe(331);
   });
 
   it("per-file tokens are consistent with chars via estimateTokens", () => {

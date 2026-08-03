@@ -54,19 +54,19 @@ If validation fails, send the planner back to fix gaps.
 
 ## Lock the spec
 
-Present a contract gate via the `question` tool:
+Present a contract gate via the `question` tool (skipped when autopilot is active — see below):
 
 - **Confirm and lock (Recommended)** → `goop_state({ action: "lock-spec" })`, then suggest `/goop-execute`.
 - **Amend** → Edit the draft and re-run the gate.
 - **Cancel** → Keep the spec unlocked.
 
-## Autopilot
-
-If `workflow.autopilot == true` or `workflow.lazyAutopilot == true`, skip the contract gate confirmation, lock the spec, then immediately call:
+When `workflow.autopilot == true` or `workflow.lazyAutopilot == true`, skip the contract gate confirmation above, lock the spec, then immediately call:
 
 ```
 mcp_slashcommand({ command: "/goop-execute" })
 ```
+
+The spec-lock requirement (`spec_locked == true`) remains absolute; the confirmation pause alone is skipped.
 
 ## Output
 
@@ -79,8 +79,5 @@ mcp_slashcommand({ command: "/goop-execute" })
 
 ## Anti-patterns
 
-- Plan without a completed interview.
-- Lock a spec that does not cover every must-have.
-- Announce `/goop-execute` without calling `mcp_slashcommand`.
 - Produce waves via `goop_write_wave` without `pr_branch`/`pr_url` when atomic PRs are enabled.
 - Delegate to the planner before the research gate resolves (unless the skip heuristic fired and the decision was logged to ADL).

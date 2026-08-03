@@ -60,8 +60,7 @@ If the user replies **No**: acknowledge and remind them to merge newest-first (h
 
 ## Anti-patterns
 
-- Accept without verification.
 - Archive before confirming the copy.
 - Delete original workflow docs without logging each file.
 - Merge PRs out of cascade order (newest-first).
-- Start the merge sequence without presenting the PR list and receiving an explicit yes.
+- Start the merge sequence without presenting the PR list first.
