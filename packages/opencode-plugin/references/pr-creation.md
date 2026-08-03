@@ -310,7 +310,7 @@ Before pushing a wave branch and opening a PR:
 - **Force-pushing to a PR branch after review has started** — rewrites history reviewers already read; use a new commit instead.
 - **Marking comments resolved without addressing them** — let the reviewer decide when their concern is satisfied.
 - **Bundling unrelated changes** — each PR should have one reason to exist.
-- **Cross-branch parallel dispatch** — never run parallel agents on different branches simultaneously.
+- **Cross-branch parallel dispatch** — see `dispatch-patterns.md` §Single-Branch Parallelism Rule.
 - **Wrong base** — never create Wave N+1 from `main`; always stack it on Wave N's branch.
 
 ---

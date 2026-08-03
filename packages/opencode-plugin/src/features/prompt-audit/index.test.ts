@@ -123,7 +123,7 @@ describe("auditPromptSurfaces (real tree)", () => {
     expect(report.directories.map((d) => d.directory)).toEqual([...PROMPT_DIRECTORIES]);
   });
 
-  it("agents: 14 files, 76,992 bytes, 127 bold spans", () => {
+  it("agents: 14 files, 76,962 bytes, 127 bold spans", () => {
     // Wave 3 Task 3.2 consolidated agents/goop-orchestrator.md (the largest
     // single prompt) around the Task 3.1 pointer targets in core-protocol.md,
     // dispatch-patterns.md, and phase-gates.md: 17,207 -> 9,807 bytes
@@ -150,9 +150,18 @@ describe("auditPromptSurfaces (real tree)", () => {
     // 99,822 -> 76,992 bytes, a decrease per MH6's agents-category-must-
     // decrease bar. Bold spans: 275 -> 127 (well under the 200 bar).
     // The immutable Wave 1 baseline (99,822 bytes) remains in RESEARCH.md.
+    //
+    // Wave 4 Task 4.3 converted six non-invariant judgment-call absolutes in
+    // agents/goop-orchestrator.md to conditional phrasing (state-only boot
+    // scope, image-generation scope, low-tier usage condition, parallel-
+    // research branch condition, hard-stop count): 76,992 -> 76,962 bytes,
+    // 62 -> 56 absolute hits, 127 bold spans unchanged. All gate, safety,
+    // identity, branch, source-write, acceptance, and state-mutation
+    // invariants preserved. The immutable Wave 1 baseline remains in
+    // RESEARCH.md.
     const agents = report.directories.find((d) => d.directory === "agents")!;
     expect(agents.files).toBe(14);
-    expect(agents.bytes).toBe(76_992);
+    expect(agents.bytes).toBe(76_962);
     expect(agents.boldSpans).toBe(127);
   });
 
@@ -171,7 +180,7 @@ describe("auditPromptSurfaces (real tree)", () => {
     expect(commands.bytes).toBe(24_702);
   });
 
-  it("references: 19 files, 160,972 bytes", () => {
+  it("references: 19 files, 160,716 bytes", () => {
     // Wave 3 Task 3.1 consolidated core-protocol.md, dispatch-patterns.md, and
     // subagent-identity.md (added one Prompt Authoring Rules section, offset
     // by removing duplicated material from the other two files). Net effect:
@@ -187,12 +196,29 @@ describe("auditPromptSurfaces (real tree)", () => {
     // core-protocol.md and phase-gates.md. Net effect: 161,458 -> 160,972
     // bytes (-486), absolute hits 237 -> 236, bold spans 528 -> 526. The
     // immutable Wave 1 baseline (161,459) remains in RESEARCH.md.
+    //
+    // Wave 4 Task 4.3 converted 34 non-invariant judgment-call absolutes to
+    // conditional phrasing and trimmed two cross-layer duplicates across
+    // four reference files: core-protocol.md (12 conversions: always/only/
+    // must/never judgment calls in boot defaults, batching rules, prompt
+    // authoring rules), phase-gates.md (10: only/never judgment calls in
+    // autopilot stops, nudge rate-limit, fail-closed blast radius, blocker
+    // hygiene), test-authoring.md (8: never/only/always judgment calls in
+    // test heuristics, mocking discipline, test-level guidance, execution
+    // ladder), dispatch-patterns.md (3: trimmed restated quick-mode self-
+    // edit conditions to a pointer to commands/goop-quick.md per precedence
+    // command > reference), and pr-creation.md (1: trimmed restated single-
+    // branch parallelism rule to a pointer to dispatch-patterns.md). Net
+    // effect: 160,972 -> 160,716 bytes (-256), absolute hits 236 -> 202,
+    // bold spans 526 -> 526. All gate, safety, identity, branch, source-
+    // write, acceptance, and state-mutation invariants preserved. The
+    // immutable Wave 1 baseline remains in RESEARCH.md.
     const references = report.directories.find((d) => d.directory === "references")!;
     expect(references.files).toBe(19);
-    expect(references.bytes).toBe(160_972);
+    expect(references.bytes).toBe(160_716);
   });
 
-  it("total absolute-language hits are 330 (post Wave 4 Task 4.2)", () => {
+  it("total absolute-language hits are 290 (post Wave 4 Task 4.3)", () => {
     // SPEC assumption A5: research-phase count (394) and spec count (396)
     // differ by measurement method. The Wave 1 audit re-measures with one
     // documented method (\b(?:must|never|always|critical|only)\b, gi) and
@@ -223,7 +249,21 @@ describe("auditPromptSurfaces (real tree)", () => {
     // and the workflow-wide total 331 -> 330. The other four references
     // kept their true-invariant absolutes (gate labels, severity names,
     // config tier names, spec terms) intact.
-    expect(report.totalAbsoluteHits).toBe(330);
+    //
+    // Wave 4 Task 4.3 converted 40 non-invariant judgment-call absolutes
+    // to conditional phrasing and trimmed two cross-layer duplicates:
+    // agents/goop-orchestrator.md 62 -> 56 (-6), references/core-protocol.md
+    // 34 -> 22 (-12), references/phase-gates.md 32 -> 22 (-10), references/
+    // test-authoring.md 26 -> 18 (-8), references/dispatch-patterns.md
+    // 22 -> 19 (-3, trimmed restated quick-mode conditions to pointer),
+    // references/pr-creation.md 19 -> 18 (-1, trimmed restated single-
+    // branch rule to pointer). Commands unchanged at 32. Total:
+    // 330 -> 290, meeting the <=300 bar. All surviving absolutes are
+    // true invariants (gate, safety, identity, branch, source-write,
+    // acceptance, state-mutation) or domain terminology (must-have,
+    // critical-path, severity names, config keys, V1-only). The immutable
+    // Wave 1 baseline (394) remains in RESEARCH.md.
+    expect(report.totalAbsoluteHits).toBe(290);
   });
 
   it("per-file tokens are consistent with chars via estimateTokens", () => {
