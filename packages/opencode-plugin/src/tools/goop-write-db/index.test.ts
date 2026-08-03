@@ -550,4 +550,182 @@ describe("goop_write_db tool", () => {
       );
     });
   });
+
+  // -----------------------------------------------------------------------
+  // Ambiguous/invalid write-mode combinations (W4.T2) — one-shot rejection,
+  // zero mutation. Mirrors the four rules in shared/write-mode.ts.
+  // -----------------------------------------------------------------------
+
+  describe("rejects ambiguous write-mode combinations (W4.T2)", () => {
+    it("rule 1: rejects meaningful content and old_string together, and does not mutate", async () => {
+      ctx.db.upsertDocument("default", "spec", "Hello world");
+
+      const tool = createGoopWriteDbTool(ctx);
+      const result = await tool.execute(
+        { doc_type: "spec", content: "# Full replacement", old_string: "world", new_string: "x" },
+        toolCtx,
+      );
+
+      expect(result).toContain("Error in goop_write_db");
+      expect(result).toContain("content and old_string cannot be supplied together");
+      expect(result).toContain("Valid call shapes");
+      expect(ctx.db.getDocument("default", "spec")?.content).toBe("Hello world");
+    });
+
+    it("rule 2: rejects new_string without old_string, and does not mutate", async () => {
+      ctx.db.upsertDocument("default", "spec", "Hello world");
+
+      const tool = createGoopWriteDbTool(ctx);
+      const result = await tool.execute(
+        { doc_type: "spec", content: "# Should not be written", new_string: "x" },
+        toolCtx,
+      );
+
+      expect(result).toContain("Error in goop_write_db");
+      expect(result).toContain("new_string");
+      expect(result).toContain("supplied without old_string");
+      expect(ctx.db.getDocument("default", "spec")?.content).toBe("Hello world");
+    });
+
+    it("rule 2: rejects replace_all without old_string, and does not mutate", async () => {
+      ctx.db.upsertDocument("default", "spec", "Hello world");
+
+      const tool = createGoopWriteDbTool(ctx);
+      const result = await tool.execute(
+        { doc_type: "spec", content: "# Should not be written", replace_all: true },
+        toolCtx,
+      );
+
+      expect(result).toContain("Error in goop_write_db");
+      expect(result).toContain("replace_all");
+      expect(ctx.db.getDocument("default", "spec")?.content).toBe("Hello world");
+    });
+
+    it('rule 3: rejects mode: "append" combined with old_string, and does not mutate', async () => {
+      ctx.db.upsertDocument("default", "spec", "Hello world");
+
+      const tool = createGoopWriteDbTool(ctx);
+      const result = await tool.execute(
+        { doc_type: "spec", old_string: "world", new_string: "GoopSpec", mode: "append" },
+        toolCtx,
+      );
+
+      expect(result).toContain("Error in goop_write_db");
+      expect(result).toContain('mode: "append"');
+      expect(ctx.db.getDocument("default", "spec")?.content).toBe("Hello world");
+    });
+
+    it("rule 4: rejects meaningful content alongside items[], and does not mutate any document", async () => {
+      ctx.db.upsertDocument("default", "spec", "Hello world");
+
+      const tool = createGoopWriteDbTool(ctx);
+      const result = await tool.execute(
+        {
+          doc_type: "spec",
+          content: "# Real top-level content",
+          items: [{ doc_type: "blueprint", content: "# Blueprint" }],
+        },
+        toolCtx,
+      );
+
+      expect(result).toContain("Error in goop_write_db");
+      expect(result).toContain("content");
+      expect(result).toContain("items[]");
+      expect(ctx.db.getDocument("default", "spec")?.content).toBe("Hello world");
+      expect(ctx.db.getDocument("default", "blueprint")).toBeNull();
+    });
+
+    it("rule 4: rejects old_string alongside items[], and does not mutate any document", async () => {
+      ctx.db.upsertDocument("default", "spec", "Hello world");
+
+      const tool = createGoopWriteDbTool(ctx);
+      const result = await tool.execute(
+        {
+          doc_type: "spec",
+          old_string: "world",
+          new_string: "GoopSpec",
+          items: [{ doc_type: "blueprint", content: "# Blueprint" }],
+        },
+        toolCtx,
+      );
+
+      expect(result).toContain("Error in goop_write_db");
+      expect(result).toContain("old_string");
+      expect(result).toContain("items[]");
+      expect(ctx.db.getDocument("default", "spec")?.content).toBe("Hello world");
+      expect(ctx.db.getDocument("default", "blueprint")).toBeNull();
+    });
+
+    it("rule 4: rejects mode alongside items[], and does not mutate any document", async () => {
+      const tool = createGoopWriteDbTool(ctx);
+      const result = await tool.execute(
+        {
+          doc_type: "spec",
+          mode: "append",
+          items: [{ doc_type: "blueprint", content: "# Blueprint" }],
+        },
+        toolCtx,
+      );
+
+      expect(result).toContain("Error in goop_write_db");
+      expect(result).toContain("mode");
+      expect(result).toContain("items[]");
+      expect(ctx.db.getDocument("default", "blueprint")).toBeNull();
+    });
+
+    it("rule 4: does NOT reject empty-string content alongside items[] (documented neutral placeholder)", async () => {
+      const tool = createGoopWriteDbTool(ctx);
+      const result = await tool.execute(
+        {
+          doc_type: "spec",
+          content: "",
+          items: [{ doc_type: "blueprint", content: "# Blueprint" }],
+        },
+        toolCtx,
+      );
+
+      expect(result).toContain("1/1 succeeded");
+      expect(ctx.db.getDocument("default", "blueprint")?.content).toBe("# Blueprint");
+    });
+
+    it("per-item validation: rejects a batch item that mixes content and old_string, rolling back the whole batch", async () => {
+      ctx.db.upsertDocument("default", "spec", "Original spec");
+
+      const tool = createGoopWriteDbTool(ctx);
+      const result = await tool.execute(
+        {
+          doc_type: "spec",
+          content: "",
+          items: [
+            { doc_type: "blueprint", content: "# Should be rolled back" },
+            { doc_type: "spec", content: "# Ambiguous", old_string: "Original", new_string: "x" },
+          ],
+        },
+        toolCtx,
+      );
+
+      expect(result).toContain("Batch write-db");
+      expect(result).toContain("0/2 succeeded");
+      // The first item's write must not survive despite validating fine on
+      // its own — the whole batch transaction rolls back on any item error.
+      expect(ctx.db.getDocument("default", "blueprint")).toBeNull();
+      expect(ctx.db.getDocument("default", "spec")?.content).toBe("Original spec");
+    });
+
+    it("per-item validation: rejects a batch item with new_string but no old_string", async () => {
+      const tool = createGoopWriteDbTool(ctx);
+      const result = await tool.execute(
+        {
+          doc_type: "spec",
+          content: "",
+          items: [{ doc_type: "spec", content: "# Doc", new_string: "x" }],
+        },
+        toolCtx,
+      );
+
+      expect(result).toContain("0/1 succeeded");
+      expect(result).toContain("supplied without old_string");
+      expect(ctx.db.getDocument("default", "spec")).toBeNull();
+    });
+  });
 });

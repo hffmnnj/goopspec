@@ -15,6 +15,7 @@ import { DOC_TYPES } from "../../features/db/types.js";
 import type { DocType } from "../../features/db/types.js";
 import { patchContent } from "../../shared/content-patch.js";
 import { DOC_TYPE_FILENAMES, renderSidecars } from "../../shared/render-sidecars.js";
+import { resolveWriteMode } from "../../shared/write-mode.js";
 
 interface PatchArgs {
   old_string?: string;
@@ -29,10 +30,6 @@ interface WriteDbItem {
 }
 
 type WriteDbItemWithPatch = WriteDbItem & PatchArgs;
-
-function isPatchActive(patch: PatchArgs): boolean {
-  return patch.old_string !== undefined;
-}
 
 /**
  * Render the persisted document length for a success message. An explicit
@@ -53,45 +50,12 @@ function patchExistingDocument(
   db: PluginContext["db"],
   workflowId: string,
   docType: DocType,
-  patch: PatchArgs,
+  oldString: string,
+  newString: string,
+  replaceAll: boolean,
 ): import("../../shared/content-patch.js").PatchResult {
-  if (!isPatchActive(patch)) {
-    return {
-      ok: false,
-      matchCount: 0,
-      error: "old_string is required for patch mode",
-    };
-  }
-
   const existing = db.getDocument(workflowId, docType)?.content ?? "";
-  return patchContent(existing, patch.old_string as string, patch.new_string ?? "", {
-    replaceAll: patch.replace_all ?? false,
-  });
-}
-
-function resolveContentForWrite(
-  db: PluginContext["db"],
-  workflowId: string,
-  item: WriteDbItemWithPatch,
-): string {
-  if (isPatchActive(item)) {
-    const patchResult = patchExistingDocument(db, workflowId, item.doc_type, {
-      old_string: item.old_string,
-      new_string: item.new_string,
-      replace_all: item.replace_all,
-    });
-    if (!patchResult.ok) {
-      throw new Error(patchResult.error ?? "Patch failed");
-    }
-
-    return patchResult.content as string;
-  }
-
-  if (item.content === undefined) {
-    throw new Error("content is required when old_string is not provided");
-  }
-
-  return item.content;
+  return patchContent(existing, oldString, newString, { replaceAll });
 }
 
 // ---------------------------------------------------------------------------
@@ -150,26 +114,74 @@ export function createGoopWriteDbTool(ctx: PluginContext): ToolDefinition {
         // runBatch/formatBatchResult path and report per-item results
         // consistently with their single-item path, so no parity change was
         // required. Recorded to prevent re-auditing these two tools.
-        if (Array.isArray(args.items) && args.items.length > 0) {
-          const workflowId = args.workflow_id ?? ctx.stateManager.getState().activeWorkflowId;
-          const result = runBatch(ctx.db, args.items, (item) => {
-            const itemMode = item.mode ?? "replace";
-            const itemContent = resolveContentForWrite(ctx.db, workflowId, item);
+        const hasItems = Array.isArray(args.items) && args.items.length > 0;
+        const resolution = resolveWriteMode({
+          content: args.content,
+          mode: args.mode,
+          old_string: args.old_string,
+          new_string: args.new_string,
+          replace_all: args.replace_all,
+          hasItems,
+        });
+
+        if (resolution.kind === "error") {
+          return `Error in goop_write_db: ${resolution.message}`;
+        }
+
+        const workflowId = args.workflow_id ?? ctx.stateManager.getState().activeWorkflowId;
+
+        if (resolution.kind === "batch") {
+          const result = runBatch(ctx.db, args.items as WriteDbItemWithPatch[], (item) => {
+            const itemResolution = resolveWriteMode({
+              content: item.content,
+              mode: item.mode,
+              old_string: item.old_string,
+              new_string: item.new_string,
+              replace_all: item.replace_all,
+            });
+
+            if (itemResolution.kind === "error") {
+              throw new Error(itemResolution.message);
+            }
+            if (itemResolution.kind === "batch" || itemResolution.kind === "none") {
+              throw new Error("content is required when old_string is not provided");
+            }
 
             ctx.db.deleteSections(workflowId, item.doc_type);
 
-            if (itemMode === "append") {
-              ctx.db.appendDocument(workflowId, item.doc_type, itemContent);
+            if (itemResolution.kind === "patch") {
+              const patchResult = patchExistingDocument(
+                ctx.db,
+                workflowId,
+                item.doc_type,
+                itemResolution.old_string,
+                itemResolution.new_string,
+                itemResolution.replace_all,
+              );
+              if (!patchResult.ok) {
+                throw new Error(patchResult.error ?? "Patch failed");
+              }
+              ctx.db.upsertDocument(workflowId, item.doc_type, patchResult.content as string);
+              ctx.db.appendEvent(workflowId, "doc_write", {
+                doc_type: item.doc_type,
+                mode: "patch",
+                timestamp: Date.now(),
+              });
+              return `wrote ${item.doc_type}`;
+            }
+
+            if (itemResolution.mode === "append") {
+              ctx.db.appendDocument(workflowId, item.doc_type, itemResolution.content);
               if (item.doc_type === "chronicle") {
-                ctx.db.appendChronicleEvent(workflowId, itemContent);
+                ctx.db.appendChronicleEvent(workflowId, itemResolution.content);
               }
             } else {
-              ctx.db.upsertDocument(workflowId, item.doc_type, itemContent);
+              ctx.db.upsertDocument(workflowId, item.doc_type, itemResolution.content);
             }
 
             ctx.db.appendEvent(workflowId, "doc_write", {
               doc_type: item.doc_type,
-              mode: itemMode,
+              mode: itemResolution.mode,
               timestamp: Date.now(),
             });
 
@@ -180,15 +192,22 @@ export function createGoopWriteDbTool(ctx: PluginContext): ToolDefinition {
           return formatBatchResult(result, "write-db");
         }
 
-        const workflowId = args.workflow_id ?? ctx.stateManager.getState().activeWorkflowId;
-        const mode = args.mode ?? "replace";
+        if (resolution.kind === "none") {
+          if (args.items?.length === 0) {
+            return "Error in goop_write_db: items[] array is empty and no document content was provided";
+          }
+          return "Error in goop_write_db: content is required when old_string is not provided";
+        }
 
-        if (isPatchActive(args)) {
-          const patchResult = patchExistingDocument(ctx.db, workflowId, args.doc_type, {
-            old_string: args.old_string,
-            new_string: args.new_string,
-            replace_all: args.replace_all,
-          });
+        if (resolution.kind === "patch") {
+          const patchResult = patchExistingDocument(
+            ctx.db,
+            workflowId,
+            args.doc_type,
+            resolution.old_string,
+            resolution.new_string,
+            resolution.replace_all,
+          );
           if (!patchResult.ok) {
             return `Error in goop_write_db: ${patchResult.error}`;
           }
@@ -209,45 +228,33 @@ export function createGoopWriteDbTool(ctx: PluginContext): ToolDefinition {
           return `Patched ${args.doc_type} for workflow '${workflowId}' (${describeWriteLength(sidecarContent.length)}, mode: patch). Sidecar: .goopspec/${workflowId}/${filename}`;
         }
 
-        if (
-          args.items?.length === 0 &&
-          args.content === undefined &&
-          args.old_string === undefined
-        ) {
-          return "Error in goop_write_db: items[] array is empty and no document content was provided";
-        }
-
-        if (args.content === undefined) {
-          return "Error in goop_write_db: content is required when old_string is not provided";
-        }
-
-        // Persist to DB
+        // Persist to DB (full-document write/append)
         ctx.db.deleteSections(workflowId, args.doc_type);
-        if (mode === "append") {
-          ctx.db.appendDocument(workflowId, args.doc_type, args.content);
+        if (resolution.mode === "append") {
+          ctx.db.appendDocument(workflowId, args.doc_type, resolution.content);
           // Also insert chronicle event row when appending chronicle
           if (args.doc_type === "chronicle") {
-            ctx.db.appendChronicleEvent(workflowId, args.content);
+            ctx.db.appendChronicleEvent(workflowId, resolution.content);
           }
         } else {
-          ctx.db.upsertDocument(workflowId, args.doc_type, args.content);
+          ctx.db.upsertDocument(workflowId, args.doc_type, resolution.content);
         }
 
         // Log doc_write event
         ctx.db.appendEvent(workflowId, "doc_write", {
           doc_type: args.doc_type,
-          mode,
+          mode: resolution.mode,
           timestamp: Date.now(),
         });
 
         // Read back the full document for sidecar (important for append mode)
         const updatedDoc = ctx.db.getDocument(workflowId, args.doc_type);
-        const sidecarContent = updatedDoc?.content ?? args.content;
+        const sidecarContent = updatedDoc?.content ?? resolution.content;
 
         renderSidecars(ctx, workflowId);
         const filename = DOC_TYPE_FILENAMES[args.doc_type];
 
-        return `Written ${args.doc_type} for workflow '${workflowId}' (${describeWriteLength(sidecarContent.length)}, mode: ${mode}). Sidecar: .goopspec/${workflowId}/${filename}`;
+        return `Written ${args.doc_type} for workflow '${workflowId}' (${describeWriteLength(sidecarContent.length)}, mode: ${resolution.mode}). Sidecar: .goopspec/${workflowId}/${filename}`;
       } catch (error: unknown) {
         const msg = error instanceof Error ? error.message : String(error);
         return `Error in goop_write_db: ${msg}`;
