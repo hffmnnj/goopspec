@@ -32,7 +32,9 @@ let didLogPromptAsyncUnavailable = false;
 function logPromptAsyncUnavailable(): void {
   if (didLogPromptAsyncUnavailable) return;
   didLogPromptAsyncUnavailable = true;
-  logError("Lazy autopilot nudge is best-effort: session.promptAsync is unavailable on this host");
+  logError(
+    "Lazy autopilot nudge: session.promptAsync is unavailable on this host; queuing the system-transform fallback for the next eligible turn (retried on later idle if unconsumed)",
+  );
 }
 
 function clearNudge(ctx: PluginContext, sessionID: string): void {
@@ -147,6 +149,15 @@ export async function dispatchLazyAutopilotNudge(
                 ? ("get-failed" as const)
                 : ("get-unavailable" as const),
           };
+    if (sessionMetadata.status === "unavailable") {
+      const detail =
+        sessionMetadata.reason === "get-unavailable"
+          ? "is unavailable on this host"
+          : sessionMetadata.reason === "get-failed"
+            ? "failed on this host"
+            : "returned indeterminate data";
+      logError(`Lazy autopilot nudge: session.get ${detail}; session scope cannot be verified`);
+    }
     if (lastMessageRole(response) !== "assistant") {
       clearNudge(ctx, sessionID);
       return;
@@ -252,3 +263,8 @@ export const lazyAutopilotNudgeHookFactory: HookFactory = (ctx: PluginContext): 
 
 /** Exported for event-handler lifecycle cleanup (MH8). */
 export { clearNudgeRateLimitState };
+
+/** Test-only: reset the promptAsync-unavailable log deduplication flag. */
+export function __resetPromptAsyncUnavailableLog(): void {
+  didLogPromptAsyncUnavailable = false;
+}

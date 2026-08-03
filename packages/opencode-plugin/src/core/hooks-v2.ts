@@ -50,6 +50,11 @@ export interface V2HooksRegistration {
 
 let didLogLazyAutopilotV2Limitation = false;
 
+/** Test-only: reset the V2 lazy-autopilot limitation log deduplication flag. */
+export function __resetV2LazyAutopilotLimitationLog(): void {
+  didLogLazyAutopilotV2Limitation = false;
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }

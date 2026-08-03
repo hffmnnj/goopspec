@@ -9,7 +9,7 @@ import {
   createMockPluginContext,
   setupTestEnvironment,
 } from "../test-utils.js";
-import { registerHooksV2 } from "./hooks-v2.js";
+import { __resetV2LazyAutopilotLimitationLog, registerHooksV2 } from "./hooks-v2.js";
 import type {
   V2AgentDraft,
   V2AgentInfo,
@@ -99,6 +99,7 @@ describe("registerHooksV2()", () => {
   afterEach(() => {
     clearMemoryCache();
     for (const context of contexts.splice(0)) context.db.close();
+    __resetV2LazyAutopilotLimitationLog();
   });
 
   it("registers the system transform and reuses its canonical V1 handler", async () => {
@@ -358,5 +359,20 @@ describe("registerHooksV2()", () => {
     expect(agent.request.headers).toEqual({ "x-existing": "keep", "x-reasoning": "medium" });
     expect(agent.request.body).toEqual({ existing: true, reasoning_effort: "medium" });
     env.cleanup();
+  });
+
+  it("logs the V2 lazy-autopilot limitation without claiming a fallback", async () => {
+    const ctx = createMockPluginContext();
+    contexts.push(ctx);
+    const errorSpy = spyOn(console, "error").mockImplementation(() => {});
+
+    await registerHooksV2({} as V2RuntimeContext, ctx);
+
+    const logged = errorSpy.mock.calls.map((c) => String(c[0] ?? ""));
+    const diag = logged.find((m) => m.includes("Lazy autopilot nudge is unavailable in V2"));
+    expect(diag).toBeDefined();
+    expect(diag).toContain("unavailable");
+    expect(diag).not.toContain("fallback");
+    errorSpy.mockRestore();
   });
 });
