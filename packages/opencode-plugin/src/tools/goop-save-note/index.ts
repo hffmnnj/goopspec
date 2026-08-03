@@ -75,6 +75,68 @@ function validateCreateFields(item: NoteFields): { ok: true } | { ok: false; err
 }
 
 // ---------------------------------------------------------------------------
+// Note-specific write-mode resolution. A note is CREATE-or-PATCH keyed on
+// `note_id` presence (not a content/old_string pair), so resolveWriteMode()
+// doesn't fit — this mirrors its intent for the note's own field shape.
+// ---------------------------------------------------------------------------
+
+const NOTE_VALID_SHAPES =
+  "Valid call shapes: (1) create — title + body + tags + source_agent; " +
+  "(2) patch — note_id + old_string, optional new_string/replace_all.";
+
+type NoteModeResolution =
+  | { kind: "create" }
+  | { kind: "patch" }
+  | { kind: "error"; message: string };
+
+function noteErr(message: string): NoteModeResolution {
+  return { kind: "error", message: `${message} ${NOTE_VALID_SHAPES}` };
+}
+
+function meaningfulCreateFields(item: NoteFields): string[] {
+  const offending: string[] = [];
+  if (item.title !== undefined && item.title.length > 0) offending.push("title");
+  if (item.body !== undefined && item.body.length > 0) offending.push("body");
+  if (item.tags !== undefined && normalizeTags(item.tags).length > 0) offending.push("tags");
+  if (item.source_agent !== undefined && item.source_agent.length > 0) {
+    offending.push("source_agent");
+  }
+  return offending;
+}
+
+function meaningfulPatchFields(item: NotePatchArgs): string[] {
+  const offending: string[] = [];
+  if (item.old_string !== undefined) offending.push("old_string");
+  if (item.new_string !== undefined) offending.push("new_string");
+  if (item.replace_all !== undefined) offending.push("replace_all");
+  return offending;
+}
+
+function resolveNoteMode(item: NoteFields & NotePatchArgs): NoteModeResolution {
+  if (item.note_id !== undefined) {
+    const createFields = meaningfulCreateFields(item);
+    if (createFields.length > 0) {
+      return noteErr(
+        `${createFields.join(", ")} cannot be supplied alongside note_id: note_id activates patch mode, which only accepts old_string/new_string/replace_all.`,
+      );
+    }
+    if (item.old_string === undefined) {
+      return noteErr("old_string is required when note_id is provided for patch mode.");
+    }
+    return { kind: "patch" };
+  }
+
+  const patchFields = meaningfulPatchFields(item);
+  if (patchFields.length > 0) {
+    return noteErr(
+      `${patchFields.join(", ")} supplied without note_id: ${patchFields.join(" and ")} only configure patch mode, which activates when note_id is present.`,
+    );
+  }
+
+  return { kind: "create" };
+}
+
+// ---------------------------------------------------------------------------
 // Tag normalization
 // ---------------------------------------------------------------------------
 
@@ -185,13 +247,14 @@ export function createGoopSaveNoteTool(ctx: PluginContext): ToolDefinition {
       try {
         if (Array.isArray(args.items) && args.items.length > 0) {
           const result = runBatch(ctx.db, args.items, (item) => {
-            if (item.note_id !== undefined) {
-              if (item.old_string === undefined) {
-                throw new Error("old_string is required when note_id is provided for patch mode");
-              }
+            const itemResolution = resolveNoteMode(item);
+            if (itemResolution.kind === "error") {
+              throw new Error(itemResolution.message);
+            }
 
-              const updateResult = ctx.db.updateNote(item.note_id, {
-                oldString: item.old_string,
+            if (itemResolution.kind === "patch") {
+              const updateResult = ctx.db.updateNote(item.note_id as string, {
+                oldString: item.old_string as string,
                 newString: item.new_string ?? "",
                 replaceAll: item.replace_all ?? false,
               });
@@ -232,13 +295,14 @@ export function createGoopSaveNoteTool(ctx: PluginContext): ToolDefinition {
           return formatBatchResult(result, "save-note");
         }
 
-        if (args.note_id !== undefined) {
-          if (args.old_string === undefined) {
-            return "Error in goop_save_note: old_string is required when note_id is provided for patch mode";
-          }
+        const topResolution = resolveNoteMode(args);
+        if (topResolution.kind === "error") {
+          return `Error in goop_save_note: ${topResolution.message}`;
+        }
 
-          const updateResult = ctx.db.updateNote(args.note_id, {
-            oldString: args.old_string,
+        if (topResolution.kind === "patch") {
+          const updateResult = ctx.db.updateNote(args.note_id as string, {
+            oldString: args.old_string as string,
             newString: args.new_string ?? "",
             replaceAll: args.replace_all ?? false,
           });

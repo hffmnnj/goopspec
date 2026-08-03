@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, spyOn } from "bun:test";
 import type { PluginContext } from "../core/types.js";
 import type { GoopSpecDB } from "../features/db/index.js";
-import type { TaskStatus, WaveStatus } from "../features/db/types.js";
+import type { TaskStatus, VerificationStatus, WaveStatus } from "../features/db/types.js";
 import { createStateManager } from "../features/state-manager/index.js";
 import {
   createDefaultWorkflowState,
@@ -24,11 +24,17 @@ function makeOutput(text = "ok"): ToolAfterOutput {
   return { title: "result", output: text, metadata: {} };
 }
 
+/**
+ * Seeds a final wave row (and optional tasks/verification row). `verificationStatus`
+ * is omitted by default; tests expecting a successful execute→accept transition
+ * must pass `"passed"` or `"skipped"` explicitly.
+ */
 function seedFinalWave(
   ctx: PluginContext,
   waveNumber: number,
   status: WaveStatus,
   taskStatuses: TaskStatus[] = [],
+  verificationStatus?: VerificationStatus,
 ): void {
   const workflowId = ctx.stateManager.getActiveWorkflowId();
   ctx.db.upsertWave(workflowId, { wave_number: waveNumber, status });
@@ -41,6 +47,14 @@ function seedFinalWave(
       workflow_id: workflowId,
       task_index: index + 1,
       status: taskStatus,
+    });
+  }
+
+  if (verificationStatus !== undefined) {
+    ctx.db.insertVerification(workflowId, {
+      wave_id: wave.id,
+      check_name: "test",
+      status: verificationStatus,
     });
   }
 }
@@ -101,7 +115,7 @@ describe("auto-progression hook", () => {
         },
       },
     });
-    seedFinalWave(ctx, 3, "completed", ["done", "completed"]);
+    seedFinalWave(ctx, 3, "completed", ["done", "completed"], "passed");
 
     const hooks = createAutoProgressionHook(ctx);
     const handler = hooks["tool.execute.after"] as NonNullable<Hooks["tool.execute.after"]>;
@@ -131,7 +145,7 @@ describe("auto-progression hook", () => {
         },
       },
     });
-    seedFinalWave(ctx, 5, "completed", ["completed"]);
+    seedFinalWave(ctx, 5, "completed", ["completed"], "passed");
 
     const hooks = createAutoProgressionHook(ctx);
     const handler = hooks["tool.execute.after"] as NonNullable<Hooks["tool.execute.after"]>;
@@ -187,7 +201,7 @@ describe("auto-progression hook", () => {
         },
       },
     });
-    seedFinalWave(ctx, 3, "completed", ["completed"]);
+    seedFinalWave(ctx, 3, "completed", ["completed"], "passed");
     const stateTool = createGoopStateTool(ctx);
     await stateTool.execute(
       { action: "transition", phase: "execute", force: true },
@@ -226,7 +240,7 @@ describe("auto-progression hook", () => {
         },
       },
     });
-    seedFinalWave(ctx, 3, "completed", ["done", "completed"]);
+    seedFinalWave(ctx, 3, "completed", ["done", "completed"], "passed");
 
     // Force transitionPhase to throw
     const originalTransition = ctx.stateManager.transitionPhase;
@@ -322,7 +336,7 @@ describe("auto-progression hook", () => {
         },
       },
     });
-    seedFinalWave(ctx, 4, "completed", ["done", "completed"]);
+    seedFinalWave(ctx, 4, "completed", ["done", "completed"], "passed");
 
     const hooks = createAutoProgressionHook(ctx);
     const handler = hooks["tool.execute.after"] as NonNullable<Hooks["tool.execute.after"]>;
@@ -339,7 +353,163 @@ describe("auto-progression hook", () => {
 });
 
 // -----------------------------------------------------------------------
-// 8. Caller-driven integration: goop_state update-wave → auto-progression
+// 8. Wave verification gate: task completion alone is not sufficient
+// -----------------------------------------------------------------------
+
+describe("auto-progression hook: wave verification gate", () => {
+  let cleanup: () => void;
+  let testDir: string;
+
+  beforeEach(() => {
+    const env = setupTestEnvironment("auto-prog-verify");
+    cleanup = env.cleanup;
+    testDir = env.testDir;
+  });
+
+  afterEach(() => cleanup());
+
+  function makeExecuteCtx(waveNumber: number): PluginContext {
+    return createMockPluginContext({
+      testDir,
+      state: {
+        workflows: {
+          default: createDefaultWorkflowState({
+            phase: "execute",
+            currentWave: waveNumber,
+            totalWaves: waveNumber,
+            specLocked: true,
+          }),
+        },
+      },
+    });
+  }
+
+  it("does not progress when the final wave has zero verification rows despite complete tasks", async () => {
+    const ctx = makeExecuteCtx(3);
+    seedFinalWave(ctx, 3, "completed", ["done", "completed"]); // no verificationStatus
+
+    const hooks = createAutoProgressionHook(ctx);
+    const handler = hooks["tool.execute.after"] as NonNullable<Hooks["tool.execute.after"]>;
+    const output = makeOutput();
+    await handler(makeInput(), output);
+
+    expect(ctx.stateManager.getActiveWorkflow().phase).toBe("execute");
+    expect(output.output).toContain("Blocked: execute → accept");
+    expect(output.output).toContain("goop-wave-verifier");
+  });
+
+  it("does not progress when the final wave's only verification row is failed", async () => {
+    const ctx = makeExecuteCtx(3);
+    seedFinalWave(ctx, 3, "completed", ["done", "completed"], "failed");
+
+    const hooks = createAutoProgressionHook(ctx);
+    const handler = hooks["tool.execute.after"] as NonNullable<Hooks["tool.execute.after"]>;
+    const output = makeOutput();
+    await handler(makeInput(), output);
+
+    expect(ctx.stateManager.getActiveWorkflow().phase).toBe("execute");
+    expect(output.output).toContain("goop-wave-verifier");
+  });
+
+  it("does not progress when the final wave has mixed passing and failing verification rows", async () => {
+    const ctx = makeExecuteCtx(3);
+    seedFinalWave(ctx, 3, "completed", ["done", "completed"]);
+    const workflowId = ctx.stateManager.getActiveWorkflowId();
+    const wave = ctx.db.getWave(workflowId, 3);
+    if (!wave) throw new Error("wave not seeded");
+    ctx.db.insertVerification(workflowId, {
+      wave_id: wave.id,
+      check_name: "typecheck",
+      status: "passed",
+    });
+    ctx.db.insertVerification(workflowId, {
+      wave_id: wave.id,
+      check_name: "test",
+      status: "failed",
+    });
+
+    const hooks = createAutoProgressionHook(ctx);
+    const handler = hooks["tool.execute.after"] as NonNullable<Hooks["tool.execute.after"]>;
+    const output = makeOutput();
+    await handler(makeInput(), output);
+
+    expect(ctx.stateManager.getActiveWorkflow().phase).toBe("execute");
+  });
+
+  it("progresses when the final wave has an explicit skip verification row (no pass required)", async () => {
+    const ctx = makeExecuteCtx(3);
+    seedFinalWave(ctx, 3, "completed", ["done", "completed"], "skipped");
+
+    const hooks = createAutoProgressionHook(ctx);
+    const handler = hooks["tool.execute.after"] as NonNullable<Hooks["tool.execute.after"]>;
+    const output = makeOutput();
+    await handler(makeInput(), output);
+
+    expect(ctx.stateManager.getActiveWorkflow().phase).toBe("accept");
+  });
+
+  it("progresses when the final wave has a passing verification row", async () => {
+    const ctx = makeExecuteCtx(3);
+    seedFinalWave(ctx, 3, "completed", ["done", "completed"], "passed");
+
+    const hooks = createAutoProgressionHook(ctx);
+    const handler = hooks["tool.execute.after"] as NonNullable<Hooks["tool.execute.after"]>;
+    const output = makeOutput();
+    await handler(makeInput(), output);
+
+    expect(ctx.stateManager.getActiveWorkflow().phase).toBe("accept");
+  });
+
+  it("a later passing row for the SAME check supersedes its own prior fail — progression proceeds (append-only rows)", async () => {
+    const ctx = makeExecuteCtx(3);
+    seedFinalWave(ctx, 3, "completed", ["done", "completed"], "failed");
+    const workflowId = ctx.stateManager.getActiveWorkflowId();
+    const wave = ctx.db.getWave(workflowId, 3);
+    if (!wave) throw new Error("wave not seeded");
+    // Verifications are append-only (no upsert) — the earlier fail row is
+    // never deleted. A later pass row for the SAME check_name ("test")
+    // supersedes it as the effective status for that check.
+    ctx.db.insertVerification(workflowId, {
+      wave_id: wave.id,
+      check_name: "test",
+      status: "passed",
+    });
+
+    const hooks = createAutoProgressionHook(ctx);
+    const handler = hooks["tool.execute.after"] as NonNullable<Hooks["tool.execute.after"]>;
+    const output = makeOutput();
+    await handler(makeInput(), output);
+
+    expect(ctx.stateManager.getActiveWorkflow().phase).toBe("accept");
+    // Both rows persist — nothing was deleted or mutated.
+    expect(ctx.db.getVerifications(workflowId, wave.id)).toHaveLength(2);
+  });
+
+  it("a later passing row for a DIFFERENT check does not erase another check's unresolved fail — the wave stays blocked", async () => {
+    const ctx = makeExecuteCtx(3);
+    seedFinalWave(ctx, 3, "completed", ["done", "completed"], "failed");
+    const workflowId = ctx.stateManager.getActiveWorkflowId();
+    const wave = ctx.db.getWave(workflowId, 3);
+    if (!wave) throw new Error("wave not seeded");
+    // "test" is still failed at its latest row; "typecheck" passing does not
+    // resolve a different check's unresolved fail.
+    ctx.db.insertVerification(workflowId, {
+      wave_id: wave.id,
+      check_name: "typecheck",
+      status: "passed",
+    });
+
+    const hooks = createAutoProgressionHook(ctx);
+    const handler = hooks["tool.execute.after"] as NonNullable<Hooks["tool.execute.after"]>;
+    const output = makeOutput();
+    await handler(makeInput(), output);
+
+    expect(ctx.stateManager.getActiveWorkflow().phase).toBe("execute");
+  });
+});
+
+// -----------------------------------------------------------------------
+// 9. Caller-driven integration: goop_state update-wave → auto-progression
 //
 // These tests exercise the REAL caller path — goop_state tool → DB-backed
 // StateManager → GoopSpecDB — rather than seeding cached state directly.
@@ -407,7 +577,7 @@ describe("caller-driven integration (goop_state update-wave → auto-progression
 
   it("transitions to accept when the final wave and all tasks are complete via the caller path", async () => {
     const ctx = await driveToExecute(5, 5);
-    seedFinalWave(ctx, 5, "completed", ["done", "completed"]);
+    seedFinalWave(ctx, 5, "completed", ["done", "completed"], "passed");
 
     const hooks = createAutoProgressionHook(ctx);
     const handler = hooks["tool.execute.after"] as NonNullable<Hooks["tool.execute.after"]>;
@@ -420,7 +590,7 @@ describe("caller-driven integration (goop_state update-wave → auto-progression
 
   it("appends ADL with concrete final-wave evidence (not a counter comparison) on caller-driven progression", async () => {
     const ctx = await driveToExecute(5, 5);
-    seedFinalWave(ctx, 5, "completed", ["done", "completed"]);
+    seedFinalWave(ctx, 5, "completed", ["done", "completed"], "passed");
 
     const hooks = createAutoProgressionHook(ctx);
     const handler = hooks["tool.execute.after"] as NonNullable<Hooks["tool.execute.after"]>;

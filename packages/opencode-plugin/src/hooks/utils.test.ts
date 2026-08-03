@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, spyOn } from "bun:test";
 import {
+  IntentionalToolDenialError,
   chainHandlers,
   isGoopspecFile,
   isImplementationFile,
@@ -94,6 +95,31 @@ describe("safeHandler", () => {
     );
     consoleSpy.mockRestore();
   });
+
+  it("rethrows IntentionalToolDenialError instead of swallowing it", async () => {
+    const consoleSpy = spyOn(console, "error").mockImplementation(() => {});
+    const handler = async (_input: { event: unknown }) => {
+      throw new IntentionalToolDenialError("denied for test");
+    };
+    const safe = safeHandler("event", handler);
+
+    await expect(safe({ event: { type: "test" } })).rejects.toThrow(IntentionalToolDenialError);
+    await expect(safe({ event: { type: "test" } })).rejects.toThrow("denied for test");
+    expect(consoleSpy).not.toHaveBeenCalled();
+    consoleSpy.mockRestore();
+  });
+
+  it("still swallows a plain Error with the same message text as a denial", async () => {
+    const consoleSpy = spyOn(console, "error").mockImplementation(() => {});
+    const handler = async (_input: { event: unknown }) => {
+      throw new Error("denied for test");
+    };
+    const safe = safeHandler("event", handler);
+
+    await expect(safe({ event: { type: "test" } })).resolves.toBeUndefined();
+    expect(consoleSpy).toHaveBeenCalledTimes(1);
+    consoleSpy.mockRestore();
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -167,6 +193,36 @@ describe("chainHandlers", () => {
     await chained({ model: {} }, output);
 
     expect(output.system).toEqual(["injected-by-h1", "h2-saw-h1"]);
+  });
+
+  it("propagates an IntentionalToolDenialError and stops the chain before later handlers run", async () => {
+    const order: number[] = [];
+
+    const h1 = async (_input: { event: unknown }) => {
+      order.push(1);
+    };
+    const h2 = async (_input: { event: unknown }) => {
+      order.push(2);
+      throw new IntentionalToolDenialError("stage denial");
+    };
+    const h3 = async (_input: { event: unknown }) => {
+      order.push(3);
+    };
+
+    const chained = chainHandlers("tool.execute.before", [h1, h2, h3]);
+
+    await expect(chained({ event: { type: "test" } })).rejects.toThrow(IntentionalToolDenialError);
+    expect(order).toEqual([1, 2]);
+  });
+
+  it("propagates an IntentionalToolDenialError through the single-handler path", async () => {
+    const h1 = async (_input: { event: unknown }) => {
+      throw new IntentionalToolDenialError("stage denial");
+    };
+
+    const chained = chainHandlers("tool.execute.before", [h1]);
+
+    await expect(chained({ event: { type: "test" } })).rejects.toThrow(IntentionalToolDenialError);
   });
 });
 

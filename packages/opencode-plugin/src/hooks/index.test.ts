@@ -1,7 +1,18 @@
 import { describe, expect, it, spyOn } from "bun:test";
-import { createMockPluginContext, setupTestEnvironment } from "../test-utils.js";
+import type { GoopState, WorkflowPhase } from "../core/types.js";
+import {
+  createDefaultWorkflowState,
+  createMockPluginContext,
+  setupTestEnvironment,
+} from "../test-utils.js";
 import { DEFAULT_HOOK_FACTORIES, createHooks, mergeHooks, registerHookFactory } from "./index.js";
 import type { HookFactory, Hooks } from "./types.js";
+import { IntentionalToolDenialError } from "./utils.js";
+
+/** Builds a `Partial<GoopState>` override that puts the default workflow at `phase`. */
+function stateAtPhase(phase: WorkflowPhase): Partial<GoopState> {
+  return { workflows: { default: createDefaultWorkflowState({ phase }) } };
+}
 
 // ---------------------------------------------------------------------------
 // mergeHooks
@@ -129,6 +140,63 @@ describe("mergeHooks", () => {
     await result.event?.({ event: { type: "test" } as never });
 
     expect(order).toEqual([1, 2]);
+    consoleSpy.mockRestore();
+  });
+
+  it("propagates an IntentionalToolDenialError through merged tool.execute.before handlers and stops later ones", async () => {
+    const order: string[] = [];
+
+    const p1: Partial<Hooks> = {
+      "tool.execute.before": async () => {
+        order.push("p1-lifecycle");
+      },
+    };
+    const p2: Partial<Hooks> = {
+      "tool.execute.before": async () => {
+        order.push("p2-guard");
+        throw new IntentionalToolDenialError("goop-verifier is acceptance-only");
+      },
+    };
+    const p3: Partial<Hooks> = {
+      "tool.execute.before": async () => {
+        order.push("p3-never-runs");
+      },
+    };
+
+    const result = mergeHooks([p1, p2, p3]);
+
+    await expect(
+      result["tool.execute.before"]?.(
+        { tool: "task", sessionID: "s1", callID: "c1" },
+        { args: { subagent_type: "goop-verifier" } },
+      ),
+    ).rejects.toThrow("goop-verifier is acceptance-only");
+    expect(order).toEqual(["p1-lifecycle", "p2-guard"]);
+  });
+
+  it("still swallows an ordinary error thrown from a tool.execute.before handler in a merged chain", async () => {
+    const consoleSpy = spyOn(console, "error").mockImplementation(() => {});
+    const order: string[] = [];
+
+    const p1: Partial<Hooks> = {
+      "tool.execute.before": async () => {
+        order.push("p1");
+        throw new Error("unexpected bug");
+      },
+    };
+    const p2: Partial<Hooks> = {
+      "tool.execute.before": async () => {
+        order.push("p2");
+      },
+    };
+
+    const result = mergeHooks([p1, p2]);
+    await result["tool.execute.before"]?.(
+      { tool: "read", sessionID: "s1", callID: "c1" },
+      { args: {} },
+    );
+
+    expect(order).toEqual(["p1", "p2"]);
     consoleSpy.mockRestore();
   });
 });
@@ -290,6 +358,71 @@ describe("DEFAULT_HOOK_FACTORIES — AD7 boundary", () => {
         // registers the autocontinue hook — revisit AD7 before doing so.
         expect(partial["experimental.compaction.autocontinue"]).toBeUndefined();
       }
+    } finally {
+      cleanup();
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// DEFAULT_HOOK_FACTORIES — verifier stage-dispatch guard reaches the host
+// through the full production pipeline (createHooks -> mergeHooks -> chain),
+// alongside the other two already-registered tool.execute.before hooks.
+// ---------------------------------------------------------------------------
+
+describe("DEFAULT_HOOK_FACTORIES — verifier stage-dispatch guard end to end", () => {
+  it("blocks a goop-verifier task delegation outside accept via the real production wiring", async () => {
+    const { testDir, cleanup } = setupTestEnvironment("verifier-guard-e2e-deny");
+    try {
+      const ctx = createMockPluginContext({ testDir, state: stateAtPhase("plan") });
+      const hooks = createHooks(ctx, [...DEFAULT_HOOK_FACTORIES]);
+
+      await expect(
+        hooks["tool.execute.before"]?.(
+          { tool: "task", sessionID: "s1", callID: "c1" },
+          { args: { description: "verify", prompt: "check it", subagent_type: "goop-verifier" } },
+        ),
+      ).rejects.toThrow(IntentionalToolDenialError);
+    } finally {
+      cleanup();
+    }
+  });
+
+  it("permits a goop-verifier task delegation during accept via the real production wiring", async () => {
+    const { testDir, cleanup } = setupTestEnvironment("verifier-guard-e2e-allow");
+    try {
+      const ctx = createMockPluginContext({ testDir, state: stateAtPhase("accept") });
+      const hooks = createHooks(ctx, [...DEFAULT_HOOK_FACTORIES]);
+
+      await expect(
+        hooks["tool.execute.before"]?.(
+          { tool: "task", sessionID: "s1", callID: "c1" },
+          { args: { description: "verify", prompt: "check it", subagent_type: "goop-verifier" } },
+        ),
+      ).resolves.toBeUndefined();
+    } finally {
+      cleanup();
+    }
+  });
+
+  it("leaves an unrelated task delegation untouched by the guard", async () => {
+    const { testDir, cleanup } = setupTestEnvironment("verifier-guard-e2e-unrelated");
+    try {
+      const ctx = createMockPluginContext({ testDir, state: stateAtPhase("plan") });
+      const hooks = createHooks(ctx, [...DEFAULT_HOOK_FACTORIES]);
+
+      await expect(
+        hooks["tool.execute.before"]?.(
+          { tool: "task", sessionID: "s1", callID: "c1" },
+          {
+            args: {
+              description: "implement",
+              prompt: "build it",
+              subagent_type: "goop-executor-high",
+            },
+          },
+        ),
+      ).resolves.toBeUndefined();
     } finally {
       cleanup();
     }

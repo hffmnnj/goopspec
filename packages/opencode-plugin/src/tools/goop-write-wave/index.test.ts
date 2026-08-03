@@ -235,7 +235,12 @@ describe("goop_write_wave batch mode", () => {
   it("appends compact reminder when single wave is written with terminal status", async () => {
     const tool = createGoopWriteWaveTool(ctx);
     const result = await tool.execute(
-      { wave_number: 1, title: "Done wave", status: "done" },
+      {
+        wave_number: 1,
+        title: "Done wave",
+        status: "done",
+        verifications: [{ check_name: "test", status: "pass" }],
+      },
       toolCtx,
     );
     expect(result).toContain("Written wave 1");
@@ -290,7 +295,12 @@ describe("goop_write_wave batch mode", () => {
         wave_number: 1,
         items: [
           { wave_number: 1, title: "Pending batch wave", status: "pending" },
-          { wave_number: 2, title: "Completed batch wave", status: "completed" },
+          {
+            wave_number: 2,
+            title: "Completed batch wave",
+            status: "completed",
+            verifications: [{ check_name: "test", status: "pass" }],
+          },
         ],
       },
       toolCtx,
@@ -920,7 +930,17 @@ describe("goop_write_wave multi-item batch targeting and rollback", () => {
     const tool = createGoopWriteWaveTool(ctx);
     // Pre-seed wave 2 as terminal so item 2's "pending" status regresses and
     // throws — a genuine invalid input, not a mock.
-    await tool.execute({ wave_number: 2, title: "Pre-seeded done wave", status: "done" }, toolCtx);
+    await tool.execute(
+      {
+        wave_number: 2,
+        title: "Pre-seeded done wave",
+        status: "done",
+        verifications: [{ check_name: "test", status: "pass" }],
+      },
+      toolCtx,
+    );
+    const wave2Before = ctx.db.getWave("default", 2);
+    const wave2Id = wave2Before?.id ?? -1;
 
     const result = await tool.execute(
       {
@@ -957,8 +977,11 @@ describe("goop_write_wave multi-item batch targeting and rollback", () => {
     expect(wave2).not.toBeNull();
     expect(wave2?.status).toBe("done");
 
-    // No verifications or traceability rows from the batch may survive.
-    expect(ctx.db.getVerifications("default")).toHaveLength(0);
+    // No verification/traceability rows from the batch may survive — only the
+    // pre-seed's own verification (written outside the batch) remains.
+    const verifications = ctx.db.getVerifications("default");
+    expect(verifications).toHaveLength(1);
+    expect(verifications[0].wave_id).toBe(wave2Id);
     expect(ctx.db.getTraceability("default")).toHaveLength(0);
   });
 
@@ -966,11 +989,21 @@ describe("goop_write_wave multi-item batch targeting and rollback", () => {
     const tool = createGoopWriteWaveTool(ctx);
     // Pre-seed wave 2 as terminal so item 2's "pending" status regresses and
     // throws.
-    await tool.execute({ wave_number: 2, title: "Pre-seeded done wave", status: "done" }, toolCtx);
+    await tool.execute(
+      {
+        wave_number: 2,
+        title: "Pre-seeded done wave",
+        status: "done",
+        verifications: [{ check_name: "test", status: "pass" }],
+      },
+      toolCtx,
+    );
 
-    // Before the batch, only the pre-seed's wave_write event exists.
+    // Before the batch, only the pre-seed's wave_write and verification_record
+    // events exist (the pre-seed now carries a verification row to satisfy
+    // the wave-completion gate).
     const eventsBefore = ctx.db.getEvents("default");
-    expect(eventsBefore).toHaveLength(1);
+    expect(eventsBefore).toHaveLength(2);
 
     await tool.execute(
       {
@@ -998,8 +1031,10 @@ describe("goop_write_wave multi-item batch targeting and rollback", () => {
     const eventsAfter = ctx.db.getEvents("default");
     expect(eventsAfter).toHaveLength(eventsBefore.length);
 
-    // No verification_record or traceability_write events may survive.
-    expect(ctx.db.getEvents("default", "verification_record")).toHaveLength(0);
+    // No verification_record or traceability_write events from the BATCH may
+    // survive — the pre-seed's own verification_record (written before the
+    // batch, outside its transaction) is the only one that persists.
+    expect(ctx.db.getEvents("default", "verification_record")).toHaveLength(1);
     expect(ctx.db.getEvents("default", "traceability_write")).toHaveLength(0);
 
     // Only the pre-seed's wave_write event remains — the batch's wave_write
@@ -1074,7 +1109,15 @@ describe("goop_write_wave status validation", () => {
 
   it("normalises complete to completed for top-level status", async () => {
     const tool = createGoopWriteWaveTool(ctx);
-    await tool.execute({ wave_number: 1, title: "W1", status: "complete" }, toolCtx);
+    await tool.execute(
+      {
+        wave_number: 1,
+        title: "W1",
+        status: "complete",
+        verifications: [{ check_name: "test", status: "pass" }],
+      },
+      toolCtx,
+    );
     expect(ctx.db.getWave("default", 1)?.status).toBe("completed");
   });
 
@@ -1098,7 +1141,14 @@ describe("goop_write_wave status validation", () => {
     await tool.execute(
       {
         wave_number: 1,
-        items: [{ wave_number: 1, title: "W1", status: "complete" }],
+        items: [
+          {
+            wave_number: 1,
+            title: "W1",
+            status: "complete",
+            verifications: [{ check_name: "test", status: "pass" }],
+          },
+        ],
       },
       toolCtx,
     );
@@ -1404,6 +1454,37 @@ describe("goop_write_wave write integrity", () => {
     expect(ctx.db.getWave("default", 2)?.status).toBe("pending");
   });
 
+  // W4.T3 audit: goop_write_wave is the reference implementation and was
+  // audited for the same silent-precedence pattern found in the sibling
+  // write tools. task_update (singular) and task_updates[] (bulk) are the
+  // one place a caller could plausibly send both by mistake; the tool
+  // already guards this via the same ignoredFields mechanism proven above,
+  // it was simply untested for this exact pair. No production change was
+  // needed — this test closes the coverage gap.
+  it("rejects task_update alongside task_updates[], with zero mutation", async () => {
+    const writeTool = createGoopWriteWaveTool(ctx);
+    await writeTool.execute(
+      {
+        wave_number: 3,
+        title: "Both-modes wave",
+        tasks: [{ task_index: 1, description: "Task" }],
+      },
+      toolCtx,
+    );
+
+    const result = await writeTool.execute(
+      {
+        wave_number: 3,
+        task_update: { task_index: 1, status: "in_progress" },
+        task_updates: [{ task_index: 1, status: "done" }],
+      },
+      toolCtx,
+    );
+
+    expect(result).toContain("task_update cannot be supplied alongside task_updates batch mode");
+    expect(ctx.db.getWaveTasks(ctx.db.getWave("default", 3)?.id ?? -1)[0].status).toBe("pending");
+  });
+
   it("rejects terminal status regressions unless explicitly overridden", async () => {
     const writeTool = createGoopWriteWaveTool(ctx);
     await writeTool.execute(
@@ -1412,6 +1493,7 @@ describe("goop_write_wave write integrity", () => {
         title: "Completed wave",
         status: "done",
         tasks: [{ task_index: 1, description: "Completed task", status: "completed" }],
+        verifications: [{ check_name: "test", status: "pass" }],
       },
       toolCtx,
     );
@@ -1434,7 +1516,15 @@ describe("goop_write_wave write integrity", () => {
 
   it("protects legacy 'complete' status from regression to pending", async () => {
     const writeTool = createGoopWriteWaveTool(ctx);
-    await writeTool.execute({ wave_number: 1, title: "Legacy wave", status: "done" }, toolCtx);
+    await writeTool.execute(
+      {
+        wave_number: 1,
+        title: "Legacy wave",
+        status: "done",
+        verifications: [{ check_name: "test", status: "pass" }],
+      },
+      toolCtx,
+    );
 
     // Simulate a legacy 'complete' status in the DB (pre-normalisation data
     // that would have been written before the status normalisation boundary).
@@ -1761,7 +1851,12 @@ describe("goop_write_wave durability, idempotence, and preservation", () => {
   it("idempotence: writing the same terminal status twice is a no-op the second time", async () => {
     const writeTool = createGoopWriteWaveTool(ctx);
     const first = await writeTool.execute(
-      { wave_number: 1, title: "Idempotent wave", status: "complete" },
+      {
+        wave_number: 1,
+        title: "Idempotent wave",
+        status: "complete",
+        verifications: [{ check_name: "test", status: "pass" }],
+      },
       toolCtx,
     );
     expect(first).toContain("Written wave 1");
@@ -1776,7 +1871,15 @@ describe("goop_write_wave durability, idempotence, and preservation", () => {
 
   it("preservation: a later write omitting status leaves an existing terminal status intact", async () => {
     const writeTool = createGoopWriteWaveTool(ctx);
-    await writeTool.execute({ wave_number: 1, title: "Original", status: "complete" }, toolCtx);
+    await writeTool.execute(
+      {
+        wave_number: 1,
+        title: "Original",
+        status: "complete",
+        verifications: [{ check_name: "test", status: "pass" }],
+      },
+      toolCtx,
+    );
 
     await writeTool.execute({ wave_number: 1, title: "Updated title" }, toolCtx);
 
@@ -1921,5 +2024,488 @@ describe("goop_write_wave conditional wave_number", () => {
     const events = ctx.db.getEvents("default", "traceability_write");
     expect(events).toHaveLength(1);
     expect(JSON.parse(events[0].payload).wave_number).toBe(1);
+  });
+});
+
+describe("goop_write_wave wave-completion verification gate", () => {
+  let ctx: PluginContext;
+  let toolCtx: ToolContext;
+  let cleanup: () => void;
+
+  beforeEach(() => {
+    const env = setupTestEnvironment("goop-write-wave-verify-gate");
+    cleanup = env.cleanup;
+    ctx = createMockPluginContext({ testDir: env.testDir, db: env.db });
+    toolCtx = createMockToolContext();
+  });
+
+  afterEach(() => cleanup());
+
+  it("blocks single-wave completion when the wave has zero verification rows", async () => {
+    const tool = createGoopWriteWaveTool(ctx);
+    const result = await tool.execute(
+      { wave_number: 1, title: "Unverified wave", status: "done" },
+      toolCtx,
+    );
+
+    expect(result).toContain("Error in goop_write_wave");
+    expect(result).toContain("cannot be marked complete");
+    expect(result).toContain("goop-wave-verifier");
+    // The whole call rolled back — the wave was never created.
+    expect(ctx.db.getWave("default", 1)).toBeNull();
+  });
+
+  it("blocks single-wave completion when the wave's only verification row is failed", async () => {
+    const tool = createGoopWriteWaveTool(ctx);
+    // Record a fail as a prior, non-completing call so the wave exists with a
+    // failing row before the completion attempt.
+    await tool.execute(
+      {
+        wave_number: 1,
+        title: "Failing wave",
+        status: "in_progress",
+        verifications: [{ check_name: "test", status: "fail" }],
+      },
+      toolCtx,
+    );
+
+    const result = await tool.execute({ wave_number: 1, status: "done" }, toolCtx);
+
+    expect(result).toContain("Error in goop_write_wave");
+    expect(result).toContain("goop-wave-verifier");
+    expect(ctx.db.getWave("default", 1)?.status).toBe("in_progress");
+  });
+
+  it("blocks single-wave completion on mixed pass/fail rows", async () => {
+    const tool = createGoopWriteWaveTool(ctx);
+    await tool.execute(
+      {
+        wave_number: 1,
+        title: "Mixed wave",
+        status: "in_progress",
+        verifications: [
+          { check_name: "typecheck", status: "pass" },
+          { check_name: "test", status: "fail" },
+        ],
+      },
+      toolCtx,
+    );
+
+    const result = await tool.execute({ wave_number: 1, status: "completed" }, toolCtx);
+
+    expect(result).toContain("Error in goop_write_wave");
+    expect(ctx.db.getWave("default", 1)?.status).toBe("in_progress");
+  });
+
+  it("unblocks single-wave completion with a pass-only row", async () => {
+    const tool = createGoopWriteWaveTool(ctx);
+    const result = await tool.execute(
+      {
+        wave_number: 1,
+        title: "Pass wave",
+        status: "done",
+        verifications: [{ check_name: "test", status: "pass" }],
+      },
+      toolCtx,
+    );
+
+    expect(result).toContain("Written wave 1");
+    expect(ctx.db.getWave("default", 1)?.status).toBe("done");
+  });
+
+  it("unblocks single-wave completion with an explicit skip-only row (auditable escape)", async () => {
+    const tool = createGoopWriteWaveTool(ctx);
+    const result = await tool.execute(
+      {
+        wave_number: 1,
+        title: "Skip wave",
+        status: "done",
+        verifications: [{ check_name: "custom", status: "skip" }],
+      },
+      toolCtx,
+    );
+
+    expect(result).toContain("Written wave 1");
+    expect(ctx.db.getWave("default", 1)?.status).toBe("done");
+  });
+
+  it("rejects a failing verification supplied in the same call as completion, rolling back the row too", async () => {
+    const tool = createGoopWriteWaveTool(ctx);
+    const result = await tool.execute(
+      {
+        wave_number: 1,
+        title: "Same-call fail",
+        status: "done",
+        verifications: [{ check_name: "test", status: "fail" }],
+      },
+      toolCtx,
+    );
+
+    expect(result).toContain("Error in goop_write_wave");
+    expect(result).toContain("goop-wave-verifier");
+    // No partial writes: neither the wave nor the failing verification row survive.
+    expect(ctx.db.getWave("default", 1)).toBeNull();
+    expect(ctx.db.getVerifications("default")).toHaveLength(0);
+  });
+
+  it("persists the DB's canonical vocabulary, not the tool's pass|fail|skip input", async () => {
+    const tool = createGoopWriteWaveTool(ctx);
+    await tool.execute(
+      {
+        wave_number: 1,
+        title: "Canonical status wave",
+        status: "done",
+        verifications: [{ check_name: "test", status: "pass" }],
+      },
+      toolCtx,
+    );
+
+    const wave = ctx.db.getWave("default", 1);
+    const rows = ctx.db.getVerifications("default", wave?.id ?? -1);
+    expect(rows).toHaveLength(1);
+    // Stored value must be the DB's "passed", never the tool's raw "pass".
+    expect(rows[0].status).toBe("passed");
+  });
+
+  it("persists 'failed' and 'skipped' as canonical DB statuses too", async () => {
+    const tool = createGoopWriteWaveTool(ctx);
+    await tool.execute(
+      {
+        wave_number: 1,
+        title: "Mixed canonical wave",
+        status: "in_progress",
+        verifications: [
+          { check_name: "typecheck", status: "fail" },
+          { check_name: "custom", status: "skip" },
+        ],
+      },
+      toolCtx,
+    );
+
+    const wave = ctx.db.getWave("default", 1);
+    const rows = ctx.db.getVerifications("default", wave?.id ?? -1);
+    expect(rows.map((r) => r.status).sort()).toEqual(["failed", "skipped"]);
+  });
+
+  it("blocks items[] batch completion when the item's wave has zero verification rows", async () => {
+    const tool = createGoopWriteWaveTool(ctx);
+    const result = await tool.execute(
+      {
+        wave_number: 1,
+        items: [{ wave_number: 1, title: "Unverified batch wave", status: "completed" }],
+      },
+      toolCtx,
+    );
+
+    expect(result).toContain("0/1 succeeded");
+    expect(result).toContain("goop-wave-verifier");
+    expect(ctx.db.getWave("default", 1)).toBeNull();
+  });
+
+  it("unblocks items[] batch completion with a same-call pass row", async () => {
+    const tool = createGoopWriteWaveTool(ctx);
+    const result = await tool.execute(
+      {
+        wave_number: 1,
+        items: [
+          {
+            wave_number: 1,
+            title: "Verified batch wave",
+            status: "completed",
+            verifications: [{ check_name: "test", status: "pass" }],
+          },
+        ],
+      },
+      toolCtx,
+    );
+
+    expect(result).toContain("1/1 succeeded");
+    expect(ctx.db.getWave("default", 1)?.status).toBe("completed");
+  });
+
+  it("in a multi-item batch, one item's unverified completion rolls back the whole batch including a sibling's verified completion", async () => {
+    const tool = createGoopWriteWaveTool(ctx);
+    const result = await tool.execute(
+      {
+        wave_number: 1,
+        items: [
+          {
+            wave_number: 1,
+            title: "Verified wave",
+            status: "completed",
+            verifications: [{ check_name: "test", status: "pass" }],
+          },
+          {
+            wave_number: 2,
+            title: "Unverified wave",
+            status: "completed",
+          },
+        ],
+      },
+      toolCtx,
+    );
+
+    expect(result).toContain("0/2 succeeded");
+    // Atomic: neither wave survives even though item 1 was individually verified.
+    expect(ctx.db.getWave("default", 1)).toBeNull();
+    expect(ctx.db.getWave("default", 2)).toBeNull();
+  });
+
+  it("does not gate task-level completion or metadata-only writes", async () => {
+    const tool = createGoopWriteWaveTool(ctx);
+    // A wave stays non-terminal; only its task is marked done. No verification
+    // row exists anywhere, and this must still succeed — the gate only
+    // applies to the wave's own status transitioning to a complete value.
+    await tool.execute(
+      {
+        wave_number: 1,
+        title: "Task-only wave",
+        tasks: [{ task_index: 1, description: "Task", status: "pending" }],
+      },
+      toolCtx,
+    );
+
+    const result = await tool.execute(
+      { wave_number: 1, task_update: { task_index: 1, status: "done" } },
+      toolCtx,
+    );
+
+    expect(result).toContain("Updated task 1");
+    expect(ctx.db.getWave("default", 1)?.status).not.toBe("done");
+  });
+
+  it("a later passing row for the SAME check supersedes an earlier failing row for that check — completion unblocks (append-only)", async () => {
+    const tool = createGoopWriteWaveTool(ctx);
+    await tool.execute(
+      {
+        wave_number: 1,
+        title: "Append-only wave",
+        status: "in_progress",
+        verifications: [{ check_name: "test", status: "fail" }],
+      },
+      toolCtx,
+    );
+    await tool.execute(
+      {
+        wave_number: 1,
+        verifications: [{ check_name: "test", status: "pass" }],
+      },
+      toolCtx,
+    );
+
+    // Both rows still exist for the wave — the later pass does not delete
+    // the earlier fail — but the effective status for "test" is now its
+    // latest row (pass), so completion succeeds.
+    const result = await tool.execute({ wave_number: 1, status: "done" }, toolCtx);
+    expect(result).toContain("Written wave 1");
+    expect(ctx.db.getWave("default", 1)?.status).toBe("done");
+
+    const wave = ctx.db.getWave("default", 1);
+    const rows = ctx.db.getVerifications("default", wave?.id ?? -1);
+    expect(rows).toHaveLength(2);
+    expect(rows.map((r) => r.status).sort()).toEqual(["failed", "passed"]);
+  });
+
+  it("a later passing row for a DIFFERENT check does not supersede another check's unresolved fail — completion stays blocked", async () => {
+    const tool = createGoopWriteWaveTool(ctx);
+    await tool.execute(
+      {
+        wave_number: 1,
+        title: "Different-check wave",
+        status: "in_progress",
+        verifications: [{ check_name: "test", status: "fail" }],
+      },
+      toolCtx,
+    );
+    await tool.execute(
+      {
+        wave_number: 1,
+        verifications: [{ check_name: "typecheck", status: "pass" }],
+      },
+      toolCtx,
+    );
+
+    const result = await tool.execute({ wave_number: 1, status: "done" }, toolCtx);
+    expect(result).toContain("Error in goop_write_wave");
+    expect(result).toContain("goop-wave-verifier");
+    expect(ctx.db.getWave("default", 1)?.status).toBe("in_progress");
+  });
+
+  it("a later skip row for the SAME check supersedes an earlier failing row for that check — completion unblocks", async () => {
+    const tool = createGoopWriteWaveTool(ctx);
+    await tool.execute(
+      {
+        wave_number: 1,
+        title: "Skip-remediation wave",
+        status: "in_progress",
+        verifications: [{ check_name: "test", status: "fail" }],
+      },
+      toolCtx,
+    );
+    await tool.execute(
+      {
+        wave_number: 1,
+        verifications: [{ check_name: "test", status: "skip" }],
+      },
+      toolCtx,
+    );
+
+    const result = await tool.execute({ wave_number: 1, status: "done" }, toolCtx);
+    expect(result).toContain("Written wave 1");
+    expect(ctx.db.getWave("default", 1)?.status).toBe("done");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Positive fixture inventory — valid call shapes (W4 Task 1)
+//
+// goop_write_wave is structurally distinct from the content-document tools:
+// it has no `content`, `mode`, `old_string`, `new_string`, or `replace_all`
+// fields. The generic inventory shapes map as follows:
+//   - "full-document write" → wave metadata write (wave_number + title/status/pr_branch/...)
+//   - "append mode" → N/A. No `mode` field; metadata is upserted with
+//     per-field overwrite-or-preserve semantics, never appended.
+//   - "patch mode (old_string/new_string)" → N/A. The tool exposes no patch
+//     fields; wave metadata has no substring-patch semantics.
+//   - "replace-all patch" → N/A (same reason — no patch fields).
+//   - "items[] batch" → applies.
+//   - "blank-document patch workaround" → N/A (no patch fields).
+//
+// The tool's OWN structurally-distinct valid shapes are inventoried below
+// the two generic ones: task_update, task_updates[], verifications[],
+// traceability[], and the traceability-only call without a top-level
+// wave_number.
+// ---------------------------------------------------------------------------
+
+describe("goop_write_wave positive fixture inventory — valid call shapes (W4.T1)", () => {
+  let ctx: PluginContext;
+  let toolCtx: ToolContext;
+  let cleanup: () => void;
+
+  beforeEach(() => {
+    const env = setupTestEnvironment("goop-write-wave-inventory");
+    cleanup = env.cleanup;
+    ctx = createMockPluginContext({ testDir: env.testDir, db: env.db });
+    toolCtx = createMockToolContext();
+  });
+
+  afterEach(() => cleanup());
+
+  it("SHAPE: wave metadata write (wave_number + title + inline tasks)", async () => {
+    const tool = createGoopWriteWaveTool(ctx);
+    const result = await tool.execute(
+      {
+        wave_number: 1,
+        title: "Inventory wave",
+        status: "in_progress",
+        tasks: [{ task_index: 1, description: "Inventory task", status: "pending" }],
+      },
+      toolCtx,
+    );
+    expect(result).toContain("Written wave 1");
+    expect(ctx.db.getWave("default", 1)?.title).toBe("Inventory wave");
+  });
+
+  it("SHAPE: items[] batch (multi-wave)", async () => {
+    const tool = createGoopWriteWaveTool(ctx);
+    const result = await tool.execute(
+      {
+        wave_number: 1,
+        items: [
+          { wave_number: 1, title: "Batch wave one" },
+          { wave_number: 2, title: "Batch wave two" },
+        ],
+      },
+      toolCtx,
+    );
+    expect(result).toContain("2/2 succeeded");
+    expect(ctx.db.getWave("default", 1)?.title).toBe("Batch wave one");
+    expect(ctx.db.getWave("default", 2)?.title).toBe("Batch wave two");
+  });
+
+  it("SHAPE (tool-specific): single task_update (wave_number + task_update)", async () => {
+    const tool = createGoopWriteWaveTool(ctx);
+    await tool.execute(
+      {
+        wave_number: 1,
+        title: "W",
+        tasks: [{ task_index: 1, description: "T1", status: "pending" }],
+      },
+      toolCtx,
+    );
+    const result = await tool.execute(
+      { wave_number: 1, task_update: { task_index: 1, status: "done" } },
+      toolCtx,
+    );
+    expect(result).toContain("Updated task 1");
+    const wave = ctx.db.getWave("default", 1);
+    expect(ctx.db.getWaveTasks(wave?.id ?? -1)[0].status).toBe("done");
+  });
+
+  it("SHAPE (tool-specific): bulk task_updates[] (wave_number + task_updates)", async () => {
+    const tool = createGoopWriteWaveTool(ctx);
+    await tool.execute(
+      {
+        wave_number: 1,
+        title: "W",
+        tasks: [
+          { task_index: 1, description: "T1", status: "pending" },
+          { task_index: 2, description: "T2", status: "pending" },
+        ],
+      },
+      toolCtx,
+    );
+    const result = await tool.execute(
+      {
+        wave_number: 1,
+        task_updates: [
+          { task_index: 1, status: "done" },
+          { task_index: 2, status: "done" },
+        ],
+      },
+      toolCtx,
+    );
+    expect(result).toContain("2/2 succeeded");
+  });
+
+  it("SHAPE (tool-specific): verifications[] side-payload alongside wave write", async () => {
+    const tool = createGoopWriteWaveTool(ctx);
+    const result = await tool.execute(
+      {
+        wave_number: 1,
+        title: "Verified wave",
+        verifications: [{ check_name: "test", status: "pass" }],
+      },
+      toolCtx,
+    );
+    expect(result).toContain("Verifications:");
+    expect(result).toContain("test=pass");
+  });
+
+  it("SHAPE (tool-specific): traceability[] side-payload alongside wave write", async () => {
+    const tool = createGoopWriteWaveTool(ctx);
+    const result = await tool.execute(
+      {
+        wave_number: 1,
+        title: "Traced wave",
+        traceability: [{ requirement_key: "MH1", status: "covered" }],
+      },
+      toolCtx,
+    );
+    expect(result).toContain("Traceability:");
+    expect(result).toContain("MH1");
+  });
+
+  it("SHAPE (tool-specific): traceability-only call without a top-level wave_number", async () => {
+    const tool = createGoopWriteWaveTool(ctx);
+    await tool.execute({ wave_number: 1, title: "Target wave" }, toolCtx);
+    const result = await tool.execute(
+      {
+        traceability: [{ requirement_key: "MH1", wave_number: 1, status: "covered" }],
+      },
+      toolCtx,
+    );
+    expect(result).toContain("Traceability:");
+    expect(ctx.db.getTraceability("default")).toHaveLength(1);
   });
 });

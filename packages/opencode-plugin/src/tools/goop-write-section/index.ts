@@ -15,6 +15,7 @@ import { DOC_TYPES } from "../../features/db/types.js";
 import type { DocType } from "../../features/db/types.js";
 import { patchContent } from "../../shared/content-patch.js";
 import { DOC_TYPE_FILENAMES, renderSidecars } from "../../shared/render-sidecars.js";
+import { resolveWriteMode } from "../../shared/write-mode.js";
 
 const MIGRATED_LEGACY_CONTENT_KEY = "_migrated-legacy-content";
 
@@ -51,11 +52,22 @@ export function createGoopWriteSectionTool(ctx: PluginContext): ToolDefinition {
   }
 
   function resolveSectionContent(workflowId: string, item: WriteSectionItem): string {
-    if (item.old_string !== undefined) {
+    const resolution = resolveWriteMode({
+      content: item.content,
+      old_string: item.old_string,
+      new_string: item.new_string,
+      replace_all: item.replace_all,
+    });
+
+    if (resolution.kind === "error") {
+      throw new Error(resolution.message);
+    }
+
+    if (resolution.kind === "patch") {
       const existing =
         ctx.db.getSection(workflowId, item.doc_type, item.section_key)?.content ?? "";
-      const patchResult = patchContent(existing, item.old_string as string, item.new_string ?? "", {
-        replaceAll: item.replace_all ?? false,
+      const patchResult = patchContent(existing, resolution.old_string, resolution.new_string, {
+        replaceAll: resolution.replace_all,
       });
       if (!patchResult.ok) {
         throw new Error(patchResult.error ?? "Patch failed");
@@ -64,11 +76,12 @@ export function createGoopWriteSectionTool(ctx: PluginContext): ToolDefinition {
       return patchResult.content as string;
     }
 
-    if (item.content === undefined) {
-      throw new Error("content is required when old_string is not provided");
+    if (resolution.kind === "full-write") {
+      return resolution.content;
     }
 
-    return item.content;
+    // "none" or "batch" (nested items[] is not a supported per-item shape).
+    throw new Error("content is required when old_string is not provided");
   }
 
   function writeSection(
@@ -174,6 +187,17 @@ export function createGoopWriteSectionTool(ctx: PluginContext): ToolDefinition {
         }
 
         if (Array.isArray(args.items) && args.items.length > 0) {
+          const topResolution = resolveWriteMode({
+            content: args.content,
+            old_string: args.old_string,
+            new_string: args.new_string,
+            replace_all: args.replace_all,
+            hasItems: true,
+          });
+          if (topResolution.kind === "error") {
+            return `Error in goop_write_section: ${topResolution.message}`;
+          }
+
           const checkedDocTypes = new Set<DocType>();
           const result = runBatch(ctx.db, args.items, (item) => {
             const shouldCheckForLegacyContent = !checkedDocTypes.has(item.doc_type);
@@ -195,11 +219,26 @@ export function createGoopWriteSectionTool(ctx: PluginContext): ToolDefinition {
           return "Error in goop_write_section: section_key is required for action 'write'";
         }
 
-        if (args.old_string !== undefined) {
+        const resolution = resolveWriteMode({
+          content: args.content,
+          old_string: args.old_string,
+          new_string: args.new_string,
+          replace_all: args.replace_all,
+        });
+
+        if (resolution.kind === "error") {
+          return `Error in goop_write_section: ${resolution.message}`;
+        }
+
+        if (resolution.kind === "none" || resolution.kind === "batch") {
+          return "Error in goop_write_section: content is required when old_string is not provided";
+        }
+
+        if (resolution.kind === "patch") {
           const existing =
             ctx.db.getSection(workflowId, args.doc_type, args.section_key)?.content ?? "";
-          const patchResult = patchContent(existing, args.old_string, args.new_string ?? "", {
-            replaceAll: args.replace_all ?? false,
+          const patchResult = patchContent(existing, resolution.old_string, resolution.new_string, {
+            replaceAll: resolution.replace_all,
           });
           if (!patchResult.ok) {
             return `Error in goop_write_section: ${patchResult.error}`;
@@ -221,14 +260,10 @@ export function createGoopWriteSectionTool(ctx: PluginContext): ToolDefinition {
           return `Patched section '${args.section_key}' for ${args.doc_type} in workflow '${workflowId}' (section: ${sectionContent.length} chars, assembled document: ${assembledContent.length} chars). Sidecar: .goopspec/${workflowId}/${filename}`;
         }
 
-        if (args.content === undefined) {
-          return "Error in goop_write_section: content is required when old_string is not provided";
-        }
-
         writeSection(workflowId, {
           doc_type: args.doc_type,
           section_key: args.section_key,
-          content: args.content,
+          content: resolution.content,
           position: args.position,
         });
 

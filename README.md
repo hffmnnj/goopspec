@@ -26,7 +26,7 @@ interview   you lock                you sign off
             the spec
 ```
 
-Underneath that loop sits a SQLite state engine, 14 specialised agents, 35 tools, a memory system that compounds across projects, and a set of runtime hooks that stop the orchestrator from writing code even when it wants to.
+Underneath that loop sits a SQLite state engine, 15 specialised agents, 35 tools, a memory system that compounds across projects, and a set of runtime hooks that stop the orchestrator from writing code even when it wants to.
 
 ---
 
@@ -180,7 +180,7 @@ Neither gate can be bypassed. Autopilot doesn't relax them. There is no config f
 
 ## Agents and Delegation
 
-One orchestrator, thirteen specialists. The orchestrator coordinates and never implements.
+One orchestrator, fourteen specialists. The orchestrator coordinates and never implements.
 
 | Agent | What it does | Default model |
 |-------|--------------|---------------|
@@ -194,7 +194,8 @@ One orchestrator, thirteen specialists. The orchestrator coordinates and never i
 | `goop-executor-frontend-low` | Markup, design tokens, copy, simple styling | `claude-sonnet-4-6` |
 | `goop-researcher` | Domain research, technology evaluation, synthesis | `claude-sonnet-4-6` |
 | `goop-explorer` | Codebase mapping, pattern detection, reconnaissance | `claude-sonnet-4-6` |
-| `goop-verifier` | Verification against the spec, security audit, trusts nothing | `claude-sonnet-4-6` |
+| `goop-wave-verifier` | Per-wave verification during execute; inspect-only, records verification rows | `claude-sonnet-4-6` |
+| `goop-verifier` | Acceptance-only verification against the spec, security audit, trusts nothing | `claude-sonnet-4-6` |
 | `goop-tester` | Test authoring, coverage, edge cases | `claude-sonnet-4-6` |
 | `goop-debugger` | Hypothesis-driven root cause analysis | `claude-sonnet-4-6` |
 | `goop-writer` | Documentation and technical writing | `claude-sonnet-4-6` |
@@ -525,7 +526,7 @@ Five levels: `none`, `low`, `medium`, `high`, `xhigh`. `none` is a real variant,
 }
 ```
 
-Defaults: `explorer` and `researcher` get `medium`, the other twelve roles get `high`.
+Defaults: `explorer` and `researcher` get `medium`, the other thirteen roles get `high`.
 
 Resolution walks the V2 catalog first (reading `model.variants[]` for the exact supported id plus the provider request body), falls back to the V1 provider catalog, and finally preserves the provider default. Providers differ (`reasoningEffort`, `reasoning.effort`, `thinking.budgetTokens`, `thinkingConfig`, `reasoningConfig`) and the resolver maps to whichever the target model actually accepts.
 
@@ -556,7 +557,7 @@ Set `GOOPSPEC_GLOBAL_CONFIG_PATH` to relocate the global file.
 | Key | Type | Default | Does |
 |-----|------|---------|------|
 | `projectName` | string | directory name | Name shown in workflow documents and status |
-| `defaultModel` | string | unset | Blanket model for all 14 roles, below per-role overrides |
+| `defaultModel` | string | unset | Blanket model for all 15 roles, below per-role overrides |
 | `enforcement` | `assist` / `warn` / `strict` | unset | How hard phase rules are applied |
 | `adlEnabled` | boolean | unset | Decision log tracking |
 | `memoryEnabled` | boolean | `true` | In-process memory |
@@ -663,7 +664,7 @@ Thirteen hook factories run the enforcement that prompts alone can't guarantee.
 
 | Hook | Binds to | Does |
 |------|----------|------|
-| Agent registration | `config`, `chat.params` | Injects 14 agents and 9 commands; applies model and thinking overrides |
+| Agent registration | `config`, `chat.params` | Injects 15 agents and 9 commands; applies model and thinking overrides |
 | System transform | `experimental.chat.system.transform` | Injects state, phase rules, document inventory, memory, and field notes |
 | Chat message | `chat.message` | Tracks activity, clears stale checkpoints, distils significant prompts to memory |
 | Comment checker | `tool.execute.*` | Flags excessive comment ratios and low-value comments on writes |
@@ -762,7 +763,7 @@ Current suite: **1956 tests, 5140 assertions, 109 files, roughly 13 seconds.**
 
 ```
 packages/opencode-plugin/
-├── agents/           # 14 agent definitions
+├── agents/           # 15 agent definitions
 ├── commands/         # 9 slash commands
 ├── references/       # 19 reference documents
 ├── templates/        # 12 document templates

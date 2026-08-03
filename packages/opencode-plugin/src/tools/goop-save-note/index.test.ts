@@ -541,6 +541,96 @@ describe("goop_save_note tool", () => {
   });
 
   // -----------------------------------------------------------------------
+  // Ambiguity rejection (W4.T3 — note-specific mirror of resolveWriteMode())
+  // -----------------------------------------------------------------------
+
+  describe("ambiguity rejection", () => {
+    it("rejects note_id + a meaningful create field together, with zero mutation", async () => {
+      const tool = createGoopSaveNoteTool(ctx);
+      const createResult = await tool.execute(
+        { title: "Original", body: "alpha beta", tags: ["p"], source_agent: "agent" },
+        toolCtx,
+      );
+      const noteId = String(createResult).match(/fn_\d{8}_[a-z0-9]+/)?.[0] ?? "";
+
+      const result = await tool.execute(
+        {
+          note_id: noteId,
+          title: "Should not apply",
+          old_string: "beta",
+          new_string: "BETA",
+        },
+        toolCtx,
+      );
+
+      expect(result).toContain("Error in goop_save_note");
+      expect(result).toContain("title");
+      expect(result).toContain("cannot be supplied alongside note_id");
+      expect(ctx.db.getNoteById(noteId)?.body).toBe("alpha beta");
+      expect(ctx.db.getNoteById(noteId)?.title).toBe("Original");
+    });
+
+    it("rejects old_string without note_id even when create fields are also present, with zero mutation", async () => {
+      const tool = createGoopSaveNoteTool(ctx);
+      const result = await tool.execute(
+        {
+          title: "Would-be note",
+          body: "Body",
+          tags: ["t"],
+          source_agent: "agent",
+          old_string: "x",
+          new_string: "y",
+        },
+        toolCtx,
+      );
+
+      expect(result).toContain("Error in goop_save_note");
+      expect(result).toContain("old_string");
+      expect(result).toContain("supplied without note_id");
+      expect(ctx.db.searchNotes("Would-be note")).toEqual([]);
+    });
+
+    it("rejects a batch item that supplies note_id and a meaningful create field, rolling back the batch", async () => {
+      const tool = createGoopSaveNoteTool(ctx);
+      const createResult = await tool.execute(
+        { title: "Batch target", body: "alpha beta", tags: ["p"], source_agent: "agent" },
+        toolCtx,
+      );
+      const noteId = String(createResult).match(/fn_\d{8}_[a-z0-9]+/)?.[0] ?? "";
+
+      const result = await tool.execute(
+        {
+          title: "",
+          body: "",
+          tags: [],
+          source_agent: "agent",
+          items: [
+            { title: "Fresh", body: "Fresh body", tags: ["n"], source_agent: "agent" },
+            { note_id: noteId, body: "Should not apply", old_string: "beta", new_string: "BETA" },
+          ],
+        },
+        toolCtx,
+      );
+
+      expect(result).toContain("0/2 succeeded");
+      expect(result).toContain("cannot be supplied alongside note_id");
+      expect(ctx.db.searchNotes("Fresh body")).toEqual([]);
+      expect(ctx.db.getNoteById(noteId)?.body).toBe("alpha beta");
+    });
+
+    it("names both valid shapes in the note_id conflict rejection message", async () => {
+      const tool = createGoopSaveNoteTool(ctx);
+      const result = await tool.execute(
+        { note_id: "fn_20260618_missing0001", title: "conflict", old_string: "x" },
+        toolCtx,
+      );
+
+      expect(result).toContain("create");
+      expect(result).toContain("patch");
+    });
+  });
+
+  // -----------------------------------------------------------------------
   // Backward compatibility
   // -----------------------------------------------------------------------
 
@@ -834,6 +924,137 @@ describe("goop_save_note tool", () => {
         expect(jsonNote?.tags).toBe(nativeNote?.tags);
         expect(jsonNote?.tags).toBe('["alpha","beta"]');
       });
+    });
+  });
+
+  // -----------------------------------------------------------------------
+  // Positive fixture inventory — valid call shapes (W4 Task 1)
+  //
+  // goop_save_note is a CREATE-or-PATCH tool, structurally distinct from the
+  // content-document tools. The generic shapes map as follows:
+  //   - "full-document write" → note CREATE (title + body + tags + source_agent)
+  //   - "append mode" → N/A. There is no `mode` field; a note is a single
+  //     inserted row, not appended content. Omitted.
+  //   - "patch mode" → note PATCH via note_id + old_string + new_string
+  //   - "replace-all patch" → note PATCH with replace_all: true
+  //   - "items[] batch" → batch create/patch
+  //   - "blank-document patch workaround" → patching a note whose body is ''
+  //     with old_string: '' succeeds today (patchContent('', '', newString)).
+  // -----------------------------------------------------------------------
+
+  describe("positive fixture inventory — valid call shapes (W4.T1)", () => {
+    function extractId(result: string): string {
+      return result.match(/fn_\d{8}_[a-z0-9]+/)?.[0] ?? "";
+    }
+
+    it("SHAPE: note create (title + body + tags + source_agent)", async () => {
+      const tool = createGoopSaveNoteTool(ctx);
+      const result = String(
+        await tool.execute(
+          {
+            title: "Inventory note",
+            body: "Body for inventory.",
+            tags: ["inv"],
+            source_agent: "goop-tester",
+          },
+          toolCtx,
+        ),
+      );
+      expect(result).toContain("Field Note saved:");
+      expect(result).toContain("Inventory note");
+    });
+
+    it("SHAPE: patch mode (note_id + old_string + new_string, single match)", async () => {
+      const tool = createGoopSaveNoteTool(ctx);
+      const createResult = String(
+        await tool.execute(
+          { title: "Inv patch target", body: "alpha beta", tags: ["p"], source_agent: "agent" },
+          toolCtx,
+        ),
+      );
+      const noteId = extractId(createResult);
+
+      const result = await tool.execute(
+        { note_id: noteId, old_string: "beta", new_string: "BETA" },
+        toolCtx,
+      );
+      expect(result).toContain(noteId);
+      expect(result).toContain("patched");
+      expect(ctx.db.getNoteById(noteId)?.body).toBe("alpha BETA");
+    });
+
+    it("SHAPE: replace-all patch (note_id + old_string + new_string + replace_all: true)", async () => {
+      const tool = createGoopSaveNoteTool(ctx);
+      const createResult = String(
+        await tool.execute(
+          {
+            title: "Inv replace-all target",
+            body: "foo bar foo baz foo",
+            tags: ["p"],
+            source_agent: "agent",
+          },
+          toolCtx,
+        ),
+      );
+      const noteId = extractId(createResult);
+
+      const result = await tool.execute(
+        { note_id: noteId, old_string: "foo", new_string: "qux", replace_all: true },
+        toolCtx,
+      );
+      expect(result).toContain(noteId);
+      expect(ctx.db.getNoteById(noteId)?.body).toBe("qux bar qux baz qux");
+    });
+
+    it("SHAPE: items[] batch (mixed create + patch items)", async () => {
+      const tool = createGoopSaveNoteTool(ctx);
+      const createResult = String(
+        await tool.execute(
+          { title: "Batch patch target", body: "alpha beta", tags: ["p"], source_agent: "agent" },
+          toolCtx,
+        ),
+      );
+      const noteId = extractId(createResult);
+
+      const result = String(
+        await tool.execute(
+          {
+            title: "",
+            body: "",
+            tags: [],
+            source_agent: "agent",
+            items: [
+              { title: "Fresh batch note", body: "Fresh body", tags: ["n"], source_agent: "agent" },
+              { note_id: noteId, old_string: "beta", new_string: "BETA" },
+            ],
+          },
+          toolCtx,
+        ),
+      );
+      expect(result).toContain("2/2 succeeded");
+      expect(ctx.db.getNoteById(noteId)?.body).toBe("alpha BETA");
+    });
+
+    it("SHAPE: blank-document patch workaround (note_id + old_string: '' on a note with empty body)", async () => {
+      // CURRENT behaviour: a note created with body: '' can be patched via
+      // old_string: '' because patchContent('', '', newString) succeeds with
+      // matchCount -1. Locked here so Wave 4 Task 2/3 must decide deliberately.
+      const tool = createGoopSaveNoteTool(ctx);
+      const createResult = String(
+        await tool.execute(
+          { title: "Empty body note", body: "", tags: ["empty"], source_agent: "agent" },
+          toolCtx,
+        ),
+      );
+      const noteId = extractId(createResult);
+      expect(ctx.db.getNoteById(noteId)?.body).toBe("");
+
+      const result = await tool.execute(
+        { note_id: noteId, old_string: "", new_string: "Filled in via empty patch" },
+        toolCtx,
+      );
+      expect(result).toContain(noteId);
+      expect(ctx.db.getNoteById(noteId)?.body).toBe("Filled in via empty patch");
     });
   });
 });

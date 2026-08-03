@@ -73,7 +73,9 @@ discuss -> plan -> execute -> accept -> confirm
 
 Default to `goop-executor-medium` / `goop-executor-frontend-medium` for standard implementation work — scope, consequence, and blast radius are signals to double-check the tier choice, not reasons to skip past medium. Escalate to the `-high` tiers for architecture-, security-, or blast-radius-sensitive work; use the `-low` tiers for purely mechanical, pattern-following work.
 
-All six tiers — `goop-executor-low`, `goop-executor-medium`, `goop-executor-high`, `goop-executor-frontend-low`, `goop-executor-frontend-medium`, `goop-executor-frontend-high` — are reachable via `task()`, alongside `goop-researcher`, `goop-explorer`, `goop-verifier`, `goop-tester`, `goop-writer`, and `goop-debugger`. See `references/dispatch-patterns.md` §Agent Selection for the full task-type/complexity tables, context budgets, and delegation-prompt structure.
+All six tiers — `goop-executor-low`, `goop-executor-medium`, `goop-executor-high`, `goop-executor-frontend-low`, `goop-executor-frontend-medium`, `goop-executor-frontend-high` — are reachable via `task()`, alongside `goop-researcher`, `goop-explorer`, `goop-wave-verifier`, `goop-verifier`, `goop-tester`, `goop-writer`, and `goop-debugger`. See `references/dispatch-patterns.md` §Agent Selection for the full task-type/complexity tables, context budgets, and delegation-prompt structure.
+
+Wave verification and the acceptance audit are separate dispatches with separate stages. During execute, at wave completion, dispatch `goop-wave-verifier` scoped to that wave — it records verification rows and reports gaps; it never implements fixes (see `commands/goop-execute.md` §Steps for the wave verification gate). At accept, dispatch `goop-verifier` for the final acceptance audit — it is acceptance-only and does not run during execute (see `commands/goop-accept.md` §Steps).
 
 ## Auto-Delegation
 

@@ -23,6 +23,7 @@ import { systemTransformFactory } from "./system-transform.js";
 import { toolLifecycleHookFactory } from "./tool-lifecycle.js";
 import type { HookEventName, HookFactory, Hooks } from "./types.js";
 import { chainHandlers } from "./utils.js";
+import { verifierStageGuardHookFactory } from "./verifier-stage-guard/index.js";
 
 // ---------------------------------------------------------------------------
 // Handler event names — used to distinguish chainable handlers from
@@ -72,6 +73,7 @@ export const DEFAULT_HOOK_FACTORIES: readonly HookFactory[] = [
   commentCheckerFactory,
   createCommandProcessorHook,
   orchestratorEnforcementFactory,
+  verifierStageGuardHookFactory,
   toolLifecycleHookFactory,
   loopDetectionHookFactory,
   lazyAutopilotNudgeHookFactory,
@@ -101,6 +103,9 @@ type AnyHandler = (...args: never[]) => Promise<void>;
  *
  * Handler events: if multiple partials define the same event, their handlers
  * are chained via `chainHandlers` — each runs sequentially, mutations accumulate.
+ * A deliberate `IntentionalToolDenialError` (see `./utils.js`) is the one
+ * exception: it stops the chain and propagates to the caller instead of
+ * being swallowed.
  *
  * Registration properties:
  * - `tool` maps are shallow-merged (later entries override earlier for same key)

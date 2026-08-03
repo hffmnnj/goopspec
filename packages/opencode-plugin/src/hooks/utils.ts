@@ -13,12 +13,38 @@ import { log } from "../shared/logger.js";
 type AsyncHandler = (...args: never[]) => Promise<void>;
 
 // ---------------------------------------------------------------------------
+// Intentional tool-execution denial — the one sentinel safeHandler rethrows
+// ---------------------------------------------------------------------------
+
+/**
+ * Thrown only when a hook deliberately means to block the in-flight tool
+ * call (e.g. the verifier-stage guard denying a wrong-stage `task`
+ * delegation). This is the single, narrowly-scoped exception to "a hook
+ * error must never crash OpenCode": `safeHandler` recognizes this exact type
+ * by identity and rethrows it instead of catching it, so it propagates
+ * through `chainHandlers`/`mergeHooks` to the host, which aborts the tool
+ * call. Every other error — expected or not, from this hook or any other —
+ * keeps the default catch-and-log behavior unchanged.
+ *
+ * Construct this only for a deliberate denial decision, never for an
+ * unexpected failure inside a hook's own logic.
+ */
+export class IntentionalToolDenialError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "IntentionalToolDenialError";
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Safe handler wrapper — graceful degradation on throw
 // ---------------------------------------------------------------------------
 
 /**
  * Wrap a hook handler so that exceptions are caught and logged rather than
- * propagated. A hook error must never crash OpenCode.
+ * propagated. A hook error must never crash OpenCode — except a deliberate
+ * {@link IntentionalToolDenialError}, which is rethrown so the host can
+ * actually block the tool call it was raised for.
  */
 export function safeHandler<H extends AsyncHandler>(label: string, handler: H): H {
   // Capture once so high-frequency hook invocations avoid reading process.env.
@@ -36,6 +62,9 @@ export function safeHandler<H extends AsyncHandler>(label: string, handler: H): 
         await (handler as unknown as (...a: unknown[]) => Promise<void>)(...args);
       }
     } catch (err) {
+      if (err instanceof IntentionalToolDenialError) {
+        throw err;
+      }
       // biome-ignore lint/suspicious/noConsole: Intentional error logging for graceful degradation
       console.error(`[goopspec] hook "${label}" error:`, err);
     }
@@ -54,7 +83,9 @@ export function safeHandler<H extends AsyncHandler>(label: string, handler: H): 
  * are visible to later ones.
  *
  * If a handler throws, the error is caught (via `safeHandler`) and the
- * chain continues with the next handler.
+ * chain continues with the next handler — unless it is an
+ * {@link IntentionalToolDenialError}, which `safeHandler` rethrows; the
+ * chain then stops and the error propagates to the caller.
  */
 export function chainHandlers<H extends AsyncHandler>(eventName: string, handlers: H[]): H {
   if (handlers.length === 1) {
