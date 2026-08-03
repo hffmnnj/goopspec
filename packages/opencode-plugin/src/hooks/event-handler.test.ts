@@ -187,7 +187,7 @@ describe("event-handler hook", () => {
     const promptAsync = mock(async () => undefined);
     Object.assign(ctx.sdk.client, {
       session: {
-        messages: mock(async () => [{ info: { role: "assistant" } }]),
+        messages: mock(async () => [{ info: { role: "assistant", mode: "goop-orchestrator" } }]),
         get: mock(async () => ({ directory: testDir })),
         promptAsync,
       },

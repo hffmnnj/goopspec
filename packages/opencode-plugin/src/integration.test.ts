@@ -663,7 +663,7 @@ describe("GoopSpec 5-phase integration", () => {
       const promptAsync = mock(async () => undefined);
       Object.assign(ctx.sdk.client, {
         session: {
-          messages: mock(async () => [{ info: { role: "assistant" } }]),
+          messages: mock(async () => [{ info: { role: "assistant", mode: "goop-orchestrator" } }]),
           get: mock(async () => ({ directory: testDir })),
           promptAsync,
         },
@@ -783,7 +783,7 @@ describe("GoopSpec 5-phase integration", () => {
       mkdirSync(foreignProject, { recursive: true });
       Object.assign(ctx.sdk.client, {
         session: {
-          messages: mock(async () => [{ info: { role: "assistant" } }]),
+          messages: mock(async () => [{ info: { role: "assistant", mode: "goop-orchestrator" } }]),
           get: mock(async ({ path }: { path: { id: string } }) => {
             if (path.id === "subagent") return { directory: testDir, parentID: "parent" };
             if (path.id === "foreign") return { directory: foreignProject };

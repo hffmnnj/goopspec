@@ -14,6 +14,7 @@ import { resolve } from "node:path";
 import type { WorkflowPhase } from "../../core/constants.js";
 import { getLivePendingCompaction } from "../../core/pending-compaction.js";
 import type { PluginContext } from "../../core/types.js";
+import { isOrchestrator } from "../utils.js";
 
 // ---------------------------------------------------------------------------
 // G8 seam — consumed by guard G8, supplied by Task 3.3 rate-limit module.
@@ -53,6 +54,12 @@ export type NudgeSuppressionReason =
       readonly kind: "session-not-nudge-eligible";
       readonly reason: "metadata-unavailable" | "subagent";
       readonly detail: string;
+    }
+  | {
+      readonly kind: "agent-not-eligible";
+      readonly reason: "unknown" | "not-orchestrator";
+      /** Observed agent name for diagnosis; absent when the identity signal was indeterminate. */
+      readonly agent?: string;
     }
   | {
       readonly kind: "project-scope-unverified";
@@ -100,6 +107,19 @@ export type NudgeSessionMetadata =
       readonly reason: "get-unavailable" | "get-failed" | "invalid-response";
     };
 
+/**
+ * Agent identity behind the session's final assistant turn.
+ *
+ * Mirrors `NudgeSessionMetadata`: an indeterminate identity is a distinct
+ * variant, never collapsed into `string | undefined`. Collapsing it would
+ * make "we couldn't tell" indistinguishable from "we don't yet have a field
+ * for it", and both must fail closed identically but be reportable
+ * separately (see `NudgeSuppressionReason`'s `agent-not-eligible` reasons).
+ */
+export type NudgeAgentIdentity =
+  | { readonly status: "known"; readonly agent: string }
+  | { readonly status: "unknown" };
+
 export interface NudgeGuardInput {
   readonly sessionID: string;
   readonly session: NudgeSessionMetadata;
@@ -108,6 +128,12 @@ export interface NudgeGuardInput {
   readonly lazyAutopilot: boolean;
   /** Workflow state is retained for production-call fidelity; G2 owns phase eligibility. */
   readonly acceptanceConfirmed: boolean;
+  /**
+   * Optional until Task 2.2 plumbs the signal into `index.ts`'s guardInput.
+   * The evaluator treats an absent field identically to `{ status: "unknown" }`
+   * — fail closed, never permissive-by-omission.
+   */
+  readonly agent?: NudgeAgentIdentity;
   readonly lastMessages?: unknown;
   readonly lastAssistantText?: string;
   readonly rateLimitCheck?: NudgeRateLimitCheck;
@@ -134,6 +160,38 @@ export function lastMessageRole(messages: unknown): string | undefined {
   const message = last as { role?: unknown; info?: { role?: unknown } };
   const role = message.info?.role ?? message.role;
   return typeof role === "string" ? role : undefined;
+}
+
+/**
+ * Extract the identity of the agent behind the session's final turn.
+ *
+ * `AssistantMessage.mode` (verified against `@opencode-ai/sdk` 1.18.3,
+ * `dist/gen/types.gen.d.ts:98-110`) is a REQUIRED `string` field carrying the
+ * agent name (e.g. `"goop-orchestrator"`, `"build"`) and is already present
+ * in the exact `{ data: [{ info, parts }] }` / bare-array envelope this hook
+ * reads via `lastMessageRole`/`lastAssistantMessageText` — no new SDK call is
+ * needed (see Field Note fn_20260802_gdckcep3). Mirrors those helpers' shape
+ * tolerance: any unexpected or missing `mode` deliberately returns the
+ * indeterminate `NudgeAgentIdentity` variant rather than throwing, so
+ * `evaluateNudgeGuards` can fail closed exactly as it does for `unknown`.
+ */
+export function lastAssistantAgent(messages: unknown): NudgeAgentIdentity {
+  const response =
+    messages !== null && typeof messages === "object"
+      ? (messages as { data?: unknown })
+      : undefined;
+  const entries = Array.isArray(messages)
+    ? messages
+    : Array.isArray(response?.data)
+      ? response.data
+      : undefined;
+  const last = entries?.at(-1);
+  if (last === null || typeof last !== "object") return { status: "unknown" };
+
+  const mode = (last as { info?: { mode?: unknown } }).info?.mode;
+  return typeof mode === "string" && mode.length > 0
+    ? { status: "known", agent: mode }
+    : { status: "unknown" };
 }
 
 /**
@@ -221,6 +279,12 @@ export function evaluateNudgeGuards(ctx: PluginContext, input: NudgeGuardInput):
     return suppress({ kind: "lazy-autopilot-disabled" });
   }
 
+  // G2: Execute-only phase eligibility is intentional and retained (SPEC
+  // Decision 1, settled under Rule 4). Non-execute phases — idle, discuss,
+  // plan, accept — may be waiting on a deliberate user gate; nudging through
+  // them would bypass human checkpoints. Phase-gate policy is explicitly out
+  // of scope; the D1/D3 defects account for the reported injection failures
+  // without widening phase eligibility. Pinned by guards.test.ts.
   if (input.phase !== "execute") {
     return suppress({ kind: "wrong-phase", phase: input.phase });
   }
@@ -239,6 +303,22 @@ export function evaluateNudgeGuards(ctx: PluginContext, input: NudgeGuardInput):
       kind: "session-not-nudge-eligible",
       reason: "subagent",
       detail: input.session.parentID,
+    });
+  }
+
+  // Agent identity guard: force-switching an innocent session's agent (the
+  // dispatch body hard-codes agent: 'goop-orchestrator') is worse than a
+  // missed nudge, so an indeterminate identity fails closed exactly like a
+  // known-wrong one. isOrchestrator() is reused rather than exact-matching
+  // 'goop-orchestrator' so the three recognised naming patterns all pass.
+  if (input.agent === undefined || input.agent.status === "unknown") {
+    return suppress({ kind: "agent-not-eligible", reason: "unknown" });
+  }
+  if (!isOrchestrator(input.agent.agent)) {
+    return suppress({
+      kind: "agent-not-eligible",
+      reason: "not-orchestrator",
+      agent: input.agent.agent,
     });
   }
 
