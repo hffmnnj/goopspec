@@ -447,6 +447,66 @@ describe("registerHooksV2()", () => {
     env.cleanup();
   });
 
+  it("applies the high thinking variant to goop-wave-verifier through the shared V2 agent transform", async () => {
+    const env = setupTestEnvironment("v2-wave-verifier-thinking");
+    const ctx = createMockPluginContext({ testDir: env.testDir, db: env.db });
+    // No agentThinkingLevels override — wave-verifier must resolve to its
+    // DEFAULT_THINKING_LEVELS value of "high" (it is not a medium role).
+    const registrations: Registrations = {
+      agentTransforms: 0,
+      catalogTransforms: 0,
+      agentReloads: 0,
+      catalogReloads: 0,
+    };
+
+    await registerHooksV2(createRuntimeContext(registrations), ctx);
+
+    const agent: V2AgentInfo = {
+      id: "goop-wave-verifier",
+      model: { providerID: "anthropic", id: "claude-sonnet-4-6" },
+      request: { headers: {}, body: {} },
+    };
+    const catalog: V2CatalogDraft = {
+      provider: {
+        list: () => [
+          {
+            provider: { id: "anthropic" },
+            models: new Map([
+              [
+                "claude-sonnet-4-6",
+                {
+                  variants: [
+                    { id: "low", headers: {}, body: { reasoning_effort: "low" } },
+                    {
+                      id: "high",
+                      headers: { "x-reasoning": "high" },
+                      body: { reasoning_effort: "high" },
+                    },
+                  ],
+                },
+              ],
+            ]),
+          },
+        ],
+      },
+    };
+    const agents: V2AgentDraft = {
+      list: () => [agent],
+      update: (_id, update) => update(agent),
+    };
+
+    await registrations.catalogTransform?.(catalog);
+    await registrations.agentTransform?.(agents);
+
+    // getGoopRole recognised "wave-verifier" via the shared AGENT_ROLES
+    // registry (otherwise applyThinkingLevelsToAgents would have skipped it)
+    // and the resolved level is the default "high".
+    expect(agent.model?.variant).toBe("high");
+    expect(agent.request.headers).toEqual({ "x-reasoning": "high" });
+    expect(agent.request.body).toEqual({ reasoning_effort: "high" });
+    env.cleanup();
+  });
+
   it("keeps experimental.session.compacting in the V2 skipped list and registers no compaction capability (AD8, NFR4)", async () => {
     const ctx = createMockPluginContext();
     contexts.push(ctx);
