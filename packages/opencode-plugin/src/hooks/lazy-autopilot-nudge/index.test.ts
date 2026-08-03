@@ -553,4 +553,122 @@ describe("lazy autopilot nudge", () => {
       expect(ctx.pendingLazyAutopilotNudges.has("sess-invalid-response")).toBe(false);
     },
   );
+
+  // -------------------------------------------------------------------------
+  // Wave 1 Task 1: D1/D3 characterisation only (green baseline, no fixes).
+  // Inspection findings: SessionInfo.agent (types.ts:373) is declared but
+  // never assigned by production code; NudgeGuardInput (guards.ts:103-115)
+  // has no identity field; orchestrator-enforcement.ts's claim that
+  // session.agent "is set during plugin initialisation" is FALSIFIED.
+  // -------------------------------------------------------------------------
+
+  it("D1 signal (LOAD-BEARING FOR WAVE 2): session.messages() final assistant message carries AssistantMessage.mode as the agent-identity signal (SDK 1.18.3)", () => {
+    // Shape verified against @opencode-ai/sdk/dist/gen/types.gen.d.ts:98-110:
+    // `mode: string` is REQUIRED on AssistantMessage and already present on
+    // the exact `{ data: [{ info, parts }] }` envelope this hook reads.
+    const realisticMessagesResponse = {
+      data: [
+        {
+          info: {
+            id: "msg_1",
+            sessionID: "sess-d1-signal",
+            role: "assistant" as const,
+            time: { created: Date.now() },
+            parentID: "",
+            modelID: "claude-sonnet-5",
+            providerID: "anthropic",
+            mode: "goop-orchestrator",
+            path: { cwd: testDir, root: testDir },
+            cost: 0,
+            tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+          },
+          parts: [{ type: "text", text: "done" }],
+        },
+      ],
+    };
+
+    const lastEntry = realisticMessagesResponse.data.at(-1);
+    expect(lastEntry?.info.role).toBe("assistant");
+    // WAVE 2 MUST READ THIS FIELD: `info.mode` carries the agent identity
+    // ("goop-orchestrator") for the final turn. Neither SessionInfo.agent nor
+    // NudgeGuardInput carries this today -- `mode` is the viable signal.
+    expect(lastEntry?.info.mode).toBe("goop-orchestrator");
+
+    // Fallback considered and rejected as unnecessary: chat-message.ts:19's
+    // ChatMessageInput.agent is likewise never persisted anywhere today (the
+    // handler receives it as `_input`, intentionally unused) -- but since
+    // `mode` is present and required on the response dispatch already reads,
+    // no fallback wiring through chat.message is needed for Wave 2.
+  });
+
+  it("D1 characterisation (KNOWN DEFECT, permissive): a non-orchestrator session (mode: build) still reaches dispatch because no guard checks agent identity", async () => {
+    const ctx = makeExecuteContext(testDir);
+    const calls: unknown[] = [];
+    Object.assign(ctx.sdk.client, {
+      session: {
+        // Final assistant message belongs to a "build" mode turn, not
+        // goop-orchestrator -- but neither NudgeGuardInput nor
+        // evaluateNudgeGuards reads agent/mode identity today (D1), so this
+        // is treated identically to a genuine orchestrator session.
+        messages: mock(async () => [{ info: { role: "assistant", mode: "build" } }]),
+        get: mock(async () => ({ directory: testDir })),
+        promptAsync(input: unknown): Promise<void> {
+          calls.push(input);
+          return Promise.resolve();
+        },
+      },
+    });
+
+    await dispatchLazyAutopilotNudge(ctx, "sess-non-orchestrator");
+    await Promise.resolve();
+
+    // KNOWN DEFECT (D1): dispatch proceeds and injects an orchestrator nudge
+    // even though the session's last turn ran under mode="build". Wave 2
+    // must invert this by gating on the `mode` signal above.
+    expect(calls).toHaveLength(1);
+  });
+
+  it("D3 characterisation (KNOWN DEFECT, inverted by Wave 3 Task 3.1): a second dispatch is blocked by the pending system-transform latch while it remains unconsumed", async () => {
+    const ctx = makeExecuteContext(testDir);
+    const errorSpy = spyOn(console, "error").mockImplementation(() => {});
+    try {
+      // Track SDK access itself (not just session.messages, which is never
+      // called on this branch -- promptAsync is checked BEFORE messages at
+      // index.ts:103-104) to prove no further host interaction happens.
+      let sessionAccessCount = 0;
+      const session = { messages: mock(async () => []) };
+      Object.defineProperty(ctx.sdk.client, "session", {
+        configurable: true,
+        get() {
+          sessionAccessCount += 1;
+          return session;
+        },
+      });
+
+      await dispatchLazyAutopilotNudge(ctx, "sess-latch");
+      expect(ctx.pendingLazyAutopilotNudges.get("sess-latch")).toEqual({
+        status: "queued",
+        source: "system-transform",
+      });
+      expect(sessionAccessCount).toBe(1);
+
+      // A second idle dispatch for the SAME session, with the fallback still
+      // un-consumed (no experimental.chat.system.transform call has fired).
+      await dispatchLazyAutopilotNudge(ctx, "sess-latch");
+
+      // KNOWN DEFECT (D3): the early return at index.ts:93 sees the still-
+      // pending map entry and blocks the second dispatch before it ever
+      // touches ctx.sdk.client.session again -- zero further SDK calls. A
+      // genuinely later idle event on this session is starved until some
+      // system-transform call happens to consume the latch, which may never
+      // occur. Wave 3 Task 3.1 inverts this.
+      expect(sessionAccessCount).toBe(1);
+      expect(ctx.pendingLazyAutopilotNudges.get("sess-latch")).toEqual({
+        status: "queued",
+        source: "system-transform",
+      });
+    } finally {
+      errorSpy.mockRestore();
+    }
+  });
 });
