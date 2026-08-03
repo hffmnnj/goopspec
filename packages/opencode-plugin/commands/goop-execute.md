@@ -43,8 +43,14 @@ goop_reference({ name: "core-protocol" })
    - Require every task to return `STATUS`, `SUMMARY`, `ARTIFACTS`, `VERIFICATION`, `NEXT`.
 3. Apply the four-rule deviation system from `phase-gates`. Log every deviation to `ADL.md` via `goop_adl`.
 4. Before dispatching a wave, call `goop_state({ action: "update-wave", currentWave: N, totalWaves: M })` to record that Wave N is in progress. `currentWave` is 1-based; `0` means no wave has started.
-5. If Atomic PRs = Yes: immediately open a PR for the verified wave against the previous branch (Wave N → Wave N-1; Wave 1 → main) via `gh pr create` or `goop_create_pr`. Do not wait for it to merge. Then create the Wave N+1 branch from the current wave's branch and continue. Show the PR URL in the checkpoint.
-6. Save a checkpoint at wave boundaries.
+5. After every task in a wave completes, run the **wave verification gate** before the wave can be marked complete:
+   - Dispatch `goop-wave-verifier` scoped to that wave — one wave per dispatch; the role is execute-phase and inspect-only (see `agents/goop-wave-verifier.md`).
+   - The verifier records a verification row per task via `goop_write_wave({ wave_number: N, verifications: [...] })` and never implements fixes.
+   - On gaps: dispatch the correctly tiered executor to remediate, then re-dispatch `goop-wave-verifier` for that wave to re-verify the remediated tasks.
+   - Bound the remediation cycle with the three-strikes convention in `references/test-authoring.md` §Test Execution Discipline: after three failed attempts on the same gap, open a blocker via `goop_blocker` and stop; do not loop.
+   - The wave is complete when its rows satisfy the runtime gate — at least one verification row and zero `fail` rows; an explicit `skip` row is a deliberate, auditable escape (`isWaveVerified` in `src/features/enforcement/verifier-stage.ts`). The runtime enforces the boundary: `goop_write_wave` rejects a complete-status transition without it.
+6. If Atomic PRs = Yes: after the wave verification gate passes, open a PR for the verified wave against the previous branch (Wave N → Wave N-1; Wave 1 → main) via `gh pr create` or `goop_create_pr`. Do not wait for it to merge. Then create the Wave N+1 branch from the current wave's branch and continue. Show the PR URL in the checkpoint.
+7. Save a checkpoint at wave boundaries.
 
 ## Completion
 

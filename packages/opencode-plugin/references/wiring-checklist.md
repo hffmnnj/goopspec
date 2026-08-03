@@ -64,6 +64,7 @@ Before marking a feature complete:
 - [ ] **Exports** — public API re-exported from the package entry point.
 - [ ] **Config plumbing** — new options read by at least one consumer with observable effect.
 - [ ] **Documentation** — new agents, skills, or references listed in `AGENTS.md` or equivalent.
+- [ ] **Verification gate** — the wave carries a non-failing verification row (`goop_write_wave` `verifications[]`) before it is marked complete or handed off.
 - [ ] **Build** — `bun run build` succeeds and includes new files in output.
 - [ ] **Discovery** — new resource appears in listing tools.
 
@@ -124,6 +125,7 @@ Mandatory handoffs at phase completion, wave completion, checkpoint reached, or 
 ### Handoff Rules
 
 - Include tasks completed, key decisions with rationale, exact workflow position, files modified, and explicit next steps.
+- At wave completion, the wave verification gate precedes the handoff: `goop-wave-verifier` records a non-failing row for the wave before `HANDOFF.md` marks it complete. A handoff never substitutes for the recorded gate.
 - Do not include full file contents or detailed implementation code.
 - Keep the context summary to 2-4 sentences max.
 - Update chronicle via `goop_write_db({ doc_type: "chronicle", content: "..." })` before generating `HANDOFF.md`.
