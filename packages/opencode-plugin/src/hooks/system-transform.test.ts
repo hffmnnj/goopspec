@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, spyOn } from "bun:test";
 import type { SdkModel } from "../core/sdk-compat.js";
 import type { MemoryEntry } from "../core/types.js";
+import { WORKFLOW_PHASES } from "../core/constants.js";
 import {
   createDefaultWorkflowState,
   createMockPluginContext,
@@ -224,6 +225,10 @@ describe("buildFieldNotesBlock", () => {
 // ---------------------------------------------------------------------------
 
 describe("createSystemTransformHook", () => {
+  // Task 1.2 measured 334 tokens for state + phase rules + DB in execute;
+  // 800 memory + 300 Field Notes budgets leave 166 tokens of headroom.
+  const MAX_ALWAYS_ON_CONTEXT_TOKENS = 1_600;
+
   afterEach(() => {
     clearMemoryCache();
     clearDocTypeCache();
@@ -262,6 +267,128 @@ describe("createSystemTransformHook", () => {
       // Single canonical state block — the markdown "## CURRENT STATE"
       // variant is no longer duplicated into the phase rules block.
       expect(injected).not.toContain("## CURRENT STATE");
+    } finally {
+      cleanup();
+    }
+  });
+
+  it("keeps exactly one canonical state block and no legacy state block in every workflow phase", async () => {
+    const { testDir, cleanup } = setupTestEnvironment("sys-transform-state-invariant");
+    try {
+      const ctx = createMockPluginContext({
+        testDir,
+        state: {
+          activeWorkflowId: "phase-invariant",
+          workflows: {
+            "phase-invariant": createDefaultWorkflowState({
+              phase: "discuss",
+              specLocked: true,
+              interviewComplete: true,
+              acceptanceConfirmed: true,
+            }),
+          },
+        },
+      });
+      const hooks = createSystemTransformHook(ctx);
+      const phases = WORKFLOW_PHASES;
+
+      for (const phase of phases) {
+        ctx.stateManager.updateWorkflow({ phase });
+        clearMemoryCache();
+        clearDocTypeCache();
+        const output = { system: [] as string[] };
+        await hooks["experimental.chat.system.transform"]?.(
+          { sessionID: `state-invariant-${phase}`, model: {} as SdkModel },
+          output,
+        );
+
+        const injected = output.system[0] ?? "";
+        expect(injected.match(/<goopspec_state>/g) ?? []).toHaveLength(1);
+        expect(injected.match(/<\/goopspec_state>/g) ?? []).toHaveLength(1);
+        expect(injected).not.toContain("## CURRENT STATE");
+      }
+    } finally {
+      cleanup();
+    }
+  });
+
+  it("rejects a synthetic duplicate-state negative control", () => {
+    const stateBlock = buildStateBlock(createDefaultWorkflowState({ phase: "execute" }), "test");
+    const countStateBlocks = (message: string): void => {
+      expect(message.match(/<goopspec_state>/g) ?? []).toHaveLength(1);
+      expect(message).not.toContain("## CURRENT STATE");
+    };
+
+    countStateBlocks(stateBlock);
+    expect(() => countStateBlocks(`${stateBlock}\n\n${stateBlock}`)).toThrow();
+    expect(() => countStateBlocks(`${stateBlock}\n\n## CURRENT STATE\nphase: execute`)).toThrow();
+  });
+
+  it("keeps the populated always-on composition under its documented token ceiling", async () => {
+    const { testDir, cleanup } = setupTestEnvironment("sys-transform-budget");
+    try {
+      const memories: MemoryEntry[] = Array.from({ length: 10 }, (_, index) => ({
+        id: index + 1,
+        type: "decision",
+        title: `execute workflow memory ${index}`,
+        content: "Preserve the shared workflow contract while composing useful context. ".repeat(8),
+        importance: 8,
+        createdAt: Date.now(),
+      }));
+      const ctx = createMockPluginContext({
+        testDir,
+        memories,
+        state: {
+          activeWorkflowId: "budget-workflow",
+          workflows: {
+            "budget-workflow": createDefaultWorkflowState({
+              phase: "execute",
+              specLocked: true,
+              interviewComplete: true,
+              currentWave: 2,
+              totalWaves: 5,
+              autopilot: true,
+              lazyAutopilot: true,
+              checkpoint: "wave-1-complete",
+            }),
+          },
+        },
+      });
+      for (const docType of [
+        "spec",
+        "blueprint",
+        "chronicle",
+        "adl",
+        "handoff",
+        "requirements",
+        "research",
+      ] as const) {
+        ctx.db.upsertDocument("budget-workflow", docType, `# ${docType}`);
+      }
+      for (let index = 0; index < 10; index++) {
+        ctx.db.saveNote({
+          id: `fn_budget_${index}`,
+          title: `execute workflow Field Note ${index}`,
+          body: "Retain high-value evidence and decisions in the assembled context. ".repeat(5),
+          tags: '["prompt", "workflow"]',
+          source_agent: "goop-researcher",
+          importance: 8,
+          workflow_id: "budget-workflow",
+          project_id: "goopspec",
+        });
+      }
+
+      const output = { system: [] as string[] };
+      await createSystemTransformHook(ctx)["experimental.chat.system.transform"]?.(
+        { sessionID: "budget", model: {} as SdkModel },
+        output,
+      );
+
+      const injected = output.system[0] ?? "";
+      const measuredTokens = estimateTokens(injected);
+      expect(injected).toContain("<goopspec_memory>");
+      expect(injected).toContain("<goopspec_field_notes>");
+      expect(measuredTokens).toBeLessThanOrEqual(MAX_ALWAYS_ON_CONTEXT_TOKENS);
     } finally {
       cleanup();
     }

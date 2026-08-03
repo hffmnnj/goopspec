@@ -126,6 +126,80 @@ describe("registerHooksV2()", () => {
     expect(v2System[0]).toContain("<goopspec_state>");
   });
 
+  it("keeps V1 and V2 system transforms byte-identical for populated composition", async () => {
+    const env = setupTestEnvironment("v1-v2-system-parity");
+    const ctx = createMockPluginContext({
+      testDir: env.testDir,
+      memories: [
+        {
+          id: 1,
+          type: "decision",
+          title: "execute workflow decision",
+          content: "Use the canonical state block and preserve phase gates.",
+          importance: 8,
+          createdAt: Date.now(),
+        },
+      ],
+      state: {
+        activeWorkflowId: "parity-workflow",
+        workflows: {
+          "parity-workflow": {
+            phase: "execute",
+            mode: "standard",
+            depth: "standard",
+            specLocked: true,
+            interviewComplete: true,
+            acceptanceConfirmed: false,
+            currentWave: 2,
+            totalWaves: 5,
+            autopilot: true,
+            lazyAutopilot: true,
+            checkpoint: "wave-1-complete",
+          },
+        },
+      },
+    });
+    ctx.db.saveNote({
+      id: "fn_parity_high",
+      title: "execute workflow Field Note",
+      body: "Keep high-value prompt evidence available to both contracts.",
+      tags: '["prompt"]',
+      source_agent: "goop-researcher",
+      importance: 8,
+      workflow_id: "parity-workflow",
+      project_id: "goopspec",
+    });
+    const contextsToClose = ctx;
+    contexts.push(ctx);
+
+    try {
+      const registrations: Registrations = {
+        agentTransforms: 0,
+        catalogTransforms: 0,
+        agentReloads: 0,
+        catalogReloads: 0,
+      };
+      await registerHooksV2(createRuntimeContext(registrations), ctx);
+
+      const v1System: string[] = [];
+      const v2System: string[] = [];
+      await createHooks(ctx, [...DEFAULT_HOOK_FACTORIES])["experimental.chat.system.transform"]?.(
+        { sessionID: "parity", model: {} as never },
+        { system: v1System },
+      );
+      await registrations.request?.({ system: v2System, messages: [], tools: {} });
+
+      expect(v2System).toEqual(v1System);
+      expect(v1System[0]).toContain("<goopspec_memory>");
+      expect(v1System[0]).toContain("<goopspec_field_notes>");
+    } finally {
+      contextsToClose.db.close();
+      const index = contexts.indexOf(contextsToClose);
+      if (index >= 0) contexts.splice(index, 1);
+      env.cleanup();
+    }
+  });
+
   it("registers lifecycle hooks and adapts their V1 mutations", async () => {
     const ctx = createMockPluginContext();
     contexts.push(ctx);
