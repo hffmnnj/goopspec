@@ -141,11 +141,9 @@ Never announce a transition in text without actually calling the tool. Announcin
 
 ### `currentWave` Semantics
 
-`currentWave` means **the wave currently in progress**, 1-based; `0` means no wave has started. It does **NOT** mean "N waves are complete". That misreading caused premature auto-progression to the accept phase (the exact defect the goopspec-state-integrity workflow was built to fix).
+`currentWave` does **NOT** mean "N waves are complete" — that misreading caused premature auto-progression to the accept phase (the exact defect the goopspec-state-integrity workflow was built to fix). For the calling convention (`0` = no wave started, `update-wave(N, total)` = "Wave N in progress"), see `task-decomposition.md` §update-wave Calling Convention.
 
-- `update-wave(N, total)` records "Wave N is now in progress", not "N waves are done".
-- Wave completion is determined from the `waves` and `wave_tasks` records, not from this counter.
-- Auto-progression reads final-wave status and task completion counts, not counter equality.
+Auto-progression reads final-wave status and task completion counts from the `waves` and `wave_tasks` records, not counter equality.
 
 ### Manual-Override Latch
 

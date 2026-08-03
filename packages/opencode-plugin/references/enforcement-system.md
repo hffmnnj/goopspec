@@ -163,13 +163,12 @@ Project-level knowledge flows automatically via `PROJECT_KNOWLEDGE_BASE.md`.
 
 ### Injection Points
 
-- Every subagent reads `PROJECT_KNOWLEDGE_BASE.md` before work.
-- Orchestrator prompts include relevant context sections.
-- `memory_search` augments injected knowledge with task-specific memories.
+- The system-transform hook injects `PROJECT_KNOWLEDGE_BASE.md` sections into subagent prompts.
+- `memory_search` augments injected knowledge with task-specific memories (see `core-protocol.md` §Memory-First Protocol).
 
 ### Maintenance
 
-The memory-distiller agent updates `PROJECT_KNOWLEDGE_BASE.md` after major decisions, pattern discoveries, gotcha discoveries, and at session end.
+Update `PROJECT_KNOWLEDGE_BASE.md` after major decisions, pattern discoveries, gotcha discoveries, and at session end.
 
 ## Troubleshooting
 
@@ -179,10 +178,7 @@ Delegate to `goop-executor-{tier}`. The orchestrator is blocked from writing imp
 
 ### Phase transition rejected
 
-Ensure required documents exist in DB:
-
-- `execute` requires `spec` document and at least one wave row (checked via `goop_read_wave`).
-- `accept` requires `spec` and `chronicle` documents plus all waves complete.
+Required documents per gate are listed in `phase-gates.md` §Gate Overview (execute requires `spec` plus a wave row; accept requires `spec` and `chronicle` plus all waves complete).
 
 ### Commands not triggering state changes
 

@@ -126,10 +126,6 @@ Hand to Wave 5 planner to redesign the two changed hooks before hook implementat
 - Avoid filler, emojis, and decorative separators.
 - Proofread before returning.
 
-## Why This Replaces XML
-
-XML carried heavy tag tax, nested elements, and duplicated state fields. Markdown headers preserve the same semantics with less structural overhead and remain regex-parseable over `## ` headers.
-
 ---
 
 *Sub-Agent Response Format v1.0 — GoopSpec Reference*

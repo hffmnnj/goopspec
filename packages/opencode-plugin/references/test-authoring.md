@@ -4,7 +4,7 @@ Writing tests that catch regressions, not consume budget.
 
 ## Why This Exists
 
-More tests ≠ better outcomes. Across six top LLM code agents (Chen et al., arXiv:2602.07900), test-writing intensity correlates with *struggle*, not success — agent-written tests skew ~5× `print` statements over assertions and lean on `assert x is not None` sanity checks. Every rule is a pre-commit self-check; the remedy must not bloat the budget.
+More tests ≠ better outcomes. Every rule below is a pre-commit self-check against low-signal tests — assertions that probe rather than verify, coverage that moves a number rather than catch a regression. The remedy is discipline, not volume.
 
 ## What Is Worth Testing
 

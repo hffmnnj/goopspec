@@ -171,17 +171,28 @@ describe("auditPromptSurfaces (real tree)", () => {
     expect(commands.bytes).toBe(24_702);
   });
 
-  it("references: 19 files, 161,458 bytes", () => {
+  it("references: 19 files, 160,972 bytes", () => {
     // Wave 3 Task 3.1 consolidated core-protocol.md, dispatch-patterns.md, and
     // subagent-identity.md (added one Prompt Authoring Rules section, offset
     // by removing duplicated material from the other two files). Net effect:
     // -1 byte vs the Wave 1 baseline of 161,459 — a non-increase, per MH6.
+    //
+    // Wave 4 Task 4.2 reconciled the five on-demand references against
+    // core-protocol.md's Prompt Authoring Rules: trimmed the currentWave
+    // overlap between phase-gates.md and task-decomposition.md to a pointer,
+    // replaced task-decomposition's restated test command with a pointer to
+    // test-authoring.md, removed response-format.md's "Why This Replaces XML"
+    // rationale, dropped test-authoring.md's model-conditional citation, and
+    // pointed enforcement-system.md's injection/troubleshooting sections at
+    // core-protocol.md and phase-gates.md. Net effect: 161,458 -> 160,972
+    // bytes (-486), absolute hits 237 -> 236, bold spans 528 -> 526. The
+    // immutable Wave 1 baseline (161,459) remains in RESEARCH.md.
     const references = report.directories.find((d) => d.directory === "references")!;
     expect(references.files).toBe(19);
-    expect(references.bytes).toBe(161_458);
+    expect(references.bytes).toBe(160_972);
   });
 
-  it("total absolute-language hits are 331 (post Wave 4 Task 4.1)", () => {
+  it("total absolute-language hits are 330 (post Wave 4 Task 4.2)", () => {
     // SPEC assumption A5: research-phase count (394) and spec count (396)
     // differ by measurement method. The Wave 1 audit re-measures with one
     // documented method (\b(?:must|never|always|critical|only)\b, gi) and
@@ -205,7 +216,14 @@ describe("auditPromptSurfaces (real tree)", () => {
     // commands 34 -> 32 and the workflow-wide total 333 -> 331. References
     // trimming is a separate task. The immutable Wave 1 baseline (394)
     // remains in RESEARCH.md.
-    expect(report.totalAbsoluteHits).toBe(331);
+    //
+    // Wave 4 Task 4.2 dropped one absolute hit from test-authoring.md's
+    // "Why This Exists" (removed the model-conditional citation and the
+    // "must not bloat the budget" phrasing), taking references 237 -> 236
+    // and the workflow-wide total 331 -> 330. The other four references
+    // kept their true-invariant absolutes (gate labels, severity names,
+    // config tier names, spec terms) intact.
+    expect(report.totalAbsoluteHits).toBe(330);
   });
 
   it("per-file tokens are consistent with chars via estimateTokens", () => {
