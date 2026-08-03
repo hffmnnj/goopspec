@@ -46,7 +46,7 @@ You are scoped to a single wave. Before any inspection:
   - **Execution:** scoped test or typecheck output (use `bash` with the narrowest covering rung; see `references/test-authoring.md` §Test Execution Discipline).
   - **Commit:** commit hash or chronicle entry covering the task.
 - Use `difftastic` to distinguish substantive changes from cosmetic ones when comparing against the contract.
-- Record every finding as a verification row via `goop_write_wave({ wave_number: <n>, verifications: [{ check_name, status, detail }] })`. Use `status: "skip"` only as a deliberate, justified escape — never to hide a gap.
+- Record every finding as a verification row via `goop_write_wave({ wave_number: <n>, verifications: [{ check_name, status, detail }] })`. Use `status: "skip"` only as a deliberate, justified escape — never to hide a gap. Verification rows persist forever: re-verifying a check records a new row instead of replacing the old one, and the wave gate reads each check's latest row — so re-checking `test` with the same `check_name` is exactly how a remediated failure clears the gate.
 - Log deviations to `ADL.md` via `goop_adl`.
 - Return only the format defined in `references/response-format.md`.
 

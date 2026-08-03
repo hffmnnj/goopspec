@@ -2243,7 +2243,7 @@ describe("goop_write_wave wave-completion verification gate", () => {
     expect(ctx.db.getWave("default", 1)?.status).not.toBe("done");
   });
 
-  it("a later passing row does not erase an earlier failing row for the same wave (append-only)", async () => {
+  it("a later passing row for the SAME check supersedes an earlier failing row for that check — completion unblocks (append-only)", async () => {
     const tool = createGoopWriteWaveTool(ctx);
     await tool.execute(
       {
@@ -2262,10 +2262,65 @@ describe("goop_write_wave wave-completion verification gate", () => {
       toolCtx,
     );
 
-    // Both rows now exist for the wave — the later pass does not delete the
-    // earlier fail — so completion must still be blocked.
+    // Both rows still exist for the wave — the later pass does not delete
+    // the earlier fail — but the effective status for "test" is now its
+    // latest row (pass), so completion succeeds.
+    const result = await tool.execute({ wave_number: 1, status: "done" }, toolCtx);
+    expect(result).toContain("Written wave 1");
+    expect(ctx.db.getWave("default", 1)?.status).toBe("done");
+
+    const wave = ctx.db.getWave("default", 1);
+    const rows = ctx.db.getVerifications("default", wave?.id ?? -1);
+    expect(rows).toHaveLength(2);
+    expect(rows.map((r) => r.status).sort()).toEqual(["failed", "passed"]);
+  });
+
+  it("a later passing row for a DIFFERENT check does not supersede another check's unresolved fail — completion stays blocked", async () => {
+    const tool = createGoopWriteWaveTool(ctx);
+    await tool.execute(
+      {
+        wave_number: 1,
+        title: "Different-check wave",
+        status: "in_progress",
+        verifications: [{ check_name: "test", status: "fail" }],
+      },
+      toolCtx,
+    );
+    await tool.execute(
+      {
+        wave_number: 1,
+        verifications: [{ check_name: "typecheck", status: "pass" }],
+      },
+      toolCtx,
+    );
+
     const result = await tool.execute({ wave_number: 1, status: "done" }, toolCtx);
     expect(result).toContain("Error in goop_write_wave");
     expect(result).toContain("goop-wave-verifier");
+    expect(ctx.db.getWave("default", 1)?.status).toBe("in_progress");
+  });
+
+  it("a later skip row for the SAME check supersedes an earlier failing row for that check — completion unblocks", async () => {
+    const tool = createGoopWriteWaveTool(ctx);
+    await tool.execute(
+      {
+        wave_number: 1,
+        title: "Skip-remediation wave",
+        status: "in_progress",
+        verifications: [{ check_name: "test", status: "fail" }],
+      },
+      toolCtx,
+    );
+    await tool.execute(
+      {
+        wave_number: 1,
+        verifications: [{ check_name: "test", status: "skip" }],
+      },
+      toolCtx,
+    );
+
+    const result = await tool.execute({ wave_number: 1, status: "done" }, toolCtx);
+    expect(result).toContain("Written wave 1");
+    expect(ctx.db.getWave("default", 1)?.status).toBe("done");
   });
 });

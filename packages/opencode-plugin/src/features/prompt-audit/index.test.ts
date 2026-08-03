@@ -181,9 +181,18 @@ describe("auditPromptSurfaces (real tree)", () => {
     // cross-reference to goop-wave-verifier (+273 bytes, +2 abs). Net:
     // 82,324 -> 83,111 bytes, absolute hits 66 -> 70, bold spans unchanged
     // at 137.
+    //
+    // The wave-verifier-gating workflow's Wave 3 Task 4 (Rule 4 remediation:
+    // latest-per-check_name verification gate) documented in
+    // agents/goop-wave-verifier.md that re-verifying a check records a new
+    // append-only row rather than replacing the old one, and that the wave
+    // gate reads each check's latest row. Net: 83,111 -> 83,373 bytes
+    // (+262), absolute hits unchanged at 70 (the added sentence uses
+    // "persist forever" and "instead of", not a must/never/always/critical/
+    // only judgment word), bold spans unchanged at 137.
     const agents = report.directories.find((d) => d.directory === "agents")!;
     expect(agents.files).toBe(15);
-    expect(agents.bytes).toBe(83_111);
+    expect(agents.bytes).toBe(83_373);
     expect(agents.boldSpans).toBe(137);
   });
 
@@ -214,9 +223,17 @@ describe("auditPromptSurfaces (real tree)", () => {
     // "never implements fixes" role invariant, the "acceptance-only" scope,
     // the "inspect/report-only" boundary, and the "never implements"
     // delegate statement).
+    //
+    // The wave-verifier-gating workflow's Wave 3 Task 4 (Rule 4 remediation:
+    // latest-per-check_name verification gate) corrected goop-execute.md's
+    // wave-completion gate description, which pinned the superseded
+    // "zero fail rows ever" reading, to the append-only latest-per-check
+    // rule the runtime now enforces. Net: 26,092 -> 26,318 bytes (+226),
+    // absolute hits 38 -> 39 (+1: "never deleted or edited" — a true
+    // data-integrity invariant, not a judgment call).
     const commands = report.directories.find((d) => d.directory === "commands")!;
     expect(commands.files).toBe(9);
-    expect(commands.bytes).toBe(26_092);
+    expect(commands.bytes).toBe(26_318);
   });
 
   it("references: 19 files, 161,350 bytes", () => {
@@ -367,7 +384,16 @@ describe("auditPromptSurfaces (real tree)", () => {
     // goop-help.md (never-implements-fixes role invariant, acceptance-only,
     // inspect/report-only boundary, delegate-never statement) — lifting the
     // total from 299 to 308.
-    expect(report.totalAbsoluteHits).toBe(308);
+    //
+    // The wave-verifier-gating workflow's Wave 3 Task 4 (Rule 4
+    // remediation: latest-per-check_name verification gate) corrected
+    // commands/goop-execute.md's wave-completion gate description to the
+    // append-only latest-per-check rule: +1 ("never deleted or edited" — a
+    // true data-integrity invariant). agents/goop-wave-verifier.md's
+    // matching clarification added zero new hits (its wording reuses the
+    // file's existing "only"/"never" vocabulary without a new match) —
+    // lifting the total from 308 to 309.
+    expect(report.totalAbsoluteHits).toBe(309);
   });
 
   it("per-file tokens are consistent with chars via estimateTokens", () => {

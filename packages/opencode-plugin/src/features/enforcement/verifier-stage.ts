@@ -93,15 +93,37 @@ export type { VerificationStatus };
 // ---------------------------------------------------------------------------
 
 export interface VerifiedRowLike {
+	/** Recency key. `id` is `INTEGER PRIMARY KEY AUTOINCREMENT` on the
+	 * append-only `verifications` table, so it is strictly increasing in
+	 * insertion order — sorted here rather than trusted from caller order. */
+	id: number;
+	/** The logical check this row reports on (e.g. `"test"`, `"typecheck"`). */
+	check_name: string;
 	status: VerificationStatus;
 }
 
 /**
- * True when there is at least one row and none is `"failed"`. An explicit
- * `"skipped"` row (alone or alongside passing rows) satisfies the gate as a
- * deliberate, auditable escape — a wave with zero rows is never verified.
+ * True when every distinct `check_name`'s *effective* (latest-by-`id`) row
+ * is non-`"failed"`, and at least one check exists. Rows are append-only —
+ * a later `pass`/`skip` for the SAME check supersedes that check's prior
+ * `fail`; a pass for a DIFFERENT check never erases another check's
+ * unresolved fail. A wave with zero rows is never verified; an explicit
+ * `"skipped"` effective row satisfies the gate as an auditable escape.
  */
 export function isWaveVerified(rows: readonly VerifiedRowLike[]): boolean {
 	if (rows.length === 0) return false;
-	return rows.every((row) => row.status !== "failed");
+
+	const latestByCheck = new Map<string, VerifiedRowLike>();
+	for (const row of rows) {
+		const existing = latestByCheck.get(row.check_name);
+		if (existing === undefined || row.id > existing.id) {
+			latestByCheck.set(row.check_name, row);
+		}
+	}
+
+	if (latestByCheck.size === 0) return false;
+	for (const row of latestByCheck.values()) {
+		if (row.status === "failed") return false;
+	}
+	return true;
 }

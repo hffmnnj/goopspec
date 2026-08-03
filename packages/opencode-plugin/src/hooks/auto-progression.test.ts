@@ -460,17 +460,42 @@ describe("auto-progression hook: wave verification gate", () => {
     expect(ctx.stateManager.getActiveWorkflow().phase).toBe("accept");
   });
 
-  it("a later passing row does not erase an earlier failing row — the wave stays blocked (append-only rows)", async () => {
+  it("a later passing row for the SAME check supersedes its own prior fail — progression proceeds (append-only rows)", async () => {
     const ctx = makeExecuteCtx(3);
     seedFinalWave(ctx, 3, "completed", ["done", "completed"], "failed");
     const workflowId = ctx.stateManager.getActiveWorkflowId();
     const wave = ctx.db.getWave(workflowId, 3);
     if (!wave) throw new Error("wave not seeded");
-    // Record a later passing row for a different check — verifications are
-    // append-only (no upsert), so this does not supersede the earlier failure.
+    // Verifications are append-only (no upsert) — the earlier fail row is
+    // never deleted. A later pass row for the SAME check_name ("test")
+    // supersedes it as the effective status for that check.
     ctx.db.insertVerification(workflowId, {
       wave_id: wave.id,
       check_name: "test",
+      status: "passed",
+    });
+
+    const hooks = createAutoProgressionHook(ctx);
+    const handler = hooks["tool.execute.after"] as NonNullable<Hooks["tool.execute.after"]>;
+    const output = makeOutput();
+    await handler(makeInput(), output);
+
+    expect(ctx.stateManager.getActiveWorkflow().phase).toBe("accept");
+    // Both rows persist — nothing was deleted or mutated.
+    expect(ctx.db.getVerifications(workflowId, wave.id)).toHaveLength(2);
+  });
+
+  it("a later passing row for a DIFFERENT check does not erase another check's unresolved fail — the wave stays blocked", async () => {
+    const ctx = makeExecuteCtx(3);
+    seedFinalWave(ctx, 3, "completed", ["done", "completed"], "failed");
+    const workflowId = ctx.stateManager.getActiveWorkflowId();
+    const wave = ctx.db.getWave(workflowId, 3);
+    if (!wave) throw new Error("wave not seeded");
+    // "test" is still failed at its latest row; "typecheck" passing does not
+    // resolve a different check's unresolved fail.
+    ctx.db.insertVerification(workflowId, {
+      wave_id: wave.id,
+      check_name: "typecheck",
       status: "passed",
     });
 

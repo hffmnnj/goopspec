@@ -122,8 +122,13 @@ describe("verification status mapping", () => {
 // isWaveVerified
 // ---------------------------------------------------------------------------
 
-function row(status: VerifiedRowLike["status"]): VerifiedRowLike {
-	return { status };
+let nextId = 1;
+function row(
+	status: VerifiedRowLike["status"],
+	check_name = "test",
+	id?: number,
+): VerifiedRowLike {
+	return { id: id ?? nextId++, check_name, status };
 }
 
 describe("isWaveVerified", () => {
@@ -143,30 +148,98 @@ describe("isWaveVerified", () => {
 		expect(isWaveVerified([row("skipped")])).toBe(true);
 	});
 
-	it("is true for multiple passed rows", () => {
-		expect(isWaveVerified([row("passed"), row("passed")])).toBe(true);
+	it("is true for multiple passed rows across different checks", () => {
+		expect(
+			isWaveVerified([row("passed", "test"), row("passed", "typecheck")]),
+		).toBe(true);
 	});
 
-	it("is false when any row among several is failed", () => {
-		expect(isWaveVerified([row("passed"), row("failed"), row("passed")])).toBe(
-			false,
-		);
+	it("is false when any check among several has a failed latest row", () => {
+		expect(
+			isWaveVerified([
+				row("passed", "typecheck"),
+				row("failed", "test"),
+				row("passed", "lint"),
+			]),
+		).toBe(false);
 	});
 
-	it("is false for a mixed skip/fail set", () => {
-		expect(isWaveVerified([row("skipped"), row("failed")])).toBe(false);
+	it("is false for a mixed skip/fail set across different checks", () => {
+		expect(
+			isWaveVerified([row("skipped", "lint"), row("failed", "test")]),
+		).toBe(false);
 	});
 
-	it("is true for a mixed pass/skip set", () => {
-		expect(isWaveVerified([row("passed"), row("skipped")])).toBe(true);
+	it("is true for a mixed pass/skip set across different checks", () => {
+		expect(
+			isWaveVerified([row("passed", "test"), row("skipped", "lint")]),
+		).toBe(true);
 	});
 
 	it("treats a pending row as non-failing on its own", () => {
 		expect(isWaveVerified([row("pending")])).toBe(true);
 	});
 
-	it("is false when a pending row accompanies a failed row", () => {
-		expect(isWaveVerified([row("pending"), row("failed")])).toBe(false);
+	it("is false when a pending row accompanies a failed row on a different check", () => {
+		expect(
+			isWaveVerified([row("pending", "lint"), row("failed", "test")]),
+		).toBe(false);
+	});
+
+	// ---------------------------------------------------------------------
+	// Latest-per-check_name semantics (append-only history)
+	// ---------------------------------------------------------------------
+
+	it("a later pass for the SAME check supersedes its own prior fail", () => {
+		expect(
+			isWaveVerified([row("failed", "test", 1), row("passed", "test", 2)]),
+		).toBe(true);
+	});
+
+	it("a later skip for the SAME check supersedes its own prior fail", () => {
+		expect(
+			isWaveVerified([row("failed", "test", 1), row("skipped", "test", 2)]),
+		).toBe(true);
+	});
+
+	it("a later fail for the SAME check supersedes its own prior pass", () => {
+		expect(
+			isWaveVerified([row("passed", "test", 1), row("failed", "test", 2)]),
+		).toBe(false);
+	});
+
+	it("a pass for a DIFFERENT check never supersedes another check's unresolved fail", () => {
+		expect(
+			isWaveVerified([row("failed", "test", 1), row("passed", "typecheck", 2)]),
+		).toBe(false);
+	});
+
+	it("is independent of array order — sorts by id, not caller position", () => {
+		// Fail row appended AFTER the pass row in the array, but its id is
+		// lower, so the pass (higher id) is still the effective latest.
+		expect(
+			isWaveVerified([row("passed", "test", 2), row("failed", "test", 1)]),
+		).toBe(true);
+	});
+
+	it("every check must have a non-failing latest row, not just one of several", () => {
+		expect(
+			isWaveVerified([
+				row("failed", "test", 1),
+				row("passed", "test", 2),
+				row("failed", "typecheck", 3),
+			]),
+		).toBe(false);
+	});
+
+	it("all checks resolved: same-check remediation plus an untouched passing check both count", () => {
+		expect(
+			isWaveVerified([
+				row("failed", "test", 1),
+				row("passed", "lint", 2),
+				row("passed", "test", 3),
+			]),
+		).toBe(true);
 	});
 });
 
