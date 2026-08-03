@@ -104,6 +104,7 @@ Under `autopilot` or `lazyAutopilot`, skip the interactive per-wave review entir
 - `currentWave: 0` means no wave has started.
 - Call `update-wave(N, total)` when work on Wave N begins, including `update-wave(1, total)` when Wave 1 starts.
 - Wave completion comes from the `waves` and `wave_tasks` records, not from this progress indicator.
+- Wave completion also requires the wave verification gate: `goop-wave-verifier` records a non-failing verification row for the wave via `goop_write_wave` `verifications[]`. The runtime enforces this boundary — `goop_write_wave` rejects the complete-status transition and `auto-progression.ts` blocks execute→accept until `isWaveVerified` (`src/features/enforcement/verifier-stage.ts`); see `commands/goop-execute.md` §Steps (wave verification gate).
 
 ### Parallel Execution Within a Wave
 
@@ -121,7 +122,7 @@ Start conservatively (2 parallel agents), increase when stable.
 - Waves grouped by technical layer instead of feature.
 - Tasks without verification steps.
 - Must-haves that do not map to any task.
-- Updating `update-wave` before a wave is verified.
+- Updating `update-wave`, or marking a wave complete, before its verification gate passes — the runtime now rejects it (`isWaveVerified` in `src/features/enforcement/verifier-stage.ts`).
 
 ---
 

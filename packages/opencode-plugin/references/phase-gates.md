@@ -8,7 +8,8 @@ Mandatory checkpoints that enforce workflow discipline. No phase proceeds until 
 |------|----------|-------------|-------------|
 | Discovery | Before `/goop-plan` | `interview_complete == true`, `requirements` document exists in DB (`goop_read_db({ doc_type: "requirements" })` returns content) | Orchestrator |
 | Spec | Before `/goop-execute` | `spec_locked == true`, `spec` document exists in DB, at least one wave row exists (via `goop_read_wave`), 100% traceability | Orchestrator |
-| Execution | Before `/goop-accept` | All waves and tasks complete, verification passing, no blockers | Orchestrator |
+| Wave Verification | Each wave during `/goop-execute` | Tasks complete → wave-scoped verifier evidence → remediation on gaps → non-failing effective evidence before completion | Orchestrator |
+| Execution | Before `/goop-accept` | All waves and tasks complete, final whole-workflow verification passing, no blockers | Orchestrator |
 | Acceptance | Within `/goop-accept` | Verification passed, user explicitly accepts | Orchestrator |
 
 ## Gate Semantics
@@ -29,6 +30,17 @@ Specification must be locked before execution.
 
 → Run: `/goop-plan`
 ```
+
+## Wave Verification Gate
+
+Each wave carries its own verification gate before it can be marked complete and before execute can progress to accept:
+
+1. **Tasks complete** — every task in the wave is done per the wave plan.
+2. **Wave-scoped verifier evidence** — the orchestrator dispatches `goop-wave-verifier` scoped to that wave (one wave per dispatch; inspect/report-only, never implements fixes). The verifier records evidence rows via `goop_write_wave` `verifications[]`.
+3. **Bounded remediation and re-verification** — on gaps, the orchestrator dispatches the correctly tiered executor to remediate, then re-dispatches `goop-wave-verifier` for that wave. The remediation cycle is bounded by the three-strikes convention in `references/test-authoring.md` §Test Execution Discipline: after three failed attempts on the same gap, open a blocker via `goop_blocker` and stop.
+4. **Completion and progression** — the wave completes, and execute progresses to accept, when its effective verification evidence is non-failing (at least one recorded check, and every check's latest recorded row is `pass` or an explicit `skip`). The runtime enforces this boundary: `goop_write_wave` rejects a complete-status transition without it, and auto-progression blocks execute→accept until the gate holds.
+
+Acceptance remains a distinct final whole-workflow audit: after every wave has passed its own gate, `goop-verifier` inspects the finished workflow against the spec at the accept gate.
 
 ## Bypass Policy
 

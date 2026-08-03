@@ -31,7 +31,7 @@ See `references/core-protocol.md` §Five-Phase Workflow for the full phase table
 
 ## Agents
 
-The orchestrator delegates to 13 specialized agents:
+One orchestrator, fourteen specialists. The orchestrator delegates and never implements.
 
 - `goop-orchestrator` — workflow conductor.
 - `goop-planner` — spec and blueprint authoring.
@@ -43,7 +43,8 @@ The orchestrator delegates to 13 specialized agents:
 - `goop-executor-frontend-high` — deep design or UI-architecture work; use when genuinely warranted.
 - `goop-researcher` — domain and technology research.
 - `goop-explorer` — codebase mapping.
-- `goop-verifier` — spec compliance and security audit.
+- `goop-wave-verifier` — per-wave verification during execute; scoped to one wave, inspect/report-only, never implements fixes.
+- `goop-verifier` — acceptance-only; spec compliance and security audit at the accept gate.
 - `goop-tester` — tests and QA.
 - `goop-debugger` — scientific debugging.
 - `goop-writer` — documentation.
