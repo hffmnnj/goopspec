@@ -10,9 +10,21 @@ import {
 } from "../../core/pending-compaction.js";
 import { tool } from "../../core/sdk-compat.js";
 import type { ToolContext, ToolDefinition } from "../../core/sdk-compat.js";
-import type { CompactionHandoffSnapshot, GoopState, PluginContext } from "../../core/types.js";
+import type {
+  CompactionHandoffBlocker,
+  CompactionHandoffSnapshot,
+  CompactionHandoffTask,
+  GoopState,
+  PluginContext,
+} from "../../core/types.js";
 import { COMPACT_RECONCILIATION_DIRECTIVE } from "../../shared/compact-reminder.js";
 import { log, logError } from "../../shared/logger.js";
+
+/** Maximum task rows projected into the snapshot (current wave only). */
+const MAX_SNAPSHOT_TASKS = 8;
+
+/** Maximum open-blocker rows projected into the snapshot. */
+const MAX_SNAPSHOT_BLOCKERS = 5;
 
 interface ModelRef {
   providerID: string;
@@ -163,6 +175,70 @@ function detectDivergence(cached: GoopState, persisted: GoopState): DivergenceCh
   return { divergentFields, persistedState: persisted };
 }
 
+interface CurrentWaveMetadata {
+  readonly currentWaveTitle: string | undefined;
+  readonly currentWaveStatus: string | undefined;
+  readonly tasks: ReadonlyArray<CompactionHandoffTask>;
+  readonly openBlockers: ReadonlyArray<CompactionHandoffBlocker>;
+  readonly prBranch: string | undefined;
+  readonly prUrl: string | undefined;
+}
+
+/**
+ * Collect current-wave task, blocker, and PR metadata from the GoopSpecDB.
+ *
+ * Returns `undefined` when the current wave has no row, the wave number is 0,
+ * or any DB accessor throws. The caller must never fail to produce a valid
+ * core snapshot because of a DB error — the optional fields simply drop out.
+ */
+function collectCurrentWaveMetadata(
+  ctx: PluginContext,
+  workflowId: string,
+  currentWave: number,
+): CurrentWaveMetadata | undefined {
+  if (currentWave <= 0) return undefined;
+
+  try {
+    const waves = ctx.db.getWaves(workflowId, [currentWave]);
+    const wave = waves[0];
+    if (!wave) return undefined;
+
+    const tasks: CompactionHandoffTask[] = ctx.db
+      .getWaveTasks(wave.id)
+      .slice(0, MAX_SNAPSHOT_TASKS)
+      .map((t) => ({
+        index: t.task_index,
+        description: t.description,
+        status: t.status,
+        agent: t.agent ?? undefined,
+      }));
+
+    const openBlockers: CompactionHandoffBlocker[] = ctx.db
+      .getBlockers(workflowId, "open")
+      .slice(0, MAX_SNAPSHOT_BLOCKERS)
+      .map((b) => ({
+        id: b.id,
+        severity: b.severity,
+        description: b.description,
+      }));
+
+    return {
+      currentWaveTitle: wave.title || undefined,
+      currentWaveStatus: wave.status,
+      tasks,
+      openBlockers,
+      prBranch: wave.pr_branch ?? undefined,
+      prUrl: wave.pr_url ?? undefined,
+    };
+  } catch (error) {
+    logError(
+      "goop_compact could not collect current-wave metadata for the handoff snapshot",
+      error,
+    );
+    return undefined;
+  }
+}
+
 async function captureCompactionHandoff(
   ctx: PluginContext,
   nextStep: string,
@@ -173,6 +249,8 @@ async function captureCompactionHandoff(
     if (!workflow) {
       throw new Error(`Active workflow ${state.activeWorkflowId} was not found`);
     }
+
+    const metadata = collectCurrentWaveMetadata(ctx, state.activeWorkflowId, workflow.currentWave);
 
     return {
       workflowId: state.activeWorkflowId,
@@ -189,6 +267,12 @@ async function captureCompactionHandoff(
       branch: await resolveCurrentBranch(ctx.sdk.worktree),
       nextStep,
       capturedAtMs: Date.now(),
+      currentWaveTitle: metadata?.currentWaveTitle,
+      currentWaveStatus: metadata?.currentWaveStatus,
+      tasks: metadata?.tasks,
+      openBlockers: metadata?.openBlockers,
+      prBranch: metadata?.prBranch,
+      prUrl: metadata?.prUrl,
     };
   } catch (error) {
     logError("goop_compact could not capture the compaction handoff snapshot", error);

@@ -93,9 +93,33 @@ export interface PendingLazyAutopilotNudge {
 }
 
 /**
+ * A single task row projected into a compaction handoff snapshot.
+ */
+export interface CompactionHandoffTask {
+  readonly index: number;
+  readonly description: string;
+  readonly status: string;
+  readonly agent: string | undefined;
+}
+
+/**
+ * A single open blocker projected into a compaction handoff snapshot.
+ */
+export interface CompactionHandoffBlocker {
+  readonly id: number;
+  readonly severity: string;
+  readonly description: string;
+}
+
+/**
  * Durable-in-memory workflow context captured when a compaction is queued.
  * `nextStep` remains directly consumable by the compaction hook rather than
  * requiring consumers to decode an opaque serialized payload.
+ *
+ * The optional fields (`currentWaveTitle` … `prUrl`) are populated from the
+ * GoopSpecDB at queue time when the current wave has a row. They are
+ * `undefined` when the DB is empty, the current wave is 0, or a DB accessor
+ * throws. The core fields are always present on a valid snapshot.
  */
 export interface CompactionHandoffSnapshot {
   readonly workflowId: string;
@@ -112,6 +136,12 @@ export interface CompactionHandoffSnapshot {
   readonly branch: string | undefined;
   readonly nextStep: string;
   readonly capturedAtMs: number;
+  readonly currentWaveTitle?: string;
+  readonly currentWaveStatus?: string;
+  readonly tasks?: ReadonlyArray<CompactionHandoffTask>;
+  readonly openBlockers?: ReadonlyArray<CompactionHandoffBlocker>;
+  readonly prBranch?: string;
+  readonly prUrl?: string;
 }
 
 // ---------------------------------------------------------------------------

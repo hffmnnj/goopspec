@@ -361,6 +361,35 @@ describe("registerHooksV2()", () => {
     env.cleanup();
   });
 
+  it("keeps experimental.session.compacting in the V2 skipped list and registers no compaction capability (AD8, NFR4)", async () => {
+    const ctx = createMockPluginContext();
+    contexts.push(ctx);
+    const registrations: Registrations = {
+      agentTransforms: 0,
+      catalogTransforms: 0,
+      agentReloads: 0,
+      catalogReloads: 0,
+    };
+    const runtimeCtx = createRuntimeContext(registrations);
+    const session = runtimeCtx.session;
+    const tool = runtimeCtx.tool;
+    if (!session || !tool) throw new Error("test setup: session and tool must be present");
+    const sessionHookSpy = spyOn(session, "hook");
+    const toolHookSpy = spyOn(tool, "hook");
+
+    await registerHooksV2(runtimeCtx, ctx);
+
+    // AD8/NFR4: experimental.session.compacting is V1-only. The V2 adapter
+    // must never register a compaction handler with either runtime capability.
+    const sessionEvents = sessionHookSpy.mock.calls.map((call) => call[0]);
+    expect(sessionEvents).not.toContain("experimental.session.compacting");
+    expect(sessionEvents).toEqual(["request"]);
+
+    const toolEvents = toolHookSpy.mock.calls.map((call) => call[0]);
+    expect(toolEvents).not.toContain("experimental.session.compacting");
+    expect(toolEvents).toEqual(expect.arrayContaining(["execute.before", "execute.after"]));
+  });
+
   it("logs the V2 lazy-autopilot limitation without claiming a fallback", async () => {
     const ctx = createMockPluginContext();
     contexts.push(ctx);

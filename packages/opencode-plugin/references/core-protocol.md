@@ -64,7 +64,9 @@ When `goop_compact` queues a compaction, it captures a `CompactionHandoffSnapsho
 - The `next_step` string provided by the caller.
 - A `capturedAtMs` timestamp.
 
-This snapshot is stored in the in-process `compactionHandoff` map keyed by session ID. When the compaction survival hook fires (`experimental.session.compacting`), it reads the snapshot, reconciles the active workflow binding (rebinding to the snapshot's workflow if the live binding has drifted), and builds a survival block that is pushed into `output.context`. The snapshot is consumed once and deleted.
+This snapshot is stored in the in-process `compactionHandoff` map keyed by session ID. When the compaction survival hook fires (`experimental.session.compacting`), it reads the snapshot, reconciles the active workflow binding (rebinding to the snapshot's workflow if the live binding has drifted), and **replaces `output.prompt`** with a bounded continuation prompt built by the shared formatter (`src/shared/continuation-prompt.ts`). The hook does not append to `output.context`; the snapshot is consumed once and deleted.
+
+**`output.prompt` is last-writer-wins.** The compaction hook overwrites any prompt content the host or an earlier hook placed in `output.prompt`; earlier content is not preserved or merged. `output.context` is never modified by the hook — if the host does not read `output.context` after compaction, any context entries pushed by other hooks are silently discarded. The hook stands down without mutating either field when no valid workflow can be resolved.
 
 ### Pre-Flush Before Compaction
 
