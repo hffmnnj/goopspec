@@ -14,6 +14,7 @@ import type {
   V2AgentDraft,
   V2AgentInfo,
   V2CatalogDraft,
+  V2CatalogModel,
   V2RuntimeContext,
   V2SessionRequestEvent,
   V2ToolExecuteAfterEvent,
@@ -30,6 +31,17 @@ interface Registrations {
   catalogTransforms: number;
   agentReloads: number;
   catalogReloads: number;
+}
+
+/**
+ * Casts host catalog test data through a single, explicit boundary. Real V2
+ * hosts publish fields (`reasoning`, `reasoning_options`) that the minimal
+ * `V2CatalogModel` type does not declare (see fn_20260803_pia9pfxi); this
+ * keeps that documented gap from forcing excess-property errors on realistic
+ * fixtures while still routing every fixture through the real type.
+ */
+function catalogModel(fields: Record<string, unknown>): V2CatalogModel {
+  return fields as V2CatalogModel;
 }
 
 function createRuntimeContext(
@@ -443,5 +455,199 @@ describe("registerHooksV2()", () => {
       if (originalDebug === undefined) process.env.GOOPSPEC_DEBUG = undefined;
       else process.env.GOOPSPEC_DEBUG = originalDebug;
     }
+  });
+
+  it("sets agent.model.variant from an id-only reasoning_options catalog model without fabricating headers or body", async () => {
+    const env = setupTestEnvironment("v2-thinking-id-only-apply");
+    const ctx = createMockPluginContext({ testDir: env.testDir, db: env.db });
+    contexts.push(ctx);
+    writeFileSync(
+      join(ctx.sdk.directory, "goopspec.json"),
+      JSON.stringify({ agentThinkingLevels: { "executor-high": "medium" } }),
+    );
+    const agent: V2AgentInfo = {
+      id: "goop-executor-high",
+      model: { providerID: "openai", id: "gpt-5.6-sol" },
+      request: { headers: { "x-existing": "keep" }, body: { existing: true } },
+    };
+    // Real host shape (fn_20260803_pia9pfxi): reasoning:true + reasoning_options,
+    // no `variants` field at all — the host publishes no request encoding.
+    const catalog: V2CatalogDraft = {
+      provider: {
+        list: () => [
+          {
+            provider: { id: "openai" },
+            models: new Map([
+              [
+                "gpt-5.6-sol",
+                catalogModel({
+                  reasoning: true,
+                  reasoning_options: [
+                    { type: "effort", values: ["none", "low", "medium", "high", "xhigh", "max"] },
+                  ],
+                }),
+              ],
+            ]),
+          },
+        ],
+      },
+    };
+    const agents: V2AgentDraft = {
+      list: () => [agent],
+      update: (_id, update) => update(agent),
+    };
+    const registrations: Registrations = {
+      agentTransforms: 0,
+      catalogTransforms: 0,
+      agentReloads: 0,
+      catalogReloads: 0,
+    };
+
+    await registerHooksV2(createRuntimeContext(registrations, { agent: agents, catalog }), ctx);
+
+    expect(agent.model?.variant).toBe("medium");
+    expect(agent.request.headers).toEqual({ "x-existing": "keep" });
+    expect(agent.request.body).toEqual({ existing: true });
+    env.cleanup();
+  });
+
+  it("emits the preserve-default warning and leaves the agent unchanged for an unsupported level", async () => {
+    const env = setupTestEnvironment("v2-thinking-unsupported");
+    const ctx = createMockPluginContext({ testDir: env.testDir, db: env.db });
+    contexts.push(ctx);
+    writeFileSync(
+      join(ctx.sdk.directory, "goopspec.json"),
+      JSON.stringify({ agentThinkingLevels: { "executor-high": "xhigh" } }),
+    );
+    const agent: V2AgentInfo = {
+      id: "goop-executor-high",
+      model: { providerID: "openai", id: "gpt-test" },
+      request: { headers: { "x-existing": "keep" }, body: { existing: true } },
+    };
+    const catalog: V2CatalogDraft = {
+      provider: {
+        list: () => [
+          {
+            provider: { id: "openai" },
+            models: new Map([
+              [
+                "gpt-test",
+                catalogModel({
+                  variants: [{ id: "medium", headers: {}, body: { reasoning_effort: "medium" } }],
+                }),
+              ],
+            ]),
+          },
+        ],
+      },
+    };
+    const agents: V2AgentDraft = {
+      list: () => [agent],
+      update: (_id, update) => update(agent),
+    };
+    const registrations: Registrations = {
+      agentTransforms: 0,
+      catalogTransforms: 0,
+      agentReloads: 0,
+      catalogReloads: 0,
+    };
+    const errorSpy = spyOn(console, "error").mockImplementation(() => {});
+
+    await registerHooksV2(createRuntimeContext(registrations, { agent: agents, catalog }), ctx);
+
+    expect(agent.model?.variant).toBeUndefined();
+    expect(agent.request.headers).toEqual({ "x-existing": "keep" });
+    expect(agent.request.body).toEqual({ existing: true });
+    const logged = errorSpy.mock.calls.map((c) => String(c[0] ?? ""));
+    expect(
+      logged.some(
+        (m) => m.includes("goop-executor-high") && m.includes("preserving the provider default"),
+      ),
+    ).toBe(true);
+
+    errorSpy.mockRestore();
+    env.cleanup();
+  });
+
+  it("does not expose a transiently emptied capabilities map to a reentrant agent transform racing catalog capture", async () => {
+    const env = setupTestEnvironment("v2-thinking-reentrancy");
+    const ctx = createMockPluginContext({ testDir: env.testDir, db: env.db });
+    contexts.push(ctx);
+    writeFileSync(
+      join(ctx.sdk.directory, "goopspec.json"),
+      JSON.stringify({ agentThinkingLevels: { "executor-high": "medium" } }),
+    );
+
+    const agent: V2AgentInfo = {
+      id: "goop-executor-high",
+      model: { providerID: "openai", id: "gpt-test" },
+      request: { headers: {}, body: {} },
+    };
+    const reentrantAgent: V2AgentInfo = {
+      id: "goop-executor-high",
+      model: { providerID: "openai", id: "gpt-test" },
+      request: { headers: {}, body: {} },
+    };
+    const catalogRecords = [
+      {
+        provider: { id: "openai" },
+        models: new Map([
+          [
+            "gpt-test",
+            catalogModel({
+              variants: [{ id: "medium", headers: {}, body: { reasoning_effort: "medium" } }],
+            }),
+          ],
+        ]),
+      },
+    ];
+    const registrations: Registrations = {
+      agentTransforms: 0,
+      catalogTransforms: 0,
+      agentReloads: 0,
+      catalogReloads: 0,
+    };
+
+    // A host that reenters the already-registered agent transform WHILE this
+    // catalog capture is still enumerating providers — before this refresh's
+    // new capability snapshot has been captured. Guards against firing on the
+    // very first registration, when no agent transform is registered yet.
+    let reentered = false;
+    const catalog: V2CatalogDraft = {
+      provider: {
+        list: () => {
+          if (!reentered && registrations.agentTransform) {
+            reentered = true;
+            void registrations.agentTransform({
+              list: () => [reentrantAgent],
+              update: (_id, update) => update(reentrantAgent),
+            });
+          }
+          return catalogRecords;
+        },
+      },
+    };
+    const agents: V2AgentDraft = {
+      list: () => [agent],
+      update: (_id, update) => update(agent),
+    };
+
+    const hooks = await registerHooksV2(
+      createRuntimeContext(registrations, { agent: agents, catalog }),
+      ctx,
+    );
+    expect(agent.model?.variant).toBe("medium");
+
+    // The second refresh is where the reentrant call fires: by now
+    // `registrations.agentTransform` is already set from the first pass.
+    await hooks.reloadThinkingLevels();
+
+    expect(reentered).toBe(true);
+    // The reentrant call must resolve against the last-known-good, fully
+    // populated snapshot — never a transiently emptied map from an in-place
+    // clear() that runs before the new snapshot is captured.
+    expect(reentrantAgent.model?.variant).toBe("medium");
+    expect(reentrantAgent.request.body.reasoning_effort).toBe("medium");
+    env.cleanup();
   });
 });
