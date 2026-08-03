@@ -9,7 +9,7 @@ import {
   createMockPluginContext,
   setupTestEnvironment,
 } from "../test-utils.js";
-import { registerHooksV2 } from "./hooks-v2.js";
+import { __resetV2LazyAutopilotLimitationLog, registerHooksV2 } from "./hooks-v2.js";
 import type {
   V2AgentDraft,
   V2AgentInfo,
@@ -99,6 +99,7 @@ describe("registerHooksV2()", () => {
   afterEach(() => {
     clearMemoryCache();
     for (const context of contexts.splice(0)) context.db.close();
+    __resetV2LazyAutopilotLimitationLog();
   });
 
   it("registers the system transform and reuses its canonical V1 handler", async () => {
@@ -387,5 +388,60 @@ describe("registerHooksV2()", () => {
     const toolEvents = toolHookSpy.mock.calls.map((call) => call[0]);
     expect(toolEvents).not.toContain("experimental.session.compacting");
     expect(toolEvents).toEqual(expect.arrayContaining(["execute.before", "execute.after"]));
+  });
+
+  it("logs the V2 lazy-autopilot limitation without claiming a fallback", async () => {
+    const ctx = createMockPluginContext();
+    contexts.push(ctx);
+    const errorSpy = spyOn(console, "error").mockImplementation(() => {});
+
+    await registerHooksV2({} as V2RuntimeContext, ctx);
+
+    const logged = errorSpy.mock.calls.map((c) => String(c[0] ?? ""));
+    const diag = logged.find((m) => m.includes("Lazy autopilot nudge is unavailable in V2"));
+    expect(diag).toBeDefined();
+    expect(diag).toContain("unavailable");
+    expect(diag).not.toContain("fallback");
+    errorSpy.mockRestore();
+  });
+
+  it("includes 'event' in the V2 skipped hooks list so the nudge remains inert under V2", async () => {
+    // The nudge dispatch lives in the V1 `event` hook (event-handler.ts
+    // session.idle → dispatchLazyAutopilotNudge). V2 does not expose an
+    // `event` capability, so the hook is never registered and the nudge
+    // cannot fire. The skipped list is the structural record that documents
+    // this limitation and prevents a future V2 adapter from silently wiring
+    // the event hook without an explicit capability check.
+    const ctx = createMockPluginContext();
+    contexts.push(ctx);
+    const registrations: Registrations = {
+      agentTransforms: 0,
+      catalogTransforms: 0,
+      agentReloads: 0,
+      catalogReloads: 0,
+    };
+
+    const originalDebug = process.env.GOOPSPEC_DEBUG;
+    process.env.GOOPSPEC_DEBUG = "true";
+    const logSpy = spyOn(console, "log").mockImplementation(() => {});
+
+    try {
+      await registerHooksV2(createRuntimeContext(registrations), ctx);
+
+      const registrationLog = logSpy.mock.calls.find(
+        (call) =>
+          typeof call[0] === "string" &&
+          call[0].includes("Registered GoopSpec runtime hooks with V2"),
+      );
+      expect(registrationLog).toBeDefined();
+
+      const data = registrationLog?.[1] as { skipped?: string[] } | undefined;
+      expect(data?.skipped).toBeDefined();
+      expect(data?.skipped).toContain("event");
+    } finally {
+      logSpy.mockRestore();
+      if (originalDebug === undefined) process.env.GOOPSPEC_DEBUG = undefined;
+      else process.env.GOOPSPEC_DEBUG = originalDebug;
+    }
   });
 });

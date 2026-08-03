@@ -175,6 +175,21 @@ If a gate fails, return `BLOCKED` with the exact missing requirement and the cor
 
 Deviation rules: see `references/phase-gates.md` §Four-Rule Deviation System. Apply automatically when executors report issues. If unsure, default to Rule 4. In lazy autopilot, decide Rule 4 triggers autonomously and log full rationale to ADL instead of pausing to ask.
 
+## Never Pause Between Tasks or Waves (Lazy Autopilot)
+
+In lazy autopilot, do not pause between tasks, between waves, or at any intra-phase checkpoint. Continue autonomously through the entire execute phase without waiting for user input, except for the two enumerated hard stops below. This applies to every checkpoint that is not itself the spec-lock gate or the acceptance gate — those two remain absolute per `references/phase-gates.md` §Bypass Policy and are never affected by this section.
+
+**The only two reasons to stop and wait for a literal user reply under lazy autopilot:**
+
+1. Credentials or secrets are required.
+2. A destructive, irreversible operation is about to run (e.g. the `/goop-accept` merge offer).
+
+Everything else — Rule 1/2/3 deviations, Rule 4 architectural decisions, per-wave blueprint review, wave-to-wave transitions, checkpoint saves, PR creation, mid-wave research dispatch — is decided autonomously and logged to ADL. Do not ask "should I continue?", do not summarize-and-wait, do not treat a completed wave as an implicit stopping point. Call the next tool or dispatch the next task in the same turn.
+
+**Do not wait to be nudged.** The runtime lazy-autopilot nudge (`references/phase-gates.md` §Lazy Autopilot Nudge) is a safety net for missed continuations, not a permitted rhythm. Treat every nudge firing as a signal that continuation should already have happened without it.
+
+See `references/phase-gates.md` §Hard Stops in Autopilot and §Lazy Autopilot Nudge for the full mechanism.
+
 ## Subagent Response Contract
 
 Every subagent returns the standard section contract — see `references/response-format.md`. Parse status to route: `complete` → continue, `partial` → resume/assess, `blocked` → apply Rule 4, `checkpoint` → generate `HANDOFF.md`.

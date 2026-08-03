@@ -150,7 +150,7 @@ Message 2: goop_state({ action: "set-autopilot", autopilot: true, lazy: true })
 Single message: goop_state({ action: "create-workflow", workflowId: "my-workflow", activate: true })
 ```
 
-(Note: once the `activate` flag lands, this becomes a single call instead of two — the best fix is often to eliminate the second call entirely via a tool-design improvement, not just batch it.)
+(The `activate` flag already collapses create + switch into one call — see `tool-reference.md`. Never issue `create-workflow` followed by a separate `set-active-workflow` call for the same ID; the two-call form above is the anti-pattern, not a fallback.)
 
 ```
 Single message, two parallel tool calls:
@@ -158,6 +158,12 @@ Single message, two parallel tool calls:
   - goop_search_notes({ query: "..." })
 (called together in the same turn since neither depends on the other's output)
 ```
+
+### Trust Successful Tool Results — Do Not Retry-Without-Progress
+
+A tool call that returns success is durable. Do not re-issue it, regenerate an ID it already created, or repeat a multi-step sequence out of unwarranted doubt about uniqueness or persistence. This produced a real orchestrator failure: repeatedly calling `create-workflow`/`set-active-workflow` with a freshly regenerated workflowId, several times in a row, with every call succeeding and no error ever surfacing — pure wasted repetition with no forward progress, and no document ever said "stop, you're done."
+
+If you are unsure whether a prior state-mutating call took effect, verify explicitly (`goop_state({ action: "get" })` or `goop_status`) before deciding whether to act again. Re-doing a successful mutation is not verification — it is the loop.
 
 ## Agent Boot Sequence
 

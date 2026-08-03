@@ -29,9 +29,9 @@ goop_reference({ name: "discovery-interview" })
 
 ## Steps
 
-1. **Create a new workflow** — do not reuse the active one. Infer a kebab-case `workflowId` from the user's prompt (or use the supplied `workflow-id` argument), then:
-   - `goop_state({ action: "create-workflow", workflowId: "<new-id>" })`
-   - `goop_state({ action: "set-active-workflow", workflowId: "<new-id>" })`
+1. **Create and activate a new workflow in a single call** — do not reuse the active one, and do not split this into a separate `create-workflow` + `set-active-workflow` pair. Infer a kebab-case `workflowId` from the user's prompt (or use the supplied `workflow-id` argument), then:
+   - `goop_state({ action: "create-workflow", workflowId: "<new-id>", activate: true })`
+   - Trust a successful response and move to step 2 immediately. Do not regenerate the ID or repeat this call — see `references/core-protocol.md` §Trust Successful Tool Results for why repeating an already-succeeded state call is a bug, not a safety measure.
 2. **Checkout a new git branch** named after the workflowId before any file writes:
    - `git checkout -b <workflowId>`
    - All implementation work for this workflow happens on this branch. Agents must never switch branches mid-workflow or work across multiple branches simultaneously.
@@ -47,7 +47,7 @@ goop_reference({ name: "discovery-interview" })
 
 If `workflow.lazyAutopilot == true`, infer all six categories from the user's prompt, skip the `question` tool, then:
 
-1. Create and bind a **new** workflowId (never reuse the active workflow).
+1. Create and activate a **new** workflowId in a single call (never reuse the active workflow): `goop_state({ action: "create-workflow", workflowId: "<new-id>", activate: true })`.
 2. Checkout a new git branch: `git checkout -b <workflowId>`.
 3. Write REQUIREMENTS.md via `goop_write_db({ doc_type: "requirements", content: "..." })`.
    - Infer atomic PR preference as `Yes` (one PR per wave) unless the user's prompt explicitly opts out. Include `## Atomic PR Strategy: Yes — one PR per wave` in the inferred REQUIREMENTS.md.
@@ -66,6 +66,7 @@ mcp_slashcommand({ command: "/goop-plan" })
 ## Anti-patterns
 
 - Reusing or appending to the current active workflow instead of creating a new one.
+- Repeating `create-workflow`/`set-active-workflow` calls, or regenerating the workflowId, after a call already returned success. Verify with `goop_status` or `goop_state({ action: "get" })` if genuinely uncertain — never blindly retry a successful mutation.
 - Starting work on `main` or the previous workflow's branch.
 - Skipping branch creation before file writes.
 - Skip the six discovery categories.
