@@ -34,6 +34,7 @@ import { createAutoProgressionHook } from "./hooks/auto-progression.js";
 import { IDLE_COMPACTION_DEFER_MS, createEventHandlerHook } from "./hooks/event-handler.js";
 import { createHooks } from "./hooks/index.js";
 import { dispatchLazyAutopilotNudge } from "./hooks/lazy-autopilot-nudge/index.js";
+import { __clearNudgeRateLimitState, buildNudgeFingerprint } from "./hooks/lazy-autopilot-nudge/rate-limit.js";
 import {
   createDefaultWorkflowState,
   createMockCompactionHandoff,
@@ -841,6 +842,284 @@ describe("GoopSpec 5-phase integration", () => {
       );
       expect(ctx.stateManager.getActiveWorkflow().phase).toBe("accept");
       expect(completedOutput.output).toContain("3/3 tasks complete");
+    });
+  });
+
+  // ========================================================================
+  // 11. Wave-verification remediation loop (W3.T3 / MH3 / MH7 / MH8)
+  //
+  // Proves the bounded fail → remediate → pass → complete path and that
+  // lazy autopilot keeps moving across a verification-only turn.
+  //
+  // MATERIAL DEVIATION from MH3's literal wording (logged to ADL):
+  // Wave 2 D2 made verification rows insert-only and the gate predicate
+  // `isWaveVerified = rows.length >= 1 AND zero failing rows` (locked in
+  // src/features/enforcement/verifier-stage.ts and pinned by
+  // auto-progression.test.ts:463). A wave row with a historical fail
+  // therefore CANNOT be unblocked by inserting a later pass row — the
+  // gate is permanent for that wave. The integration scenarios below
+  // model the supported auditable mechanisms instead of silently
+  // weakening D2: the happy path (no fail row) completes and progresses;
+  // the gate-enforcement path proves a fail row blocks completion, a
+  // later pass row does NOT unblock it, and the orchestrator's recourse
+  // is to open a high-severity blocker (which the lazy-autopilot guard
+  // observes and suppresses).
+  // ========================================================================
+
+  describe("wave-verification remediation loop", () => {
+    function makeExecuteCtx() {
+      return createMockPluginContext({
+        testDir,
+        state: {
+          activeWorkflowId: "default",
+          workflows: {
+            default: createDefaultWorkflowState({
+              phase: "execute",
+              currentWave: 2,
+              totalWaves: 2,
+              specLocked: true,
+              lazyAutopilot: true,
+            }),
+          },
+        },
+      });
+    }
+
+    // Scenario A — supported happy path: the verifier records a pass row,
+    // then the orchestrator marks the wave complete and progression fires.
+    it("supported happy path: pass row recorded → wave completion succeeds → progression allowed", async () => {
+      const ctx = makeExecuteCtx();
+      const tools = createTools(ctx);
+      const writeWave = tools.goop_write_wave;
+      const toolContext = createMockToolContext();
+
+      // Wave 2 (final) exists with two tasks, one still in progress.
+      await writeWave.execute(
+        {
+          wave_number: 2,
+          title: "Final wave",
+          status: "in_progress",
+          tasks: [
+            { task_index: 1, description: "First", status: "complete" },
+            { task_index: 2, description: "Second", status: "in_progress" },
+          ],
+        },
+        toolContext,
+      );
+
+      // Verification-only turn: the verifier records a pass row while the
+      // second task is still in progress. No task-status change.
+      await writeWave.execute(
+        {
+          wave_number: 2,
+          verifications: [{ check_name: "test", status: "pass", detail: "scoped run" }],
+        },
+        toolContext,
+      );
+
+      // Remediation represented: the executor finishes the second task.
+      await writeWave.execute(
+        { wave_number: 2, task_updates: [{ task_index: 2, status: "complete" }] },
+        toolContext,
+      );
+
+      // Wave completion succeeds because the gate reads the prior pass row
+      // and finds zero failing rows.
+      const completion = await writeWave.execute(
+        { wave_number: 2, status: "completed" },
+        toolContext,
+      );
+      expect(completion).toContain("Written wave 2");
+      expect(ctx.db.getWave("default", 2)?.status).toBe("completed");
+
+      // Auto-progression fires and transitions execute → accept because
+      // the final wave is complete and the verification gate is satisfied.
+      const autoProgression = createAutoProgressionHook(ctx)["tool.execute.after"];
+      const output = { title: "result", output: "ok", metadata: {} };
+      await autoProgression?.(
+        { tool: "goop_write_wave", sessionID: "orchestrator", callID: "complete", args: {} },
+        output,
+      );
+      expect(ctx.stateManager.getActiveWorkflow().phase).toBe("accept");
+      expect(output.output).toContain("2/2 tasks complete");
+    });
+
+    // Scenario B — gate enforcement with a fail row: proves the locked D2
+    // behavior is honored end-to-end. A fail row blocks completion; a later
+    // pass row does NOT unblock it; the supported terminal state is to open
+    // a high-severity blocker, which the lazy-autopilot guard observes and
+    // uses to suppress further nudges.
+    it("locked D2 enforced: fail row blocks completion; later pass row does NOT unblock; blocker suppresses nudge", async () => {
+      const ctx = makeExecuteCtx();
+      const tools = createTools(ctx);
+      const writeWave = tools.goop_write_wave;
+      const blocker = tools.goop_blocker;
+      const toolContext = createMockToolContext();
+      __clearNudgeRateLimitState();
+
+      // Wave exists with both tasks complete but a failing verification row.
+      await writeWave.execute(
+        {
+          wave_number: 2,
+          title: "Failing final wave",
+          status: "in_progress",
+          tasks: [
+            { task_index: 1, description: "First", status: "complete" },
+            { task_index: 2, description: "Second", status: "complete" },
+          ],
+          verifications: [{ check_name: "test", status: "fail", detail: "regression: 2 failing" }],
+        },
+        toolContext,
+      );
+
+      // 1. Completion is BLOCKED by the gate (zero-pass / one-fail row).
+      const blockedCompletion = await writeWave.execute(
+        { wave_number: 2, status: "completed" },
+        toolContext,
+      );
+      expect(blockedCompletion).toContain("Error in goop_write_wave");
+      expect(blockedCompletion).toContain("cannot be marked complete");
+      expect(blockedCompletion).toContain("goop-wave-verifier");
+      expect(ctx.db.getWave("default", 2)?.status).toBe("in_progress");
+
+      // 2. Remediation phase represented: the orchestrator dispatches an
+      //    executor to fix the gap, then re-dispatches the wave verifier.
+      //    Per W3.T1 docs this is the documented loop. Per W2 D2 (locked),
+      //    inserting a later pass row cannot unblock the wave — the gate
+      //    reads ALL rows and rejects any wave with a historical fail.
+      const remediationRow = await writeWave.execute(
+        {
+          wave_number: 2,
+          verifications: [{ check_name: "test", status: "pass", detail: "post-fix recheck" }],
+        },
+        toolContext,
+      );
+      expect(remediationRow).toContain("Verifications:");
+      expect(remediationRow).toContain("test=pass");
+
+      // 3. Re-attempted completion is STILL BLOCKED — this is the locked
+      //    D2 behavior. The test pins it so a future change cannot silently
+      //    weaken the gate.
+      const stillBlocked = await writeWave.execute(
+        { wave_number: 2, status: "completed" },
+        toolContext,
+      );
+      expect(stillBlocked).toContain("Error in goop_write_wave");
+      expect(stillBlocked).toContain("cannot be marked complete");
+      expect(ctx.db.getWave("default", 2)?.status).toBe("in_progress");
+
+      // 4. Because the wave never reaches a complete status, the
+      //    auto-progression hook returns early at its isCompleteStatus
+      //    guard and the phase stays execute. The hook's secondary
+      //    "Blocked: execute → accept" defense is pinned directly by
+      //    auto-progression.test.ts:401 (seeding a complete wave with a
+      //    failing row); the integration assertion here is the
+      //    higher-level guarantee: the phase cannot advance while the
+      //    gate is unsatisfied.
+      const autoProgression = createAutoProgressionHook(ctx)["tool.execute.after"];
+      const apOutput = { title: "result", output: "ok", metadata: {} };
+      await autoProgression?.(
+        { tool: "goop_write_wave", sessionID: "orchestrator", callID: "any", args: {} },
+        apOutput,
+      );
+      expect(ctx.stateManager.getActiveWorkflow().phase).toBe("execute");
+
+      // 5. Supported terminal state per commands/goop-execute.md:50
+      //    (three-strikes): open a high-severity blocker and stop.
+      const blockerResult = await blocker.execute(
+        {
+          action: "open",
+          description:
+            "Wave 2 verification gate cannot be satisfied: a failing row is permanently in the row set (D2 insert-only). Operator must force-complete or reset the wave.",
+          severity: "high",
+        },
+        toolContext,
+      );
+      expect(blockerResult).toContain("Opened blocker #");
+
+      // 6. The lazy-autopilot guard observes the open high-severity blocker
+      //    and suppresses the nudge — the orchestrator is not pestered while
+      //    a blocker is outstanding.
+      const promptAsync = mock(async () => undefined);
+      Object.assign(ctx.sdk.client, {
+        session: {
+          messages: mock(async () => [{ info: { role: "assistant", mode: "goop-orchestrator" } }]),
+          get: mock(async () => ({ directory: testDir })),
+          promptAsync,
+        },
+      });
+
+      await dispatchLazyAutopilotNudge(ctx, "sess-blocked-by-blocker");
+      await Promise.resolve();
+
+      expect(promptAsync).not.toHaveBeenCalled();
+      expect(ctx.pendingLazyAutopilotNudges.has("sess-blocked-by-blocker")).toBe(false);
+    });
+
+    // Scenario C — verification-only turn yields forward motion in the
+    // lazy-autopilot progress fingerprint (MH7/MH8). Without the fix in
+    // rate-limit.ts, a verification-only turn left the fingerprint
+    // identical and the consecutive counter did not reset, eventually
+    // abandoning the session despite real evidence of progress.
+    it("a verification-only turn moves the lazy-autopilot progress fingerprint (no stall)", async () => {
+      const ctx = makeExecuteCtx();
+      const tools = createTools(ctx);
+      const writeWave = tools.goop_write_wave;
+      const toolContext = createMockToolContext();
+
+      await writeWave.execute(
+        {
+          wave_number: 2,
+          title: "Verification turn wave",
+          status: "in_progress",
+          tasks: [{ task_index: 1, description: "Only task", status: "in_progress" }],
+        },
+        toolContext,
+      );
+
+      const beforeFingerprint = buildNudgeFingerprint(
+        ctx,
+        "default",
+        ctx.stateManager.getActiveWorkflow(),
+      );
+      expect(beforeFingerprint).toMatch(/\|v:none$/);
+
+      // Verification-only turn — no task-status change.
+      await writeWave.execute(
+        {
+          wave_number: 2,
+          verifications: [{ check_name: "test", status: "pass", detail: "first evidence" }],
+        },
+        toolContext,
+      );
+
+      const afterFingerprint = buildNudgeFingerprint(
+        ctx,
+        "default",
+        ctx.stateManager.getActiveWorkflow(),
+      );
+      expect(afterFingerprint).not.toBe(beforeFingerprint);
+      expect(afterFingerprint).toMatch(/\|v:test:passed$/);
+
+      // A second verification-only turn (the verifier records more evidence
+      // for the same wave) must also move the fingerprint — otherwise the
+      // nudge would treat the second evidence turn as a no-op repeat.
+      await writeWave.execute(
+        {
+          wave_number: 2,
+          verifications: [{ check_name: "typecheck", status: "pass", detail: "no type errors" }],
+        },
+        toolContext,
+      );
+
+      const afterSecondFingerprint = buildNudgeFingerprint(
+        ctx,
+        "default",
+        ctx.stateManager.getActiveWorkflow(),
+      );
+      expect(afterSecondFingerprint).not.toBe(afterFingerprint);
+      // Insertion order preserved: test landed first, then typecheck.
+      expect(afterSecondFingerprint).toMatch(/\|v:test:passed,typecheck:passed$/);
     });
   });
 });

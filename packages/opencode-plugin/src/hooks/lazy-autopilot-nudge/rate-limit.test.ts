@@ -215,6 +215,109 @@ describe("lazy autopilot nudge rate-limit", () => {
     expect(after).not.toBe(before);
   });
 
+  // -------------------------------------------------------------------------
+  // T3 / MH7 / MH8: A verification-only turn must move the fingerprint.
+  // The orchestrator dispatches goop-wave-verifier after every wave's tasks
+  // are complete (commands/goop-execute.md). The verifier records evidence
+  // via goop_write_wave verifications[]; task statuses do not change. Without
+  // verification rows in the digest, the nudge's progress fingerprint would
+  // be identical before and after that turn, so the consecutive counter
+  // would not reset and the session would eventually be abandoned even
+  // though real evidence landed. These tests pin the fix.
+  // -------------------------------------------------------------------------
+
+  it("builds a fingerprint that ends with the verification digest slot", () => {
+    const fp = buildNudgeFingerprint(
+      baseCtx,
+      "default",
+      baseCtx.stateManager.getActiveWorkflow(),
+    );
+    // No verification rows seeded in beforeEach -> slot is "none".
+    expect(fp).toMatch(/\|v:none$/);
+  });
+
+  it("changes fingerprint when a verification row is recorded without any task-status change", () => {
+    const before = buildNudgeFingerprint(
+      baseCtx,
+      "default",
+      baseCtx.stateManager.getActiveWorkflow(),
+    );
+    const waveId = baseCtx.db.getWave("default", 3)?.id ?? 1;
+    baseCtx.db.insertVerification("default", {
+      wave_id: waveId,
+      check_name: "test",
+      status: "passed",
+    });
+    const after = buildNudgeFingerprint(
+      baseCtx,
+      "default",
+      baseCtx.stateManager.getActiveWorkflow(),
+    );
+    expect(after).not.toBe(before);
+    expect(after).toMatch(/\|v:test:passed$/);
+  });
+
+  it("changes fingerprint when a second verification row lands (insertion order preserved)", () => {
+    const waveId = baseCtx.db.getWave("default", 3)?.id ?? 1;
+    baseCtx.db.insertVerification("default", {
+      wave_id: waveId,
+      check_name: "typecheck",
+      status: "passed",
+    });
+    const before = buildNudgeFingerprint(
+      baseCtx,
+      "default",
+      baseCtx.stateManager.getActiveWorkflow(),
+    );
+    baseCtx.db.insertVerification("default", {
+      wave_id: waveId,
+      check_name: "test",
+      status: "passed",
+    });
+    const after = buildNudgeFingerprint(
+      baseCtx,
+      "default",
+      baseCtx.stateManager.getActiveWorkflow(),
+    );
+    expect(after).not.toBe(before);
+    // Insertion order: typecheck landed first, then test. getVerifications
+    // returns newest-first, so the digest reverses to insertion order.
+    expect(after).toMatch(/\|v:typecheck:passed,test:passed$/);
+  });
+
+  it("a verification-only turn resets the consecutive nudge counter (regression for the stall)", () => {
+    const check = createNudgeRateLimitCheck(baseCtx, cfg({ cap: 2 })).check;
+    const sess = "sess-verify-reset";
+
+    expect(check(baseCtx, sess).allowed).toBe(true);
+    recordNudge(baseCtx, sess, "default");
+    expect(__getNudgeRateLimitState(sess)?.count).toBe(1);
+
+    advanceTime(2_000);
+
+    // Same fingerprint, second nudge — counter climbs toward the cap.
+    expect(check(baseCtx, sess).allowed).toBe(true);
+    recordNudge(baseCtx, sess, "default");
+    expect(__getNudgeRateLimitState(sess)?.count).toBe(2);
+
+    advanceTime(4_000);
+
+    // Without the fix, a third check at the same fingerprint would be
+    // abandoned (count >= cap). A verification-only turn moves the
+    // fingerprint, so the counter resets and the session gets a fresh
+    // budget instead of being abandoned.
+    const waveId = baseCtx.db.getWave("default", 3)?.id ?? 1;
+    baseCtx.db.insertVerification("default", {
+      wave_id: waveId,
+      check_name: "test",
+      status: "passed",
+    });
+
+    const after = check(baseCtx, sess);
+    expect(after.allowed).toBe(true);
+    expect(__getNudgeRateLimitState(sess)?.count).toBe(0);
+  });
+
   it("kill switch produces zero SDK calls", () => {
     const check = createNudgeRateLimitCheck(baseCtx, cfg({ enabled: false })).check;
     const promptAsync = mock(async () => undefined);

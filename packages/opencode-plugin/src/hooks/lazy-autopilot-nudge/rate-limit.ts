@@ -98,10 +98,20 @@ export function __getNudgeRateLimitState(
 /**
  * Build a progress fingerprint for the active workflow.
  *
- * Exact composition: `<phase>|<currentWave>|<task-status-digest>`.
- * The task-status digest is a comma-separated list of `task_index:status`
- * for every task in the current wave, ordered by task_index. If no wave
- * row or tasks exist, the digest is `none`.
+ * Exact composition: `<phase>|<currentWave>|<task-status-digest>|v:<verification-digest>`.
+ *
+ * - The task-status digest is a comma-separated list of `task_index:status`
+ *   for every task in the current wave, ordered by task_index. If no wave
+ *   row or tasks exist, the digest is `none`.
+ * - The verification digest is a comma-separated list of
+ *   `check_name:status` rows attached to the current wave, ordered by row
+ *   id ascending so the order in which rows were inserted is preserved.
+ *   If no wave row or no verification rows exist, the digest is `none`.
+ *
+ * The verification digest matters because a wave-verifier turn can record
+ * evidence without changing any task status — without it, that turn would
+ * look identical to a no-op idle and the consecutive counter would not
+ * reset, eventually abandoning the session despite real forward motion.
  *
  * The consecutive counter resets only when this fingerprint changes, so
  * idle -> nudge -> idle with no real progress counts as a repeat, not a
@@ -116,19 +126,33 @@ export function buildNudgeFingerprint(
   const currentWave = workflow.currentWave;
   const waveRow = ctx.db.getWave(workflowId, currentWave);
 
-  let digest = "none";
+  let taskDigest = "none";
+  let verificationDigest = "none";
   if (waveRow != null) {
     const tasks = ctx.db.getWaveTasks(waveRow.id);
     if (tasks.length > 0) {
-      digest = tasks
+      taskDigest = tasks
         .slice()
         .sort((a, b) => a.task_index - b.task_index)
         .map((t) => `${t.task_index}:${t.status}`)
         .join(",");
     }
+
+    // Order by id ascending so the digest captures insertion order, which
+    // is the auditable record of how verification evidence accumulated.
+    // getVerifications returns rows newest-first (created_at DESC, id DESC),
+    // so reverse to get insertion order.
+    const verifications = ctx.db.getVerifications(workflowId, waveRow.id);
+    if (verifications.length > 0) {
+      verificationDigest = verifications
+        .slice()
+        .reverse()
+        .map((v) => `${v.check_name}:${v.status}`)
+        .join(",");
+    }
   }
 
-  return `${phase}|${currentWave}|${digest}`;
+  return `${phase}|${currentWave}|${taskDigest}|v:${verificationDigest}`;
 }
 
 // ---------------------------------------------------------------------------
