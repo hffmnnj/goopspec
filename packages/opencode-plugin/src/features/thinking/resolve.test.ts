@@ -145,4 +145,75 @@ describe("resolveThinkingValue", () => {
     expect(resolution.apply).toBeNull();
     expect(resolution.source).toBe("preserve-default");
   });
+
+  it("returns a string apply for an id-only V2 supported set derived from reasoning_options", () => {
+    const capabilities = resolveCapabilities({
+      reasoning: true,
+      reasoning_options: [
+        { type: "effort", values: ["none", "low", "medium", "high", "xhigh", "max"] },
+      ],
+    });
+
+    expect(resolveThinkingValue("high", capabilities)).toEqual({
+      apply: "high",
+      source: "v2",
+    });
+  });
+
+  it("preserves the provider default when the requested level is absent from an id-only V2 set", () => {
+    const capabilities = resolveCapabilities({
+      reasoning: true,
+      reasoning_options: [{ type: "effort", values: ["low", "medium", "high"] }],
+    });
+
+    expect(resolveThinkingValue("xhigh", capabilities)).toEqual({
+      apply: null,
+      warning:
+        'Thinking level "xhigh" is not supported by the resolved model; preserving the provider default.',
+      source: "preserve-default",
+    });
+  });
+
+  it("resolves none as a real id-only V2 value rather than mapping it to a numeric budget", () => {
+    const capabilities = resolveCapabilities({
+      reasoning: true,
+      reasoning_options: [{ type: "effort", values: ["none", "low", "medium", "high"] }],
+    });
+
+    expect(resolveThinkingValue("none", capabilities)).toEqual({
+      apply: "none",
+      source: "v2",
+    });
+  });
+
+  it("still returns the exact stored variant object when a full V2 variant matches", () => {
+    const capabilities = resolveCapabilities({
+      variants: [
+        { id: "low", headers: {}, body: { reasoning: { effort: "low" } } },
+        {
+          id: "high",
+          headers: { "x-provider-feature": "reasoning" },
+          body: { reasoning: { effort: "high" } },
+        },
+      ],
+    });
+
+    const resolution = resolveThinkingValue("high", capabilities);
+    expect(resolution.source).toBe("v2");
+    expect(resolution.apply).toEqual({
+      id: "high",
+      headers: { "x-provider-feature": "reasoning" },
+      body: { reasoning: { effort: "high" } },
+    });
+
+    // Apply must be the exact variant object stored in raw.variants, never synthesized.
+    if (capabilities.raw?.source !== "v2") {
+      throw new Error("expected v2 raw capability source");
+    }
+    const storedHigh = capabilities.raw.variants.find((variant) => variant.id === "high");
+    if (!storedHigh) {
+      throw new Error("expected a stored high variant for reference comparison");
+    }
+    expect(resolution.apply).toBe(storedHigh);
+  });
 });

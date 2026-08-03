@@ -45,7 +45,11 @@ export function resolveThinkingValue(
 
     if (capabilities.raw.source === "v2") {
       const variant = capabilities.raw.variants.find((entry) => entry.id === candidate);
-      return variant ? { apply: variant, source: "v2" } : createPreserveDefaultResolution(label);
+      if (variant) return { apply: variant, source: "v2" };
+      // Id-only V2 source: level is supported but the host published no
+      // request encoding. Return the honest string id — never fabricate a
+      // variant, never silently downgrade.
+      return { apply: candidate, source: "v2" };
     }
 
     return { apply: candidate, source: "v1" };
