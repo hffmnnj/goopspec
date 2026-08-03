@@ -128,6 +128,7 @@ export const AGENT_ROLES = [
   "executor-frontend-high",
   "planner",
   "verifier",
+  "wave-verifier",
   "researcher",
   "explorer",
   "debugger",

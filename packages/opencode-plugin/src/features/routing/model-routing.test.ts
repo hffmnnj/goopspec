@@ -98,8 +98,8 @@ describe("resolveModelForRole", () => {
     expect(resolveModelForRole("orchestrator", testDir)).toBe(DEFAULT_MODEL_MAP.orchestrator);
   });
 
-  it("covers all 14 agent roles", () => {
-    expect(AGENT_ROLES.length).toBe(14);
+  it("covers all 15 agent roles", () => {
+    expect(AGENT_ROLES.length).toBe(15);
     for (const role of AGENT_ROLES) {
       const model = resolveModelForRole(role);
       expect(typeof model).toBe("string");

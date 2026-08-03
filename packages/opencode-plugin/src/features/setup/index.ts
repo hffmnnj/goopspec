@@ -42,6 +42,7 @@ export const DEFAULT_MODEL_MAP: Record<AgentRole, string> = {
   "executor-frontend-high": "anthropic/claude-opus-4-6",
   planner: "anthropic/claude-opus-4-6",
   verifier: "anthropic/claude-sonnet-4-6",
+  "wave-verifier": "anthropic/claude-sonnet-4-6",
   researcher: "anthropic/claude-sonnet-4-6",
   explorer: "anthropic/claude-sonnet-4-6",
   debugger: "anthropic/claude-sonnet-4-6",
