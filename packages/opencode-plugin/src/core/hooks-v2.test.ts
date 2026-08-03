@@ -375,4 +375,44 @@ describe("registerHooksV2()", () => {
     expect(diag).not.toContain("fallback");
     errorSpy.mockRestore();
   });
+
+  it("includes 'event' in the V2 skipped hooks list so the nudge remains inert under V2", async () => {
+    // The nudge dispatch lives in the V1 `event` hook (event-handler.ts
+    // session.idle → dispatchLazyAutopilotNudge). V2 does not expose an
+    // `event` capability, so the hook is never registered and the nudge
+    // cannot fire. The skipped list is the structural record that documents
+    // this limitation and prevents a future V2 adapter from silently wiring
+    // the event hook without an explicit capability check.
+    const ctx = createMockPluginContext();
+    contexts.push(ctx);
+    const registrations: Registrations = {
+      agentTransforms: 0,
+      catalogTransforms: 0,
+      agentReloads: 0,
+      catalogReloads: 0,
+    };
+
+    const originalDebug = process.env.GOOPSPEC_DEBUG;
+    process.env.GOOPSPEC_DEBUG = "true";
+    const logSpy = spyOn(console, "log").mockImplementation(() => {});
+
+    try {
+      await registerHooksV2(createRuntimeContext(registrations), ctx);
+
+      const registrationLog = logSpy.mock.calls.find(
+        (call) =>
+          typeof call[0] === "string" &&
+          call[0].includes("Registered GoopSpec runtime hooks with V2"),
+      );
+      expect(registrationLog).toBeDefined();
+
+      const data = registrationLog?.[1] as { skipped?: string[] } | undefined;
+      expect(data?.skipped).toBeDefined();
+      expect(data?.skipped).toContain("event");
+    } finally {
+      logSpy.mockRestore();
+      if (originalDebug === undefined) process.env.GOOPSPEC_DEBUG = undefined;
+      else process.env.GOOPSPEC_DEBUG = originalDebug;
+    }
+  });
 });
