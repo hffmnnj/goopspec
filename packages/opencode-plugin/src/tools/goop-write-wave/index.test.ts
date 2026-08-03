@@ -2324,3 +2324,157 @@ describe("goop_write_wave wave-completion verification gate", () => {
     expect(ctx.db.getWave("default", 1)?.status).toBe("done");
   });
 });
+
+// ---------------------------------------------------------------------------
+// Positive fixture inventory — valid call shapes (W4 Task 1)
+//
+// goop_write_wave is structurally distinct from the content-document tools:
+// it has no `content`, `mode`, `old_string`, `new_string`, or `replace_all`
+// fields. The generic inventory shapes map as follows:
+//   - "full-document write" → wave metadata write (wave_number + title/status/pr_branch/...)
+//   - "append mode" → N/A. No `mode` field; metadata is upserted with
+//     per-field overwrite-or-preserve semantics, never appended.
+//   - "patch mode (old_string/new_string)" → N/A. The tool exposes no patch
+//     fields; wave metadata has no substring-patch semantics.
+//   - "replace-all patch" → N/A (same reason — no patch fields).
+//   - "items[] batch" → applies.
+//   - "blank-document patch workaround" → N/A (no patch fields).
+//
+// The tool's OWN structurally-distinct valid shapes are inventoried below
+// the two generic ones: task_update, task_updates[], verifications[],
+// traceability[], and the traceability-only call without a top-level
+// wave_number.
+// ---------------------------------------------------------------------------
+
+describe("goop_write_wave positive fixture inventory — valid call shapes (W4.T1)", () => {
+  let ctx: PluginContext;
+  let toolCtx: ToolContext;
+  let cleanup: () => void;
+
+  beforeEach(() => {
+    const env = setupTestEnvironment("goop-write-wave-inventory");
+    cleanup = env.cleanup;
+    ctx = createMockPluginContext({ testDir: env.testDir, db: env.db });
+    toolCtx = createMockToolContext();
+  });
+
+  afterEach(() => cleanup());
+
+  it("SHAPE: wave metadata write (wave_number + title + inline tasks)", async () => {
+    const tool = createGoopWriteWaveTool(ctx);
+    const result = await tool.execute(
+      {
+        wave_number: 1,
+        title: "Inventory wave",
+        status: "in_progress",
+        tasks: [{ task_index: 1, description: "Inventory task", status: "pending" }],
+      },
+      toolCtx,
+    );
+    expect(result).toContain("Written wave 1");
+    expect(ctx.db.getWave("default", 1)?.title).toBe("Inventory wave");
+  });
+
+  it("SHAPE: items[] batch (multi-wave)", async () => {
+    const tool = createGoopWriteWaveTool(ctx);
+    const result = await tool.execute(
+      {
+        wave_number: 1,
+        items: [
+          { wave_number: 1, title: "Batch wave one" },
+          { wave_number: 2, title: "Batch wave two" },
+        ],
+      },
+      toolCtx,
+    );
+    expect(result).toContain("2/2 succeeded");
+    expect(ctx.db.getWave("default", 1)?.title).toBe("Batch wave one");
+    expect(ctx.db.getWave("default", 2)?.title).toBe("Batch wave two");
+  });
+
+  it("SHAPE (tool-specific): single task_update (wave_number + task_update)", async () => {
+    const tool = createGoopWriteWaveTool(ctx);
+    await tool.execute(
+      {
+        wave_number: 1,
+        title: "W",
+        tasks: [{ task_index: 1, description: "T1", status: "pending" }],
+      },
+      toolCtx,
+    );
+    const result = await tool.execute(
+      { wave_number: 1, task_update: { task_index: 1, status: "done" } },
+      toolCtx,
+    );
+    expect(result).toContain("Updated task 1");
+    const wave = ctx.db.getWave("default", 1);
+    expect(ctx.db.getWaveTasks(wave?.id ?? -1)[0].status).toBe("done");
+  });
+
+  it("SHAPE (tool-specific): bulk task_updates[] (wave_number + task_updates)", async () => {
+    const tool = createGoopWriteWaveTool(ctx);
+    await tool.execute(
+      {
+        wave_number: 1,
+        title: "W",
+        tasks: [
+          { task_index: 1, description: "T1", status: "pending" },
+          { task_index: 2, description: "T2", status: "pending" },
+        ],
+      },
+      toolCtx,
+    );
+    const result = await tool.execute(
+      {
+        wave_number: 1,
+        task_updates: [
+          { task_index: 1, status: "done" },
+          { task_index: 2, status: "done" },
+        ],
+      },
+      toolCtx,
+    );
+    expect(result).toContain("2/2 succeeded");
+  });
+
+  it("SHAPE (tool-specific): verifications[] side-payload alongside wave write", async () => {
+    const tool = createGoopWriteWaveTool(ctx);
+    const result = await tool.execute(
+      {
+        wave_number: 1,
+        title: "Verified wave",
+        verifications: [{ check_name: "test", status: "pass" }],
+      },
+      toolCtx,
+    );
+    expect(result).toContain("Verifications:");
+    expect(result).toContain("test=pass");
+  });
+
+  it("SHAPE (tool-specific): traceability[] side-payload alongside wave write", async () => {
+    const tool = createGoopWriteWaveTool(ctx);
+    const result = await tool.execute(
+      {
+        wave_number: 1,
+        title: "Traced wave",
+        traceability: [{ requirement_key: "MH1", status: "covered" }],
+      },
+      toolCtx,
+    );
+    expect(result).toContain("Traceability:");
+    expect(result).toContain("MH1");
+  });
+
+  it("SHAPE (tool-specific): traceability-only call without a top-level wave_number", async () => {
+    const tool = createGoopWriteWaveTool(ctx);
+    await tool.execute({ wave_number: 1, title: "Target wave" }, toolCtx);
+    const result = await tool.execute(
+      {
+        traceability: [{ requirement_key: "MH1", wave_number: 1, status: "covered" }],
+      },
+      toolCtx,
+    );
+    expect(result).toContain("Traceability:");
+    expect(ctx.db.getTraceability("default")).toHaveLength(1);
+  });
+});

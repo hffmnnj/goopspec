@@ -460,4 +460,94 @@ describe("goop_write_db tool", () => {
       expect(result).not.toContain("0 chars");
     });
   });
+
+  // -----------------------------------------------------------------------
+  // Positive fixture inventory — valid call shapes (W4 Task 1)
+  //
+  // Locks every currently-valid goop_write_db call shape as a passing
+  // fixture in one self-contained block, so Wave 4 Task 2/3 runtime
+  // validation tightening cannot silently break a working caller. These
+  // fixtures assert the CURRENT behaviour; they are not a spec of the
+  // intended behaviour. Some shapes are individually covered by dedicated
+  // tests above — repeated here as a single contract surface.
+  // -----------------------------------------------------------------------
+
+  describe("positive fixture inventory — valid call shapes (W4.T1)", () => {
+    it("SHAPE: full-document write (doc_type + content)", async () => {
+      const tool = createGoopWriteDbTool(ctx);
+      const result = await tool.execute({ doc_type: "spec", content: "# Inventory Spec" }, toolCtx);
+      expect(result).toContain("Written spec");
+      expect(ctx.db.getDocument("default", "spec")?.content).toBe("# Inventory Spec");
+    });
+
+    it("SHAPE: append mode (doc_type + content + mode: 'append')", async () => {
+      ctx.db.upsertDocument("default", "spec", "# Base");
+      const tool = createGoopWriteDbTool(ctx);
+      const result = await tool.execute(
+        { doc_type: "spec", content: "# Appended", mode: "append" },
+        toolCtx,
+      );
+      expect(result).toContain("mode: append");
+      expect(ctx.db.getDocument("default", "spec")?.content).toBe("# Base\n\n# Appended");
+    });
+
+    it("SHAPE: patch mode (doc_type + old_string + new_string, single match)", async () => {
+      ctx.db.upsertDocument("default", "spec", "Hello world");
+      const tool = createGoopWriteDbTool(ctx);
+      const result = await tool.execute(
+        { doc_type: "spec", old_string: "world", new_string: "GoopSpec" },
+        toolCtx,
+      );
+      expect(result).toContain("mode: patch");
+      expect(ctx.db.getDocument("default", "spec")?.content).toBe("Hello GoopSpec");
+    });
+
+    it("SHAPE: replace-all patch (doc_type + old_string + new_string + replace_all: true)", async () => {
+      ctx.db.upsertDocument("default", "spec", "foo bar foo baz foo");
+      const tool = createGoopWriteDbTool(ctx);
+      const result = await tool.execute(
+        { doc_type: "spec", old_string: "foo", new_string: "qux", replace_all: true },
+        toolCtx,
+      );
+      expect(result).toContain("mode: patch");
+      expect(ctx.db.getDocument("default", "spec")?.content).toBe("qux bar qux baz qux");
+    });
+
+    it("SHAPE: items[] batch (mixed create + patch items)", async () => {
+      ctx.db.upsertDocument("default", "spec", "Hello world");
+      const tool = createGoopWriteDbTool(ctx);
+      const result = await tool.execute(
+        {
+          doc_type: "spec",
+          content: "",
+          items: [
+            { doc_type: "spec", old_string: "world", new_string: "GoopSpec" },
+            { doc_type: "blueprint", content: "# Blueprint" },
+          ],
+        },
+        toolCtx,
+      );
+      expect(result).toContain("2/2 succeeded");
+      expect(ctx.db.getDocument("default", "spec")?.content).toBe("Hello GoopSpec");
+      expect(ctx.db.getDocument("default", "blueprint")?.content).toBe("# Blueprint");
+    });
+
+    it("SHAPE: blank-document patch workaround (old_string: '' on an empty document)", async () => {
+      // CURRENT behaviour: an absent/empty document resolves to '' and
+      // patchContent('', '', newString) returns ok with matchCount -1, which
+      // falls through every guard so new_string becomes the full document
+      // content. This is the workaround observed during discovery. Locked
+      // here so Wave 4 Task 2/3 must decide deliberately whether to keep or
+      // reject it rather than silently changing the outcome.
+      const tool = createGoopWriteDbTool(ctx);
+      const result = await tool.execute(
+        { doc_type: "spec", old_string: "", new_string: "# Written via empty-old-string patch" },
+        toolCtx,
+      );
+      expect(result).toContain("mode: patch");
+      expect(ctx.db.getDocument("default", "spec")?.content).toBe(
+        "# Written via empty-old-string patch",
+      );
+    });
+  });
 });
