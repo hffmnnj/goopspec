@@ -180,7 +180,7 @@ describe("auditPromptSurfaces (real tree)", () => {
     expect(commands.bytes).toBe(24_702);
   });
 
-  it("references: 19 files, 160,716 bytes", () => {
+  it("references: 19 files, 161,350 bytes", () => {
     // Wave 3 Task 3.1 consolidated core-protocol.md, dispatch-patterns.md, and
     // subagent-identity.md (added one Prompt Authoring Rules section, offset
     // by removing duplicated material from the other two files). Net effect:
@@ -213,12 +213,24 @@ describe("auditPromptSurfaces (real tree)", () => {
     // bold spans 526 -> 526. All gate, safety, identity, branch, source-
     // write, acceptance, and state-mutation invariants preserved. The
     // immutable Wave 1 baseline remains in RESEARCH.md.
+    //
+    // Wave 4 Task 4.3 follow-up corrected a branch-base contradiction between
+    // pr-creation.md and dispatch-patterns.md: the unconditional "never
+    // create Wave N+1 from main; always stack it" and "Wave N must be fully
+    // merged before Wave N+1 is created" rules contradicted the supported
+    // stacked-PR contract and the merged-PR flow. Replaced with a conditional
+    // branch-base rule in pr-creation.md §Stacked Branch Rule (stacked PR
+    // when preceding wave PR unmerged; branch from updated origin/main when
+    // all preceding waves merged) and pointed dispatch-patterns.md at it.
+    // Net effect: 160,716 -> 161,350 bytes (+634, still below the 161,459
+    // Wave 1 baseline), absolute hits 202 -> 198 (-4), bold spans 526 ->
+    // 530. The non-increase bar relative to the Wave 1 baseline holds.
     const references = report.directories.find((d) => d.directory === "references")!;
     expect(references.files).toBe(19);
-    expect(references.bytes).toBe(160_716);
+    expect(references.bytes).toBe(161_350);
   });
 
-  it("total absolute-language hits are 290 (post Wave 4 Task 4.3)", () => {
+  it("total absolute-language hits are 286 (post Wave 4 Task 4.3 follow-up)", () => {
     // SPEC assumption A5: research-phase count (394) and spec count (396)
     // differ by measurement method. The Wave 1 audit re-measures with one
     // documented method (\b(?:must|never|always|critical|only)\b, gi) and
@@ -263,7 +275,18 @@ describe("auditPromptSurfaces (real tree)", () => {
     // acceptance, state-mutation) or domain terminology (must-have,
     // critical-path, severity names, config keys, V1-only). The immutable
     // Wave 1 baseline (394) remains in RESEARCH.md.
-    expect(report.totalAbsoluteHits).toBe(290);
+    //
+    // Wave 4 Task 4.3 follow-up corrected a branch-base contradiction:
+    // pr-creation.md's unconditional "never create Wave N+1 from main;
+    // always stack it" and dispatch-patterns.md's "Wave N must be fully
+    // merged before Wave N+1 is created" contradicted the stacked-PR
+    // contract. Replaced with a conditional branch-base rule (stacked PR
+    // when preceding wave PR unmerged; from updated origin/main when all
+    // preceding waves merged). Removed 4 more absolute hits: pr-creation.md
+    // 18 -> 15 (-3: "Only", "never", "always"), dispatch-patterns.md
+    // 19 -> 18 (-1: "must"). Total: 290 -> 286. The immutable Wave 1
+    // baseline (394) remains in RESEARCH.md.
+    expect(report.totalAbsoluteHits).toBe(286);
   });
 
   it("per-file tokens are consistent with chars via estimateTokens", () => {

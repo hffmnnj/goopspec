@@ -40,11 +40,12 @@ git branch -a | grep feat/
 
 ## Stacked Branch Rule
 
-Each wave branch is created immediately from the previous wave's branch — no waiting for a merge. Wave 1 branches from `main`; Wave N branches from Wave N-1.
+Wave N+1's branch base depends on the merge state of preceding-wave PRs:
 
-PRs are opened after each wave against the previous branch: Wave N → Wave N-1; Wave 1 → main.
+1. **Preceding wave PR unmerged** — branch from that parent-wave branch and target the parent branch (stacked PR). A parent-wave merge is not required before beginning the next wave when stacked PR ancestry is valid.
+2. **All preceding-wave changes merged** — update from `origin/main`, branch from that merged `main`, and target `main`.
 
-Only one wave is actively worked on at a time. Multiple open PRs in the stack are expected and correct.
+Wave 1 branches from `main` and targets `main`. One wave is actively worked on at a time; multiple open PRs in a stack are expected and correct.
 
 ## Stacked PR Model
 
@@ -293,9 +294,9 @@ If the gate blocks, the tool returns a list of violations with line numbers and 
 
 Before pushing a wave branch and opening a PR:
 
-- [ ] Branch created from latest `main`.
+- [ ] Branch base matches the merge state: parent-wave branch when stacked, or updated `main` when preceding waves are merged (see §Stacked Branch Rule).
 - [ ] One commit per task minimum — `git log --oneline -5` shows individual commits.
-- [ ] Branch is stacked on the previous wave branch (not main, unless this is Wave 1).
+- [ ] PR base matches the branch base: parent branch when stacked, or `main` when merged.
 - [ ] PR title follows conventional commit format (`type(scope): description`).
 - [ ] `git diff --name-only main` shows only expected files.
 - [ ] No internal GoopSpec terms in PR title or body (see Terminology Gate).
@@ -311,7 +312,7 @@ Before pushing a wave branch and opening a PR:
 - **Marking comments resolved without addressing them** — let the reviewer decide when their concern is satisfied.
 - **Bundling unrelated changes** — each PR should have one reason to exist.
 - **Cross-branch parallel dispatch** — see `dispatch-patterns.md` §Single-Branch Parallelism Rule.
-- **Wrong base** — never create Wave N+1 from `main`; always stack it on Wave N's branch.
+- **Wrong base** — branching from `main` when the preceding wave PR is still unmerged, or stacking on a parent branch when all preceding waves are already merged. See §Stacked Branch Rule for the conditional rule.
 
 ---
 
