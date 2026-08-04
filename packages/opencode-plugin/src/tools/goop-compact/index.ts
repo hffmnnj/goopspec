@@ -306,7 +306,8 @@ export function dispatchPendingCompaction(ctx: PluginContext, sessionID: string)
 
 export function createGoopCompactTool(ctx: PluginContext): ToolDefinition {
   return tool({
-    description: "Trigger session compaction and record the immediate resume step.",
+    description:
+      "Trigger OpenCode session compaction and seed the post-compaction resume step. WHEN TO USE: When the orchestrator context is near its limit and a clean handoff is needed. WHEN NOT TO USE: goop_checkpoint for a reversible state snapshot; goop_status to orient without compacting. RETURNS: A directive to end the turn so compaction can occur, carrying the recorded next_step. CAVEATS: Orchestrator-only and V1-only. If the host lacks session compaction the tool returns 'unavailable', which is not an error. next_step is required and is replayed as the immediate resume action; a queued compaction cannot be doubled.",
     args: {
       next_step: tool.schema
         .string()

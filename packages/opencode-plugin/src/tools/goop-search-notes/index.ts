@@ -86,32 +86,41 @@ function formatNote(
 export function createGoopSearchNotesTool(ctx: PluginContext): ToolDefinition {
   return tool({
     description:
-      "Search Field Notes with hybrid FTS5 + tag matching. " +
-      "Supports scoping by project, workflow, and tags. " +
-      "Optional body control via `full`, `body_offset`, and `body_limit`. " +
-      "Use `note_id` to fetch a specific note by ID (bypasses ranking, returns full body).",
+      "Search Field Notes with hybrid FTS5 plus tag matching. WHEN TO USE: To recall a reusable finding by keywords or tags, scoped to a project or workflow. WHEN NOT TO USE: memory_search for an agent's own process memory; goop_read_db for workflow documents. MODES: search = query and/or tags (default, up to 10 results, max 50); exact-fetch = note_id alone (bypasses ranking, ignores query, returns the full body). RETURNS: A markdown list of notes with tags, importance, agent, and a body slice. CAVEATS: The default body is a 200-char snippet; pass full:true for whole bodies, or body_offset/body_limit for a window (body_limit:0 means unbounded). note_id takes precedence over every other argument.",
     args: {
       query: tool.schema
         .string()
         .optional()
-        .describe("Search query (optional when note_id provided)"),
-      tags: tool.schema.array(tool.schema.string()).optional().describe("Filter by tags"),
-      project_id: tool.schema.string().optional().describe("Scope to project (omit for global)"),
-      workflow_id: tool.schema.string().optional().describe("Scope to workflow"),
-      limit: tool.schema.number().optional().describe("Max results (default 10, max 50)"),
+        .describe("Search query; optional when note_id is supplied."),
+      tags: tool.schema
+        .array(tool.schema.string())
+        .optional()
+        .describe("Filter results to notes carrying all of these tags."),
+      project_id: tool.schema
+        .string()
+        .optional()
+        .describe("Scope to a project; omit for the global knowledge base."),
+      workflow_id: tool.schema.string().optional().describe("Scope to a workflow."),
+      limit: tool.schema
+        .number()
+        .optional()
+        .describe("Max results (default 10, clamped to 50)."),
       full: tool.schema
         .boolean()
         .optional()
-        .describe("Return full body instead of 200-char snippet"),
-      body_offset: tool.schema.number().optional().describe("Character offset into note body"),
+        .describe("Return the whole body instead of a 200-char snippet."),
+      body_offset: tool.schema
+        .number()
+        .optional()
+        .describe("Character offset into the body (default 0); ignored unless full or body_limit is set."),
       body_limit: tool.schema
         .number()
         .optional()
-        .describe("Max chars from body_offset (0 = unbounded)"),
+        .describe("Max chars returned from body_offset (0 means unbounded)."),
       note_id: tool.schema
         .string()
         .optional()
-        .describe("Fetch exact note by fn_... ID (bypasses search)"),
+        .describe("Exact fn_... id; when present, bypasses ranking and query and returns the full body."),
     },
     async execute(
       args: {

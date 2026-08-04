@@ -88,6 +88,12 @@ const HIGH_FRICTION_TOOLS: readonly string[] = [
   "goop_write_db",
   "goop_write_section",
   "goop_append_chronicle",
+  // Wave 3 Task 3: goop_save_note is structurally identical to goop_write_db
+  // — create / patch (by note_id) / batch modes with cross-field rejection
+  // (create fields rejected alongside note_id; patch fields rejected without
+  // it) plus a mandatory atomicity-history caveat. Parity with the existing
+  // allowlist, not a loosened bar; the description lands at 766 chars.
+  "goop_save_note",
 ];
 
 /**
@@ -116,15 +122,9 @@ const PENDING_CONFORMANCE: readonly string[] = [
   "background_status",
   "difftastic",
   "generate_image",
-  "goop_boot",
-  "goop_checkpoint",
-  "goop_compact",
   "goop_create_pr",
   "goop_get_global_config",
   "goop_infer_intent",
-  "goop_reference",
-  "goop_save_note",
-  "goop_search_notes",
   "goop_setup",
   "goop_spec",
   "goop_status",
