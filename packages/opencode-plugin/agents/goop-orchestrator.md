@@ -77,9 +77,11 @@ All six tiers — `goop-executor-low`, `goop-executor-medium`, `goop-executor-hi
 
 Wave verification and the acceptance audit are separate dispatches with separate stages. During execute, at wave completion, dispatch `goop-wave-verifier` scoped to that wave — it records verification rows and reports gaps; it never implements fixes (see `commands/goop-execute.md` §Steps for the wave verification gate). At accept, dispatch `goop-verifier` for the final acceptance audit — it is acceptance-only and does not run during execute (see `commands/goop-accept.md` §Steps).
 
-## Auto-Delegation
+## Idle-Prompt Triage
 
-Research and debug intents route automatically — no `/goop-research` or `/goop-debug` slash commands exist. When a user prompt matches a research or debug intent, `detectAutoDelegation()` (routing subsystem) dispatches directly to `goop-researcher` or `goop-debugger`. If it returns `detected: false`, fall back to the normal phase workflow and the Delegation section above.
+While the workflow is idle, a substantive user prompt is triaged automatically by the registered idle-triage hook. The hook runs the routing subsystem's `detectAutoDelegation`, the routing classifier (`route`), and `detectTaskMode` from mode-detection, then injects a `<goopspec_triage>` system block carrying `intent`, `recommended_effort`, `confidence`, and `reasoning`. Research and debug intents surface here — no `/goop-research` or `/goop-debug` slash commands exist.
+
+The block is advisory: it informs the next delegation (intent, recommended effort, confidence) but does not auto-dispatch or act on a low-confidence value. Use it to pick the delegate and tier described in the Delegation section above; when no triage block is present, proceed with the normal phase workflow.
 
 ## Research-First Gate (Plan Phase)
 

@@ -123,7 +123,7 @@ describe("auditPromptSurfaces (real tree)", () => {
     expect(report.directories.map((d) => d.directory)).toEqual([...PROMPT_DIRECTORIES]);
   });
 
-  it("agents: 15 files, 82,324 bytes, 137 bold spans", () => {
+  it("agents: 15 files, 83,817 bytes, 137 bold spans", () => {
     // Wave 3 Task 3.2 consolidated agents/goop-orchestrator.md (the largest
     // single prompt) around the Task 3.1 pointer targets in core-protocol.md,
     // dispatch-patterns.md, and phase-gates.md: 17,207 -> 9,807 bytes
@@ -197,9 +197,22 @@ describe("auditPromptSurfaces (real tree)", () => {
     // from the deleted validation-contract code module, and updated the two
     // cross-references to it in the same file. Net: 83,373 -> 83,405 bytes
     // (+32), absolute hits and bold spans unchanged.
+    //
+    // The coding-harness-research-upgrade-ideas workflow's Wave 3 Task 3.1
+    // made the Auto-Delegation documentation true: the idle-triage hook now
+    // genuinely runs detectAutoDelegation, the routing classifier, and
+    // detectTaskMode while idle. Renamed the orchestrator's "Auto-Delegation"
+    // section to "Idle-Prompt Triage" and rewrote it as plain description of
+    // the real mechanism (registered hook → classifiers → injected
+    // <goopspec_triage> block carrying intent, recommended_effort,
+    // confidence, reasoning; advisory, no auto-dispatch). Net on this file:
+    // 83,405 -> 83,817 bytes (+412); zero absolute-language keywords added
+    // (the new prose uses none of must/never/always/critical/only, and the
+    // removed fiction used none either) and zero bold spans added, so the
+    // workflow-wide total stays 288 and agents bold spans stay 137.
     const agents = report.directories.find((d) => d.directory === "agents")!;
     expect(agents.files).toBe(15);
-    expect(agents.bytes).toBe(83_405);
+    expect(agents.bytes).toBe(83_817);
     expect(agents.boldSpans).toBe(137);
   });
 
