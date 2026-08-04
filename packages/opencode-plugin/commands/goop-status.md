@@ -32,12 +32,12 @@ goop_status({ verbose: true })
 | State | Next command |
 |-------|--------------|
 | No `.goopspec` | `/goop-setup` |
-| Interview incomplete | `/goop-discuss` |
+| Interview incomplete | Describe what you want to build |
 | Interview done, no locked spec | `/goop-plan` |
 | Spec locked | `/goop-execute` |
 | Executing | `/goop-execute` |
 | All waves complete | `/goop-accept` |
-| Accepted | `/goop-discuss` |
+| Accepted | Describe the next milestone to start a new workflow |
 
 ## Anti-patterns
 

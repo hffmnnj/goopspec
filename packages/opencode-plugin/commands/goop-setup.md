@@ -4,7 +4,7 @@ description: Initialize or reconfigure GoopSpec for this project
 agent: orchestrator
 phase: setup
 requires: none
-next-step: "Run /goop-discuss to start your first workflow"
+next-step: "Describe what you want to build to start your first workflow"
 ---
 
 # /goop-setup
@@ -42,4 +42,4 @@ Use `question` to choose:
 
 After setup finishes:
 
-> GoopSpec ready. Run `/goop-discuss` to start your first workflow.
+> GoopSpec ready. Describe what you want to build to start your first workflow.

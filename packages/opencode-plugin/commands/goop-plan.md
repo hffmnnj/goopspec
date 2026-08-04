@@ -6,9 +6,6 @@ phase: plan
 requires: interview_complete
 next-step: "When the contract gate is satisfied, run /goop-execute"
 next-command: /goop-execute
-alternatives:
-  - command: /goop-discuss
-    when: "If the discovery interview has not been completed"
 ---
 
 # /goop-plan
@@ -19,7 +16,7 @@ Turn the requirements document into a locked contract (`SPEC.md`) and an executa
 
 Call `goop_state({ action: "get" })`. If `interviewComplete` is not `true` or the `requirements` document does not exist — check via `goop_read_db({ doc_type: "requirements" })` returning content (not a 'not found' message) — return `BLOCKED` with:
 
-> Run `/goop-discuss` first.
+> Complete the discovery interview first — describe what you want to build so the orchestrator can capture requirements.
 
 ## Research-first gate
 
@@ -40,7 +37,7 @@ goop_reference({ name: "pr-creation" })
 2. Complete the Research-first gate above (or record the skip decision in ADL). Then spawn `goop-planner` with the discovery context, current depth, workflow isolation context, and the assembled `## Research Summary` block.
 3. Review the draft `SPEC.md` and `BLUEPRINT.md`.
 
-## Validation-contract gate
+## Contract gate
 
 Before wave decomposition is finalized, validate:
 

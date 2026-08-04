@@ -4,8 +4,7 @@ description: Verify work, confirm acceptance, and archive the milestone
 agent: orchestrator
 phase: accept
 requires: execution_complete
-next-step: "After acceptance, archive and start the next milestone with /goop-discuss"
-next-command: /goop-discuss
+next-step: "After acceptance, archive and start the next milestone by describing what you want to build"
 alternatives:
   - command: /goop-execute
     when: "If verification finds issues to fix"

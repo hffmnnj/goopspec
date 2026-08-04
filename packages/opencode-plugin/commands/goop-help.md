@@ -4,7 +4,7 @@ description: List GoopSpec commands, workflow phases, and agents
 agent: orchestrator
 phase: any
 requires: none
-next-step: "Run /goop-discuss to begin, or /goop-status to see where you are"
+next-step: "Describe what you want to build to begin, or run /goop-status to see where you are"
 ---
 
 # /goop-help
@@ -15,15 +15,17 @@ Show available commands and workflow overview.
 
 | Command | Purpose |
 |---------|---------|
-| `/goop-discuss [workflow-id]` | Start the discovery interview |
 | `/goop-plan` | Create locked spec and blueprint |
 | `/goop-execute` | Execute blueprint waves |
 | `/goop-accept` | Verify, accept, and archive |
-| `/goop-quick [task]` | Fast-track a small task |
 | `/goop-amend [change]` | Propose changes to a locked spec |
 | `/goop-status` | Show current workflow status |
 | `/goop-setup` | Setup and configuration wizard |
 | `/goop-help` | Show this help |
+
+## Starting a workflow
+
+There is no dedicated command to begin discovery. Describe what you want to build in plain language and the orchestrator routes you into the discovery interview, or run `/goop-status` to see where you are.
 
 ## Five-phase workflow
 
@@ -55,4 +57,4 @@ Saying "research X" or "debug Y" does not require a dedicated command. The orche
 
 ## Next step
 
-Run `/goop-discuss` to begin, or `/goop-status` to see where you are.
+Describe what you want to build to begin, or run `/goop-status` to see where you are.

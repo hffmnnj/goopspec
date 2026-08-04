@@ -240,9 +240,22 @@ describe("auditPromptSurfaces (real tree)", () => {
     // 26,318 -> 19,259 bytes (-7,059), 9 -> 7 files, absolute hits
     // 39 -> 19 (-20). The prose sweep across the remaining command docs
     // (other commands still mention /goop-discuss) is a separate task.
+    //
+    // The command-surface-cleanup workflow's Wave 2 Task 2.3 swept the
+    // stale /goop-discuss and /goop-quick references from the remaining
+    // seven command docs: goop-help (frontmatter next-step, table rows,
+    // next-step section), goop-status (suggested-commands table),
+    // goop-setup (frontmatter next-step and completion banner),
+    // goop-plan (alternatives frontmatter, gate-check message, renamed
+    // "Validation-contract gate" heading to "Contract gate"), and
+    // goop-accept (frontmatter next-step/next-command). None of the
+    // rewordings added or removed an absolute-language keyword, and no
+    // bold spans changed in an asserted directory. Net on this category:
+    // 19,259 -> 19,455 bytes (+196), files unchanged at 7, absolute hits
+    // unchanged at 19 (workflow-wide total stays 288).
     const commands = report.directories.find((d) => d.directory === "commands")!;
     expect(commands.files).toBe(7);
-    expect(commands.bytes).toBe(19_259);
+    expect(commands.bytes).toBe(19_455);
   });
 
   it("references: 19 files, 164,672 bytes", () => {
