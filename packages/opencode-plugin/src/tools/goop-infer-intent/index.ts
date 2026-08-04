@@ -86,12 +86,18 @@ Return ONLY valid JSON, no explanation, no markdown:
 Be conservative with confidence. If ambiguous, classify as "chat" with confidence 0.5.
 Empty or gibberish transcript: return { "command": "chat", "confidence": 0.1, "slots": {}, "reasoning": "Empty or unclear input" }`;
 
+// `discuss` and `quick` remain recognized *intents* (the classifier still
+// detects discovery and small-fix intent), but they no longer map to a slash
+// command: `/goop-discuss` and `/goop-quick` were removed as commands while
+// the `discuss` *phase* survived. The orchestrator will act on discovery
+// intent via prompt inference in a later wave; until then these intents carry
+// no command string, exactly like create-workflow/transition/chat.
 const COMMAND_MAP: Record<IntentCommand, string> = {
-  discuss: "/goop-discuss",
+  discuss: "",
   plan: "/goop-plan",
   execute: "/goop-execute",
   accept: "/goop-accept",
-  quick: "/goop-quick",
+  quick: "",
   "create-workflow": "",
   transition: "",
   chat: "",
