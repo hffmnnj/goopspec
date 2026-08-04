@@ -311,9 +311,16 @@ describe("auditPromptSurfaces (real tree)", () => {
     // absolute hits 200 -> 202 (+2: the "never implements fixes" role
     // invariant and the "inspect/report-only" boundary, both true invariants
     // shared with dispatch-patterns.md), bold spans 532 -> 542 (+10).
+    //
+    // The repo-dead-code-pruning workflow's Wave 1 Task 1.2 removed the
+    // Quick Mode Self-Edit Carve-Out subsection from phase-gates.md (the
+    // /goop-quick command is being retired in Wave 2, so the carve-out
+    // described behaviour that will no longer exist). Net effect on
+    // references: 164,672 -> 164,111 bytes (-561). File count unchanged
+    // at 19 (in-place edit, no file added or removed).
     const references = report.directories.find((d) => d.directory === "references")!;
     expect(references.files).toBe(19);
-    expect(references.bytes).toBe(164_672);
+    expect(references.bytes).toBe(164_111);
   });
 
   it("total absolute-language hits are 299 (Wave 1 role plumbing plus the Wave 3 execution gate)", () => {
@@ -413,7 +420,17 @@ describe("auditPromptSurfaces (real tree)", () => {
     // implements fixes" role invariant and the "inspect/report-only"
     // boundary, both true invariants shared with dispatch-patterns.md) —
     // lifting the total from 309 to 311.
-    expect(report.totalAbsoluteHits).toBe(311);
+    //
+    // The repo-dead-code-pruning workflow's Wave 1 Task 1.2 removed the
+    // Quick Mode Self-Edit Carve-Out subsection from phase-gates.md ahead
+    // of the /goop-quick command's retirement in Wave 2. That paragraph
+    // carried three absolute-language hits ("only" in quick-mode-only,
+    // and two "never"s: "orchestrator never implements" and "never
+    // bypassable"). Net: 311 -> 308 (-3). No code files contribute to
+    // this audit (it scans agents/commands/references only), so the
+    // concurrent deletion of dead validators/model-routing/validation-
+    // contract modules does not affect this count.
+    expect(report.totalAbsoluteHits).toBe(308);
   });
 
   it("per-file tokens are consistent with chars via estimateTokens", () => {
