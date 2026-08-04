@@ -9,7 +9,7 @@ import {
 } from "./real-prompts.test-support.js";
 
 const EXPECTED_AGENT_FILES = 15;
-const EXPECTED_COMMAND_FILES = 9;
+const EXPECTED_COMMAND_FILES = 7;
 
 const BUILTIN_TOOLS = new Set([
   "ast_grep",

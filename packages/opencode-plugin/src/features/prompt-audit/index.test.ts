@@ -196,7 +196,7 @@ describe("auditPromptSurfaces (real tree)", () => {
     expect(agents.boldSpans).toBe(137);
   });
 
-  it("commands: 9 files, 25,890 bytes", () => {
+  it("commands: 7 files, 19,259 bytes", () => {
     // Wave 4 Task 4.1 reconciled the nine command docs against the
     // runtime-injected phase rules: trimmed anti-pattern/prohibition lists
     // to command-specific material (removing items the injected phase
@@ -231,9 +231,18 @@ describe("auditPromptSurfaces (real tree)", () => {
     // rule the runtime now enforces. Net: 26,092 -> 26,318 bytes (+226),
     // absolute hits 38 -> 39 (+1: "never deleted or edited" — a true
     // data-integrity invariant, not a judgment call).
+    //
+    // The command-surface-cleanup workflow's Wave 2 Task 2.1 removed the
+    // goop-discuss and goop-quick command docs (the slash commands are
+    // retired; the discuss *phase* survives in the state machine). The two
+    // deleted files measured 5,125 bytes / 13 absolute hits and 1,934
+    // bytes / 7 absolute hits respectively. Net on this category:
+    // 26,318 -> 19,259 bytes (-7,059), 9 -> 7 files, absolute hits
+    // 39 -> 19 (-20). The prose sweep across the remaining command docs
+    // (other commands still mention /goop-discuss) is a separate task.
     const commands = report.directories.find((d) => d.directory === "commands")!;
-    expect(commands.files).toBe(9);
-    expect(commands.bytes).toBe(26_318);
+    expect(commands.files).toBe(7);
+    expect(commands.bytes).toBe(19_259);
   });
 
   it("references: 19 files, 164,672 bytes", () => {
@@ -323,7 +332,7 @@ describe("auditPromptSurfaces (real tree)", () => {
     expect(references.bytes).toBe(164_111);
   });
 
-  it("total absolute-language hits are 299 (Wave 1 role plumbing plus the Wave 3 execution gate)", () => {
+  it("total absolute-language hits are 288 (Wave 1 role plumbing plus the Wave 3 execution gate)", () => {
     // SPEC assumption A5: research-phase count (394) and spec count (396)
     // differ by measurement method. The Wave 1 audit re-measures with one
     // documented method (\b(?:must|never|always|critical|only)\b, gi) and
@@ -430,7 +439,13 @@ describe("auditPromptSurfaces (real tree)", () => {
     // this audit (it scans agents/commands/references only), so the
     // concurrent deletion of dead validators/model-routing/validation-
     // contract modules does not affect this count.
-    expect(report.totalAbsoluteHits).toBe(308);
+    //
+    // The command-surface-cleanup workflow's Wave 2 Task 2.1 deleted the
+    // goop-discuss and goop-quick command docs themselves. Those two files
+    // carried 13 and 7 absolute-language hits respectively (20 total).
+    // Net: 308 -> 288 (-20). The discuss *phase* survives this change;
+    // only the two slash commands (and their docs) are removed.
+    expect(report.totalAbsoluteHits).toBe(288);
   });
 
   it("per-file tokens are consistent with chars via estimateTokens", () => {
