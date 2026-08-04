@@ -20,13 +20,21 @@ import type { DocType } from "../../features/db/types.js";
 export function createGoopReadSectionTool(ctx: PluginContext): ToolDefinition {
   return tool({
     description:
-      "Read structured workflow document sections from GoopSpecDB. " +
-      "Section reads are separate from full-document goop_read_db reads.",
+      "Read keyed sections of a workflow document from GoopSpecDB. WHEN TO USE: Load one section_key, several section_keys[], or — with neither key — every section for a doc_type. WHEN NOT TO USE: goop_read_db for whole documents; goop_search_docs to find sections by content across workflows. RETURNS: Section content (single) or sections under \"## {key}\" headings joined by \"---\"; a \"not found\" message names goop_write_section as the creator. CAVEATS: Sections and whole documents are separate stores — content written via goop_write_db is not returned here until goop_write_section creates a keyed section. doc_type is required.",
     args: {
-      doc_type: tool.schema.enum(DOC_TYPES),
-      section_key: tool.schema.string().optional(),
-      section_keys: tool.schema.array(tool.schema.string()).optional(),
-      workflow_id: tool.schema.string().optional(),
+      doc_type: tool.schema.enum(DOC_TYPES).describe("Document type to read sections from."),
+      section_key: tool.schema
+        .string()
+        .optional()
+        .describe("Single section key to read; omit both key fields to read every section."),
+      section_keys: tool.schema
+        .array(tool.schema.string())
+        .optional()
+        .describe("Batch of section keys to read in one call."),
+      workflow_id: tool.schema
+        .string()
+        .optional()
+        .describe("Target workflow id; omit to use the active workflow."),
     },
     async execute(
       args: {

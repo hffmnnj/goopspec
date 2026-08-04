@@ -25,12 +25,24 @@ export function createGoopReadDbTool(ctx: PluginContext): ToolDefinition {
 
   return tool({
     description:
-      "Read workflow documents from the GoopSpecDB. " +
-      "Provide doc_type (single) or doc_types (batch).",
+      "Read whole workflow documents from GoopSpecDB. WHEN TO USE: Load one doc_type or several doc_types[] in one call. WHEN NOT TO USE: goop_read_section for keyed sections; goop_adl({action:\"read\"}) for the ADL (it is an append-log of structured events, not a document row, so doc_type:\"adl\" returns \"No adl document found\"); goop_search_docs to find content across workflows. RETURNS: Raw markdown (single) or docs under \"## {doc_type}\" headings joined by \"---\"; a \"not found\" message names goop_write_db as the creator. CAVEATS: Valid doc_types: spec, blueprint, chronicle, adl, handoff, requirements, research; unknown types list the valid set.",
     args: {
-      doc_type: tool.schema.string().optional(),
-      doc_types: tool.schema.array(tool.schema.string()).optional(),
-      workflow_id: tool.schema.string().optional(),
+      doc_type: tool.schema
+        .string()
+        .optional()
+        .describe(
+          "Single document type to load; prefer doc_types[] when loading more than one.",
+        ),
+      doc_types: tool.schema
+        .array(tool.schema.string())
+        .optional()
+        .describe(
+          "Batch of document types to load in one call; preferred over repeated doc_type calls.",
+        ),
+      workflow_id: tool.schema
+        .string()
+        .optional()
+        .describe("Target workflow id; omit to use the active workflow."),
     },
     async execute(
       args: {
