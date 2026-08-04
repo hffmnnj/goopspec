@@ -190,9 +190,19 @@ describe("auditPromptSurfaces (real tree)", () => {
     // (+262), absolute hits unchanged at 70 (the added sentence uses
     // "persist forever" and "instead of", not a must/never/always/critical/
     // only judgment word), bold spans unchanged at 137.
+    //
+    // The tool-definition-clarity workflow's Wave 1 made
+    // references/tool-reference.md §House Tool-Description Standard the
+    // single normative home for tool-description rules. agents/goop-
+    // orchestrator.md's standalone friction-reporting instruction was
+    // trimmed to a pointer at tool-reference.md §Friction Reporting (the
+    // "mandatory" ask itself was retained): 10,374 -> 10,413 bytes (+39),
+    // absolute hits unchanged at 15, bold spans unchanged at 137. No other
+    // agent file changed. The immutable Wave 1 baseline (99,822 bytes, 14
+    // files) remains in RESEARCH.md.
     const agents = report.directories.find((d) => d.directory === "agents")!;
     expect(agents.files).toBe(15);
-    expect(agents.bytes).toBe(83_373);
+    expect(agents.bytes).toBe(83_412);
     expect(agents.boldSpans).toBe(137);
   });
 
@@ -311,9 +321,24 @@ describe("auditPromptSurfaces (real tree)", () => {
     // absolute hits 200 -> 202 (+2: the "never implements fixes" role
     // invariant and the "inspect/report-only" boundary, both true invariants
     // shared with dispatch-patterns.md), bold spans 532 -> 542 (+10).
+    //
+    // The tool-definition-clarity workflow's Wave 1 established
+    // references/tool-reference.md §House Tool-Description Standard as the
+    // single normative home for how every tool `description` and argument
+    // `.describe()` string is composed (named sections, length bounds,
+    // omission language, cross-field prose rules, friction-reporting
+    // ownership). tool-reference.md gained the standard itself: 17,699 ->
+    // 23,329 bytes (+5,630). dispatch-patterns.md and goop-orchestrator.md
+    // (the latter under agents/, above) now point at it rather than
+    // restating the rules; dispatch-patterns.md's pointer added 10,523 ->
+    // 10,895 bytes (+372). Net references: 164,672 -> 170,674 bytes
+    // (+6,002), all attributable to those two files. No other reference
+    // file changed. The standard's mandatory-wording rules lift the
+    // workflow-wide absolute-language total (see the assertion below). The
+    // immutable Wave 1 baseline (161,459) remains in RESEARCH.md.
     const references = report.directories.find((d) => d.directory === "references")!;
     expect(references.files).toBe(19);
-    expect(references.bytes).toBe(164_672);
+    expect(references.bytes).toBe(170_674);
   });
 
   it("total absolute-language hits are 299 (Wave 1 role plumbing plus the Wave 3 execution gate)", () => {
@@ -413,7 +438,23 @@ describe("auditPromptSurfaces (real tree)", () => {
     // implements fixes" role invariant and the "inspect/report-only"
     // boundary, both true invariants shared with dispatch-patterns.md) —
     // lifting the total from 309 to 311.
-    expect(report.totalAbsoluteHits).toBe(311);
+    //
+    // The tool-definition-clarity workflow's Wave 1 added the House
+    // Tool-Description Standard as the single normative home for tool-
+    // description rules. The +7 delta is the standard's mandatory-wording
+    // rules themselves, verified against the audit regex rather than
+    // assumed: +6 in references/tool-reference.md (six rule-bearing lines
+    // of the new section, each carrying one must/only — argument fields
+    // must end with .describe(), .describe() must be the last chain
+    // method, descriptions must give the caller enough to avoid the error
+    // on the first try, omit-only-for-Y conditional status, the registry
+    // is fixed at exactly 38 tools, and the friction-reporting ownership
+    // rule), and +1 in references/dispatch-patterns.md (the pointer line's
+    // "must be composed"). agents/goop-orchestrator.md's friction-pointer
+    // swap added zero — the retained "mandatory" keyword was already
+    // present and the new pointer carries no absolute keyword — so its
+    // absolute-hit count stays at 15. Total: 311 -> 318.
+    expect(report.totalAbsoluteHits).toBe(318);
   });
 
   it("per-file tokens are consistent with chars via estimateTokens", () => {
