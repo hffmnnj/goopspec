@@ -10,10 +10,10 @@
 
 import { describe, expect, it } from "bun:test";
 import {
+  type IdleTriageResult,
   LOW_TRIAGE_CONFIDENCE_THRESHOLD,
   buildTriageBlock,
   triageRequiresConfirmation,
-  type IdleTriageResult,
 } from "./index.js";
 
 // ---------------------------------------------------------------------------
@@ -81,10 +81,13 @@ describe("buildTriageBlock — A5 confirmation band", () => {
     expect(fields.get("confirmation_required")).toBe("true");
     const guidance = fields.get("guidance");
     expect(guidance).toBeDefined();
+    if (guidance === undefined) {
+      throw new Error("guidance field missing from triage block");
+    }
     // Phrasing must direct the orchestrator to ask, not to apply.
-    expect(guidance!).toMatch(/confirm/i);
-    expect(guidance!).toMatch(/do not auto-apply/i);
-    expect(guidance!).toContain(String(LOW_TRIAGE_CONFIDENCE_THRESHOLD));
+    expect(guidance).toMatch(/confirm/i);
+    expect(guidance).toMatch(/do not auto-apply/i);
+    expect(guidance).toContain(String(LOW_TRIAGE_CONFIDENCE_THRESHOLD));
   });
 
   it("below threshold: still carries intent, recommended_effort, confidence, and reasoning", () => {
@@ -94,7 +97,12 @@ describe("buildTriageBlock — A5 confirmation band", () => {
     expect(fields.get("intent")).toBe("general");
     expect(fields.get("recommended_effort")).toBe("high");
     expect(fields.get("confidence")).toBe("0.2");
-    expect(fields.get("reasoning")!.length).toBeGreaterThan(0);
+    const reasoning = fields.get("reasoning");
+    expect(reasoning).toBeDefined();
+    if (reasoning === undefined) {
+      throw new Error("reasoning field missing from triage block");
+    }
+    expect(reasoning.length).toBeGreaterThan(0);
   });
 
   it("at the exact boundary (0.5): no confirmation fields — boundary is trusted", () => {
