@@ -377,9 +377,16 @@ describe("auditPromptSurfaces (real tree)", () => {
     // factories. None of the rewordings added or removed an absolute-
     // language keyword. Net: 164,111 -> 163,423 bytes (-688), bold spans
     // 540 -> 538 (-2), files unchanged at 19, absolute hits unchanged.
+    //
+    // The coding-harness-research-upgrade-ideas workflow's Wave 3 Task 3.2
+    // removed the bogus /goop-research row from enforcement-system.md's
+    // Command Processor table and added a one-sentence clarification that
+    // research routes by intent. Net: 163,423 -> 163,712 bytes (+289),
+    // files unchanged at 19, absolute hits unchanged at 288, bold spans
+    // unchanged at 538.
     const references = report.directories.find((d) => d.directory === "references")!;
     expect(references.files).toBe(19);
-    expect(references.bytes).toBe(163_423);
+    expect(references.bytes).toBe(163_712);
   });
 
   it("total absolute-language hits are 288 (Wave 1 role plumbing plus the Wave 3 execution gate)", () => {
