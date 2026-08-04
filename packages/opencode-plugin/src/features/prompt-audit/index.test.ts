@@ -336,9 +336,19 @@ describe("auditPromptSurfaces (real tree)", () => {
     // file changed. The standard's mandatory-wording rules lift the
     // workflow-wide absolute-language total (see the assertion below). The
     // immutable Wave 1 baseline (161,459) remains in RESEARCH.md.
+    //
+    // The tool-definition-clarity workflow's Wave 1 verification follow-up
+    // clarified the high-friction length bound in tool-reference.md §Length
+    // bounds as a ceiling rather than a floor: the allowlist row changed
+    // from "701-1200" (which read as obligating a description to exceed 700)
+    // to "120-1200", with an explicit statement that allowlisting raises
+    // the ceiling from 700 to 1200 and never requires a description to
+    // exceed 700. Wording-only; the gate logic in src/tools/index.test.ts
+    // and the allowlist membership are unchanged. tool-reference.md:
+    // 23,329 -> 23,825 bytes (+496); references rollup 170,674 -> 171,170.
     const references = report.directories.find((d) => d.directory === "references")!;
     expect(references.files).toBe(19);
-    expect(references.bytes).toBe(170_674);
+    expect(references.bytes).toBe(171_170);
   });
 
   it("total absolute-language hits are 299 (Wave 1 role plumbing plus the Wave 3 execution gate)", () => {
@@ -454,7 +464,15 @@ describe("auditPromptSurfaces (real tree)", () => {
     // swap added zero — the retained "mandatory" keyword was already
     // present and the new pointer carries no absolute keyword — so its
     // absolute-hit count stays at 15. Total: 311 -> 318.
-    expect(report.totalAbsoluteHits).toBe(318);
+    //
+    // The tool-definition-clarity workflow's Wave 1 verification follow-up
+    // clarified the high-friction length bound as a ceiling rather than a
+    // floor (see the references.bytes note above). The clarification adds
+    // one "never" to tool-reference.md §Length bounds ("allowlisting ...
+    // never requires a description to exceed 700"), verified against the
+    // audit regex (tool-reference.md 17 -> 18 hits) rather than assumed.
+    // Total: 318 -> 319.
+    expect(report.totalAbsoluteHits).toBe(319);
   });
 
   it("per-file tokens are consistent with chars via estimateTokens", () => {

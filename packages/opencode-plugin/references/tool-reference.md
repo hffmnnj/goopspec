@@ -25,12 +25,14 @@ Section labels are uppercase inline tags terminated by a colon (`WHEN TO USE:`, 
 
 ### Length bounds
 
+The bound that differs by allowlist membership is the ceiling, not the floor. Every description shares the same 120-character floor.
+
 | Bound | Range | Applies to |
 |-------|-------|------------|
 | Normal | 120-700 characters | All tools not on the high-friction allowlist. |
-| High-friction allowlist | 701-1200 characters | Tools whose descriptions cannot fit in 700 characters while meeting all mandatory sections. |
+| High-friction allowlist | 120-1200 characters | Tools on the high-friction allowlist. Allowlisting raises the ceiling from 700 to 1200 and never requires a description to exceed 700, so a concise allowlisted description anywhere in 120-700 still passes. |
 
-**Allowlist criteria.** A tool qualifies for the allowlist when it has multiple mutually exclusive modes, conditional arguments, action-dependent required fields, or complex cross-field contracts. The allowlist is intentionally small to protect the prompt token budget.
+**Allowlist criteria.** A tool qualifies for the allowlist when it has multiple mutually exclusive modes, conditional arguments, action-dependent required fields, or complex cross-field contracts whose mandatory content cannot fit in 700 characters. The allowlist is intentionally small to protect the prompt token budget. Qualifying earns headroom above 700; it does not obligate a description to use it, and padding a description past 700 just to "fill" the allowance defeats the token-budget goal and fails review.
 
 **Allowlist storage location.** The allowlist is a TypeScript constant `HIGH_FRICTION_TOOLS: readonly string[]` in `packages/opencode-plugin/src/tools/index.test.ts`. It holds registered MCP tool names (e.g. `"goop_write_wave"`). Add a tool's name to the constant to exempt it from the 700-char upper bound; the conformance test enforces the 1200-char ceiling for allowlisted tools and the 700-char ceiling for all others. This constant is the single source of truth for allowlist membership — do not duplicate the list in this document.
 
