@@ -2,12 +2,11 @@
  * End-to-end integration test for the GoopSpec 5-phase workflow.
  *
  * Proves that the full plugin lifecycle wires together: context assembly,
- * phase transitions, gates, document scaffolding, enforcement, routing,
- * and auto-delegation. Exercises real subsystem implementations (state
- * manager, enforcement, routing) against the mock PluginContext.
+ * phase transitions, document scaffolding, routing, and auto-delegation.
+ * Exercises real subsystem implementations (state manager, enforcement,
+ * routing) against the mock PluginContext.
  *
- * Covers: MH3 (rebuild plugin), MH5 (core principles), MH15 (validation
- * contract gate), MH18 (auto-delegation).
+ * Covers: MH3 (rebuild plugin), MH5 (core principles), MH18 (auto-delegation).
  *
  * @module integration.test
  */
@@ -19,15 +18,9 @@ import { join } from "node:path";
 import { createPluginContext } from "./core/context.js";
 import type { PluginInput, SdkEvent } from "./core/sdk-compat.js";
 import {
-  type SpecContract,
-  canStartExecution,
-  canStartPlanning,
-  checkContractGate,
   checkPhaseDocuments,
   getRequiredDocuments,
-  isOrchestratorCodeWrite,
   scaffoldPhaseDocuments,
-  validateSpecContract,
 } from "./features/enforcement/index.js";
 import { detectAutoDelegation } from "./features/routing/index.js";
 import { createAutoProgressionHook } from "./hooks/auto-progression.js";
@@ -173,163 +166,7 @@ describe("GoopSpec 5-phase integration", () => {
   });
 
   // ========================================================================
-  // 2. Discuss → Plan gate
-  // ========================================================================
-
-  describe("discuss → plan gate", () => {
-    it("canStartPlanning denies when interview is not complete (standard mode)", () => {
-      const workflow = createDefaultWorkflowState({
-        phase: "discuss",
-        mode: "standard",
-        interviewComplete: false,
-      });
-
-      const result = canStartPlanning(workflow);
-      expect(result.allowed).toBe(false);
-      expect(result.reason).toContain("interview");
-    });
-
-    it("canStartPlanning allows after completeInterview", () => {
-      const mgr = createMockStateManager();
-      mgr.transitionPhase("discuss");
-      mgr.completeInterview();
-
-      const workflow = mgr.getActiveWorkflow();
-      const result = canStartPlanning(workflow);
-      expect(result.allowed).toBe(true);
-    });
-
-    it("canStartPlanning allows in quick mode even without interview", () => {
-      const workflow = createDefaultWorkflowState({
-        phase: "discuss",
-        mode: "quick",
-        interviewComplete: false,
-      });
-
-      const result = canStartPlanning(workflow);
-      expect(result.allowed).toBe(true);
-    });
-  });
-
-  // ========================================================================
-  // 3. Validation-contract gate (MH15)
-  // ========================================================================
-
-  describe("validation-contract gate (MH15)", () => {
-    const incompleteContract: SpecContract = {
-      vision: "Build something",
-      mustHaves: ["Feature A"],
-      // missing: outOfScope, risks, constraints
-    };
-
-    const completeContract: SpecContract = {
-      vision: "Build a complete system",
-      mustHaves: ["Feature A", "Feature B"],
-      outOfScope: ["Feature C"],
-      risks: ["Risk 1"],
-      constraints: ["Constraint 1"],
-    };
-
-    it("validateSpecContract rejects incomplete contract", () => {
-      const result = validateSpecContract(incompleteContract);
-      expect(result.valid).toBe(false);
-      expect(result.missing).toContain("outOfScope");
-      expect(result.missing).toContain("risks");
-      expect(result.missing).toContain("constraints");
-      expect(result.missing.length).toBe(3);
-    });
-
-    it("validateSpecContract accepts complete contract", () => {
-      const result = validateSpecContract(completeContract);
-      expect(result.valid).toBe(true);
-      expect(result.missing).toHaveLength(0);
-    });
-
-    it("checkContractGate rejects incomplete contract in standard mode", () => {
-      const result = checkContractGate(incompleteContract, "standard");
-      expect(result.valid).toBe(false);
-      expect(result.missing.length).toBeGreaterThan(0);
-    });
-
-    it("checkContractGate accepts complete contract in standard mode", () => {
-      const result = checkContractGate(completeContract, "standard");
-      expect(result.valid).toBe(true);
-    });
-
-    it("checkContractGate bypasses in quick mode (valid even when incomplete)", () => {
-      const result = checkContractGate(incompleteContract, "quick");
-      expect(result.valid).toBe(true);
-      expect(result.missing).toHaveLength(0);
-    });
-
-    it("checkContractGate enforces in comprehensive mode", () => {
-      const result = checkContractGate(incompleteContract, "comprehensive");
-      expect(result.valid).toBe(false);
-    });
-
-    it("checkContractGate enforces in milestone mode", () => {
-      const result = checkContractGate(incompleteContract, "milestone");
-      expect(result.valid).toBe(false);
-    });
-  });
-
-  // ========================================================================
-  // 4. Plan → Execute gate
-  // ========================================================================
-
-  describe("plan → execute gate", () => {
-    it("canStartExecution denies when spec is not locked", () => {
-      const workflow = createDefaultWorkflowState({
-        phase: "plan",
-        specLocked: false,
-        interviewComplete: true,
-      });
-
-      const result = canStartExecution(workflow);
-      expect(result.allowed).toBe(false);
-      expect(result.reason).toContain("locked");
-    });
-
-    it("canStartExecution allows after lockSpec", () => {
-      const mgr = createMockStateManager();
-      mgr.transitionPhase("discuss");
-      mgr.completeInterview();
-      mgr.transitionPhase("plan");
-      mgr.lockSpec();
-
-      const workflow = mgr.getActiveWorkflow();
-      const result = canStartExecution(workflow);
-      expect(result.allowed).toBe(true);
-    });
-
-    it("canStartExecution denies when interview not complete in standard mode", () => {
-      const workflow = createDefaultWorkflowState({
-        phase: "plan",
-        specLocked: true,
-        interviewComplete: false,
-        mode: "standard",
-      });
-
-      const result = canStartExecution(workflow);
-      expect(result.allowed).toBe(false);
-      expect(result.reason).toContain("interview");
-    });
-
-    it("canStartExecution allows in quick mode without interview", () => {
-      const workflow = createDefaultWorkflowState({
-        phase: "plan",
-        specLocked: true,
-        interviewComplete: false,
-        mode: "quick",
-      });
-
-      const result = canStartExecution(workflow);
-      expect(result.allowed).toBe(true);
-    });
-  });
-
-  // ========================================================================
-  // 5. Document scaffolding
+  // 2. Document scaffolding
   // ========================================================================
 
   describe("document scaffolding", () => {
@@ -399,39 +236,7 @@ describe("GoopSpec 5-phase integration", () => {
   });
 
   // ========================================================================
-  // 6. Orchestrator enforcement
-  // ========================================================================
-
-  describe("orchestrator enforcement", () => {
-    it("denies orchestrator writing implementation code", () => {
-      const result = isOrchestratorCodeWrite("orchestrator", "src/foo.ts");
-      expect(result.allowed).toBe(false);
-      expect(result.reason).toContain("Orchestrator");
-    });
-
-    it("allows executor writing implementation code", () => {
-      const result = isOrchestratorCodeWrite("executor-medium", "src/foo.ts");
-      expect(result.allowed).toBe(true);
-    });
-
-    it("allows orchestrator writing .goopspec docs", () => {
-      const result = isOrchestratorCodeWrite("orchestrator", ".goopspec/SPEC.md");
-      expect(result.allowed).toBe(true);
-    });
-
-    it("allows orchestrator writing non-code files", () => {
-      const result = isOrchestratorCodeWrite("orchestrator", "README.md");
-      expect(result.allowed).toBe(true);
-    });
-
-    it("allows orchestrator writing config files in src", () => {
-      const result = isOrchestratorCodeWrite("orchestrator", "src/config.json");
-      expect(result.allowed).toBe(true);
-    });
-  });
-
-  // ========================================================================
-  // 7. Auto-delegation (MH18)
+  // 3. Auto-delegation (MH18)
   // ========================================================================
 
   describe("auto-delegation (MH18)", () => {
@@ -479,7 +284,7 @@ describe("GoopSpec 5-phase integration", () => {
   });
 
   // ========================================================================
-  // 8. Phase transitions (full lifecycle)
+  // 4. Phase transitions (full lifecycle)
   // ========================================================================
 
   describe("phase transitions (full lifecycle)", () => {
@@ -568,38 +373,6 @@ describe("GoopSpec 5-phase integration", () => {
       expect(mgr.getActiveWorkflow().phase).toBe("discuss");
     });
 
-    it("gates integrate with transitions end-to-end", () => {
-      const mgr = createMockStateManager();
-
-      // Start workflow
-      mgr.transitionPhase("discuss");
-
-      // Gate check: cannot plan without interview
-      const planGate1 = canStartPlanning(mgr.getActiveWorkflow());
-      expect(planGate1.allowed).toBe(false);
-
-      // Complete interview
-      mgr.completeInterview();
-      const planGate2 = canStartPlanning(mgr.getActiveWorkflow());
-      expect(planGate2.allowed).toBe(true);
-
-      // Transition to plan
-      mgr.transitionPhase("plan");
-
-      // Gate check: cannot execute without spec lock
-      const execGate1 = canStartExecution(mgr.getActiveWorkflow());
-      expect(execGate1.allowed).toBe(false);
-
-      // Lock spec
-      mgr.lockSpec();
-      const execGate2 = canStartExecution(mgr.getActiveWorkflow());
-      expect(execGate2.allowed).toBe(true);
-
-      // Transition to execute
-      mgr.transitionPhase("execute");
-      expect(mgr.getActiveWorkflow().phase).toBe("execute");
-    });
-
     it("resetWorkflow returns to clean idle state", () => {
       const mgr = createMockStateManager();
 
@@ -624,7 +397,7 @@ describe("GoopSpec 5-phase integration", () => {
   });
 
   // ========================================================================
-  // 9. Lazy autopilot nudge composes with compaction (MH11)
+  // 5. Lazy autopilot nudge composes with compaction (MH11)
   // ========================================================================
 
   describe("lazy autopilot nudge and compaction composition", () => {
@@ -733,7 +506,7 @@ describe("GoopSpec 5-phase integration", () => {
   });
 
   // ========================================================================
-  // 10. State-integrity repaired-path wiring
+  // 6. State-integrity repaired-path wiring
   // ========================================================================
 
   describe("state-integrity repaired-path wiring", () => {
@@ -846,26 +619,7 @@ describe("GoopSpec 5-phase integration", () => {
   });
 
   // ========================================================================
-  // 11. Wave-verification remediation loop (W3.T3-T4 / MH3 / MH7 / MH8)
-  //
-  // Proves the bounded fail → remediate → pass → complete path and that
-  // lazy autopilot keeps moving across a verification-only turn.
-  //
-  // RULE 4 ARCHITECTURE DECISION (logged to ADL, reconciling W2 D2 with
-  // MH3's bounded remediation loop): verification rows remain append-only
-  // — never updated or deleted (src/features/db/index.ts insertVerification
-  // has no matching update/delete) — but the wave-completion gate
-  // (`isWaveVerified` in src/features/enforcement/verifier-stage.ts) reads
-  // the EFFECTIVE status per `check_name`: the latest (highest-id) row for
-  // each check. A later `pass` or explicit `skip` for the SAME check
-  // supersedes that check's own prior `fail` without touching history; a
-  // pass for a DIFFERENT check never erases another check's unresolved
-  // fail. The scenarios below prove: the happy path (no fail row) completes
-  // and progresses; a fail blocks completion; remediation via a same-check
-  // pass unblocks completion and lets progression proceed; and a
-  // different-check pass does NOT unblock — the orchestrator's recourse
-  // there remains opening a high-severity blocker, which the lazy-autopilot
-  // guard observes and suppresses.
+  // 7. Wave-verification remediation loop (W3.T3-T4 / MH3 / MH7 / MH8)
   // ========================================================================
 
   describe("wave-verification remediation loop", () => {

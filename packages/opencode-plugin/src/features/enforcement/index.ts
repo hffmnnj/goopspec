@@ -1,24 +1,11 @@
 /**
- * Enforcement subsystem — phase validators, document scaffolder, and
- * context injection rules.
+ * Enforcement subsystem — document scaffolder and context injection rules.
  *
- * This module re-exports the three enforcement concerns as a single
- * public surface. Hooks (Wave 5) consume these pure functions.
+ * This module re-exports the retained enforcement concerns as a single
+ * public surface. Hooks consume these pure functions.
  *
  * @module features/enforcement
  */
-
-// Validators — phase-action allow/deny logic
-export {
-  canStartExecution,
-  canStartPlanning,
-  isImplementationFile,
-  isOperationAllowed,
-  isOrchestratorCodeWrite,
-  validateWriteOperation,
-  type EnforcedOperation,
-  type ValidationResult,
-} from "./validators.js";
 
 // Scaffolder — document auto-creation per phase
 export {
@@ -40,12 +27,3 @@ export {
   getPhaseRules,
   type PhaseRules,
 } from "./phase-context.js";
-
-// Validation contract — spec completeness gate before wave decomposition
-export {
-  checkContractGate,
-  shouldEnforceContractGate,
-  validateSpecContract,
-  type ContractValidation,
-  type SpecContract,
-} from "./validation-contract.js";

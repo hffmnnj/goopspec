@@ -53,10 +53,6 @@ Acceptance remains a distinct final whole-workflow audit: after every wave has p
 
 All bypasses must be logged via `goop_adl`.
 
-### Quick Mode Self-Edit Carve-Out
-
-`/goop-quick` permits the orchestrator to make narrow self-edits without delegating, but when all five conditions in `commands/goop-quick.md` "Self-Edit Authority" are met: single file, `.goopspec/` or config-root scope, under 5 lines, no logic implications, quick-mode-only. This does **not** weaken the Spec gate, the Acceptance gate, or the general rule that the orchestrator never implements anything beyond those five conditions. `spec_locked == true` and explicit user acceptance remain absolute and never bypassable.
-
 ## Autopilot Behavior
 
 Lazy autopilot relaxes checkpoint/pause behavior (skips the discovery interview, in-flight questions, and the contract-gate confirmation), but the spec-lock requirement and acceptance gate remain absolute and non-negotiable in both autopilot and lazy-autopilot modes.

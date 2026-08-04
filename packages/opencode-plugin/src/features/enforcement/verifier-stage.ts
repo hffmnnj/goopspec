@@ -9,7 +9,13 @@
 
 import type { WorkflowPhase } from "../../core/types.js";
 import { VERIFICATION_STATUSES, type VerificationStatus } from "../db/types.js";
-import type { ValidationResult } from "./validators.js";
+
+// Relocated from the pruned validators.ts — its functions had no callers,
+// only this two-field result shape was shared.
+export interface ValidationResult {
+  allowed: boolean;
+  reason?: string;
+}
 
 // ---------------------------------------------------------------------------
 // Verifier dispatch gating
