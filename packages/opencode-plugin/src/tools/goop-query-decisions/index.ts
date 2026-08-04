@@ -53,15 +53,40 @@ function formatDecision(decision: DecisionRow): string {
 export function createGoopQueryDecisionsTool(ctx: PluginContext): ToolDefinition {
   return tool({
     description:
-      "Query structured decisions captured from the Automated Decision Log. " +
-      "Omit workflow_id to search across all workflows.",
+      "Query structured decisions dual-written from the Automated Decision Log across one or all workflows. " +
+      "WHEN TO USE: Review past decisions, deviations, or observations by rule, type, or workflow. " +
+      "WHEN NOT TO USE: goop_adl appends new entries; goop_read_db loads the full ADL document; goop_timeline merges decisions into a chronological audit trail. " +
+      "RETURNS: A markdown list of decisions (timestamp, rule, type, description, action, files), newest first; a no-results message when empty. " +
+      "CAVEATS: Omit workflow_id to search across ALL workflows — the default is cross-workflow, not the active workflow. rules[] overrides rule; types[] overrides type. limit defaults to 50.",
     args: {
-      rule: tool.schema.number().optional(),
-      rules: tool.schema.array(tool.schema.number()).optional(),
-      type: tool.schema.string().optional(),
-      types: tool.schema.array(tool.schema.string()).optional(),
-      workflow_id: tool.schema.string().optional(),
-      limit: tool.schema.number().optional(),
+      rule: tool.schema
+        .number()
+        .optional()
+        .describe("Filter to a single rule number; ignored when rules[] is supplied."),
+      rules: tool.schema
+        .array(tool.schema.number())
+        .optional()
+        .describe("Filter to any of these rule numbers; takes precedence over rule when supplied."),
+      type: tool.schema
+        .string()
+        .optional()
+        .describe(
+          "Filter to a single decision type (e.g. decision, deviation, observation); ignored when types[] is supplied.",
+        ),
+      types: tool.schema
+        .array(tool.schema.string())
+        .optional()
+        .describe("Filter to any of these decision types; takes precedence over type when supplied."),
+      workflow_id: tool.schema
+        .string()
+        .optional()
+        .describe(
+          "Scope to one workflow; omit to search across ALL workflows (the default is cross-workflow, not the active workflow).",
+        ),
+      limit: tool.schema
+        .number()
+        .optional()
+        .describe("Maximum number of decisions to return; defaults to 50."),
     },
     async execute(
       args: {

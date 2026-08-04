@@ -143,4 +143,57 @@ describe("goop_acceptance_audit tool", () => {
     expect(parsed.waves).toContain("Wave 1: Other wave");
     expect(parsed.waves).not.toContain("No waves found");
   });
+
+  // wave_ids filters verifications and waves ONLY — blockers are never narrowed
+  // by it (getBlockers is called with workflow + status only). Pin this so a
+  // caller requesting wave 2's audit still sees an open blocker attached to
+  // wave 1, matching the documented caveat.
+  it("wave_ids filters verifications and waves but NOT blockers", async () => {
+    const workflowId = ctx.stateManager.getState().activeWorkflowId;
+
+    ctx.db.upsertWave(workflowId, { wave_number: 1, title: "Wave one", status: "done" });
+    ctx.db.upsertWave(workflowId, { wave_number: 2, title: "Wave two", status: "in_progress" });
+    ctx.db.insertVerification(workflowId, { check_name: "test", status: "passed", wave_id: 1 });
+    ctx.db.insertVerification(workflowId, { check_name: "lint", status: "failed", wave_id: 2 });
+    // An open blocker attached to wave 1.
+    ctx.db.upsertBlocker(workflowId, {
+      description: "Open blocker on wave 1",
+      severity: "high",
+      status: "open",
+      wave_id: 1,
+    });
+
+    const tool = createGoopAcceptanceAuditTool(ctx);
+    const parsed = parseResult(await tool.execute({ wave_ids: [2] }, createMockToolContext()));
+
+    // Verifications and waves narrowed to wave 2.
+    expect(parsed.verifications).toContain("lint");
+    expect(parsed.verifications).not.toContain("test");
+    expect(parsed.waves).toContain("Wave 2: Wave two");
+    expect(parsed.waves).not.toContain("Wave 1: Wave one");
+
+    // Blocker still present despite being attached to wave 1.
+    expect(parsed.blockers).toContain("Open blocker on wave 1");
+  });
+
+  it("defaults to open-only blockers when include_all_blockers is omitted", async () => {
+    const workflowId = ctx.stateManager.getState().activeWorkflowId;
+    ctx.db.upsertBlocker(workflowId, {
+      description: "Still open",
+      severity: "high",
+      status: "open",
+    });
+    ctx.db.upsertBlocker(workflowId, {
+      description: "Already resolved",
+      severity: "low",
+      status: "resolved",
+      resolution: "done",
+    });
+
+    const tool = createGoopAcceptanceAuditTool(ctx);
+    const parsed = parseResult(await tool.execute({}, createMockToolContext()));
+
+    expect(parsed.blockers).toContain("Still open");
+    expect(parsed.blockers).not.toContain("Already resolved");
+  });
 });

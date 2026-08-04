@@ -137,6 +137,40 @@ describe("goop_read_wave tool", () => {
 
     expect(result).toContain("No wave numbers [99] found for workflow");
   });
+
+  // Empty array is treated identically to omitting wave_numbers — both return
+  // every wave for the workflow. Pin the boundary so a serialization layer
+  // injecting [] cannot accidentally narrow the read.
+  it("an empty wave_numbers array returns every wave, matching an omitted filter", async () => {
+    const workflowId = ctx.stateManager.getState().activeWorkflowId;
+    ctx.db.upsertWave(workflowId, { wave_number: 1, title: "Wave one", status: "done" });
+    ctx.db.upsertWave(workflowId, { wave_number: 2, title: "Wave two", status: "pending" });
+
+    const tool = createGoopReadWaveTool(ctx);
+    const emptyResult = await tool.execute({ wave_numbers: [] }, createMockToolContext());
+    const omittedResult = await tool.execute({}, createMockToolContext());
+
+    expect(emptyResult).toContain("Wave 1: Wave one");
+    expect(emptyResult).toContain("Wave 2: Wave two");
+    expect(emptyResult).toBe(omittedResult);
+  });
+
+  // Contract pin: goop_read_wave reads TRACKING rows only, never workflow
+  // documents. A spec/blueprint written to the DB does not surface here — that
+  // is goop_read_db's job. This locks the redirect the description states.
+  it("does not surface workflow documents (spec/blueprint) — those belong to goop_read_db", async () => {
+    const workflowId = ctx.stateManager.getState().activeWorkflowId;
+    ctx.db.upsertWave(workflowId, { wave_number: 1, title: "Wave one", status: "pending" });
+    // Write a document row of a type goop_read_db would return.
+    ctx.db.upsertDocument(workflowId, "spec", "# Spec prose\nVision goes here");
+
+    const tool = createGoopReadWaveTool(ctx);
+    const result = await tool.execute({}, createMockToolContext());
+
+    expect(result).toContain("Wave 1: Wave one");
+    expect(result).not.toContain("Spec prose");
+    expect(result).not.toContain("Vision goes here");
+  });
 });
 
 describe("goop_read_wave regression and durability", () => {

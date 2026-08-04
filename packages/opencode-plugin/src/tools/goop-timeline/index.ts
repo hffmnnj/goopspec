@@ -6,10 +6,21 @@ import { buildTimeline, formatTimelineMarkdown } from "../../shared/timeline.js"
 
 export function createGoopTimelineTool(ctx: PluginContext): ToolDefinition {
   return tool({
-    description: "Render a unified chronological audit trail for a workflow.",
+    description:
+      "Render a unified chronological audit trail merging events, chronicle entries, decisions, and verifications for one workflow. " +
+      "WHEN TO USE: Review what happened in a workflow across every audit source in time order. " +
+      "WHEN NOT TO USE: goop_dashboard for a cross-workflow project board; goop_query_decisions for decisions alone; goop_read_wave for wave/task rows. " +
+      "RETURNS: A chronological markdown list of timestamped entries tagged by source, plus a TIMELINE.md sidecar render. " +
+      "CAVEATS: workflow_id defaults to the active workflow — this tool is workflow-scoped, not cross-workflow. limit caps to the most recent N entries. Renders TIMELINE.md as a side effect.",
     args: {
-      workflow_id: tool.schema.string().optional(),
-      limit: tool.schema.number().optional(),
+      workflow_id: tool.schema
+        .string()
+        .optional()
+        .describe("Target workflow id; omit to render the active workflow."),
+      limit: tool.schema
+        .number()
+        .optional()
+        .describe("Optional cap on the number of entries returned; omit for all entries."),
     },
     async execute(
       args: { workflow_id?: string; limit?: number },

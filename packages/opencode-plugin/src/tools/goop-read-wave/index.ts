@@ -21,11 +21,24 @@ import { formatWaves } from "../../features/db/wave-format.js";
 export function createGoopReadWaveTool(ctx: PluginContext): ToolDefinition {
   return tool({
     description:
-      "Read-only counterpart to goop_write_wave. " +
-      "Returns wave/task/PR/status/traceability context for a workflow.",
+      "Read wave, task, PR, status, verification, and traceability rows for one workflow. " +
+      "WHEN TO USE: Inspect wave progress, task status, PR links, or recorded verification/traceability rows. " +
+      "WHEN NOT TO USE: goop_read_db loads workflow DOCUMENTS (SPEC, BLUEPRINT) — this reads tracking rows only, and picking the wrong one is a common silent mistake. goop_acceptance_audit combines blockers, verifications, and waves at the accept gate. " +
+      "RETURNS: A markdown block of wave rows with tasks, progress, and any verification/traceability rows; a no-waves message when none exist. " +
+      "CAVEATS: workflow_id defaults to the active workflow. Omit wave_numbers to read every wave; supply an array to filter. Read-only.",
     args: {
-      workflow_id: tool.schema.string().optional(),
-      wave_numbers: tool.schema.array(tool.schema.number()).optional(),
+      workflow_id: tool.schema
+        .string()
+        .optional()
+        .describe(
+          "Target workflow id; omit to read the active workflow. This tool is workflow-scoped, not cross-workflow.",
+        ),
+      wave_numbers: tool.schema
+        .array(tool.schema.number())
+        .optional()
+        .describe(
+          "Optional filter; omit (or pass an empty array) to read every wave for the workflow, or supply specific wave numbers to read a subset.",
+        ),
     },
     async execute(
       args: {
