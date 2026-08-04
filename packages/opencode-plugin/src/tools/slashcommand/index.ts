@@ -120,9 +120,13 @@ function listAvailableCommands(commandsDir: string): string[] {
 // ---------------------------------------------------------------------------
 
 export function createSlashcommandTool(ctx: PluginContext): ToolDefinition {
-  const availableList = KEPT_COMMANDS.map((c) => `/${c}`).join(", ");
   return tool({
-    description: `Execute a GoopSpec slash command. Available commands: ${availableList}`,
+    description:
+      "Resolve a GoopSpec slash command name to its markdown definition. " +
+      "WHEN TO USE: Load workflow instructions for a kept command (goop-discuss, goop-plan, goop-execute, goop-accept, goop-quick, goop-status, goop-setup, goop-help, goop-amend). " +
+      "WHEN NOT TO USE: goop_status for live state; goop_reference for reference documents. " +
+      "RETURNS: The command's raw markdown body, or an error string listing available commands when the name is unknown. " +
+      "CAVEATS: Side-effect free — resolves and returns markdown only; never creates sessions, binds workflows, or mutates state. Leading slash and the goop- prefix are both optional; only the first whitespace-delimited token is used.",
     args: {
       command: tool.schema
         .string()

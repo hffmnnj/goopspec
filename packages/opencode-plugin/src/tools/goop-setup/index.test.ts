@@ -239,8 +239,60 @@ describe("goop_setup tool", () => {
   });
 
   // =========================================================================
-  // gitignore side-effect
+  // action-to-argument legality (contract pinning)
   // =========================================================================
+
+  describe("action-to-argument legality", () => {
+    it("scope is ignored by every action — supplying it has no observable effect", async () => {
+      await exec({ action: "init", projectName: "scope-test" });
+
+      // Run status with and without scope; output must be identical.
+      const withoutScope = await exec({ action: "status" });
+      const withScope = await exec({ action: "status", scope: "global" });
+      expect(withScope).toBe(withoutScope);
+
+      // detect ignores scope too.
+      const detectPlain = await exec({ action: "detect" });
+      const detectScoped = await exec({ action: "detect", scope: "both" });
+      expect(detectScoped).toBe(detectPlain);
+    });
+
+    it("detect ignores all config args — projectName/defaultModel/agentModels have no effect", async () => {
+      const result = await exec({
+        action: "detect",
+        projectName: "ignored-name",
+        defaultModel: "ignored-model",
+        agentModels: { orchestrator: "ignored/model" },
+      });
+      // detect reports the directory state, not config args.
+      expect(result).toContain("Environment Detection");
+      expect(result).not.toContain("ignored-name");
+    });
+
+    it("verify ignores all config args", async () => {
+      await exec({ action: "init", projectName: "verify-real" });
+      const result = await exec({
+        action: "verify",
+        projectName: "wrong-name",
+        defaultModel: "wrong-model",
+      });
+      // verify checks directory/db health, not config args.
+      expect(result).toContain("All checks passed");
+      expect(result).not.toContain("wrong-name");
+    });
+
+    it("status ignores all config args", async () => {
+      await exec({ action: "init", projectName: "real-name" });
+      const result = await exec({
+        action: "status",
+        defaultModel: "ignored-model",
+        agentModels: { orchestrator: "ignored/model" },
+      });
+      expect(result).toContain("real-name");
+      expect(result).not.toContain("ignored-model");
+    });
+  });
+
 
   describe("gitignore handling", () => {
     it("adds .goopspec to .gitignore when gitignoreGoopspec is true", async () => {

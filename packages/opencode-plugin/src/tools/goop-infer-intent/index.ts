@@ -577,13 +577,40 @@ async function classifyTranscript(
 
 export function createGoopInferIntentTool(ctx: PluginContext): ToolDefinition {
   return tool({
-    description: "Classify a raw voice transcript into a GoopSpec command intent.",
+    description:
+      "Classify a raw voice transcript into one of eight GoopSpec command intents. " +
+      "WHEN TO USE: Interpret natural-language or voice input into a structured command (discuss, plan, execute, accept, quick, create-workflow, transition, chat). " +
+      "WHEN NOT TO USE: Call slashcommand directly when the exact command is already known; goop_state for explicit phase transitions without inference. " +
+      "RETURNS: Markdown with the classified command, confidence (0.0-1.0), extracted slots, an autoRun hint, and a JSON comment payload; when autoApply or confidenceThreshold is supplied, a mutation object reports applied/result/error. " +
+      "CAVEATS: Prefers an SDK completion method, falling back to keyword matching. autoApply (default false) gates non-destructive create-workflow/transition mutations only; it requires confidence strictly above 0.85 AND at or above confidenceThreshold (default 0.9, clamped to 0-1). A below-threshold result is never an error — the classification is always returned and mutation.applied is false with an error. autoRun (the markdown hint) is separate from autoApply: it requires confidence >= 0.75 plus no active workflow or an idle-phase workflow.",
     args: {
-      transcript: tool.schema.string(),
-      workflowPhase: tool.schema.string().optional(),
-      hasActiveWorkflow: tool.schema.boolean().optional(),
-      autoApply: tool.schema.boolean().optional(),
-      confidenceThreshold: tool.schema.number().optional(),
+      transcript: tool.schema
+        .string()
+        .describe("Raw voice or text transcript to classify into a command intent."),
+      workflowPhase: tool.schema
+        .string()
+        .optional()
+        .describe(
+          "Phase of the active workflow (idle, discuss, plan, execute, accept). Affects only the autoRun hint: auto-run is suggested only when hasActiveWorkflow is false or this is idle.",
+        ),
+      hasActiveWorkflow: tool.schema
+        .boolean()
+        .optional()
+        .describe(
+          "Whether a workflow is currently active. Affects only the autoRun hint; has no effect on autoApply mutations.",
+        ),
+      autoApply: tool.schema
+        .boolean()
+        .optional()
+        .describe(
+          "When true, attempt to apply create-workflow or transition mutations server-side, gated by confidenceThreshold and a hard floor of 0.85. Default false; when false, no mutation is attempted.",
+        ),
+      confidenceThreshold: tool.schema
+        .number()
+        .optional()
+        .describe(
+          "Minimum confidence for autoApply, clamped to 0-1 (default 0.9). Confidence must also exceed a hard floor of 0.85. Read only when autoApply is true.",
+        ),
     },
     async execute(args: IntentArgs, _context: ToolContext): Promise<string> {
       try {

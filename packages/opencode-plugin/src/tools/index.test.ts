@@ -103,6 +103,20 @@ const HIGH_FRICTION_TOOLS: readonly string[] = [
   // cannot use this safely first-try without all three, and together they
   // cannot fit under 700. Description lands at 1074 chars.
   "memory_forget",
+  // Wave 4 Task 2: action-dispatch tools whose action-to-argument legality
+  // matrix cannot fit under 700 without dropping a rule a caller needs.
+  // goop_setup: 8 actions, each reading a different subset of 9 args, plus
+  // a cross-action gitignoreGoopspec side effect and a scope arg that is
+  // silently ignored — caller cannot first-try know which fields apply.
+  // goop_spec: 3 actions (read/list/validate) where file is read only by
+  // read and phase is ignored by all — mode contract is mandatory content.
+  // goop_infer_intent: autoApply vs autoRun are separate mechanisms with
+  // different gates (hard floor 0.85, threshold default 0.9, autoRun floor
+  // 0.75), and a below-threshold result is never an error — the precise
+  // confidence contract is load-bearing for safe use.
+  "goop_setup",
+  "goop_spec",
+  "goop_infer_intent",
 ];
 
 /**
@@ -132,13 +146,7 @@ const PENDING_CONFORMANCE: readonly string[] = [
   "difftastic",
   "generate_image",
   "goop_create_pr",
-  "goop_get_global_config",
-  "goop_infer_intent",
-  "goop_setup",
-  "goop_spec",
-  "goop_status",
   "scip",
-  "slashcommand",
 ];
 
 // ---- Predicates (pure; shared with the bad-fixture proofs) ---------------
