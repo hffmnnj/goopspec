@@ -1,8 +1,0 @@
-.svelte-kit/
-build/
-node_modules/
-*.local
-*.log
-
-# VAD runtime assets copied from node_modules by the copy-vad-assets Vite plugin
-static/vad/
