@@ -31,18 +31,6 @@ Required documents (checked via `goop_read_db({ doc_type: "..." })` returning co
 | `spec` | plan, execute, accept |
 | `chronicle` | execute, accept |
 
-### Validators
-
-Validate operations against the current phase.
-
-Key functions:
-
-- `validateWriteOperation(phase, filePath)`
-- `validatePhaseTransition(ctx, from, to)`
-- `isImplementationFile(filePath)`
-
-Protected implementation directories include `src/`, `lib/`, `app/`, `apps/`, `packages/`, `server/`, `client/`.
-
 ## Hooks
 
 ### System Transform Hook
@@ -60,7 +48,6 @@ Processes `/goop-*` slash commands, triggers state transitions, scaffolds phase 
 
 | Command | Target Phase |
 |---------|--------------|
-| `/goop-discuss` | plan (discovery) |
 | `/goop-plan` | plan |
 | `/goop-research` | research |
 | `/goop-execute` | execute |

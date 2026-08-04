@@ -46,7 +46,7 @@ Acceptance remains a distinct final whole-workflow audit: after every wave has p
 
 | Gate | Bypass Allowed | Conditions |
 |------|----------------|------------|
-| Discovery | Yes | `/goop-quick`, clear bug fixes, documentation-only changes |
+| Discovery | Yes | Clear bug fixes, documentation-only changes |
 | Spec | No | Never — the locked contract is fundamental |
 | Execution | Partial | Nice-to-haves may be deferred with user confirmation |
 | Acceptance | No | Never — explicit user acceptance is required |

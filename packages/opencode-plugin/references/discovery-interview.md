@@ -4,7 +4,7 @@ Mandatory gate before `/goop-plan`. Captures vision, must-haves, constraints, ou
 
 ## When to Run
 
-- Triggered by `/goop-discuss`.
+- Triggered by describing what you want to build (the orchestrator routes the goal into the interview).
 - Output: `requirements` document via `goop_write_db({ doc_type: "requirements", content: "..." })`.
 - State update: `interview_complete: true`.
 
@@ -146,7 +146,7 @@ The interview is incomplete if:
 
 Discovery may be skipped only for:
 
-- `/goop-quick` small tasks (single file, < 30 min).
+- Quick-mode small tasks (single file, < 30 min).
 - Bug fixes with clear reproduction steps.
 - Documentation-only changes.
 

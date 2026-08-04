@@ -21,7 +21,7 @@ Approach the product as a first-time user:
 
 ## Dogfooding GoopSpec
 
-- Run a full workflow: `/goop-discuss` → `/goop-plan` → `/goop-execute`. Don't use internal shortcuts.
+- Run a full workflow: describe what you want to build → `/goop-plan` → `/goop-execute`. Don't use internal shortcuts.
 - Exercise MCP tools directly: `goop_reference`, `goop_read_db`, `goop_write_db`, `goop_state`, `goop_save_note`, `goop_search_notes`.
 - Check system prompt injection: open a fresh session and verify the state, memory, and DB-tools blocks.
 - Verify reference injection: send a keyword like "tdd" or "git workflow" and confirm the `<goopspec_references>` block appears.
