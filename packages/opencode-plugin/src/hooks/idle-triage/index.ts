@@ -40,11 +40,7 @@ export interface IdleTriageChatOutput {
  * prompt is substantive. Failures are logged and swallowed — triage must
  * never block a turn.
  */
-export function captureIdleTriage(
-  ctx: PluginContext,
-  sessionID: string,
-  prompt: string,
-): boolean {
+export function captureIdleTriage(ctx: PluginContext, sessionID: string, prompt: string): boolean {
   try {
     if (!sessionID) return false;
     if (!isSubstantivePrompt(prompt)) return false;
@@ -106,10 +102,7 @@ export function createIdleTriageHook(ctx: PluginContext): Partial<Hooks> {
 
   const onSystemTransform = safeHandler(
     "idle-triage:system-transform",
-    async (
-      input: { sessionID?: string },
-      output: { system: string[] },
-    ): Promise<void> => {
+    async (input: { sessionID?: string }, output: { system: string[] }): Promise<void> => {
       injectPendingIdleTriage(ctx, input.sessionID, output);
     },
   );

@@ -11,8 +11,8 @@
 import type { TaskMode } from "../../core/constants.js";
 import type { PendingIdleTriage } from "../../core/types.js";
 import { detectTaskMode } from "../mode-detection/index.js";
-import type { ThinkingLevel } from "../setup/index.js";
 import { detectAutoDelegation, route } from "../routing/index.js";
+import type { ThinkingLevel } from "../setup/index.js";
 
 // ---------------------------------------------------------------------------
 // Public types
@@ -150,7 +150,7 @@ export function runIdleTriage(prompt: string): IdleTriageResult {
     intent,
     recommendedEffort,
     confidence: Math.round(confidence * 100) / 100,
-    reasoning: reasoningParts.join(". ") + ".",
+    reasoning: `${reasoningParts.join(". ")}.`,
     sources: {
       autoDelegationDetected: auto.detected,
       autoDelegationIntent: auto.intent,
