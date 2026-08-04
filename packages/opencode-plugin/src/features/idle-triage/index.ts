@@ -61,6 +61,37 @@ const WEAK_SIGNAL_DEFAULT: RecommendedEffort = "high";
 const WEAK_MODE_CONFIDENCE = 0.35;
 
 // ---------------------------------------------------------------------------
+// Confirmation threshold (A5)
+// ---------------------------------------------------------------------------
+
+/**
+ * Confidence at or above which a triage recommendation may be presented as
+ * actionable; below it the recommendation must be presented for explicit
+ * confirmation (A5).
+ *
+ * Empirical bands established by Task 3.1:
+ *   - auto-delegated prompts land at ≥ 0.75
+ *   - mixed-signal prompts (mode·0.55 + routing·0.45) land above 0.5
+ *   - no-signal / fallback prompts land at ≤ 0.45
+ *
+ * 0.5 is the natural cut: it places the entire no-signal band into the
+ * confirmation path while leaving both the auto-delegation band and the
+ * mixed-signal band byte-identical to their verified output. A prompt at
+ * exactly 0.5 has accumulated enough routing signal to recommend without
+ * asking; a prompt at 0.49 is treated as a guess.
+ */
+export const LOW_TRIAGE_CONFIDENCE_THRESHOLD = 0.5;
+
+/**
+ * Whether a triage recommendation must be presented for confirmation rather
+ * than silently applied (A5). The boundary is exclusive: a confidence equal
+ * to the threshold is trusted.
+ */
+export function triageRequiresConfirmation(confidence: number): boolean {
+  return confidence < LOW_TRIAGE_CONFIDENCE_THRESHOLD;
+}
+
+// ---------------------------------------------------------------------------
 // Substantive prompt gate
 // ---------------------------------------------------------------------------
 
@@ -164,16 +195,29 @@ export function runIdleTriage(prompt: string): IdleTriageResult {
 
 /**
  * Format a triage result as a `<goopspec_triage>` system block.
+ *
+ * When confidence is below `LOW_TRIAGE_CONFIDENCE_THRESHOLD` (A5), the block
+ * adds `confirmation_required: true` and a `guidance:` line phrased so the
+ * orchestrator asks the user to confirm the recommended effort rather than
+ * silently applying it. At or above the threshold the block is byte-identical
+ * to the verified high-confidence output — no fields are added, reordered, or
+ * restated.
  */
 export function buildTriageBlock(result: IdleTriageResult | PendingIdleTriage): string {
-  return [
+  const lines = [
     "<goopspec_triage>",
     `intent: ${result.intent}`,
     `recommended_effort: ${result.recommendedEffort}`,
     `confidence: ${result.confidence}`,
-    `reasoning: ${result.reasoning}`,
-    "</goopspec_triage>",
-  ].join("\n");
+  ];
+  if (triageRequiresConfirmation(result.confidence)) {
+    lines.push(
+      "confirmation_required: true",
+      `guidance: Confidence is below ${LOW_TRIAGE_CONFIDENCE_THRESHOLD}. Ask the user to confirm recommended_effort before applying it; do not auto-apply.`,
+    );
+  }
+  lines.push(`reasoning: ${result.reasoning}`, "</goopspec_triage>");
+  return lines.join("\n");
 }
 
 /**
