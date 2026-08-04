@@ -67,6 +67,7 @@ function clearCompactionState(ctx: PluginContext, sessionID: string): void {
   ctx.compactionHandoff.delete(sessionID);
   clearNudgeRateLimitState(sessionID);
   ctx.pendingLazyAutopilotNudges.delete(sessionID);
+  ctx.pendingIdleTriages.delete(sessionID);
 }
 
 // ---------------------------------------------------------------------------
