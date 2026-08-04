@@ -39,7 +39,7 @@ const PHASE_RULES: Record<WorkflowPhase, Omit<PhaseRules, "phase">> = {
   idle: {
     label: "IDLE",
     mustDo: [
-      "Use /goop-discuss or /goop-plan to start a new feature",
+      "Describe what you want to build, or use /goop-plan to start a new feature",
       "Use /goop-status to check current state",
     ],
     mustNotDo: ["Write implementation code without a plan", "Skip the planning phase"],

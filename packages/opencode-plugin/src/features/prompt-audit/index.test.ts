@@ -190,13 +190,20 @@ describe("auditPromptSurfaces (real tree)", () => {
     // (+262), absolute hits unchanged at 70 (the added sentence uses
     // "persist forever" and "instead of", not a must/never/always/critical/
     // only judgment word), bold spans unchanged at 137.
+    //
+    // The command-surface-cleanup workflow's Wave 2 Task 2.3 renamed the
+    // planner's "Validation-Contract Gate (MH15)" to "Requirements-
+    // Completeness Gate (MH15)" in agents/goop-planner.md to disambiguate
+    // from the deleted validation-contract code module, and updated the two
+    // cross-references to it in the same file. Net: 83,373 -> 83,405 bytes
+    // (+32), absolute hits and bold spans unchanged.
     const agents = report.directories.find((d) => d.directory === "agents")!;
     expect(agents.files).toBe(15);
-    expect(agents.bytes).toBe(83_373);
+    expect(agents.bytes).toBe(83_405);
     expect(agents.boldSpans).toBe(137);
   });
 
-  it("commands: 9 files, 25,890 bytes", () => {
+  it("commands: 7 files, 19,259 bytes", () => {
     // Wave 4 Task 4.1 reconciled the nine command docs against the
     // runtime-injected phase rules: trimmed anti-pattern/prohibition lists
     // to command-specific material (removing items the injected phase
@@ -231,9 +238,31 @@ describe("auditPromptSurfaces (real tree)", () => {
     // rule the runtime now enforces. Net: 26,092 -> 26,318 bytes (+226),
     // absolute hits 38 -> 39 (+1: "never deleted or edited" — a true
     // data-integrity invariant, not a judgment call).
+    //
+    // The command-surface-cleanup workflow's Wave 2 Task 2.1 removed the
+    // goop-discuss and goop-quick command docs (the slash commands are
+    // retired; the discuss *phase* survives in the state machine). The two
+    // deleted files measured 5,125 bytes / 13 absolute hits and 1,934
+    // bytes / 7 absolute hits respectively. Net on this category:
+    // 26,318 -> 19,259 bytes (-7,059), 9 -> 7 files, absolute hits
+    // 39 -> 19 (-20). The prose sweep across the remaining command docs
+    // (other commands still mention /goop-discuss) is a separate task.
+    //
+    // The command-surface-cleanup workflow's Wave 2 Task 2.3 swept the
+    // stale /goop-discuss and /goop-quick references from the remaining
+    // seven command docs: goop-help (frontmatter next-step, table rows,
+    // next-step section), goop-status (suggested-commands table),
+    // goop-setup (frontmatter next-step and completion banner),
+    // goop-plan (alternatives frontmatter, gate-check message, renamed
+    // "Validation-contract gate" heading to "Contract gate"), and
+    // goop-accept (frontmatter next-step/next-command). None of the
+    // rewordings added or removed an absolute-language keyword, and no
+    // bold spans changed in an asserted directory. Net on this category:
+    // 19,259 -> 19,455 bytes (+196), files unchanged at 7, absolute hits
+    // unchanged at 19 (workflow-wide total stays 288).
     const commands = report.directories.find((d) => d.directory === "commands")!;
-    expect(commands.files).toBe(9);
-    expect(commands.bytes).toBe(26_318);
+    expect(commands.files).toBe(7);
+    expect(commands.bytes).toBe(19_455);
   });
 
   it("references: 19 files, 164,672 bytes", () => {
@@ -318,12 +347,29 @@ describe("auditPromptSurfaces (real tree)", () => {
     // described behaviour that will no longer exist). Net effect on
     // references: 164,672 -> 164,111 bytes (-561). File count unchanged
     // at 19 (in-place edit, no file added or removed).
+    //
+    // The command-surface-cleanup workflow's Wave 2 Task 2.3 swept the
+    // stale /goop-discuss and /goop-quick references and the deferred
+    // validation-contract prose out of references: phase-gates.md dropped
+    // /goop-quick from the discovery bypass row, core-protocol.md reworded
+    // the boot-sequence discovery row and dropped the deleted-file self-
+    // edit clause from the quick Task Mode row, dispatch-patterns.md
+    // removed the Quick-mode self-edit carve-out paragraph that pointed at
+    // the deleted commands/goop-quick.md, discovery-interview.md and
+    // dogfooding.md reworded their discovery-entry guidance to prose,
+    // enforcement-system.md removed the deleted-code Validators subsection
+    // (validateWriteOperation/validatePhaseTransition) and the /goop-discuss
+    // command-processor row, and architecture-design.md replaced the
+    // validation-contract-gate Factory example with the live tool
+    // factories. None of the rewordings added or removed an absolute-
+    // language keyword. Net: 164,111 -> 163,423 bytes (-688), bold spans
+    // 540 -> 538 (-2), files unchanged at 19, absolute hits unchanged.
     const references = report.directories.find((d) => d.directory === "references")!;
     expect(references.files).toBe(19);
-    expect(references.bytes).toBe(164_111);
+    expect(references.bytes).toBe(163_423);
   });
 
-  it("total absolute-language hits are 299 (Wave 1 role plumbing plus the Wave 3 execution gate)", () => {
+  it("total absolute-language hits are 288 (Wave 1 role plumbing plus the Wave 3 execution gate)", () => {
     // SPEC assumption A5: research-phase count (394) and spec count (396)
     // differ by measurement method. The Wave 1 audit re-measures with one
     // documented method (\b(?:must|never|always|critical|only)\b, gi) and
@@ -430,7 +476,20 @@ describe("auditPromptSurfaces (real tree)", () => {
     // this audit (it scans agents/commands/references only), so the
     // concurrent deletion of dead validators/model-routing/validation-
     // contract modules does not affect this count.
-    expect(report.totalAbsoluteHits).toBe(308);
+    //
+    // The command-surface-cleanup workflow's Wave 2 Task 2.1 deleted the
+    // goop-discuss and goop-quick command docs themselves. Those two files
+    // carried 13 and 7 absolute-language hits respectively (20 total).
+    // Net: 308 -> 288 (-20). The discuss *phase* survives this change;
+    // only the two slash commands (and their docs) are removed.
+    //
+    // The command-surface-cleanup workflow's Wave 2 Task 2.3 swept the
+    // remaining stale /goop-discuss and /goop-quick references and the
+    // deferred validation-contract prose from the surviving command docs,
+    // references, and agents/goop-planner.md. None of the rewordings
+    // added or removed a must/never/always/critical/only keyword, so the
+    // workflow-wide total stays at 288.
+    expect(report.totalAbsoluteHits).toBe(288);
   });
 
   it("per-file tokens are consistent with chars via estimateTokens", () => {

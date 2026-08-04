@@ -192,7 +192,7 @@ Before doing work, every subagent must:
 
 | Role / Context | Default document load |
 |---|---|
-| Orchestrator @ `/goop-discuss` start | None — zero documents of any kind (state) |
+| Orchestrator @ discovery start | None — zero documents of any kind (state) |
 | Orchestrator @ other phases | None as a "boot default" — uses the explicit, phase-specific reads already defined in each command doc (e.g. `/goop-plan` step 1 reads `requirements`) |
 | Planner | `requirements` |
 | Executors (all six tiers) | Current assigned wave/task via `goop_read_wave` — no spec/blueprint document by default |
@@ -242,7 +242,7 @@ Required sections: `STATUS`, `SUMMARY`, `ARTIFACTS`, `VERIFICATION`, `NEXT`.
 
 | Mode | Use | Flow |
 |------|-----|------|
-| **quick** | Small fix, single file, < 30 min; orchestrator may self-edit trivial config/docs per the 5-condition test in `commands/goop-quick.md` (Self-Edit Authority) | Discuss → Execute → Accept |
+| **quick** | Small fix, single file, < 30 min | Discuss → Execute → Accept |
 | **standard** | Feature or moderate work | Full 5-phase workflow |
 | **comprehensive** | Complex system | Full workflow + deep research + parallel agents |
 | **milestone** | Major release | Multiple cycles + archive + git tag |

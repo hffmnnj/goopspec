@@ -53,7 +53,7 @@ idle → plan → research → specify → execute → accept → archive
 |---------|-----|
 | **Repository** | Abstract data access behind a collection-like interface |
 | **Service layer** | Coordinate application operations and transactions |
-| **Factory** | Encapsulate creation logic (e.g., validation-contract gate) |
+| **Factory** | Encapsulate creation logic (e.g., the tool factories in `src/tools/`) |
 | **Observer** | React to state changes without tight coupling |
 | **Strategy** | Swap algorithms without changing callers |
 

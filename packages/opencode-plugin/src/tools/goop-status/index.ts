@@ -45,8 +45,8 @@ function getPhaseGuidance(wf: WorkflowState): PhaseGuidance {
     case "idle":
       return {
         description: "No active workflow. Ready for a new task.",
-        next: "Start planning a new feature or task",
-        command: "/goop-discuss",
+        next: "Describe what you want to build to begin discovery",
+        command: "Describe what you want to build",
       };
     case "discuss":
       return {
@@ -132,7 +132,9 @@ export function formatStatus(
   lines.push(`${guidance.description}`);
   lines.push("");
   lines.push(`**Next:** ${guidance.next}`);
-  lines.push(`**Command:** \`${guidance.command}\``);
+  lines.push(
+    `**Command:** ${guidance.command.startsWith("/") ? `\`${guidance.command}\`` : guidance.command}`,
+  );
 
   // Multi-workflow summary
   if (allIds.length > 1) {
@@ -164,7 +166,7 @@ export function createGoopStatusTool(ctx: PluginContext): ToolDefinition {
         const wf = state.workflows[activeId];
 
         if (!wf) {
-          return "## \u{1F52E} GoopSpec \u00B7 Status\n\nNo active workflow found. Run `/goop-discuss` to start.";
+          return "## \u{1F52E} GoopSpec \u00B7 Status\n\nNo active workflow found. Describe what you want to build to begin.";
         }
 
         const allIds = ctx.stateManager.listWorkflowIds();

@@ -78,7 +78,9 @@ describe("goop_infer_intent tool", () => {
     expect(parsed.command).toBe("discuss");
     expect(parsed.confidence).toBeGreaterThanOrEqual(0.75);
     expect(parsed.autoRun).toBe(true);
-    expect(parsed.commandString).toBe("/goop-discuss");
+    // `/goop-discuss` was removed as a command (Wave 2); the `discuss` intent
+    // is preserved but no longer maps to a command string.
+    expect(parsed.commandString).toBe("");
   });
 
   it("classifies clear plan intent via keywords", async () => {
@@ -193,7 +195,9 @@ describe("goop_infer_intent tool", () => {
 
     expect(parsed.command).toBe("discuss");
     expect(parsed.autoRun).toBe(true);
-    expect(parsed.commandString).toBe("/goop-discuss");
+    // `/goop-discuss` was removed as a command (Wave 2); the `discuss` intent
+    // is preserved but no longer maps to a command string.
+    expect(parsed.commandString).toBe("");
   });
 
   it("does not auto-run when confidence is below threshold", async () => {

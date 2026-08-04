@@ -28,15 +28,13 @@ import { getPackageRoot } from "../../shared/paths.js";
 // ---------------------------------------------------------------------------
 
 /**
- * The 9 kept commands for GoopSpec 1.0.0.
+ * The 7 kept commands for GoopSpec 1.0.0.
  * Used to build the "available commands" list in error messages.
  */
 const KEPT_COMMANDS = [
-  "goop-discuss",
   "goop-plan",
   "goop-execute",
   "goop-accept",
-  "goop-quick",
   "goop-status",
   "goop-setup",
   "goop-help",
