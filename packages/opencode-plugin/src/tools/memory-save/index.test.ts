@@ -275,6 +275,38 @@ describe("memory_save tool", () => {
   });
 
   // -------------------------------------------------------------------------
+  // Graceful degradation: a failed write surfaces as id -1, not a throw.
+  // The memory manager degrades to a synthetic fallbackEntry (id: -1) when
+  // the DB write fails, so the tool still returns a success-shaped message.
+  // A caller must check the returned id to know whether the record persisted.
+  // -------------------------------------------------------------------------
+
+  it("surfaces a failed write as id -1 rather than throwing", async () => {
+    const degradedCtx = createMockPluginContext({ testDir: "/tmp/broken" });
+    // Mimic the real manager's graceful-degradation return (fallbackEntry).
+    degradedCtx.memory.save = async (input) => ({
+      id: -1,
+      type: input.type,
+      title: input.title,
+      content: input.content,
+      facts: input.facts,
+      concepts: input.concepts,
+      sourceFiles: input.sourceFiles,
+      importance: input.importance ?? 5,
+      createdAt: Date.now(),
+    });
+
+    const tool = createMemorySaveTool(degradedCtx);
+    const result = await tool.execute(
+      { title: "Fails to persist", content: "Should degrade gracefully." },
+      toolCtx,
+    );
+
+    // The tool still reports success-shaped output, but the id signals failure.
+    expect(result).toContain("**ID:** -1");
+  });
+
+  // -------------------------------------------------------------------------
   // Error handling
   // -------------------------------------------------------------------------
 

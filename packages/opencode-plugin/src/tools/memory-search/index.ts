@@ -81,23 +81,48 @@ function formatCrossStoreResult(result: CrossStoreSearchResult, index: number): 
 export function createMemorySearchTool(ctx: PluginContext): ToolDefinition {
   return tool({
     description:
-      "Search persistent memory using keyword and semantic matching with optional filters.",
+      "Search persistent memory by query with optional filters. " +
+      "WHEN TO USE: Recall saved memories by keyword. " +
+      "WHEN NOT TO USE: goop_search_notes for Field Notes; memory_forget with a query to " +
+      "preview a deletion without committing it. " +
+      "RETURNS: Ranked results or a no-matches tip. " +
+      "CAVEATS: limit defaults to 5, clamped to 1-20. Filters AND together: types (membership), " +
+      "concepts (OR within, substring on stored tags), minImportance (>=). Empty query returns " +
+      "nothing. includeFieldNotes:true adds Field Notes and re-ranks all results via " +
+      "reciprocal-rank fusion (k=60), tagging each origin; filters apply to memories only. " +
+      "Any filter narrows results by design: a query match lacking the filter is excluded.",
     args: {
-      query: tool.schema.string().describe("Search query"),
-      limit: tool.schema.number().optional().describe("Max results (default 5, max 20)"),
+      query: tool.schema.string().describe(
+        "Search query over title, content, facts, and concepts. Required; an empty or " +
+          "whitespace-only query returns no results.",
+      ),
+      limit: tool.schema
+        .number()
+        .optional()
+        .describe("Max results to return. Defaults to 5; clamped to the 1-20 range."),
       types: tool.schema
         .array(tool.schema.enum(MEMORY_TYPES))
         .optional()
-        .describe("Filter by memory types"),
-      concepts: tool.schema
-        .array(tool.schema.string())
+        .describe(
+          "Restrict to memories whose type is in this list " +
+            "(observation, decision, note, todo, session_summary). AND-combined with other filters.",
+        ),
+      concepts: tool.schema.array(tool.schema.string()).optional().describe(
+        "Restrict to memories tagged with any of these concepts. Multiple concepts are OR'd " +
+          "within this list (a memory need only match one), then AND'd with other filters. " +
+          "Matched as a case-insensitive substring against stored tags.",
+      ),
+      minImportance: tool.schema
+        .number()
         .optional()
-        .describe("Filter by concept tags"),
-      minImportance: tool.schema.number().optional().describe("Minimum importance (1-10)"),
-      includeFieldNotes: tool.schema
-        .boolean()
-        .optional()
-        .describe("Include matching Field Notes, fused with memories using reciprocal-rank fusion"),
+        .describe(
+          "Exclude memories with importance below this value (>= comparison). AND-combined with other filters.",
+        ),
+      includeFieldNotes: tool.schema.boolean().optional().describe(
+        "When true, also search Field Notes and fuse both ranked lists via reciprocal-rank " +
+          "fusion (k=60), tagging each result's origin. Re-ranks every result. Filters apply to " +
+          "the memory side only; Field Notes are searched by query alone. Absent and false are identical.",
+      ),
     },
     async execute(
       args: {

@@ -87,41 +87,60 @@ const USER_MEMORY_TYPES = MEMORY_TYPES.filter(
 export function createMemorySaveTool(ctx: PluginContext): ToolDefinition {
   return tool({
     description:
-      "Save structured information to persistent memory. " +
-      "Supports observation, decision, note, and todo types.",
+      "Persist a structured memory record. " +
+      "WHEN TO USE: Capture an observation, decision, note, or todo. " +
+      "WHEN NOT TO USE: goop_save_note for curated project knowledge with tags and agent attribution. " +
+      "RETURNS: A confirmation with id, type, title, importance; a failed write degrades to id -1 " +
+      "rather than throwing. " +
+      "CAVEATS: importance defaults by type (decision 7, note 4, else 5), must be 1-10 " +
+      "(0-1 scales x10). type=decision folds reasoning/alternatives into content and " +
+      "auto-generates facts from the title if omitted; both ignored otherwise. " +
+      "deduplicate:true reinforces a near-duplicate (importance=max(old,new), created_at " +
+      "refreshed, content unchanged) instead of inserting; absent/false inserts.",
     args: {
-      title: tool.schema.string().describe("Memory title (max 100 chars)"),
-      content: tool.schema.string().describe("Memory content"),
-      type: tool.schema
-        .enum(USER_MEMORY_TYPES)
-        .optional()
-        .describe("Type: observation (default), decision, note, or todo"),
+      title: tool.schema
+        .string()
+        .describe("Memory title; max 100 characters. Required."),
+      content: tool.schema.string().describe(
+        "Memory body text. Required. Stored verbatim for non-decision types; for type=decision " +
+          "the reasoning and alternatives are appended into the stored content.",
+      ),
+      type: tool.schema.enum(USER_MEMORY_TYPES).optional().describe(
+        "Record type. Defaults to observation. decision folds reasoning/alternatives into " +
+          "content and auto-generates facts; note lowers the default importance; todo tracks " +
+          "an action item.",
+      ),
       concepts: tool.schema
         .array(tool.schema.string())
         .optional()
-        .describe("Tags for categorization and search"),
-      facts: tool.schema
-        .array(tool.schema.string())
-        .optional()
-        .describe("Atomic facts extracted from this memory"),
-      importance: tool.schema
-        .number()
-        .optional()
-        .describe("Importance 1-10 (default varies by type)"),
+        .describe(
+          "Tags for categorization and retrieval; stored verbatim and full-text-indexed.",
+        ),
+      facts: tool.schema.array(tool.schema.string()).optional().describe(
+        "Atomic facts extracted from this memory; stored verbatim and full-text-indexed. For " +
+          "type=decision, auto-generated from the title when omitted.",
+      ),
+      importance: tool.schema.number().optional().describe(
+        "Priority 1-10. Defaults vary by type: decision 7, note 4, observation/todo 5. Values " +
+          "in (0, 1) are scaled x10 for backward compatibility.",
+      ),
       sourceFiles: tool.schema
         .array(tool.schema.string())
         .optional()
-        .describe("Related file paths"),
-      // Decision-specific fields (only meaningful when type=decision)
-      reasoning: tool.schema.string().optional().describe("Why this decision was made"),
-      alternatives: tool.schema
-        .array(tool.schema.string())
-        .optional()
-        .describe("Alternatives considered"),
-      deduplicate: tool.schema
-        .boolean()
-        .optional()
-        .describe("Consolidate a near-duplicate memory instead of inserting a new entry"),
+        .describe("Related file paths; stored verbatim."),
+      reasoning: tool.schema.string().optional().describe(
+        "Why a decision was made. Only applied for type=decision (folded into content); " +
+          "ignored for other types. Omit for non-decision memories.",
+      ),
+      alternatives: tool.schema.array(tool.schema.string()).optional().describe(
+        "Alternatives considered. Only applied for type=decision (folded into content); " +
+          "ignored for other types. Omit for non-decision memories.",
+      ),
+      deduplicate: tool.schema.boolean().optional().describe(
+        "When true, reinforce a near-duplicate existing record instead of inserting a new row " +
+          "(importance becomes max of old and new, created_at refreshed, content unchanged). " +
+          "When absent or false, always insert. No-op when FTS5 is unavailable.",
+      ),
     },
     async execute(
       args: {

@@ -18,15 +18,35 @@ import type { PluginContext } from "../../core/types.js";
 export function createMemoryForgetTool(ctx: PluginContext): ToolDefinition {
   return tool({
     description:
-      "Delete memories from persistent storage by ID or query. " +
-      "Query-based deletes require confirm=true. WARNING: irreversible.",
+      "Delete one memory by id, or every memory matching a query. Irreversible: no undo, " +
+      "no recycle bin, no soft delete. " +
+      "WHEN TO USE: Remove a single wrong record via id; bulk-remove a topic via query. " +
+      "WHEN NOT TO USE: memory_search to inspect without deleting; goop_search_notes targets " +
+      "Field Notes (a separate store this tool never touches). " +
+      "MODES: id mode — send only id; deletes that one record immediately; query and confirm " +
+      "are ignored. query mode — send only query; without confirm returns a read-only preview " +
+      "(up to 20 matches) plus the exact confirm=true call to repeat; with confirm:true deletes " +
+      "every match. Supplying neither id nor query is rejected. " +
+      "RETURNS: The deletion outcome (count or not-found), or in query mode without confirm the " +
+      "preview plus the confirmation call to issue next. " +
+      "CAVEATS: confirm gates ONLY query-mode deletion; it does not protect id mode, which needs " +
+      "no confirm. The preview caps at 20 rows but confirmed deletion searches up to 100, so the " +
+      "count deleted can exceed the count previewed. A missing id returns 'not found' and deletes nothing.",
     args: {
-      id: tool.schema.number().optional().describe("Memory ID to delete"),
-      query: tool.schema
-        .string()
-        .optional()
-        .describe("Search query to delete matching memories (requires confirm=true)"),
-      confirm: tool.schema.boolean().optional().describe("Confirm deletion when using query"),
+      id: tool.schema.number().optional().describe(
+        "Numeric id of the single memory to delete. When supplied, takes precedence over query " +
+          "and confirm: that one record is deleted immediately and confirm is not required. " +
+          "Omit when using query mode.",
+      ),
+      query: tool.schema.string().optional().describe(
+        "Search query whose matches to delete, after confirmation. Without confirm, returns a " +
+          "read-only preview; with confirm:true, deletes every match. Omit entirely when using " +
+          "id mode; do not pass an empty string.",
+      ),
+      confirm: tool.schema.boolean().optional().describe(
+        "Set to true to commit a query-mode deletion. Has no effect in id mode, which deletes " +
+          "without confirmation regardless. Omit when using id mode.",
+      ),
     },
     async execute(
       args: {

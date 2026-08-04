@@ -126,6 +126,73 @@ describe("memory_forget tool", () => {
   });
 
   // -------------------------------------------------------------------------
+  // Confirm gate and mode precedence — the destructive contract pinned.
+  // These tests exist because memory_forget is irreversible: a caller must
+  // be able to read the description alone and know which invocation deletes
+  // one record, which can delete many, and what confirm gates. The assertions
+  // below fix that contract so a future refactor cannot silently change it.
+  // -------------------------------------------------------------------------
+
+  it("id mode deletes immediately without confirm and ignores confirm:false", async () => {
+    const tool = createMemoryForgetTool(ctx);
+    // confirm:false must NOT protect an id-mode deletion.
+    const result = await tool.execute({ id: 1, confirm: false }, toolCtx);
+
+    expect(result).toBe("Memory 1 deleted successfully.");
+    expect(await ctx.memory.getById(1)).toBeNull();
+  });
+
+  it("id mode takes precedence over query + confirm (no bulk deletion occurs)", async () => {
+    const tool = createMemoryForgetTool(ctx);
+    // Supplying both id and a confirmed query must delete only the id record.
+    // forgetByQuery must NOT run, so the other auth-related memory survives.
+    const result = await tool.execute({ id: 2, query: "auth", confirm: true }, toolCtx);
+
+    expect(result).toBe("Memory 2 deleted successfully.");
+    // Memory 3 ("Use auth tokens") matches the query but must survive because
+    // id mode short-circuits before the query path runs.
+    const surviving = await ctx.memory.search({ query: "auth" });
+    expect(surviving.some((r) => r.memory.id === 3)).toBe(true);
+  });
+
+  it("query mode without confirm returns a read-only preview and deletes nothing", async () => {
+    const tool = createMemoryForgetTool(ctx);
+    const result = await tool.execute({ query: "auth" }, toolCtx);
+
+    expect(result).toContain("Will delete:");
+    expect(result).toContain("confirm=true");
+    // Nothing was actually deleted.
+    const stillPresent = await ctx.memory.search({ query: "auth" });
+    expect(stillPresent.length).toBeGreaterThan(0);
+  });
+
+  it("query-mode preview searches with a limit of 20", async () => {
+    // The preview path passes limit:20 to memory.search. This pins the
+    // documented "preview caps at 20 rows" contract; the confirmed-delete
+    // path (limit 100) is pinned at the manager level in features/memory.
+    const realSearch = ctx.memory.search;
+    let capturedLimit: number | undefined;
+    ctx.memory.search = async (options) => {
+      capturedLimit = options.limit;
+      return realSearch(options);
+    };
+
+    const tool = createMemoryForgetTool(ctx);
+    await tool.execute({ query: "auth" }, toolCtx);
+
+    expect(capturedLimit).toBe(20);
+  });
+
+  it("query mode with confirm:true commits the deletion via forgetByQuery", async () => {
+    const tool = createMemoryForgetTool(ctx);
+    const result = await tool.execute({ query: "auth", confirm: true }, toolCtx);
+
+    expect(result).toContain("Deleted");
+    const remaining = await ctx.memory.search({ query: "auth" });
+    expect(remaining.length).toBe(0);
+  });
+
+  // -------------------------------------------------------------------------
   // Error handling
   // -------------------------------------------------------------------------
 

@@ -94,6 +94,15 @@ const HIGH_FRICTION_TOOLS: readonly string[] = [
   // it) plus a mandatory atomicity-history caveat. Parity with the existing
   // allowlist, not a loosened bar; the description lands at 766 chars.
   "goop_save_note",
+  // Wave 4 Task 1: memory_forget is destructive and irreversible, with two
+  // mutually exclusive modes (id vs query) gated by different rules: id
+  // deletes immediately and ignores confirm; query needs confirm:true to
+  // commit. The mandatory content includes the confirm-gates-query-only
+  // rule, the preview-vs-commit workflow, AND the footgun that the preview
+  // caps at 20 rows while confirmed deletion searches up to 100 — a caller
+  // cannot use this safely first-try without all three, and together they
+  // cannot fit under 700. Description lands at 1074 chars.
+  "memory_forget",
 ];
 
 /**
@@ -128,9 +137,6 @@ const PENDING_CONFORMANCE: readonly string[] = [
   "goop_setup",
   "goop_spec",
   "goop_status",
-  "memory_forget",
-  "memory_save",
-  "memory_search",
   "scip",
   "slashcommand",
 ];

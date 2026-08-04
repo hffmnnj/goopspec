@@ -461,6 +461,56 @@ describe("SqliteMemoryManager", () => {
       expect(results[0].memory.type).toBe("decision");
       expect(results[0].memory.importance).toBeGreaterThanOrEqual(5);
     });
+
+    // MH11/MH20 investigation: "query plus tag misses results that query
+    // alone finds." Confirmed as intended AND-combination behavior, not a
+    // ranking bug: a memory that matches the query text but does not carry
+    // the filtered concept is excluded by design. A memory that carries the
+    // concept is retained even when the concept tag is a substring of the
+    // stored JSON value (the real filter is LIKE '%concept%'). Documented
+    // in tool-reference.md and the memory_search description; no algorithm
+    // change made or warranted.
+    it("a concept filter excludes a query match lacking the concept, under real FTS5", async () => {
+      await mgr.save({
+        ...baseSaveInput,
+        title: "Gateway router",
+        content: "the gateway service handles inbound routing",
+        concepts: ["networking"],
+        importance: 7,
+      });
+      await mgr.save({
+        ...baseSaveInput,
+        title: "Gateway logging",
+        content: "the gateway service logs inbound routing",
+        concepts: ["observability"],
+        importance: 7,
+      });
+
+      const unfiltered = await mgr.search({ query: "gateway routing" });
+      expect(unfiltered.length).toBe(2);
+
+      const filtered = await mgr.search({ query: "gateway routing", concepts: ["networking"] });
+      expect(filtered.length).toBe(1);
+      expect(filtered[0].memory.title).toBe("Gateway router");
+    });
+
+    it("a concept filter matches stored tags by substring (real LIKE semantics)", async () => {
+      // The stored concepts JSON is matched with LIKE '%tag%'. A concept
+      // stored as "observability" is matched by a "serv" filter fragment,
+      // and an exact-case stored tag matches a lowercase filter (ASCII
+      // case-insensitivity). This is the real-manager semantic the mock
+      // cannot exercise (it uses exact, case-sensitive Array.includes).
+      await mgr.save({
+        ...baseSaveInput,
+        title: "Telemetry pipeline",
+        content: "telemetry collection pipeline",
+        concepts: ["Observability"],
+        importance: 7,
+      });
+
+      const byLowercase = await mgr.search({ query: "telemetry", concepts: ["observability"] });
+      expect(byLowercase.length).toBe(1);
+    });
   });
 
   // -----------------------------------------------------------------------
@@ -542,6 +592,39 @@ describe("SqliteMemoryManager", () => {
     it("returns 0 for empty query", async () => {
       const count = await mgr.forgetByQuery("   ");
       expect(count).toBe(0);
+    });
+
+    // Pins the documented memory_forget divergence: the tool's preview path
+    // caps at limit 20, but confirmed deletion calls forgetByQuery, which
+    // searches with limit 100. A caller who reads "20 matches" in the
+    // preview and confirms can therefore delete up to 100 records. This
+    // test pins the 100-search ceiling at the manager level; the tool-level
+    // 20-preview limit is pinned in tools/memory-forget/index.test.ts.
+    it("deletes more than the 20-row preview ceiling when more than 20 match", async () => {
+      for (let i = 0; i < 30; i++) {
+        await mgr.save({
+          ...baseSaveInput,
+          title: `Nebula orion match ${i}`,
+          content: "nebula orion deletable batch",
+          importance: 5,
+        });
+      }
+      // One non-matching record whose title and content share no query
+      // tokens, to prove selectivity (FTS5 tokenizes on whitespace, so any
+      // shared token would otherwise pull it into the match set).
+      await mgr.save({
+        ...baseSaveInput,
+        title: "Keeper record",
+        content: "this record must survive",
+        importance: 5,
+      });
+
+      const count = await mgr.forgetByQuery("nebula orion deletable batch");
+      expect(count).toBe(30);
+
+      const remaining = await mgr.search({ query: "survive" });
+      expect(remaining.length).toBe(1);
+      expect(remaining[0].memory.title).toBe("Keeper record");
     });
   });
 
