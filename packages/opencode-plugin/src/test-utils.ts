@@ -468,6 +468,7 @@ export function createMockPluginContext(opts: MockPluginContextOptions = {}): Pl
     compactionHandoff: new Map(),
     pendingCompactions: new Map(),
     pendingLazyAutopilotNudges: new Map(),
+    pendingIdleTriages: new Map(),
     backgroundJobs: createBackgroundJobRegistry(),
   };
 }

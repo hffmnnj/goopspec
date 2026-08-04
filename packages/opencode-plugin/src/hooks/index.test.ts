@@ -428,3 +428,76 @@ describe("DEFAULT_HOOK_FACTORIES — verifier stage-dispatch guard end to end", 
     }
   });
 });
+
+// ---------------------------------------------------------------------------
+// DEFAULT_HOOK_FACTORIES — idle-triage reaches the host through the full
+// production pipeline (createHooks -> mergeHooks -> chain). This test goes
+// through the real assembly path the plugin entry point uses; it fails if
+// idleTriageHookFactory is removed from DEFAULT_HOOK_FACTORIES, which is the
+// acceptance bar for closing the "tested in isolation but never wired" gap.
+// ---------------------------------------------------------------------------
+
+describe("DEFAULT_HOOK_FACTORIES — idle-triage end to end", () => {
+  // Minimal handler call shapes (handlers only read these fields; see
+  // hooks/idle-triage/index.ts). Casts avoid fabricating SDK-internal types.
+  type ChatCall = (
+    input: { sessionID: string },
+    output: { parts: { type: string; text: string }[] },
+  ) => Promise<void>;
+  type SystemCall = (input: { sessionID?: string }, output: { system: string[] }) => Promise<void>;
+
+  async function runThroughProductionHooks(
+    ctx: ReturnType<typeof createMockPluginContext>,
+    sessionID: string,
+    prompt: string,
+  ): Promise<string[]> {
+    const hooks = createHooks(ctx, [...DEFAULT_HOOK_FACTORIES]);
+    const chat = hooks["chat.message"] as unknown as ChatCall | undefined;
+    const system = hooks["experimental.chat.system.transform"] as unknown as SystemCall | undefined;
+    if (!chat || !system) {
+      throw new Error("production hooks did not register chat.message and system.transform");
+    }
+    await chat({ sessionID }, { parts: [{ type: "text", text: prompt }] });
+    const output = { system: [] as string[] };
+    await system({ sessionID }, output);
+    return output.system;
+  }
+
+  it("injects a <goopspec_triage> block for a substantive idle prompt through createHooks([...DEFAULT_HOOK_FACTORIES])", async () => {
+    const { testDir, cleanup } = setupTestEnvironment("idle-triage-e2e-registered");
+    try {
+      // Default mock state is phase "idle" — the positive case.
+      const ctx = createMockPluginContext({ testDir });
+      const system = await runThroughProductionHooks(
+        ctx,
+        "sess-prod",
+        "implement a new authentication form with validation and error handling",
+      );
+
+      const block = system.find((s) => s.startsWith("<goopspec_triage>"));
+      expect(block, "expected <goopspec_triage> block from the production hook path").toBeDefined();
+      // Field presence — the registered hook chain ran the live classifiers.
+      expect(block).toContain("intent:");
+      expect(block).toContain("recommended_effort:");
+      expect(block).toContain("confidence:");
+      expect(block).toContain("reasoning:");
+    } finally {
+      cleanup();
+    }
+  });
+
+  it("does not inject when the workflow is not idle, through the same production path", async () => {
+    const { testDir, cleanup } = setupTestEnvironment("idle-triage-e2e-not-idle");
+    try {
+      const ctx = createMockPluginContext({ testDir, state: stateAtPhase("execute") });
+      const system = await runThroughProductionHooks(
+        ctx,
+        "sess-exec",
+        "implement a new authentication form with validation and error handling",
+      );
+      expect(system.find((s) => s.startsWith("<goopspec_triage>"))).toBeUndefined();
+    } finally {
+      cleanup();
+    }
+  });
+});

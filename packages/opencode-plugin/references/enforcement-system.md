@@ -46,10 +46,11 @@ Injects enforcement context into every system prompt:
 
 Processes `/goop-*` slash commands, triggers state transitions, scaffolds phase documents, and logs to ADL.
 
+Three of the seven real commands (`/goop-plan`, `/goop-execute`, `/goop-accept`) drive phase transitions; the other four (`/goop-amend`, `/goop-help`, `/goop-setup`, `/goop-status`) support the workflow without changing phase. There is no `/goop-research` command — research routes by intent, not via a slash command.
+
 | Command | Target Phase |
 |---------|--------------|
 | `/goop-plan` | plan |
-| `/goop-research` | research |
 | `/goop-execute` | execute |
 | `/goop-accept` | accept |
 

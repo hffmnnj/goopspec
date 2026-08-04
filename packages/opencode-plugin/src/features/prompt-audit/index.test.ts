@@ -123,7 +123,7 @@ describe("auditPromptSurfaces (real tree)", () => {
     expect(report.directories.map((d) => d.directory)).toEqual([...PROMPT_DIRECTORIES]);
   });
 
-  it("agents: 15 files, 82,324 bytes, 137 bold spans", () => {
+  it("agents: 15 files, 83,817 bytes, 137 bold spans", () => {
     // Wave 3 Task 3.2 consolidated agents/goop-orchestrator.md (the largest
     // single prompt) around the Task 3.1 pointer targets in core-protocol.md,
     // dispatch-patterns.md, and phase-gates.md: 17,207 -> 9,807 bytes
@@ -197,9 +197,32 @@ describe("auditPromptSurfaces (real tree)", () => {
     // from the deleted validation-contract code module, and updated the two
     // cross-references to it in the same file. Net: 83,373 -> 83,405 bytes
     // (+32), absolute hits and bold spans unchanged.
+    //
+    // The coding-harness-research-upgrade-ideas workflow's Wave 3 Task 3.1
+    // made the Auto-Delegation documentation true: the idle-triage hook now
+    // genuinely runs detectAutoDelegation, the routing classifier, and
+    // detectTaskMode while idle. Renamed the orchestrator's "Auto-Delegation"
+    // section to "Idle-Prompt Triage" and rewrote it as plain description of
+    // the real mechanism (registered hook → classifiers → injected
+    // <goopspec_triage> block carrying intent, recommended_effort,
+    // confidence, reasoning; advisory, no auto-dispatch). Net on this file:
+    // 83,405 -> 83,817 bytes (+412); zero absolute-language keywords added
+    // (the new prose uses none of must/never/always/critical/only, and the
+    // removed fiction used none either) and zero bold spans added, so the
+    // workflow-wide total stays 288 and agents bold spans stay 137.
+    //
+    // The coding-harness-research-upgrade-ideas workflow's Wave 3
+    // remediation extended the same section with an explicit V2 contract
+    // note: idle triage is V1-only because V2 exposes no chat.message
+    // equivalent, so under a V2 host the prompt is never captured and no
+    // <goopspec_triage> block is injected. The added paragraph carries one
+    // absolute-language hit ("silently never fires" — a true V1-only
+    // invariant, not a judgment call). Net on this file:
+    // 83,817 -> 84,265 bytes (+448); bold spans unchanged at 137; the
+    // workflow-wide total rises 288 -> 289.
     const agents = report.directories.find((d) => d.directory === "agents")!;
     expect(agents.files).toBe(15);
-    expect(agents.bytes).toBe(83_405);
+    expect(agents.bytes).toBe(84_265);
     expect(agents.boldSpans).toBe(137);
   });
 
@@ -364,9 +387,16 @@ describe("auditPromptSurfaces (real tree)", () => {
     // factories. None of the rewordings added or removed an absolute-
     // language keyword. Net: 164,111 -> 163,423 bytes (-688), bold spans
     // 540 -> 538 (-2), files unchanged at 19, absolute hits unchanged.
+    //
+    // The coding-harness-research-upgrade-ideas workflow's Wave 3 Task 3.2
+    // removed the bogus /goop-research row from enforcement-system.md's
+    // Command Processor table and added a one-sentence clarification that
+    // research routes by intent. Net: 163,423 -> 163,712 bytes (+289),
+    // files unchanged at 19, absolute hits unchanged at 288, bold spans
+    // unchanged at 538.
     const references = report.directories.find((d) => d.directory === "references")!;
     expect(references.files).toBe(19);
-    expect(references.bytes).toBe(163_423);
+    expect(references.bytes).toBe(163_712);
   });
 
   it("total absolute-language hits are 288 (Wave 1 role plumbing plus the Wave 3 execution gate)", () => {
@@ -489,7 +519,14 @@ describe("auditPromptSurfaces (real tree)", () => {
     // references, and agents/goop-planner.md. None of the rewordings
     // added or removed a must/never/always/critical/only keyword, so the
     // workflow-wide total stays at 288.
-    expect(report.totalAbsoluteHits).toBe(288);
+    //
+    // The coding-harness-research-upgrade-ideas workflow's Wave 3
+    // remediation documented that idle-prompt triage is V1-only under V2
+    // (no chat.message equivalent; the prompt cannot be captured). The
+    // added paragraph in agents/goop-orchestrator.md §Idle-Prompt Triage
+    // carries one absolute-language hit ("silently never fires" — a true
+    // V1-only invariant). Net: 288 -> 289.
+    expect(report.totalAbsoluteHits).toBe(289);
   });
 
   it("per-file tokens are consistent with chars via estimateTokens", () => {

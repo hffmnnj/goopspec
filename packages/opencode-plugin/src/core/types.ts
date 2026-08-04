@@ -72,6 +72,8 @@ export interface PluginContext {
   readonly pendingCompactions: Map<string, PendingCompactionRequest>;
   /** Session-scoped lazy-autopilot nudges awaiting dispatch or system-transform fallback. */
   readonly pendingLazyAutopilotNudges: Map<string, PendingLazyAutopilotNudge>;
+  /** Session-scoped idle-prompt triage awaiting system-transform injection. */
+  readonly pendingIdleTriages: Map<string, PendingIdleTriage>;
   /** Process-scoped background jobs, swept when the plugin is disposed. */
   readonly backgroundJobs: BackgroundJobRegistry;
 }
@@ -90,6 +92,19 @@ export interface PendingCompactionRequest {
 export interface PendingLazyAutopilotNudge {
   status: "queued" | "in-flight";
   source: "prompt-async" | "system-transform";
+}
+
+/**
+ * Ephemeral idle-prompt triage captured on `chat.message` and consumed once by
+ * `experimental.chat.system.transform`. Recommended effort is advisory only —
+ * Wave 4 persists it; Task 3.2 acts on low confidence.
+ */
+export interface PendingIdleTriage {
+  readonly intent: string;
+  readonly recommendedEffort: "none" | "low" | "medium" | "high" | "xhigh";
+  readonly confidence: number;
+  readonly reasoning: string;
+  readonly capturedAtMs: number;
 }
 
 /**
