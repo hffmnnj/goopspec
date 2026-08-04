@@ -263,26 +263,40 @@ function assertWaveVerifiedForCompletion(
 export function createGoopWriteWaveTool(ctx: PluginContext): ToolDefinition {
   return tool({
     description:
-      "Create or partially update wave metadata and optional inline tasks in GoopSpecDB. " +
-      "Omit fields you do not intend to change: omitted values are preserved, while supplied metadata values, including empty strings, overwrite. " +
-      "A tasks[] entry with task_index and status updates that task's status alone. " +
-      "Optionally record verifications and traceability rows in the same call. " +
-      "A wave cannot transition to a complete status (done/completed) without at least one " +
-      "passing or explicit-skip verification row for that wave — record one via verifications[] " +
-      "in this call or a prior one.",
+      "Create or update wave metadata, tasks, verification and traceability rows in GoopSpecDB. " +
+      "WHEN TO USE: Upsert a wave, advance tasks, record verification, or write traceability. " +
+      "WHEN NOT TO USE: Use goop_read_wave to read, goop_acceptance_audit at accept, goop_append_chronicle for prose. " +
+      "MODES: One per call; mixing modes is rejected, not ignored. " +
+      "Single-wave: title/status/pr_branch/pr_url/tasks (+ task_update, verifications, traceability). " +
+      "task_updates[]: task_updates[] + optional verifications/traceability. " +
+      "items[]: items[], each item with its own wave_number and per-item verifications/traceability. " +
+      "Traceability-only: omit wave_number; only traceability[] with wave_number on every row. " +
+      "Omit mode-selecting fields entirely; status:\"\" is invalid. " +
+      "RETURNS: Counts, per-row lines, batch summary; goop_compact reminder on completion. " +
+      "CAVEATS: wave_number is required except in traceability-only mode, including items[] (each item targets its own). " +
+      "done/completed needs a passing or explicit-skip verification row (verifications[] this call or earlier). " +
+      "Atomic: failures roll back every row and event. " +
+      "Omitted metadata is preserved; supplied values, including empty strings, overwrite.",
     args: {
       wave_number: tool.schema
         .number()
         .optional()
         .describe(
-          "Required for wave writes, task writes, verifications, and items[]; " +
-            "omit only for traceability-only calls where every row carries its own wave_number.",
+          "Required for every mode except traceability-only — including items[], where it gates the call though each item targets its own wave_number. " +
+            "Omit only for traceability-only calls where every row carries its own wave_number.",
         ),
       title: tool.schema
         .string()
         .optional()
         .describe("Omit to preserve it; supplied values, including empty strings, overwrite it."),
-      status: tool.schema.string().optional(),
+      status: tool.schema
+        .string()
+        .optional()
+        .describe(
+          "Wave status (pending, in_progress, done, completed). Cannot be supplied alongside task_updates[] or items[]. " +
+            "Omit entirely when unchanged; do not pass an empty string — status:\"\" is rejected as invalid. " +
+            "Reaching done/completed requires a passing or explicit-skip verification row.",
+        ),
       pr_branch: tool.schema
         .string()
         .optional()
@@ -294,7 +308,9 @@ export function createGoopWriteWaveTool(ctx: PluginContext): ToolDefinition {
       tasks: tool.schema
         .array(
           tool.schema.object({
-            task_index: tool.schema.number(),
+            task_index: tool.schema
+              .number()
+              .describe("Index identifying the task within its wave; used to upsert the task."),
             description: tool.schema
               .string()
               .optional()
@@ -303,45 +319,62 @@ export function createGoopWriteWaveTool(ctx: PluginContext): ToolDefinition {
             status: tool.schema
               .string()
               .optional()
-              .describe("With task_index, updates only status."),
+              .describe("Task status (pending, in_progress, done, completed); omit to leave unchanged."),
           }),
         )
-        .optional(),
+        .optional()
+        .describe(
+          "Inline task definitions for the single-wave mode; each entry upserts a task by task_index. " +
+            "Cannot be supplied alongside task_updates[] or items[].",
+        ),
       task_update: tool.schema
         .object({
-          task_index: tool.schema.number(),
-          status: tool.schema.string(),
+          task_index: tool.schema.number().describe("Index of the existing task to update."),
+          status: tool.schema
+            .string()
+            .describe("New task status (pending, in_progress, done, completed)."),
         })
-        .optional(),
-      allow_status_regression: tool.schema.boolean().optional(),
-      workflow_id: tool.schema.string().optional(),
+        .optional()
+        .describe(
+          "Update one existing task's status alone (single-wave mode only); cannot be supplied alongside task_updates[] or items[].",
+        ),
+      allow_status_regression: tool.schema
+        .boolean()
+        .optional()
+        .describe(
+          "Set true to deliberately regress a completed wave or task back to pending; defaults to false, which rejects the regression.",
+        ),
+      workflow_id: tool.schema.string().optional().describe("Target workflow id; omit to use the active workflow."),
       items: tool.schema
         .array(
           tool.schema.object({
-            wave_number: tool.schema.number(),
+            wave_number: tool.schema
+              .number()
+              .describe("Wave number this item targets; required on every item."),
             title: tool.schema
               .string()
               .optional()
+              .describe("Omit to preserve it; supplied values, including empty strings, overwrite it."),
+            status: tool.schema
+              .string()
+              .optional()
               .describe(
-                "Omit to preserve it; supplied values, including empty strings, overwrite it.",
+                "Wave status (pending, in_progress, done, completed); done/completed needs a passing or explicit-skip verification row.",
               ),
-            status: tool.schema.string().optional(),
             pr_branch: tool.schema
               .string()
               .optional()
-              .describe(
-                "Omit to preserve it; supplied values, including empty strings, overwrite it.",
-              ),
+              .describe("Omit to preserve it; supplied values, including empty strings, overwrite it."),
             pr_url: tool.schema
               .string()
               .optional()
-              .describe(
-                "Omit to preserve it; supplied values, including empty strings, overwrite it.",
-              ),
+              .describe("Omit to preserve it; supplied values, including empty strings, overwrite it."),
             tasks: tool.schema
               .array(
                 tool.schema.object({
-                  task_index: tool.schema.number(),
+                  task_index: tool.schema
+                    .number()
+                    .describe("Index identifying the task to upsert within this item's wave."),
                   description: tool.schema
                     .string()
                     .optional()
@@ -353,76 +386,132 @@ export function createGoopWriteWaveTool(ctx: PluginContext): ToolDefinition {
                   status: tool.schema
                     .string()
                     .optional()
-                    .describe("With task_index, updates only status."),
+                    .describe("Task status (pending, in_progress, done, completed); omit to leave unchanged."),
                 }),
               )
-              .optional(),
+              .optional()
+              .describe("Inline task upserts for this item's wave."),
             verifications: tool.schema
               .array(
                 tool.schema.object({
-                  check_name: tool.schema.enum(VERIFICATION_CHECK_NAMES),
-                  status: tool.schema.enum(VERIFICATION_RESULT_STATUSES),
-                  detail: tool.schema.string().optional(),
+                  check_name: tool.schema
+                    .enum(VERIFICATION_CHECK_NAMES)
+                    .describe("Verification check (typecheck, test, lint, custom)."),
+                  status: tool.schema
+                    .enum(VERIFICATION_RESULT_STATUSES)
+                    .describe("Verification result (pass, fail, skip)."),
+                  detail: tool.schema
+                    .string()
+                    .optional()
+                    .describe("Optional free-text note attached to the row."),
                   wave_id: tool.schema
                     .number()
                     .optional()
-                    .describe("Internal wave row id (not wave_number)"),
+                    .describe(
+                      "Internal wave row id (not wave_number); omit to inherit the enclosing item's resolved wave row, supply to override.",
+                    ),
                 }),
               )
               .optional()
               .describe(
-                "Records verification rows for this item's wave inside the batch transaction.",
+                "Verification rows for this item's wave, written inside the batch transaction; supply per-item, not at the top level, when using items[].",
               ),
             traceability: tool.schema
               .array(
                 tool.schema.object({
-                  requirement_key: tool.schema.string(),
+                  requirement_key: tool.schema
+                    .string()
+                    .describe("Requirement identifier to link the wave/task to."),
                   wave_number: tool.schema
                     .number()
                     .optional()
-                    .describe("Omit to inherit the enclosing item's wave_number."),
-                  task_index: tool.schema.number().optional(),
-                  status: tool.schema.string().optional(),
+                    .describe("Omit to inherit the enclosing item's wave_number; supply to override."),
+                  task_index: tool.schema
+                    .number()
+                    .optional()
+                    .describe("Optional task index to bind the requirement to a specific task."),
+                  status: tool.schema
+                    .string()
+                    .optional()
+                    .describe("Optional free-form coverage status (defaults to pending)."),
                 }),
               )
               .optional()
               .describe(
-                "Writes traceability rows for this item's wave inside the batch transaction.",
+                "Traceability rows for this item's wave, written inside the batch transaction; supply per-item, not at the top level, when using items[].",
               ),
           }),
         )
-        .optional(),
+        .optional()
+        .describe(
+          "Batch of wave writes; each item carries its own wave_number, optional metadata, and per-item verifications/traceability. " +
+            "Cannot be supplied alongside any other top-level field except wave_number.",
+        ),
       task_updates: tool.schema
         .array(
           tool.schema.object({
-            task_index: tool.schema.number(),
-            status: tool.schema.string(),
+            task_index: tool.schema.number().describe("Index of the existing task to update."),
+            status: tool.schema
+              .string()
+              .describe("New task status (pending, in_progress, done, completed)."),
           }),
         )
-        .optional(),
+        .optional()
+        .describe(
+          "Bulk task status updates for one wave; cannot be supplied alongside wave metadata (title/status/pr_branch/pr_url/tasks) or task_update. " +
+            "May carry top-level verifications/traceability.",
+        ),
       verifications: tool.schema
         .array(
           tool.schema.object({
-            check_name: tool.schema.enum(VERIFICATION_CHECK_NAMES),
-            status: tool.schema.enum(VERIFICATION_RESULT_STATUSES),
-            detail: tool.schema.string().optional(),
+            check_name: tool.schema
+              .enum(VERIFICATION_CHECK_NAMES)
+              .describe("Verification check (typecheck, test, lint, custom)."),
+            status: tool.schema
+              .enum(VERIFICATION_RESULT_STATUSES)
+              .describe("Verification result (pass, fail, skip)."),
+            detail: tool.schema
+              .string()
+              .optional()
+              .describe("Optional free-text note attached to the row."),
             wave_id: tool.schema
               .number()
               .optional()
-              .describe("Internal wave row id (not wave_number)"),
+              .describe(
+                "Internal wave row id (not wave_number); omit to target the resolved wave, supply to override.",
+              ),
           }),
         )
-        .optional(),
+        .optional()
+        .describe(
+          "Top-level verification rows for the resolved wave (single-wave and task_updates modes only); cannot be supplied alongside items[] — supply per-item inside items[] instead.",
+        ),
       traceability: tool.schema
         .array(
           tool.schema.object({
-            requirement_key: tool.schema.string(),
-            wave_number: tool.schema.number().optional(),
-            task_index: tool.schema.number().optional(),
-            status: tool.schema.string().optional(),
+            requirement_key: tool.schema
+              .string()
+              .describe("Requirement identifier to link the wave/task to."),
+            wave_number: tool.schema
+              .number()
+              .optional()
+              .describe(
+                "Omit to inherit the call's wave_number; required on every row when top-level wave_number is omitted (traceability-only mode).",
+              ),
+            task_index: tool.schema
+              .number()
+              .optional()
+              .describe("Optional task index to bind the requirement to a specific task."),
+            status: tool.schema
+              .string()
+              .optional()
+              .describe("Optional free-form coverage status (defaults to pending)."),
           }),
         )
-        .optional(),
+        .optional()
+        .describe(
+          "Top-level traceability rows for the resolved wave (single-wave and task_updates modes only); cannot be supplied alongside items[] — supply per-item inside items[] instead.",
+        ),
     },
     async execute(
       args: {
@@ -468,7 +557,7 @@ export function createGoopWriteWaveTool(ctx: PluginContext): ToolDefinition {
             args.verifications !== undefined;
 
           if (hasNonTraceabilityPayload) {
-            return "Error in goop_write_wave: wave_number is required for wave writes, task writes, verifications, and items[]; only traceability-only calls may omit it.";
+            return "Error in goop_write_wave: wave_number is required for wave writes, task writes, verifications, and items[] — supply a top-level wave_number even when every items[] entry carries its own; only traceability-only calls may omit it.";
           }
 
           if (args.traceability === undefined || args.traceability.length === 0) {

@@ -2509,3 +2509,131 @@ describe("goop_write_wave positive fixture inventory — valid call shapes (W4.T
     expect(ctx.db.getTraceability("default")).toHaveLength(1);
   });
 });
+
+// Each rejection here asserts the FULL corrective content of the error, not
+// just that it throws. The message is the product: a first-try caller who
+// hits one of these must learn the fix from the message alone. These four
+// cases are the recorded real-world first-attempt failures against this tool.
+describe("goop_write_wave rejection messages teach the correction", () => {
+  let ctx: PluginContext;
+  let toolCtx: ToolContext;
+  let cleanup: () => void;
+
+  beforeEach(() => {
+    const env = setupTestEnvironment("goop-write-wave-rejection-messages");
+    cleanup = env.cleanup;
+    ctx = createMockPluginContext({ testDir: env.testDir, db: env.db });
+    toolCtx = createMockToolContext();
+  });
+
+  afterEach(() => cleanup());
+
+  it("items[] without a top-level wave_number names items[] and states the top-level fix", async () => {
+    const tool = createGoopWriteWaveTool(ctx);
+    // Every item carries its own wave_number, yet the call must still be
+    // rejected — the top-level wave_number is required even for items[].
+    const result = await tool.execute(
+      { items: [{ wave_number: 1, title: "Batch wave" }] },
+      toolCtx,
+    );
+
+    expect(result).toContain("Error in goop_write_wave");
+    expect(result).toContain("wave_number is required");
+    // The message must acknowledge the items[] case specifically...
+    expect(result).toContain("items[]");
+    // ...and state the correction: supply a top-level wave_number even when
+    // every entry carries its own.
+    expect(result).toContain("top-level wave_number");
+    // Nothing was written.
+    expect(ctx.db.getWave("default", 1)).toBeNull();
+  });
+
+  it("status alongside task_updates[] names both and says to use one mode", async () => {
+    const tool = createGoopWriteWaveTool(ctx);
+    const result = await tool.execute(
+      {
+        wave_number: 1,
+        status: "in_progress",
+        task_updates: [{ task_index: 1, status: "in_progress" }],
+      },
+      toolCtx,
+    );
+
+    expect(result).toContain("Error in goop_write_wave");
+    expect(result).toContain("status cannot be supplied alongside task_updates");
+    // The correction: one write mode per call.
+    expect(result).toContain("one write mode");
+  });
+
+  it("top-level verifications alongside items[] names the field and the mode", async () => {
+    const tool = createGoopWriteWaveTool(ctx);
+    const result = await tool.execute(
+      {
+        wave_number: 1,
+        items: [{ wave_number: 1, title: "Batch wave" }],
+        verifications: [{ check_name: "test", status: "pass" }],
+      },
+      toolCtx,
+    );
+
+    expect(result).toContain("Error in goop_write_wave");
+    expect(result).toContain("verifications cannot be supplied alongside items[]");
+    expect(result).toContain("one write mode");
+    // Nothing was written — the payload was not silently ignored.
+    expect(ctx.db.getWave("default", 1)).toBeNull();
+    expect(ctx.db.getVerifications("default")).toHaveLength(0);
+  });
+
+  it("top-level traceability alongside items[] names the field and the mode", async () => {
+    const tool = createGoopWriteWaveTool(ctx);
+    const result = await tool.execute(
+      {
+        wave_number: 1,
+        items: [{ wave_number: 1, title: "Batch wave" }],
+        traceability: [{ requirement_key: "MH1" }],
+      },
+      toolCtx,
+    );
+
+    expect(result).toContain("Error in goop_write_wave");
+    expect(result).toContain("traceability cannot be supplied alongside items[]");
+    expect(result).toContain("one write mode");
+    expect(ctx.db.getTraceability("default")).toHaveLength(0);
+  });
+
+  it("a completion attempt with no verification evidence states the gate and the remedy", async () => {
+    const tool = createGoopWriteWaveTool(ctx);
+    const result = await tool.execute(
+      { wave_number: 1, title: "Unverified wave", status: "done" },
+      toolCtx,
+    );
+
+    expect(result).toContain("Error in goop_write_wave");
+    // Names the gate...
+    expect(result).toContain("cannot be marked complete");
+    // ...names the remedy channels (verifications[] argument and the verifier role)...
+    expect(result).toContain("verifications[]");
+    expect(result).toContain("goop-wave-verifier");
+    // ...and the acceptable evidence (pass or skip).
+    expect(result).toContain("pass or skip");
+    // The whole call rolled back.
+    expect(ctx.db.getWave("default", 1)).toBeNull();
+  });
+
+  it("status:\"\" is rejected as an invalid status (not silently applied) with the valid set listed", async () => {
+    const tool = createGoopWriteWaveTool(ctx);
+    // An empty-string status is injected by some tool-call serialization
+    // layers. It must be rejected — never silently interpreted as "no change"
+    // — and the message must list the valid statuses so the caller can fix it
+    // or omit the field entirely.
+    const result = await tool.execute(
+      { wave_number: 1, title: "Empty-status wave", status: "" },
+      toolCtx,
+    );
+
+    expect(result).toContain("Error in goop_write_wave");
+    expect(result).toContain("Invalid status ''");
+    expect(result).toContain("pending, in_progress, done, completed");
+    expect(ctx.db.getWave("default", 1)).toBeNull();
+  });
+});
