@@ -1,8 +1,67 @@
 # GoopSpec MCP Tool Reference
 
-A complete, example-first cheat sheet for every GoopSpec MCP tool.
+A complete, example-first cheat sheet for every GoopSpec MCP tool, and the single normative home of the house tool-description standard.
 
 > **Companion document:** `references/core-protocol.md` explains *when and why* to batch independent tool calls in one turn. This document is the *what arguments exist* companion to that *when/why* guidance. Read the batching section there first, then use this reference to pick the most efficient arguments for each call.
+
+## House Tool-Description Standard
+
+This section is the **single normative definition** of how every GoopSpec tool description and argument description must be composed. The registry is fixed at exactly 38 tools (verified in `src/tools/index.test.ts` and `src/core/tools-v2.test.ts`; full audit in Field Note `fn_20260804_lnt7gk2b`). Other documents — `dispatch-patterns.md`, `AGENTS.md`, agent definitions — point here; they do not restate these rules.
+
+### Named sections (top-level `description`)
+
+Every tool `description` string is a single plaintext block with these named sections, in this order. Front-load the most important information; agents may not read the whole description.
+
+| # | Section | Label | Presence | Content |
+|---|---------|-------|----------|---------|
+| 1 | Purpose | *(no label — opening sentence)* | **Mandatory** | `<VERB> <RESOURCE>. <WHAT it does>.` One concrete sentence, no jargon. |
+| 2 | When to use | `WHEN TO USE:` | **Mandatory** | Exact situations that warrant the tool. 1-2 sentences. |
+| 3 | When not to use | `WHEN NOT TO USE:` | **Mandatory** | Adjacent tools or cases, with explicit redirects (name the alternative tool). 1-2 sentences. |
+| 4 | Modes | `MODES:` | **Mandatory when the tool has more than one mode**; omit for a single unconditional mode. | For each mutually exclusive mode: name exactly which arguments to send, which to omit, and which combinations are rejected. |
+| 5 | Returns | `RETURNS:` | **Mandatory** | What the tool returns and a useful next action. |
+| 6 | Caveats | `CAVEATS:` | **Mandatory when applicable** | Atomicity, side effects, defaults, precedence, conditional requirements, exclusions, empty-value behavior. |
+
+Section labels are uppercase inline tags terminated by a colon (`WHEN TO USE:`, `WHEN NOT TO USE:`, `MODES:`, `RETURNS:`, `CAVEATS:`). The Purpose section has no label; it is the opening sentence. Sections are separated by single spaces or newlines within one continuous string.
+
+### Length bounds
+
+| Bound | Range | Applies to |
+|-------|-------|------------|
+| Normal | 120-700 characters | All tools not on the high-friction allowlist. |
+| High-friction allowlist | 701-1200 characters | Tools whose descriptions cannot fit in 700 characters while meeting all mandatory sections. |
+
+**Allowlist criteria.** A tool qualifies for the allowlist when it has multiple mutually exclusive modes, conditional arguments, action-dependent required fields, or complex cross-field contracts. The allowlist is intentionally small to protect the prompt token budget.
+
+**Allowlist storage location.** The allowlist is a TypeScript constant `HIGH_FRICTION_TOOLS: readonly string[]` in `packages/opencode-plugin/src/tools/index.test.ts`. It holds registered MCP tool names (e.g. `"goop_write_wave"`). Add a tool's name to the constant to exempt it from the 700-char upper bound; the conformance test enforces the 1200-char ceiling for allowlisted tools and the 700-char ceiling for all others. This constant is the single source of truth for allowlist membership — do not duplicate the list in this document.
+
+### Argument descriptions
+
+Every top-level and nested argument field — including fields inside nested objects and array item element objects — must end its Zod chain with `.describe()`. The description string covers:
+
+1. **Shape and meaning** — what the value represents.
+2. **Required or conditional status** — e.g., "Required for X; omit only for Y."
+3. **Defaults** — where applicable.
+4. **Allowed values** — where not already constrained by an enum.
+5. **Sibling interactions** — e.g., "Cannot be supplied alongside `items[]`."
+6. **Omission semantics** — for every optional argument that selects a mode: state **"omit this field entirely when not using this mode; do not pass an empty string."**
+
+`.describe()` must be the **last method** in the Zod chain so that `z.toJSONSchema()` emits the metadata in the V2 JSON Schema. The codebase follows this convention (verified: every `.describe()` call is terminal; zero reversed chains). Preserve it.
+
+### Cross-field contracts in prose
+
+Express mutually exclusive modes, conditional requirements, and action-dependent arguments in **prose** within the top-level description and `.describe()` text. Do **not** use JSON Schema `oneOf`, `anyOf`, `allOf`, or `dependentRequired`. Multiple tool hosts do not reliably support these constructs (verified: zero instances in `src/tools/`).
+
+### Enums for finite values
+
+Use `tool.schema.enum(...)` for finite-value fields. Keep `.describe()` last so both the enum metadata and the description survive `z.toJSONSchema()` conversion.
+
+### Corrective errors
+
+Runtime errors for invalid argument combinations name the tool, the offending field or combination, valid usage, and the next action. The description and `.describe()` text must give the caller enough information to avoid the error on the first try.
+
+### Friction reporting
+
+Executors and wave verifiers own reporting tool friction. Every executor and verifier return must include a `FRICTION` section reporting every instance where a GoopSpec tool call failed, behaved unexpectedly, required a retry, or where a tool's schema or description misled the caller — including the exact argument involved and what the schema should have said. If no friction occurred, write "none". Incidents are logged to ADL and Field Notes and mapped to traced amendments through the deviation protocol. **This is the single authoritative statement of friction-reporting ownership; other documents point here.**
 
 ## Batching cheat sheet
 
