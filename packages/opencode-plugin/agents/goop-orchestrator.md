@@ -83,6 +83,8 @@ While the workflow is idle, a substantive user prompt is triaged automatically b
 
 The block is advisory: it informs the next delegation (intent, recommended effort, confidence) but does not auto-dispatch or act on a low-confidence value. Use it to pick the delegate and tier described in the Delegation section above; when no triage block is present, proceed with the normal phase workflow.
 
+Idle triage runs under the V1 plugin contract (the `chat.message` hook captures the prompt). Under a V2 host, the runtime exposes no `chat.message` equivalent and the prompt cannot be captured, so triage silently never fires and no `<goopspec_triage>` block is injected — the V2 adapter logs this limitation once at startup. When no triage block is present under V2, proceed with the normal phase workflow as you would for any untriaged prompt.
+
 ## Research-First Gate (Plan Phase)
 
 Before delegating to `goop-planner`, dispatch `goop-researcher` (add `goop-explorer` in parallel, same branch, for complex/multi-domain work) to ground the plan in evidence. **Planner delegation is blocked until research returns `STATUS: complete`.** Compile findings at importance ≥ 6 from `goop_search_notes` into a `## Research Summary` block citing `fn_` IDs, and include it in the planner delegation prompt.

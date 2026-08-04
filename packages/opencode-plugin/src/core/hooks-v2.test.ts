@@ -9,7 +9,11 @@ import {
   createMockPluginContext,
   setupTestEnvironment,
 } from "../test-utils.js";
-import { __resetV2LazyAutopilotLimitationLog, registerHooksV2 } from "./hooks-v2.js";
+import {
+  __resetV2IdleTriageLimitationLog,
+  __resetV2LazyAutopilotLimitationLog,
+  registerHooksV2,
+} from "./hooks-v2.js";
 import type {
   V2AgentDraft,
   V2AgentInfo,
@@ -112,6 +116,7 @@ describe("registerHooksV2()", () => {
     clearMemoryCache();
     for (const context of contexts.splice(0)) context.db.close();
     __resetV2LazyAutopilotLimitationLog();
+    __resetV2IdleTriageLimitationLog();
   });
 
   it("registers the system transform and reuses its canonical V1 handler", async () => {
@@ -548,6 +553,38 @@ describe("registerHooksV2()", () => {
     expect(diag).toBeDefined();
     expect(diag).toContain("unavailable");
     expect(diag).not.toContain("fallback");
+    errorSpy.mockRestore();
+  });
+
+  it("logs the V2 idle-triage limitation once at startup (chat.message has no V2 equivalent)", async () => {
+    // Idle-prompt triage captures the user prompt on V1 `chat.message` and
+    // injects <goopspec_triage> via experimental.chat.system.transform.
+    // V2 exposes no chat.message equivalent; the session `request` hook
+    // re-fires on every model call (not once per user message) and its
+    // `messages` field is published as `unknown[]`. Rather than guess at a
+    // host-owned payload shape, the V2 adapter logs the limitation once
+    // and degrades. The system-transform handler stays registered and is
+    // a no-op when no prompt was captured.
+    const ctx = createMockPluginContext();
+    contexts.push(ctx);
+    const errorSpy = spyOn(console, "error").mockImplementation(() => {});
+
+    await registerHooksV2({} as V2RuntimeContext, ctx);
+
+    const logged = errorSpy.mock.calls.map((c) => String(c[0] ?? ""));
+    const diag = logged.find((m) => m.includes("Idle-prompt triage is unavailable in V2"));
+    expect(diag).toBeDefined();
+    expect(diag).toContain("chat.message");
+    expect(diag).toContain("cannot be captured");
+
+    // Dedup: a second registration does not re-log.
+    const before = errorSpy.mock.calls.length;
+    await registerHooksV2({} as V2RuntimeContext, ctx);
+    const idleTriageLogs = errorSpy.mock.calls
+      .slice(before)
+      .filter((c) => String(c[0] ?? "").includes("Idle-prompt triage is unavailable"));
+    expect(idleTriageLogs).toHaveLength(0);
+
     errorSpy.mockRestore();
   });
 

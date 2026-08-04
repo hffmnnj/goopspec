@@ -49,10 +49,16 @@ export interface V2HooksRegistration {
 }
 
 let didLogLazyAutopilotV2Limitation = false;
+let didLogIdleTriageV2Limitation = false;
 
 /** Test-only: reset the V2 lazy-autopilot limitation log deduplication flag. */
 export function __resetV2LazyAutopilotLimitationLog(): void {
   didLogLazyAutopilotV2Limitation = false;
+}
+
+/** Test-only: reset the V2 idle-triage limitation log deduplication flag. */
+export function __resetV2IdleTriageLimitationLog(): void {
+  didLogIdleTriageV2Limitation = false;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -275,6 +281,22 @@ export async function registerHooksV2(
   if (!didLogLazyAutopilotV2Limitation) {
     didLogLazyAutopilotV2Limitation = true;
     logError("Lazy autopilot nudge is unavailable in V2: the runtime does not expose event hooks");
+  }
+  // Idle-prompt triage captures the user prompt on V1 `chat.message` and
+  // injects `<goopspec_triage>` via `experimental.chat.system.transform`.
+  // V2 has no chat.message equivalent; the session `request` hook re-fires
+  // on every model call (not once per user message) and its `messages`
+  // field is published as `unknown[]` with no verified shape. Guessing at
+  // a host-owned payload shape would repeat the very defect this wave
+  // exists to close, so we follow the lazy-autopilot precedent: log once,
+  // degrade explicitly, document the V1-only surface (see
+  // agents/goop-orchestrator.md §Idle-Prompt Triage). The system-transform
+  // handler is still registered under V2 and degrades to a no-op.
+  if (!didLogIdleTriageV2Limitation) {
+    didLogIdleTriageV2Limitation = true;
+    logError(
+      "Idle-prompt triage is unavailable in V2: the runtime exposes no chat.message equivalent, so the user prompt cannot be captured",
+    );
   }
   const hooks = createHooks(ctx, [...DEFAULT_HOOK_FACTORIES]);
   const sessionCapability = runtimeCtx.session;
