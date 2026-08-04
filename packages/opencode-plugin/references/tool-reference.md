@@ -65,6 +65,26 @@ Runtime errors for invalid argument combinations name the tool, the offending fi
 
 Executors and wave verifiers own reporting tool friction. Every executor and verifier return must include a `FRICTION` section reporting every instance where a GoopSpec tool call failed, behaved unexpectedly, required a retry, or where a tool's schema or description misled the caller — including the exact argument involved and what the schema should have said. If no friction occurred, write "none". Incidents are logged to ADL and Field Notes and mapped to traced amendments through the deviation protocol. **This is the single authoritative statement of friction-reporting ownership; other documents point here.**
 
+### Empty-string argument coalescing
+
+Tool-call serialization in some hosts injects empty strings (`""`) into argument payloads the caller never authored — most often into status and mode-selecting fields, including inside nested `task_updates[]` entries. An empty string is never a legitimate value for those fields, but it arrives as a *present* value and defeats the caller's intent: a mode conflict the caller never created, an "invalid status" rejection, or `""` stored as a real value. This was confirmed in the field: rewriting descriptions to say "omit, do not pass an empty string" did not stop the next agent from failing the same way, because the empty string is injected below the level any description can reach.
+
+At the single shared tool-input boundary (`createTools` in `src/tools/index.ts`, which both the V1 and V2 registration paths consume), an exact empty string is treated as absent (omitted) for every field where empty has no legitimate meaning, recursively through arrays and nested objects, before any tool logic runs. Only exact `""` is affected — `null`, `undefined`, `0`, `false`, `[]`, `{}`, and whitespace-only strings pass through untouched (a whitespace-only string may be intentional content). A non-empty value is never dropped.
+
+A small, explicit set of fields is exempt, because for those fields an empty string is a documented, intentional operation and coalescing it would convert that operation into a silent no-op — the same failure class the boundary exists to eliminate. The exclusion set lives in `EMPTY_STRING_LOAD_BEARING_KEYS` in `packages/opencode-plugin/src/shared/coalesce.ts`:
+
+| Field | Tools | Meaning of empty |
+|-------|-------|------------------|
+| `new_string` | `goop_write_db`, `goop_write_section`, `goop_save_note` | Delete the matched text. |
+| `old_string` | `goop_write_db`, `goop_write_section`, `goop_save_note` | Activate patch mode on presence alone (documented in `shared/write-mode.ts`). |
+| `pr_url` | `goop_write_wave` (top-level and `items[]`) | Clear the stored PR URL. |
+| `pr_branch` | `goop_write_wave` (top-level and `items[]`) | Clear the stored PR branch. |
+| `title` | `goop_write_wave` (top-level and `items[]`) | Clear the stored wave title (same overwrite-with-empty contract as `pr_url`/`pr_branch`). |
+
+`content` is deliberately **not** exempt: an empty content has no legitimate meaning in a single-mode write, and exempting it would let an injected `content:""` silently destroy a document. Coalescing it to absent produces a loud `none`-mode error instead of a destructive wipe; in batch mode an empty `content` is already a neutral placeholder and is unaffected.
+
+Callers should still omit fields they do not intend rather than rely on coalescing — the boundary exists to neutralize injected artifacts a caller cannot prevent, not to license passing empty strings deliberately.
+
 ## Batching cheat sheet
 
 The fastest mental model is: if the tool has a plural/batch argument (`doc_types`, `wave_numbers`, `section_keys`, `items`, `entries`, `task_updates`), use it. Preferring batch/plural forms over repeated single calls is the single biggest tool-call efficiency win available.
