@@ -107,7 +107,6 @@ const PENDING_CONFORMANCE: readonly string[] = [
   "background_status",
   "difftastic",
   "generate_image",
-  "goop_adl",
   "goop_append_chronicle",
   "goop_boot",
   "goop_checkpoint",
