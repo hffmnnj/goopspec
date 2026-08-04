@@ -79,7 +79,7 @@ const EXPECTED_TOOL_KEYS = [
  * change; otherwise the length predicate fails it for exceeding the normal
  * ceiling.
  */
-const HIGH_FRICTION_TOOLS: readonly string[] = ["goop_write_wave", "goop_state"];
+const HIGH_FRICTION_TOOLS: readonly string[] = ["goop_write_wave", "goop_state", "goop_blocker"];
 
 /**
  * Tools that do NOT yet meet the house standard and so skip the content
@@ -110,7 +110,6 @@ const PENDING_CONFORMANCE: readonly string[] = [
   "goop_acceptance_audit",
   "goop_adl",
   "goop_append_chronicle",
-  "goop_blocker",
   "goop_boot",
   "goop_checkpoint",
   "goop_compact",

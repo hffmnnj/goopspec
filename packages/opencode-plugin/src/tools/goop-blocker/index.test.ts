@@ -486,3 +486,104 @@ describe("goop_blocker positive fixture inventory — valid call shapes (W4.T1)"
     expect(ctx.db.getBlockers("default", "open")).toHaveLength(2);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Mode contract pins: which argument each action actually consults.
+// goop_blocker's `status` field is the subtle one — it is forced to "open" on
+// open and "resolved" on resolve, so a caller-supplied status has no effect
+// there and is honored only as a list filter. These lock that behavior.
+// ---------------------------------------------------------------------------
+
+describe("goop_blocker mode-selection contract", () => {
+  let ctx: PluginContext;
+  let toolCtx: ToolContext;
+  let cleanup: () => void;
+
+  beforeEach(() => {
+    const env = setupTestEnvironment("goop-blocker-modes");
+    cleanup = env.cleanup;
+    ctx = createMockPluginContext({ testDir: env.testDir, db: env.db });
+    toolCtx = createMockToolContext();
+  });
+
+  afterEach(() => cleanup());
+
+  it("open ignores a caller-supplied status and forces 'open'", async () => {
+    const tool = createGoopBlockerTool(ctx);
+
+    const result = await tool.execute(
+      { action: "open", description: "Forced-status blocker", status: "resolved" },
+      toolCtx,
+    );
+
+    expect(result).toContain("Opened blocker #");
+    const rows = ctx.db.getBlockers("default", "open");
+    expect(rows).toHaveLength(1);
+    expect(rows[0].status).toBe("open");
+    expect(ctx.db.getBlockers("default", "resolved")).toHaveLength(0);
+  });
+
+  it("resolve ignores a caller-supplied status and forces 'resolved'", async () => {
+    const tool = createGoopBlockerTool(ctx);
+    await tool.execute({ action: "open", description: "To resolve" }, toolCtx);
+    const id = ctx.db.getBlockers("default", "open")[0].id;
+
+    const result = await tool.execute(
+      { action: "resolve", id, status: "open" },
+      toolCtx,
+    );
+
+    expect(result).toContain(`Resolved blocker #${id}`);
+    expect(ctx.db.getBlockers("default", "resolved")).toHaveLength(1);
+    expect(ctx.db.getBlockers("default", "open")).toHaveLength(0);
+  });
+
+  it("list honors status as a filter (open vs resolved)", async () => {
+    const tool = createGoopBlockerTool(ctx);
+    await tool.execute({ action: "open", description: "First" }, toolCtx);
+    await tool.execute({ action: "open", description: "Second" }, toolCtx);
+    const firstId = ctx.db
+      .getBlockers("default", "open")
+      .find((blocker) => blocker.description === "First")?.id;
+    if (firstId === undefined) throw new Error("First blocker not found in setup");
+    await tool.execute({ action: "resolve", id: firstId, resolution: "done" }, toolCtx);
+
+    const openList = await tool.execute({ action: "list", status: "open" }, toolCtx);
+    expect(openList).toContain("Second");
+    expect(openList).not.toContain("First");
+
+    const resolvedList = await tool.execute({ action: "list", status: "resolved" }, toolCtx);
+    expect(resolvedList).toContain("First");
+    expect(resolvedList).not.toContain("Second");
+  });
+
+  it("open without description returns an actionable error naming the field", async () => {
+    const tool = createGoopBlockerTool(ctx);
+
+    const result = await tool.execute({ action: "open" }, toolCtx);
+
+    expect(result).toContain("Error in goop_blocker");
+    expect(result).toContain("'description' is required");
+    expect(ctx.db.getBlockers("default")).toHaveLength(0);
+  });
+
+  it("resolve without id returns an actionable error naming the field", async () => {
+    const tool = createGoopBlockerTool(ctx);
+
+    const result = await tool.execute({ action: "resolve", resolution: "no id" }, toolCtx);
+
+    expect(result).toContain("Error in goop_blocker");
+    expect(result).toContain("'id' is required");
+    expect(ctx.db.getBlockers("default")).toHaveLength(0);
+  });
+
+  it("resolve on an unknown id returns an error naming the id and workflow", async () => {
+    const tool = createGoopBlockerTool(ctx);
+
+    const result = await tool.execute({ action: "resolve", id: 9999 }, toolCtx);
+
+    expect(result).toContain("Error in goop_blocker");
+    expect(result).toContain("9999");
+    expect(result).toContain("not found");
+  });
+});

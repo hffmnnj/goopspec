@@ -160,30 +160,97 @@ function processBlockerItem(
 
 export function createGoopBlockerTool(ctx: PluginContext): ToolDefinition {
   return tool({
-    description: "Open, resolve, or list workflow blockers in GoopSpecDB.",
+    description:
+      "Open, resolve, or list workflow blockers in GoopSpecDB. " +
+      "WHEN TO USE: Record a blocking issue, close one, or list blockers for a workflow. " +
+      "WHEN NOT TO USE: goop_acceptance_audit reads blockers with verifications and waves at the accept gate; goop_timeline gives a chronological audit trail. " +
+      "MODES: action picks open/resolve/list; items[] batches mixed actions. open needs description (severity defaults medium, wave_id optional). resolve needs id (resolution optional; description/wave_id optional to amend). list takes only an optional status filter. In items[] each item carries its own action and required fields; top-level operation fields alongside items[] are rejected. status is forced to open on open and resolved on resolve, so it only filters list. " +
+      "RETURNS: Per-action confirmation, a markdown blocker table for list, or a batch summary for items[]. " +
+      "CAVEATS: Omit action entirely when using items[] — passing it alongside items[] is rejected. workflow_id is honored at top level and per item. Opening a blocker against a completed wave warns but still opens.",
     args: {
-      action: tool.schema.enum(BLOCKER_ACTIONS).optional(),
-      description: tool.schema.string().optional(),
-      severity: tool.schema.enum(BLOCKER_TOOL_SEVERITIES).optional(),
-      wave_id: tool.schema.number().optional(),
-      id: tool.schema.number().optional(),
-      resolution: tool.schema.string().optional(),
-      status: tool.schema.enum(BLOCKER_TOOL_STATUSES).optional(),
-      workflow_id: tool.schema.string().optional(),
+      action: tool.schema
+        .enum(BLOCKER_ACTIONS)
+        .optional()
+        .describe(
+          "Lifecycle operation (open, resolve, or list). Required for every call except items[] batch mode, where each item carries its own action. " +
+            "Omit entirely when using items[] — passing action alongside items[] is rejected, not ignored.",
+        ),
+      description: tool.schema
+        .string()
+        .optional()
+        .describe("Required for open; optional for resolve (amends the stored text). Ignored by list."),
+      severity: tool.schema
+        .enum(BLOCKER_TOOL_SEVERITIES)
+        .optional()
+        .describe(
+          "Severity for open (low, medium, high, critical); defaults to medium when omitted. Stored on open; ignored by resolve and list.",
+        ),
+      wave_id: tool.schema
+        .number()
+        .optional()
+        .describe(
+          "Wave number to associate the blocker with. Used by open (attaches) and resolve (updates); ignored by list. Opening against a wave already marked done/completed warns but still opens.",
+        ),
+      id: tool.schema
+        .number()
+        .optional()
+        .describe("Blocker row id; required for resolve. Ignored by open and list."),
+      resolution: tool.schema
+        .string()
+        .optional()
+        .describe("Optional closure note for resolve. Ignored by open and list."),
+      status: tool.schema
+        .enum(BLOCKER_TOOL_STATUSES)
+        .optional()
+        .describe(
+          "Filter for list only (open or resolved). Forced to open on open and resolved on resolve regardless of input, so it has no effect outside list.",
+        ),
+      workflow_id: tool.schema
+        .string()
+        .optional()
+        .describe(
+          "Target workflow id; omit to use the active workflow. Honored at the top level and as the per-item default inside items[].",
+        ),
       items: tool.schema
         .array(
           tool.schema.object({
-            action: tool.schema.enum(BLOCKER_ACTIONS),
-            description: tool.schema.string().optional(),
-            severity: tool.schema.enum(BLOCKER_TOOL_SEVERITIES).optional(),
-            wave_id: tool.schema.number().optional(),
-            id: tool.schema.number().optional(),
-            resolution: tool.schema.string().optional(),
-            status: tool.schema.enum(BLOCKER_TOOL_STATUSES).optional(),
-            workflow_id: tool.schema.string().optional(),
+            action: tool.schema
+              .enum(BLOCKER_ACTIONS)
+              .describe("Lifecycle operation for this item (open, resolve, or list)."),
+            description: tool.schema
+              .string()
+              .optional()
+              .describe("Required when this item's action is open; optional for resolve."),
+            severity: tool.schema
+              .enum(BLOCKER_TOOL_SEVERITIES)
+              .optional()
+              .describe("Optional for an open item (defaults to medium)."),
+            wave_id: tool.schema
+              .number()
+              .optional()
+              .describe("Optional wave number to associate this item's blocker with."),
+            id: tool.schema
+              .number()
+              .optional()
+              .describe("Required when this item's action is resolve."),
+            resolution: tool.schema
+              .string()
+              .optional()
+              .describe("Optional closure note for a resolve item."),
+            status: tool.schema
+              .enum(BLOCKER_TOOL_STATUSES)
+              .optional()
+              .describe("Filter for a list item only (open or resolved)."),
+            workflow_id: tool.schema
+              .string()
+              .optional()
+              .describe("Per-item workflow override; omit to inherit the top-level workflow_id or the active workflow."),
           }),
         )
-        .optional(),
+        .optional()
+        .describe(
+          "Batch of mixed actions; each item carries its own action and required fields. Top-level operation fields (action/description/severity/wave_id/id/resolution/status) alongside items[] are rejected — only workflow_id may accompany items[].",
+        ),
     },
     async execute(
       args: {
