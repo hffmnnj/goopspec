@@ -15,6 +15,7 @@ import {
 } from "../../test-utils.js";
 import { createGoopReadWaveTool } from "../goop-read-wave/index.js";
 import { createGoopWriteWaveTool } from "./index.js";
+import { createTools } from "../index.js";
 
 describe("goop_write_wave tool", () => {
   let ctx: PluginContext;
@@ -2635,5 +2636,144 @@ describe("goop_write_wave rejection messages teach the correction", () => {
     expect(result).toContain("Invalid status ''");
     expect(result).toContain("pending, in_progress, done, completed");
     expect(ctx.db.getWave("default", 1)).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Empty-string boundary (via createTools) — Wave 3 Task 1 regression
+//
+// Tool-call serialization in some hosts injects empty strings the caller never
+// authored. The coalescing boundary in createTools treats "" as absent for
+// fields where empty has no legitimate meaning, so a call expressing clear
+// intent is not defeated by a value its author never wrote. These tests go
+// THROUGH createTools (the wrapped path agents actually use); the direct
+// factory tests above remain strict by design.
+// ---------------------------------------------------------------------------
+
+describe("goop_write_wave empty-string boundary (via createTools)", () => {
+  let ctx: PluginContext;
+  let toolCtx: ToolContext;
+  let cleanup: () => void;
+
+  beforeEach(() => {
+    const env = setupTestEnvironment("goop-write-wave-coalesce");
+    cleanup = env.cleanup;
+    ctx = createMockPluginContext({ testDir: env.testDir, db: env.db });
+    toolCtx = createMockToolContext();
+  });
+
+  afterEach(() => cleanup());
+
+  it("regression: the exact Wave 2 failure shape now succeeds and records verifications", async () => {
+    // This is the real shape that broke the Wave 2 verifier: a call intended
+    // as { wave_number, verifications } arrived with an injected top-level
+    // status:"" and an injected task_updates:[{task_index:0,status:""}]. The
+    // empty status triggered a mode conflict (status alongside task_updates),
+    // so the verifications were never recorded. After coalescing, status and
+    // the nested task_update status become absent, the spurious task_update is
+    // filtered as a no-op, and the verifications are recorded.
+    const tools = createTools(ctx);
+    const waveTool = tools.goop_write_wave;
+
+    // Set up wave 3 with task 0 so the target exists.
+    await waveTool.execute(
+      {
+        wave_number: 3,
+        title: "Wave three",
+        status: "in_progress",
+        tasks: [{ task_index: 0, description: "seed task", status: "pending" }],
+      },
+      toolCtx,
+    );
+
+    // The broken shape, exactly as observed in the field.
+    const result = await waveTool.execute(
+      {
+        wave_number: 3,
+        status: "",
+        task_updates: [{ task_index: 0, status: "" }],
+        verifications: [
+          { check_name: "typecheck", status: "pass" },
+          { check_name: "test", status: "pass", detail: "scoped run" },
+        ],
+      },
+      toolCtx,
+    );
+
+    // The call must succeed (not return an error) and record the verifications.
+    expect(result).not.toContain("Error in goop_write_wave");
+    expect(result).toContain("Verifications:");
+    expect(result).toContain("typecheck=pass");
+    expect(result).toContain("test=pass");
+
+    // Both verification rows persisted.
+    const wave = ctx.db.getWave("default", 3);
+    if (wave === null) throw new Error("wave 3 should exist after setup");
+    const rows = ctx.db.getVerifications("default", wave.id);
+    expect(rows.length).toBe(2);
+    expect(rows.some((r) => r.check_name === "typecheck" && r.status === "passed")).toBe(true);
+    expect(rows.some((r) => r.check_name === "test" && r.status === "passed")).toBe(true);
+
+    // The wave status was NOT clobbered by the injected status:"".
+    expect(wave.status).toBe("in_progress");
+    // Task 0 status was NOT clobbered by the injected task_update status:"".
+    const tasks = ctx.db.getWaveTasks(wave.id);
+    expect(tasks.find((t) => t.task_index === 0)?.status).toBe("pending");
+  });
+
+  it("exclusion: an empty pr_url still clears the stored value", async () => {
+    const tools = createTools(ctx);
+    const waveTool = tools.goop_write_wave;
+
+    await waveTool.execute(
+      { wave_number: 1, pr_url: "https://example.com/pr/1", status: "in_progress" },
+      toolCtx,
+    );
+    expect(ctx.db.getWave("default", 1)?.pr_url).toBe("https://example.com/pr/1");
+
+    // pr_url:"" is protected from coalescing and must overwrite (clear) the
+    // stored value, per the documented contract.
+    const result = await waveTool.execute({ wave_number: 1, pr_url: "" }, toolCtx);
+    expect(result).not.toContain("Error in goop_write_wave");
+    expect(ctx.db.getWave("default", 1)?.pr_url).toBe("");
+  });
+
+  it("exclusion: an empty pr_branch still clears the stored value", async () => {
+    const tools = createTools(ctx);
+    const waveTool = tools.goop_write_wave;
+
+    await waveTool.execute(
+      { wave_number: 1, pr_branch: "feat/orig", status: "in_progress" },
+      toolCtx,
+    );
+    expect(ctx.db.getWave("default", 1)?.pr_branch).toBe("feat/orig");
+
+    const result = await waveTool.execute({ wave_number: 1, pr_branch: "" }, toolCtx);
+    expect(result).not.toContain("Error in goop_write_wave");
+    expect(ctx.db.getWave("default", 1)?.pr_branch).toBe("");
+  });
+
+  it("exclusion: an empty title still clears the stored value", async () => {
+    const tools = createTools(ctx);
+    const waveTool = tools.goop_write_wave;
+
+    await waveTool.execute({ wave_number: 1, title: "Original", status: "in_progress" }, toolCtx);
+    expect(ctx.db.getWave("default", 1)?.title).toBe("Original");
+
+    const result = await waveTool.execute({ wave_number: 1, title: "" }, toolCtx);
+    expect(result).not.toContain("Error in goop_write_wave");
+    expect(ctx.db.getWave("default", 1)?.title).toBe("");
+  });
+
+  it("a spurious top-level status:\"\" does not clobber a real status in the same call", async () => {
+    // status:"" coalesces to absent, so the real intent (status: "in_progress"
+    // written moments before) is preserved rather than reset to "".
+    const tools = createTools(ctx);
+    const waveTool = tools.goop_write_wave;
+    await waveTool.execute({ wave_number: 2, status: "in_progress" }, toolCtx);
+
+    const result = await waveTool.execute({ wave_number: 2, status: "" }, toolCtx);
+    expect(result).not.toContain("Error in goop_write_wave");
+    expect(ctx.db.getWave("default", 2)?.status).toBe("in_progress");
   });
 });

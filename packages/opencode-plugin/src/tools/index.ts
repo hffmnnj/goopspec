@@ -9,6 +9,7 @@
 
 import type { ToolDefinition } from "../core/sdk-compat.js";
 import type { PluginContext } from "../core/types.js";
+import { coalesceEmptyStrings } from "../shared/coalesce.js";
 import { createGoopAcceptanceAuditTool } from "./goop-acceptance-audit/index.js";
 import { createGoopAdlTool } from "./goop-adl/index.js";
 import { createGoopAppendChronicleTool } from "./goop-append-chronicle/index.js";
@@ -93,7 +94,7 @@ export {
 };
 
 export function createTools(ctx: PluginContext): Record<string, ToolDefinition> {
-  return {
+  const tools: Record<string, ToolDefinition> = {
     goop_status: createGoopStatusTool(ctx),
     goop_state: createGoopStateTool(ctx),
     goop_spec: createGoopSpecTool(ctx),
@@ -135,5 +136,32 @@ export function createTools(ctx: PluginContext): Record<string, ToolDefinition> 
     background_command: createBackgroundCommandTool(ctx),
     background_status: createBackgroundStatusTool(ctx),
     background_cancel: createBackgroundCancelTool(ctx),
+  };
+
+  // Coalesce empty-string arguments to absent at this single shared boundary,
+  // before any tool logic runs. Tool-call serialization in some hosts injects
+  // empty strings into payloads the caller never authored (status fields, mode
+  // selectors, nested task_updates[] entries); for fields where empty has no
+  // legitimate meaning, treating "" as absent restores the caller's intent.
+  // Both registration paths consume this map — V1 (src/index.ts returns it as
+  // `tool:`) and V2 (src/core/tools-v2.ts reads each definition's execute) —
+  // so the coalescing applies on both hosts from one source of truth. Fields
+  // where empty is a documented operation (new_string delete, pr_url/pr_branch/
+  // title clear) are exempt; see shared/coalesce.ts.
+  return Object.fromEntries(
+    Object.entries(tools).map(([name, definition]) => [name, wrapWithCoalescing(definition)]),
+  );
+}
+
+/**
+ * Wrap a tool's `execute` so its arguments pass through empty-string coalescing
+ * first. Preserves `description` and `args` (the schema) verbatim — only the
+ * runtime argument payload is normalized.
+ */
+function wrapWithCoalescing(definition: ToolDefinition): ToolDefinition {
+  const { execute: originalExecute, ...rest } = definition;
+  return {
+    ...rest,
+    execute: async (args, context) => originalExecute(coalesceEmptyStrings(args), context),
   };
 }
