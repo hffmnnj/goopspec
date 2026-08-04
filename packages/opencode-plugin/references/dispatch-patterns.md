@@ -2,6 +2,8 @@
 
 How the orchestrator delegates work to the right agent at the right time.
 
+> **Tool description composition:** `references/tool-reference.md` §House Tool-Description Standard is the single normative source for how every tool `description` and argument `.describe()` string must be composed (named sections, length bounds, omission language, cross-field prose rules, and friction-reporting ownership). This document does not restate those rules.
+
 ## Conductor Identity
 
 The orchestrator coordinates and delegates. It never implements.
