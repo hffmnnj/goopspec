@@ -6,6 +6,7 @@ import {
   createMockToolContext,
 } from "../test-utils.js";
 import { createTools } from "../tools/index.js";
+import { tool } from "./sdk-compat.js";
 import { convertToolArgsToJsonSchema, registerToolsV2 } from "./tools-v2.js";
 import type {
   V2JsonSchema,
@@ -318,5 +319,91 @@ describe("convertToolArgsToJsonSchema() — host-visible required-array contract
     // optional at the schema level and disambiguated at runtime. Pin that
     // nothing leaked into required.
     expect(itemElementRequired(schema, "items")).toEqual([]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Argument description survival (W1.T2a)
+//
+// V2 hosts read argument documentation ONLY from the `description` field on
+// each JSON Schema node the plugin hands them. The original conversion used
+// the workspace `zod` instance (`z.toJSONSchema(z.object(args))`) over schemas
+// built with `tool.schema.*` (the Zod bundled inside @opencode-ai/plugin).
+// That cross-instance conversion silently drops every `.describe()` string.
+//
+// These tests pin that descriptions survive the conversion at every nesting
+// depth, using REAL createTools() output. A hand-written fixture is exactly
+// what let the original defect hide. If a pinned description string drifts
+// because a tool's args were reworded, update the expected string here — the
+// coupling is intentional and documents the host-visible contract.
+// ---------------------------------------------------------------------------
+
+describe("convertToolArgsToJsonSchema() — argument descriptions survive V2 conversion", () => {
+  const descContexts: PluginContext[] = [];
+
+  afterEach(() => {
+    for (const context of descContexts.splice(0)) {
+      context.db.close();
+    }
+  });
+
+  function prop(schema: V2JsonSchema, name: string): V2JsonSchema {
+    const properties = schema.properties as Record<string, V2JsonSchema | undefined> | undefined;
+    return properties?.[name] ?? {};
+  }
+
+  function itemsOf(arraySchema: V2JsonSchema): V2JsonSchema {
+    return (arraySchema.items as V2JsonSchema | undefined) ?? {};
+  }
+
+  it("preserves a top-level argument description (goop_write_wave.title)", () => {
+    const ctx = createMockPluginContext();
+    descContexts.push(ctx);
+    const schema = convertToolArgsToJsonSchema(createTools(ctx).goop_write_wave.args);
+
+    expect(prop(schema, "title").description).toBe(
+      "Omit to preserve it; supplied values, including empty strings, overwrite it.",
+    );
+  });
+
+  it("preserves a nested object property description (goop_write_wave.items[].title)", () => {
+    const ctx = createMockPluginContext();
+    descContexts.push(ctx);
+    const schema = convertToolArgsToJsonSchema(createTools(ctx).goop_write_wave.args);
+
+    const itemElement = itemsOf(prop(schema, "items"));
+    expect(prop(itemElement, "title").description).toBe(
+      "Omit to preserve it; supplied values, including empty strings, overwrite it.",
+    );
+  });
+
+  it("preserves an array item field description at nested depth (goop_write_wave.items[].verifications[].wave_id)", () => {
+    const ctx = createMockPluginContext();
+    descContexts.push(ctx);
+    const schema = convertToolArgsToJsonSchema(createTools(ctx).goop_write_wave.args);
+
+    const itemElement = itemsOf(prop(schema, "items"));
+    const verificationElement = itemsOf(prop(itemElement, "verifications"));
+    expect(prop(verificationElement, "wave_id").description).toBe(
+      "Internal wave row id (not wave_number)",
+    );
+  });
+
+  // Regression guard for the exact mechanism that caused the original defect:
+  // converting a `tool.schema`-built schema with the workspace `zod` instance
+  // drops descriptions. This controlled schema isolates the conversion path
+  // from any specific tool's content, so it fails immediately if the converter
+  // reverts to a cross-instance call (e.g. `z.toJSONSchema(z.object(args))`).
+  it("regression: conversion uses the same Zod instance that built the schema", () => {
+    const args = {
+      labelled: tool.schema.string().describe("REGRESSION_MARKER_TOP"),
+      nested: tool.schema.object({
+        inner: tool.schema.string().describe("REGRESSION_MARKER_NESTED"),
+      }),
+    };
+    const schema = convertToolArgsToJsonSchema(args);
+
+    expect(prop(schema, "labelled").description).toBe("REGRESSION_MARKER_TOP");
+    expect(prop(prop(schema, "nested"), "inner").description).toBe("REGRESSION_MARKER_NESTED");
   });
 });
