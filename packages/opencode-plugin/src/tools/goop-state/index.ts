@@ -152,21 +152,88 @@ function renderStatusAfterMutation(ctx: PluginContext): void {
 export function createGoopStateTool(ctx: PluginContext): ToolDefinition {
   return tool({
     description:
-      "Safe atomic state operations for GoopSpec workflow. Use this instead of directly editing state.json. " +
-      "This is the ONLY sanctioned mutation boundary for workflow state. A forced transition pauses " +
-      "automatic progression until the explicit clear-manual-override action is used or the workflow is reset.",
+      "Mutate or read GoopSpec workflow state via the only sanctioned mutation boundary; never edit state.json directly. " +
+      "WHEN TO USE: Change phase, mode, depth, locks, acceptance, interview, autopilot, waves, or workflow; or read state. " +
+      "WHEN NOT TO USE: Use goop_status to summarize, goop_read_wave for wave detail, goop_write_wave for wave rows, goop_checkpoint for snapshots. " +
+      "MODES: One action per call; arguments it does not name are silently ignored, not rejected. " +
+      "Read-only: get, list-workflows. " +
+      "No-arg mutations: complete-interview, reset-interview, lock-spec, unlock-spec, confirm-acceptance, reset-acceptance, clear-manual-override, reset. " +
+      "transition: phase required, force optional. set-mode: mode. set-depth: depth. " +
+      "set-autopilot: autopilot required, lazy optional. update-wave: currentWave + totalWaves. " +
+      "set-active-workflow: workflowId. create-workflow: workflowId, activate optional. " +
+      "RETURNS: A confirmation per mutation, or the state/workflow list for reads; errors return as strings, never thrown. " +
+      "CAVEATS: workflowId is read only by set-active-workflow and create-workflow — every other action targets the ACTIVE workflow and silently ignores it.",
     args: {
-      action: tool.schema.enum(STATE_ACTIONS),
-      phase: tool.schema.string().optional(),
-      mode: tool.schema.string().optional(),
-      depth: tool.schema.string().optional(),
-      autopilot: tool.schema.boolean().optional(),
-      lazy: tool.schema.boolean().optional(),
-      currentWave: tool.schema.number().optional(),
-      totalWaves: tool.schema.number().optional(),
-      workflowId: tool.schema.string().optional(),
-      force: tool.schema.boolean().optional(),
-      activate: tool.schema.boolean().optional(),
+      action: tool.schema
+        .enum(STATE_ACTIONS)
+        .describe(
+          "State operation to perform. Exactly one per call; arguments the selected action does not name are silently ignored, not rejected.",
+        ),
+      phase: tool.schema
+        .string()
+        .optional()
+        .describe(
+          "Required for transition; one of idle, discuss, plan, execute, accept. Ignored by every other action. " +
+            "Omit entirely when unused; do not pass an empty string.",
+        ),
+      mode: tool.schema
+        .string()
+        .optional()
+        .describe(
+          "Required for set-mode; one of quick, standard, comprehensive, milestone. Ignored by every other action. " +
+            "Omit entirely when unused; do not pass an empty string.",
+        ),
+      depth: tool.schema
+        .string()
+        .optional()
+        .describe(
+          "Required for set-depth; one of shallow, standard, deep. Ignored by every other action. " +
+            "Omit entirely when unused; do not pass an empty string.",
+        ),
+      autopilot: tool.schema
+        .boolean()
+        .optional()
+        .describe(
+          "Required for set-autopilot (boolean; null/undefined is rejected with an error). Ignored by every other action.",
+        ),
+      lazy: tool.schema
+        .boolean()
+        .optional()
+        .describe(
+          "Optional for set-autopilot; honored only when autopilot is true — turning autopilot off forces lazy off regardless of this value. Ignored by every other action.",
+        ),
+      currentWave: tool.schema
+        .number()
+        .optional()
+        .describe(
+          "Required for update-wave; one-based by convention (1 = first wave in progress; the default 0 means no wave has started). " +
+            "Stored verbatim without validation or bounding. Ignored by every other action.",
+        ),
+      totalWaves: tool.schema
+        .number()
+        .optional()
+        .describe(
+          "Required for update-wave; the configured wave count, stored verbatim without validation. Ignored by every other action.",
+        ),
+      workflowId: tool.schema
+        .string()
+        .optional()
+        .describe(
+          "Required for set-active-workflow (must name an existing workflow) and create-workflow (idempotent if it exists). " +
+            "Scopes NOTHING for any other action — every other action targets the active workflow and silently ignores this field.",
+        ),
+      force: tool.schema
+        .boolean()
+        .optional()
+        .describe(
+          "Optional for transition (default false); true bypasses the transition guard AND sets manualOverride, which suspends automatic progression until clear-manual-override clears it. Ignored by every other action.",
+        ),
+      activate: tool.schema
+        .boolean()
+        .optional()
+        .describe(
+          "Optional for create-workflow (default false); true also switches the active workflow to the new one in the same call. Ignored by every other action.",
+        ),
     },
     async execute(
       args: {

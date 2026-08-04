@@ -536,6 +536,113 @@ describe("goop_state tool", () => {
   });
 
   // -----------------------------------------------------------------------
+  // action → argument contract: ignored arguments & teaching errors
+  //
+  // goop_state silently ignores any argument the selected action does not
+  // name (it does NOT reject them). These tests pin that documented outcome
+  // and assert that missing-required-argument errors name the field and the
+  // action so a caller can correct the call without guessing.
+  // -----------------------------------------------------------------------
+
+  describe("action → argument contract", () => {
+    it("silently ignores workflowId for non-workflow actions (targets the active workflow)", async () => {
+      ctx.stateManager.createWorkflow("feat-x");
+      ctx.stateManager.setActiveWorkflow("default");
+      const tool = createGoopStateTool(ctx);
+
+      const result = await tool.execute(
+        { action: "lock-spec", workflowId: "feat-x" },
+        createMockToolContext(),
+      );
+
+      // The call succeeds on the ACTIVE workflow; workflowId was ignored.
+      expect(result).toContain("locked");
+      expect(ctx.stateManager.getWorkflow("default")!.specLocked).toBe(true);
+      expect(ctx.stateManager.getWorkflow("feat-x")!.specLocked).toBe(false);
+    });
+
+    it("silently ignores arguments the selected action does not name", async () => {
+      const tool = createGoopStateTool(ctx);
+
+      const result = await tool.execute(
+        {
+          action: "set-mode",
+          mode: "comprehensive",
+          phase: "execute",
+          depth: "deep",
+          autopilot: true,
+          currentWave: 9,
+          totalWaves: 9,
+        },
+        createMockToolContext(),
+      );
+
+      expect(result).toContain("comprehensive");
+      const wf = ctx.stateManager.getActiveWorkflow();
+      expect(wf.mode).toBe("comprehensive");
+      expect(wf.phase).toBe("idle"); // phase ignored
+      expect(wf.depth).toBe("standard"); // depth ignored
+      expect(wf.autopilot).toBe(false); // autopilot ignored
+      expect(wf.currentWave).toBe(0); // currentWave ignored
+    });
+
+    it("silently drops lazy when autopilot is turned off", async () => {
+      const tool = createGoopStateTool(ctx);
+
+      const result = await tool.execute(
+        { action: "set-autopilot", autopilot: false, lazy: true },
+        createMockToolContext(),
+      );
+
+      expect(result).toContain("OFF");
+      expect(ctx.stateManager.getActiveWorkflow().lazyAutopilot).toBe(false);
+    });
+
+    it("update-wave error names both required fields and the action so the caller knows what to add", async () => {
+      const tool = createGoopStateTool(ctx);
+
+      const result = await tool.execute(
+        { action: "update-wave", currentWave: 2 },
+        createMockToolContext(),
+      );
+
+      expect(result).toContain("Error");
+      expect(result).toContain("currentWave");
+      expect(result).toContain("totalWaves");
+      expect(result).toContain("update-wave");
+    });
+
+    it("set-active-workflow on a nonexistent id teaches that the workflow must exist", async () => {
+      const tool = createGoopStateTool(ctx);
+
+      const result = await tool.execute(
+        { action: "set-active-workflow", workflowId: "nope" },
+        createMockToolContext(),
+      );
+
+      expect(result).toContain("Error");
+      expect(result).toContain("nope");
+      expect(result).toContain("does not exist");
+    });
+
+    it("stores currentWave/totalWaves verbatim without one-based validation", async () => {
+      // The one-based convention is documented but not enforced: the tool
+      // stores whatever integer is passed. Pinning this prevents a future
+      // silent validation from contradicting the documented contract.
+      const tool = createGoopStateTool(ctx);
+
+      await tool.execute(
+        { action: "update-wave", currentWave: 0, totalWaves: 99 },
+        createMockToolContext(),
+      );
+
+      const wf = ctx.stateManager.getActiveWorkflow();
+      expect(wf.currentWave).toBe(0);
+      expect(wf.totalWaves).toBe(99);
+    });
+  });
+
+  // -----------------------------------------------------------------------
   // error handling
   // -----------------------------------------------------------------------
 
