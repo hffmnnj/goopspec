@@ -22,18 +22,19 @@
  *   empty strings inside `task_updates[]` entries are coalesced too.
  * - Never silently drops a non-empty value, and never drops an array element or
  *   object that becomes empty after coalescing.
- * - Fields in {@link EMPTY_STRING_LOAD_BEARING_KEYS} are exempt everywhere they
- *   appear, because for those fields an empty string is a documented,
- * intentional operation (delete, clear, activate) that coalescing would turn
- * into a silent no-op.
+ * - Fields listed for the receiving tool in
+ *   {@link EMPTY_STRING_LOAD_BEARING_FIELDS_BY_TOOL} are exempt, because for
+ *   those specific tool-field pairs an empty string is a documented,
+ *   intentional operation (delete, clear, activate) that coalescing would turn
+ *   into a silent no-op. A field name alone never grants an exemption.
  *
  * @module shared/coalesce
  */
 
 /**
- * Tool-argument fields where an empty string (`""`) is a documented,
- * intentional operation rather than an absent value. These are excluded from
- * empty-string coalescing everywhere they appear, across every tool.
+ * Tool-specific fields where an empty string (`""`) is a documented,
+ * intentional operation rather than an absent value. An unlisted tool gets no
+ * exemptions, even when it shares a field name with an allowlisted tool.
  *
  * Each entry exists because coalescing its empty value to absent would convert
  * an intentional operation into a silent no-op — the exact failure class the
@@ -50,38 +51,40 @@
  * - Free-text fields (`description`, `detail`, `body`, `entry`, …) — an empty
  *   value is not a documented operation; coalescing to absent is safe.
  */
-export const EMPTY_STRING_LOAD_BEARING_KEYS: ReadonlySet<string> = new Set<string>([
-  // Patch tools (goop_write_db, goop_write_section, goop_save_note): an empty
-  // new_string deletes the matched text; an empty old_string activates patch
-  // mode on presence alone (documented in shared/write-mode.ts and pinned by
-  // tests) — coalescing either would change the resolved operation mode.
-  "new_string",
-  "old_string",
-  // goop_write_wave (top-level and items[]): an empty value clears the stored
-  // field per the documented "supplied values, including empty strings,
-  // overwrite it" contract.
-  "pr_url",
-  "pr_branch",
-  // goop_write_wave (top-level and items[]): same overwrite-with-empty contract
-  // as pr_url/pr_branch; coalescing turns an intentional title-clear into a
-  // silent no-op.
-  "title",
-]);
+export const EMPTY_STRING_LOAD_BEARING_FIELDS_BY_TOOL: Readonly<
+  Record<string, ReadonlySet<string>>
+> = {
+  // Patch-capable tools: an empty new_string deletes matched text; an empty
+  // old_string activates patch mode on presence alone. Both behaviors are
+  // documented and tested for every tool in this group.
+  goop_write_db: new Set(["new_string", "old_string"]),
+  goop_write_section: new Set(["new_string", "old_string"]),
+  goop_save_note: new Set(["new_string", "old_string"]),
+  // Wave metadata: empty values explicitly clear these stored fields.
+  goop_write_wave: new Set(["pr_url", "pr_branch", "title"]),
+};
+
+const NO_LOAD_BEARING_FIELDS: ReadonlySet<string> = new Set<string>();
 
 /**
  * Recursively treat exact empty strings as absent (omitted) for tool arguments
  * where an empty string carries no legitimate meaning.
  *
  * @param value - The raw argument payload (object, array, or primitive).
- * @param protectedKeys - Fields exempt from coalescing. Defaults to
- *   {@link EMPTY_STRING_LOAD_BEARING_KEYS}. Pass a custom set only in tests.
+ * @param toolName - Canonical MCP tool name. Only its explicitly listed
+ *   protected fields are exempt; unknown and omitted tool names get no
+ *   exemptions by default.
  * @returns A structurally equivalent value with exact empty strings omitted
  *   from non-protected keys, recursively.
  */
 export function coalesceEmptyStrings<T>(
   value: T,
-  protectedKeys: ReadonlySet<string> = EMPTY_STRING_LOAD_BEARING_KEYS,
+  toolName?: string,
 ): T {
+  const protectedKeys =
+    toolName === undefined
+      ? NO_LOAD_BEARING_FIELDS
+      : (EMPTY_STRING_LOAD_BEARING_FIELDS_BY_TOOL[toolName] ?? NO_LOAD_BEARING_FIELDS);
   return walk(value, protectedKeys) as T;
 }
 

@@ -1,16 +1,16 @@
 import { describe, expect, it } from "bun:test";
 
 import {
-  EMPTY_STRING_LOAD_BEARING_KEYS,
+  EMPTY_STRING_LOAD_BEARING_FIELDS_BY_TOOL,
   coalesceEmptyStrings,
 } from "./coalesce.js";
 
 /** Typed wrapper so object-shape assertions aren't fought by the generic `<T>` return. */
 function coalesce(
   input: Record<string, unknown>,
-  protectedKeys?: ReadonlySet<string>,
+  toolName?: string,
 ): Record<string, unknown> {
-  return coalesceEmptyStrings(input, protectedKeys) as Record<string, unknown>;
+  return coalesceEmptyStrings(input, toolName) as Record<string, unknown>;
 }
 
 describe("coalesceEmptyStrings", () => {
@@ -72,36 +72,43 @@ describe("coalesceEmptyStrings", () => {
     expect(out).toEqual({ branch: "feat/x", status: "done" });
   });
 
-  it("protects new_string and old_string everywhere they appear", () => {
+  it("protects new_string and old_string only for patch-capable tools", () => {
+    for (const toolName of ["goop_write_db", "goop_write_section", "goop_save_note"]) {
+      expect(
+        coalesce({ old_string: "", new_string: "", items: [{ old_string: "", new_string: "" }] }, toolName),
+      ).toEqual({
+        old_string: "",
+        new_string: "",
+        items: [{ old_string: "", new_string: "" }],
+      });
+    }
+    expect(coalesce({ old_string: "", new_string: "" }, "goop_create_pr")).toEqual({});
+  });
+
+  it("protects wave metadata clears only for goop_write_wave", () => {
     const out = coalesce({
-      old_string: "",
-      new_string: "",
-      items: [{ old_string: "", new_string: "" }],
-    });
+      pr_url: "",
+      pr_branch: "",
+      title: "",
+      items: [{ wave_number: 1, pr_url: "", pr_branch: "", title: "" }],
+    }, "goop_write_wave");
     expect(out).toEqual({
-      old_string: "",
-      new_string: "",
-      items: [{ old_string: "", new_string: "" }],
+      pr_url: "",
+      pr_branch: "",
+      title: "",
+      items: [{ wave_number: 1, pr_url: "", pr_branch: "", title: "" }],
     });
   });
 
-  it("protects pr_url, pr_branch, and title everywhere they appear", () => {
-    const out = coalesce({
-      pr_url: "",
-      pr_branch: "",
-      title: "",
-      items: [{ wave_number: 1, pr_url: "", pr_branch: "", title: "" }],
-    });
-    expect(out).toEqual({
-      pr_url: "",
-      pr_branch: "",
-      title: "",
-      items: [{ wave_number: 1, pr_url: "", pr_branch: "", title: "" }],
-    });
+  it("uses protection-off as the safe default for tools sharing a field name", () => {
+    const out = coalesce({ status: "", pr_url: "" }, "memory_save");
+    expect(out).toEqual({});
+    expect(coalesce({ title: "" }, "memory_save")).toEqual({});
+    expect(coalesce({ title: "" }, "goop_create_pr")).toEqual({});
   });
 
   it("coalesces a non-protected sibling alongside a protected field", () => {
-    const out = coalesce({ status: "", pr_url: "" });
+    const out = coalesce({ status: "", pr_url: "" }, "goop_write_wave");
     expect(out).toEqual({ pr_url: "" });
   });
 
@@ -123,16 +130,25 @@ describe("coalesceEmptyStrings", () => {
     expect(coalesceEmptyStrings("")).toBe("");
   });
 
-  it("accepts a custom protected-keys set", () => {
-    const out = coalesce({ status: "", custom: "" }, new Set(["custom"]));
-    expect(out).toEqual({ custom: "" });
+  it("uses no exemptions when no tool name is supplied", () => {
+    expect(coalesce({ title: "", new_string: "" })).toEqual({});
   });
 });
 
-describe("EMPTY_STRING_LOAD_BEARING_KEYS", () => {
-  it("contains exactly the audited load-bearing fields", () => {
-    expect([...EMPTY_STRING_LOAD_BEARING_KEYS].sort()).toEqual(
-      ["new_string", "old_string", "pr_branch", "pr_url", "title"].sort(),
-    );
+describe("EMPTY_STRING_LOAD_BEARING_FIELDS_BY_TOOL", () => {
+  it("contains exactly the audited tool-field exclusions", () => {
+    expect(
+      Object.fromEntries(
+        Object.entries(EMPTY_STRING_LOAD_BEARING_FIELDS_BY_TOOL).map(([toolName, fields]) => [
+          toolName,
+          [...fields].sort(),
+        ]),
+      ),
+    ).toEqual({
+      goop_save_note: ["new_string", "old_string"],
+      goop_write_db: ["new_string", "old_string"],
+      goop_write_section: ["new_string", "old_string"],
+      goop_write_wave: ["pr_branch", "pr_url", "title"],
+    });
   });
 });

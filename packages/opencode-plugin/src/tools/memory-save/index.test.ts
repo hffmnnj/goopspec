@@ -6,6 +6,7 @@ import {
   createMockToolContext,
   setupTestEnvironment,
 } from "../../test-utils.js";
+import { createTools } from "../index.js";
 import { createMemorySaveTool } from "./index.js";
 
 describe("memory_save tool", () => {
@@ -37,6 +38,21 @@ describe("memory_save tool", () => {
     expect(result).toContain("**ID:** 1");
     expect(result).toContain("**Type:** observation");
     expect(result).toContain("**Importance:** 5/10");
+  });
+
+  it("coalesces an injected empty title to absent at the shared tool boundary", async () => {
+    const tools = createTools(ctx);
+    const save = ctx.memory.save;
+    let saveCalled = false;
+    ctx.memory.save = async (input) => {
+      saveCalled = true;
+      return save(input);
+    };
+
+    const result = await tools.memory_save.execute({ title: "", content: "must not persist" }, toolCtx);
+
+    expect(result).toContain("Error saving memory");
+    expect(saveCalled).toBe(false);
   });
 
   it("saves with explicit type, concepts, facts, sourceFiles", async () => {

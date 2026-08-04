@@ -356,9 +356,14 @@ describe("auditPromptSurfaces (real tree)", () => {
     // "Empty-string argument coalescing" subsection under the House Tool-
     // Description Standard documenting the boundary and the exclusion table.
     // 23,825 -> 26,702 bytes (+2,877); references rollup 171,170 -> 174,047.
+    // A verifier-found remediation narrowed the exclusions to explicit
+    // tool-field pairs (rather than field names globally), so a new tool with
+    // title does not inherit goop_write_wave's clear-title behavior. The
+    // reference now states the protection-off default for new tools:
+    // 26,702 -> 27,161 bytes (+459); references 174,047 -> 174,506.
     const references = report.directories.find((d) => d.directory === "references")!;
     expect(references.files).toBe(19);
-    expect(references.bytes).toBe(174_047);
+    expect(references.bytes).toBe(174_506);
   });
 
   it("total absolute-language hits are 299 (Wave 1 role plumbing plus the Wave 3 execution gate)", () => {
@@ -490,7 +495,10 @@ describe("auditPromptSurfaces (real tree)", () => {
     // true invariants of the coalescing contract: an empty status is never a
     // legitimate value, a non-empty value is never dropped, and only exact
     // "" is affected. tool-reference.md 18 -> 25 hits; total 319 -> 326.
-    expect(report.totalAbsoluteHits).toBe(326);
+    // The tool-scoping remediation adds two true boundary invariants (a field
+    // name never grants an exemption; a new tool receives no exemption by
+    // default), taking total absolute-language hits 326 -> 328.
+    expect(report.totalAbsoluteHits).toBe(328);
   });
 
   it("per-file tokens are consistent with chars via estimateTokens", () => {

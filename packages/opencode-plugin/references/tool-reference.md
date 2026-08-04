@@ -71,7 +71,7 @@ Tool-call serialization in some hosts injects empty strings (`""`) into argument
 
 At the single shared tool-input boundary (`createTools` in `src/tools/index.ts`, which both the V1 and V2 registration paths consume), an exact empty string is treated as absent (omitted) for every field where empty has no legitimate meaning, recursively through arrays and nested objects, before any tool logic runs. Only exact `""` is affected — `null`, `undefined`, `0`, `false`, `[]`, `{}`, and whitespace-only strings pass through untouched (a whitespace-only string may be intentional content). A non-empty value is never dropped.
 
-A small, explicit set of fields is exempt, because for those fields an empty string is a documented, intentional operation and coalescing it would convert that operation into a silent no-op — the same failure class the boundary exists to eliminate. The exclusion set lives in `EMPTY_STRING_LOAD_BEARING_KEYS` in `packages/opencode-plugin/src/shared/coalesce.ts`:
+A small, explicit set of **tool-field pairs** is exempt, because for those pairs an empty string is a documented, intentional operation and coalescing it would convert that operation into a silent no-op — the same failure class the boundary exists to eliminate. The policy lives in `EMPTY_STRING_LOAD_BEARING_FIELDS_BY_TOOL` in `packages/opencode-plugin/src/shared/coalesce.ts`; it is keyed by canonical tool name first, then field name:
 
 | Field | Tools | Meaning of empty |
 |-------|-------|------------------|
@@ -80,6 +80,8 @@ A small, explicit set of fields is exempt, because for those fields an empty str
 | `pr_url` | `goop_write_wave` (top-level and `items[]`) | Clear the stored PR URL. |
 | `pr_branch` | `goop_write_wave` (top-level and `items[]`) | Clear the stored PR branch. |
 | `title` | `goop_write_wave` (top-level and `items[]`) | Clear the stored wave title (same overwrite-with-empty contract as `pr_url`/`pr_branch`). |
+
+Tool scoping is deliberate: a field name alone never grants an exemption. For example, `title:""` is protected for `goop_write_wave` but coalesces to absent for `memory_save`, `goop_save_note`, and `goop_create_pr`. A new tool receives no exemption by default; add a tool-field pair only after confirming that empty is a documented, load-bearing operation and testing that behavior.
 
 `content` is deliberately **not** exempt: an empty content has no legitimate meaning in a single-mode write, and exempting it would let an injected `content:""` silently destroy a document. Coalescing it to absent produces a loud `none`-mode error instead of a destructive wipe; in batch mode an empty `content` is already a neutral placeholder and is unaffected.
 

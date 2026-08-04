@@ -146,10 +146,10 @@ export function createTools(ctx: PluginContext): Record<string, ToolDefinition> 
   // Both registration paths consume this map — V1 (src/index.ts returns it as
   // `tool:`) and V2 (src/core/tools-v2.ts reads each definition's execute) —
   // so the coalescing applies on both hosts from one source of truth. Fields
-  // where empty is a documented operation (new_string delete, pr_url/pr_branch/
-  // title clear) are exempt; see shared/coalesce.ts.
+  // where empty is a documented operation are exempt only for their owning
+  // tool; see shared/coalesce.ts.
   return Object.fromEntries(
-    Object.entries(tools).map(([name, definition]) => [name, wrapWithCoalescing(definition)]),
+    Object.entries(tools).map(([name, definition]) => [name, wrapWithCoalescing(name, definition)]),
   );
 }
 
@@ -158,10 +158,10 @@ export function createTools(ctx: PluginContext): Record<string, ToolDefinition> 
  * first. Preserves `description` and `args` (the schema) verbatim — only the
  * runtime argument payload is normalized.
  */
-function wrapWithCoalescing(definition: ToolDefinition): ToolDefinition {
+function wrapWithCoalescing(name: string, definition: ToolDefinition): ToolDefinition {
   const { execute: originalExecute, ...rest } = definition;
   return {
     ...rest,
-    execute: async (args, context) => originalExecute(coalesceEmptyStrings(args), context),
+    execute: async (args, context) => originalExecute(coalesceEmptyStrings(args, name), context),
   };
 }
