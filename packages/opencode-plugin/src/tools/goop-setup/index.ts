@@ -86,7 +86,7 @@ function formatInit(result: ReturnType<typeof init>): string {
   if (result.success) {
     lines.push("## Next Steps");
     lines.push('1. Run `goop_setup(action: "verify")` to check setup health');
-    lines.push("2. Use `/goop-discuss` to start planning a feature");
+    lines.push("2. Describe what you want to build to start planning a feature");
   }
 
   return lines.join("\n");

@@ -393,7 +393,9 @@ function formatResult(args: IntentArgs, result: IntentResult, mutation?: Mutatio
   const displayCommand =
     result.commandString.length > 0 ? `\`${result.commandString}\` (${result.command})` : "chat";
   const autoRunText = result.autoRun
-    ? `✅ Running \`${result.commandString}\` automatically...`
+    ? result.commandString.length > 0
+      ? `✅ Running \`${result.commandString}\` automatically...`
+      : "✅ Routing automatically (no command needed)..."
     : "Not running automatically. Ask a clarification or run the command manually.";
   const jsonPayload: Record<string, unknown> = {
     command: result.command,

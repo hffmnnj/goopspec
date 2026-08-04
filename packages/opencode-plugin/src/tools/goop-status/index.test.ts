@@ -73,7 +73,7 @@ describe("goop_status tool", () => {
   it("shows phase guidance for idle", async () => {
     const tool = createGoopStatusTool(ctx);
     const result = await tool.execute({}, createMockToolContext());
-    expect(result).toContain("/goop-discuss");
+    expect(result).toContain("Describe what you want to build");
   });
 
   it("shows phase guidance for execute", async () => {
