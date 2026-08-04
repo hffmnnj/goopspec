@@ -79,7 +79,16 @@ const EXPECTED_TOOL_KEYS = [
  * change; otherwise the length predicate fails it for exceeding the normal
  * ceiling.
  */
-const HIGH_FRICTION_TOOLS: readonly string[] = ["goop_write_wave", "goop_state", "goop_blocker"];
+const HIGH_FRICTION_TOOLS: readonly string[] = [
+  "goop_write_wave",
+  "goop_state",
+  "goop_blocker",
+  // Wave 3 Task 2: multi-mode write tools whose rejection contracts cannot
+  // fit under 700 without dropping a rule a caller needs to avoid an error.
+  "goop_write_db",
+  "goop_write_section",
+  "goop_append_chronicle",
+];
 
 /**
  * Tools that do NOT yet meet the house standard and so skip the content
@@ -107,24 +116,18 @@ const PENDING_CONFORMANCE: readonly string[] = [
   "background_status",
   "difftastic",
   "generate_image",
-  "goop_append_chronicle",
   "goop_boot",
   "goop_checkpoint",
   "goop_compact",
   "goop_create_pr",
   "goop_get_global_config",
   "goop_infer_intent",
-  "goop_read_db",
-  "goop_read_section",
   "goop_reference",
   "goop_save_note",
-  "goop_search_docs",
   "goop_search_notes",
   "goop_setup",
   "goop_spec",
   "goop_status",
-  "goop_write_db",
-  "goop_write_section",
   "memory_forget",
   "memory_save",
   "memory_search",
