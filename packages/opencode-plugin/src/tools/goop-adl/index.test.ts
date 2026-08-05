@@ -178,6 +178,46 @@ describe("goop_adl tool", () => {
       const adl = await tool.execute({ action: "read" }, toolCtx);
       expect(adl).toContain("Keep ADL resilient");
     });
+
+    // Scoping contract: goop_adl does not declare workflow_id. An unrecognized
+    // workflow_id on the call is dropped; the dual-write always targets the
+    // active workflow. This pins the documented silent-acceptance behavior so a
+    // future partial/misleading selector cannot land quietly.
+    it("ignores an unrecognized workflow_id and dual-writes only to the active workflow", async () => {
+      ctx.stateManager.createWorkflow("other-wf");
+      const activeId = ctx.stateManager.getState().activeWorkflowId;
+      expect(activeId).not.toBe("other-wf");
+
+      const tool = createGoopAdlTool(ctx);
+      expect(Object.keys(tool.args)).not.toContain("workflow_id");
+
+      const marker = "Active-only ADL marker despite workflow_id";
+      const result = await tool.execute(
+        {
+          action: "append",
+          type: "observation",
+          description: marker,
+          entry_action: "Logged under active workflow",
+          workflow_id: "other-wf",
+        } as {
+          action: "append";
+          type: "observation";
+          description: string;
+          entry_action: string;
+          workflow_id: string;
+        },
+        toolCtx,
+      );
+
+      expect(result).toContain("ADL entry added");
+      expect(result).toContain(marker);
+
+      const activeRows = ctx.db.getDecisions({ workflowId: activeId });
+      expect(activeRows.some((row) => row.description === marker)).toBe(true);
+
+      const otherRows = ctx.db.getDecisions({ workflowId: "other-wf" });
+      expect(otherRows.some((row) => row.description === marker)).toBe(false);
+    });
   });
 
   // -----------------------------------------------------------------------

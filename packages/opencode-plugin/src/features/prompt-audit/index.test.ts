@@ -346,9 +346,39 @@ describe("auditPromptSurfaces (real tree)", () => {
     // exceed 700. Wording-only; the gate logic in src/tools/index.test.ts
     // and the allowlist membership are unchanged. tool-reference.md:
     // 23,329 -> 23,825 bytes (+496); references rollup 170,674 -> 171,170.
+    //
+    // The tool-definition-clarity workflow's Wave 3 Task 1 added the
+    // empty-string argument coalescing boundary (a behavior change, not a
+    // wording change): shared/coalesce.ts treats an exact "" as absent at
+    // the single createTools input boundary both V1 and V2 consume, with an
+    // explicit exclusion list (new_string/old_string delete+patch activation,
+    // pr_url/pr_branch/title clear). tool-reference.md gained a new
+    // "Empty-string argument coalescing" subsection under the House Tool-
+    // Description Standard documenting the boundary and the exclusion table.
+    // 23,825 -> 26,702 bytes (+2,877); references rollup 171,170 -> 174,047.
+    // A verifier-found remediation narrowed the exclusions to explicit
+    // tool-field pairs (rather than field names globally), so a new tool with
+    // title does not inherit goop_write_wave's clear-title behavior. The
+    // reference now states the protection-off default for new tools:
+    // 26,702 -> 27,161 bytes (+459); references 174,047 -> 174,506.
+    //
+    // The tool-definition-clarity workflow's Wave 6 Task 2 made the emitted
+    // tool schemas the sole usage-contract authority and reconciled the
+    // secondary surfaces against them. tool-reference.md had two real
+    // contradictions with current behavior, both fixed here: (1) the
+    // goop_write_wave prose and Combinator table said verifications/
+    // traceability were "not available alongside items batch mode", which
+    // contradicts the per-item side-payload contract Wave 2 established
+    // (supply per-item inside items[]; top-level side payloads alongside
+    // items[] are rejected, not dropped); (2) the generate_image arg list
+    // carried phantom `model` and `inputFidelity` arguments the schema never
+    // declared, and did not note that `mask`/`outputCompression` are declared
+    // but ignored. Wording-only; no abs-language keywords added or removed.
+    // 27,161 -> 27,620 bytes (+459); references 174,506 -> 174,965.
+    // totalAbsoluteHits unchanged at 328.
     const references = report.directories.find((d) => d.directory === "references")!;
     expect(references.files).toBe(19);
-    expect(references.bytes).toBe(171_170);
+    expect(references.bytes).toBe(174_965);
   });
 
   it("total absolute-language hits are 299 (Wave 1 role plumbing plus the Wave 3 execution gate)", () => {
@@ -472,7 +502,18 @@ describe("auditPromptSurfaces (real tree)", () => {
     // never requires a description to exceed 700"), verified against the
     // audit regex (tool-reference.md 17 -> 18 hits) rather than assumed.
     // Total: 318 -> 319.
-    expect(report.totalAbsoluteHits).toBe(319);
+    //
+    // The tool-definition-clarity workflow's Wave 3 Task 1 added the
+    // "Empty-string argument coalescing" subsection to tool-reference.md.
+    // The +7 delta is the boundary's own contract language, verified against
+    // the audit regex (4x "never", 3x "only") rather than assumed. All are
+    // true invariants of the coalescing contract: an empty status is never a
+    // legitimate value, a non-empty value is never dropped, and only exact
+    // "" is affected. tool-reference.md 18 -> 25 hits; total 319 -> 326.
+    // The tool-scoping remediation adds two true boundary invariants (a field
+    // name never grants an exemption; a new tool receives no exemption by
+    // default), taking total absolute-language hits 326 -> 328.
+    expect(report.totalAbsoluteHits).toBe(328);
   });
 
   it("per-file tokens are consistent with chars via estimateTokens", () => {

@@ -37,27 +37,6 @@ function normalizeImportance(raw: number | undefined, memoryType: MemoryType): n
 }
 
 /**
- * When type=decision, fold reasoning/alternatives into the stored content
- * so a single tool covers what `memory_decision` used to do.
- */
-function buildDecisionContent(
-  baseContent: string,
-  reasoning: string | undefined,
-  alternatives: string[] | undefined,
-): string {
-  const sections: string[] = [baseContent];
-
-  if (reasoning) {
-    sections.push("", "## Reasoning", reasoning);
-  }
-  if (alternatives?.length) {
-    sections.push("", "## Alternatives Considered", ...alternatives.map((a) => `- ${a}`));
-  }
-
-  return sections.join("\n");
-}
-
-/**
  * For decisions, auto-generate facts from the reasoning/alternatives if the
  * caller didn't supply explicit facts.
  */
@@ -87,41 +66,56 @@ const USER_MEMORY_TYPES = MEMORY_TYPES.filter(
 export function createMemorySaveTool(ctx: PluginContext): ToolDefinition {
   return tool({
     description:
-      "Save structured information to persistent memory. " +
-      "Supports observation, decision, note, and todo types.",
+      "Persist a memory record. " +
+      "WHEN TO USE: Capture an observation, decision, note, or todo. " +
+      "WHEN NOT TO USE: goop_save_note for curated, tagged knowledge. " +
+      "MODES: insert = omit deduplicate or send false; creates a row. deduplicate = true: a near-duplicate (token F1 >=0.85) keeps its id, sets importance=max(old,new), refreshes created_at, and leaves content unchanged; no match inserts. " +
+      "RETURNS: A confirmation with id, type, title, importance; failures return id -1. " +
+      "CAVEATS: importance defaults by type (decision 7, note 4, else 5), must be 1-10 (0-1 scales x10). type=decision folds reasoning/alternatives into content and auto-generates facts from the title if omitted; both are ignored otherwise.",
     args: {
-      title: tool.schema.string().describe("Memory title (max 100 chars)"),
-      content: tool.schema.string().describe("Memory content"),
-      type: tool.schema
-        .enum(USER_MEMORY_TYPES)
-        .optional()
-        .describe("Type: observation (default), decision, note, or todo"),
+      title: tool.schema
+        .string()
+        .describe("Memory title; max 100 characters. Required."),
+      content: tool.schema.string().describe(
+        "Memory body text. Required. Stored verbatim for non-decision types; for type=decision " +
+          "the reasoning and alternatives are appended into the stored content.",
+      ),
+      type: tool.schema.enum(USER_MEMORY_TYPES).optional().describe(
+        "Record type. Defaults to observation. decision folds reasoning/alternatives into " +
+          "content and auto-generates facts; note lowers the default importance; todo tracks " +
+          "an action item.",
+      ),
       concepts: tool.schema
         .array(tool.schema.string())
         .optional()
-        .describe("Tags for categorization and search"),
-      facts: tool.schema
-        .array(tool.schema.string())
-        .optional()
-        .describe("Atomic facts extracted from this memory"),
-      importance: tool.schema
-        .number()
-        .optional()
-        .describe("Importance 1-10 (default varies by type)"),
+        .describe(
+          "Tags for categorization and retrieval; stored verbatim and full-text-indexed.",
+        ),
+      facts: tool.schema.array(tool.schema.string()).optional().describe(
+        "Atomic facts extracted from this memory; stored verbatim and full-text-indexed. For " +
+          "type=decision, auto-generated from the title when omitted.",
+      ),
+      importance: tool.schema.number().optional().describe(
+        "Priority 1-10. Defaults vary by type: decision 7, note 4, observation/todo 5. Values " +
+          "in (0, 1) are scaled x10 for backward compatibility.",
+      ),
       sourceFiles: tool.schema
         .array(tool.schema.string())
         .optional()
-        .describe("Related file paths"),
-      // Decision-specific fields (only meaningful when type=decision)
-      reasoning: tool.schema.string().optional().describe("Why this decision was made"),
-      alternatives: tool.schema
-        .array(tool.schema.string())
-        .optional()
-        .describe("Alternatives considered"),
-      deduplicate: tool.schema
-        .boolean()
-        .optional()
-        .describe("Consolidate a near-duplicate memory instead of inserting a new entry"),
+        .describe("Related file paths; stored verbatim."),
+      reasoning: tool.schema.string().optional().describe(
+        "Why a decision was made. Only applied for type=decision (folded into content); " +
+          "ignored for other types. Omit for non-decision memories.",
+      ),
+      alternatives: tool.schema.array(tool.schema.string()).optional().describe(
+        "Alternatives considered. Only applied for type=decision (folded into content); " +
+          "ignored for other types. Omit for non-decision memories.",
+      ),
+      deduplicate: tool.schema.boolean().optional().describe(
+        "When true, reinforce a near-duplicate existing record instead of inserting a new row " +
+          "(importance becomes max of old and new, created_at refreshed, content unchanged). " +
+          "When absent or false, always insert. No-op when FTS5 is unavailable.",
+      ),
     },
     async execute(
       args: {
@@ -152,12 +146,6 @@ export function createMemorySaveTool(ctx: PluginContext): ToolDefinition {
           return "Error: Importance must be between 1 and 10.";
         }
 
-        // Build content — decisions get reasoning/alternatives folded in
-        const content =
-          memoryType === "decision"
-            ? buildDecisionContent(args.content, args.reasoning, args.alternatives)
-            : args.content;
-
         // Build facts — decisions auto-generate if none supplied
         const facts =
           memoryType === "decision"
@@ -167,7 +155,7 @@ export function createMemorySaveTool(ctx: PluginContext): ToolDefinition {
         const entry = await ctx.memory.save({
           type: memoryType,
           title: args.title,
-          content,
+          content: args.content,
           facts,
           concepts: args.concepts,
           sourceFiles: args.sourceFiles,

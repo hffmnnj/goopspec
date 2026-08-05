@@ -246,6 +246,39 @@ describe("goop_spec tool", () => {
   });
 
   // -----------------------------------------------------------------------
+  // argument-to-nothing contract (phase is declared but ignored)
+  // -----------------------------------------------------------------------
+
+  describe("phase is ignored by every action", () => {
+    it("read produces identical output regardless of phase", async () => {
+      const docDir = join(testDir, GOOPSPEC_DIR);
+      writeFileSync(join(docDir, "SPEC.md"), "# Spec\nContent.", "utf-8");
+
+      const tool = createGoopSpecTool(ctx);
+      const withoutPhase = await tool.execute({ action: "read", file: "spec" }, toolCtx);
+      const withPhase = await tool.execute(
+        { action: "read", file: "spec", phase: "execute" },
+        toolCtx,
+      );
+      expect(withPhase).toBe(withoutPhase);
+    });
+
+    it("list produces identical output regardless of phase", async () => {
+      const tool = createGoopSpecTool(ctx);
+      const withoutPhase = await tool.execute({ action: "list" }, toolCtx);
+      const withPhase = await tool.execute({ action: "list", phase: "discuss" }, toolCtx);
+      expect(withPhase).toBe(withoutPhase);
+    });
+
+    it("validate produces identical output regardless of phase", async () => {
+      const tool = createGoopSpecTool(ctx);
+      const withoutPhase = await tool.execute({ action: "validate" }, toolCtx);
+      const withPhase = await tool.execute({ action: "validate", phase: "plan" }, toolCtx);
+      expect(withPhase).toBe(withoutPhase);
+    });
+  });
+
+  // -----------------------------------------------------------------------
   // error handling
   // -----------------------------------------------------------------------
 

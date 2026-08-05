@@ -124,6 +124,13 @@ describe("goop_status tool", () => {
     expect(result).toContain("No active workflow found");
   });
 
+  it("verbose is declared but ignored — output is identical whether set or omitted", async () => {
+    const tool = createGoopStatusTool(ctx);
+    const withoutVerbose = await tool.execute({}, createMockToolContext());
+    const withVerbose = await tool.execute({ verbose: true }, createMockToolContext());
+    expect(withVerbose).toBe(withoutVerbose);
+  });
+
   it("handles errors gracefully without throwing", async () => {
     // Create a context with a broken state manager
     const brokenCtx: PluginContext = {

@@ -66,24 +66,64 @@ function formatReference(resource: ResolvedResource, section?: string): string {
 export function createGoopBootTool(ctx: PluginContext): ToolDefinition {
   return tool({
     description:
-      "Load workflow state, documents, Field Notes, memory, and references in one call. " +
-      "Documents load only when doc_types is explicitly provided; otherwise, use goop_read_db or goop_read_section for explicit reads. " +
-      "Wave/task context is loaded separately via goop_read_wave.",
+      "Assemble workflow state, documents, Field Notes, memory, and references in one call. WHEN TO USE: At the start of a turn to orient on the active workflow and prime context in one round-trip. WHEN NOT TO USE: goop_read_wave for wave or task detail; goop_status for a compact status line; the granular tools when you need only one block. RETURNS: One markdown document with a section per requested block (State, Documents, Field Notes, Memory, References). CAVEATS: Every block is opt-in. Documents load ONLY when doc_types is explicitly passed — there is no default document set, so omitting it returns no documents. Wave/task context is never included; fetch it separately via goop_read_wave.",
     args: {
-      workflow_id: tool.schema.string().optional(),
-      doc_types: tool.schema.array(tool.schema.string()).optional(),
-      include_state: tool.schema.boolean().optional(),
-      note_query: tool.schema.string().optional(),
-      note_tags: tool.schema.array(tool.schema.string()).optional(),
-      note_limit: tool.schema.number().optional(),
-      note_full: tool.schema.boolean().optional(),
-      memory_query: tool.schema.string().optional(),
-      memory_limit: tool.schema.number().optional(),
-      memory_types: tool.schema.array(tool.schema.enum(MEMORY_TYPES)).optional(),
-      memory_concepts: tool.schema.array(tool.schema.string()).optional(),
-      memory_min_importance: tool.schema.number().optional(),
-      references: tool.schema.array(tool.schema.string()).optional(),
-      reference_section: tool.schema.string().optional(),
+      workflow_id: tool.schema
+        .string()
+        .optional()
+        .describe("Target workflow id; omit to use the active workflow."),
+      doc_types: tool.schema
+        .array(tool.schema.string())
+        .optional()
+        .describe("Document types to load (opt-in); omit to load NO documents — there is no default set."),
+      include_state: tool.schema
+        .boolean()
+        .optional()
+        .describe("Include the State block (defaults to true)."),
+      note_query: tool.schema
+        .string()
+        .optional()
+        .describe("Field Notes search query; supplies the Field Notes block when set."),
+      note_tags: tool.schema
+        .array(tool.schema.string())
+        .optional()
+        .describe("Filter the Field Notes block to notes carrying these tags."),
+      note_limit: tool.schema
+        .number()
+        .optional()
+        .describe("Max Field Notes results (default 10, clamped to 50)."),
+      note_full: tool.schema
+        .boolean()
+        .optional()
+        .describe("Return full Field Note bodies instead of 200-char snippets."),
+      memory_query: tool.schema
+        .string()
+        .optional()
+        .describe("Memory search query; supplies the Memory block when set."),
+      memory_limit: tool.schema
+        .number()
+        .optional()
+        .describe("Max memory results (default 5, clamped to 20)."),
+      memory_types: tool.schema
+        .array(tool.schema.enum(MEMORY_TYPES))
+        .optional()
+        .describe("Filter memory results by type (observation, decision, note, todo)."),
+      memory_concepts: tool.schema
+        .array(tool.schema.string())
+        .optional()
+        .describe("Filter memory results by concept tags."),
+      memory_min_importance: tool.schema
+        .number()
+        .optional()
+        .describe("Minimum importance (1-10) for memory results."),
+      references: tool.schema
+        .array(tool.schema.string())
+        .optional()
+        .describe("Reference names to load; supplies the References block."),
+      reference_section: tool.schema
+        .string()
+        .optional()
+        .describe("Heading text to extract from each loaded reference; must match exactly, case-insensitively."),
     },
     async execute(
       args: {

@@ -68,22 +68,29 @@ function formatResource(resource: ResolvedResource, section?: string): string {
 
 export function createGoopReferenceTool(ctx: PluginContext): ToolDefinition {
   return tool({
-    description: "Load reference documents or templates. Supports multi-load via `names` array.",
+    description:
+      "Load bundled reference documents or templates from disk. WHEN TO USE: To read a reference (e.g. core-protocol, tool-reference) or template, or list what is available. WHEN NOT TO USE: goop_read_db for workflow documents; goop_search_docs to search stored docs. MODES: single = name; multi = names[] (loads each, lists any not-found); list = list:true (optionally filtered by type). RETURNS: Rendered markdown per resource, or an inventory. CAVEATS: section extracts one heading and needs an EXACT, case-insensitive match of the full heading text (not a substring or prefix); a miss returns the whole resource with a 'not found' note, not an error. type defaults to 'reference' with template fallback.",
     args: {
-      name: tool.schema.string().optional().describe("Single reference name"),
+      name: tool.schema
+        .string()
+        .optional()
+        .describe("Single resource name; omit when using names[] or list."),
       names: tool.schema
         .array(tool.schema.string())
         .optional()
-        .describe("Multiple reference names (multi-load)"),
+        .describe("Multiple resource names for a multi-load; takes precedence over name."),
       type: tool.schema
         .enum(RESOURCE_TYPES)
         .optional()
-        .describe("Filter by type: reference or template"),
-      list: tool.schema.boolean().optional().describe("List available references"),
+        .describe("Filter by type: 'reference' or 'template'; defaults to reference with template fallback."),
+      list: tool.schema
+        .boolean()
+        .optional()
+        .describe("List available resource names instead of loading; combine with type to filter."),
       section: tool.schema
         .string()
         .optional()
-        .describe("Extract a specific ## section from the resource"),
+        .describe("Heading text to extract; must match the full heading exactly, case-insensitively."),
     },
     async execute(args): Promise<string> {
       try {

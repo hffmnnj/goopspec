@@ -55,8 +55,7 @@ function formatResult(result: DocumentSearchResult, index: number): string {
 export function createGoopSearchDocsTool(ctx: PluginContext): ToolDefinition {
   return tool({
     description:
-      "Search workflow documents and sections across all workflows. " +
-      "Plural filters (workflow_ids, doc_types, section_keys) use OR matching.",
+      "Search workflow documents and keyed sections by query text. WHEN TO USE: Find where a term appears before reading the whole doc; narrow by workflow, doc_type, section_key, or time window. WHEN NOT TO USE: goop_read_db / goop_read_section when you already know the doc or section key. RETURNS: Ranked results with source (document|section), workflow_id, doc_type, section_key, created_at, and a 160-char snippet; \"No ... found\" when empty. CAVEATS: Plural filters (workflow_ids, doc_types, section_keys) OR within each set — a result matching any value passes, widening not narrowing; filters AND across types. limit defaults to 20 (clamped 1-50); unknown doc_types list the valid set.",
     args: {
       query: tool.schema.string().describe("Search query"),
       workflow_id: tool.schema.string().optional().describe("Filter by workflow ID"),

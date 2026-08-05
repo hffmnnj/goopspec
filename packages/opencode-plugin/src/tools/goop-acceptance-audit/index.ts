@@ -103,11 +103,29 @@ function formatVerifications(workflowId: string, rows: VerificationRow[]): strin
 
 export function createGoopAcceptanceAuditTool(ctx: PluginContext): ToolDefinition {
   return tool({
-    description: "One-call acceptance gate audit combining blockers, verifications, and waves.",
+    description:
+      "Aggregate blockers, verifications, and wave rows for one workflow into one read-only snapshot. " +
+      "WHEN TO USE: The /goop-accept gate, or any readiness check combining blockers, verification evidence, and wave status. " +
+      "WHEN NOT TO USE: This aggregates; it does NOT verify — it reports recorded evidence as-is. Use goop-wave-verifier or goop-verifier to verify; goop_read_wave reads waves; goop_blocker manages lifecycle. " +
+      "RETURNS: A JSON-comment block with separate blockers, verifications, and waves sections. " +
+      "CAVEATS: workflow_id defaults to the active workflow. include_all_blockers defaults false (open only); true adds resolved. wave_ids filters verifications and waves only, NOT blockers. Read-only.",
     args: {
-      workflow_id: tool.schema.string().optional(),
-      wave_ids: tool.schema.array(tool.schema.number()).optional(),
-      include_all_blockers: tool.schema.boolean().optional(),
+      workflow_id: tool.schema
+        .string()
+        .optional()
+        .describe("Target workflow id; omit to audit the active workflow."),
+      wave_ids: tool.schema
+        .array(tool.schema.number())
+        .optional()
+        .describe(
+          "Optional filter narrowing the verifications and waves sections to these wave numbers; omit to include all. Does NOT filter the blockers section.",
+        ),
+      include_all_blockers: tool.schema
+        .boolean()
+        .optional()
+        .describe(
+          "Defaults false — the blockers section shows only open blockers. Set true to include resolved blockers as well.",
+        ),
     },
     async execute(
       args: {

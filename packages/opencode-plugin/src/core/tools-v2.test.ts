@@ -103,7 +103,10 @@ describe("registerToolsV2()", () => {
 
     expect(schema.type).toBe("object");
     expect(schema.properties).toEqual({
-      verbose: { type: "boolean" },
+      verbose: {
+        type: "boolean",
+        description: expect.any(String),
+      },
     });
   });
 
@@ -385,7 +388,7 @@ describe("convertToolArgsToJsonSchema() — argument descriptions survive V2 con
     const itemElement = itemsOf(prop(schema, "items"));
     const verificationElement = itemsOf(prop(itemElement, "verifications"));
     expect(prop(verificationElement, "wave_id").description).toBe(
-      "Internal wave row id (not wave_number)",
+      "Internal wave row id (not wave_number); omit to inherit the enclosing item's resolved wave row, supply to override.",
     );
   });
 

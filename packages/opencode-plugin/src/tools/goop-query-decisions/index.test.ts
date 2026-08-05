@@ -137,4 +137,71 @@ describe("goop_query_decisions tool", () => {
     expect(result).toContain("Rule 3 decision");
     expect(result).not.toContain("Observation entry");
   });
+
+  // ---------------------------------------------------------------------------
+  // Scoping contract: omitting workflow_id searches across ALL workflows.
+  // getDecisions adds no workflow_id clause when the field is absent, so the
+  // default is cross-workflow — NOT the active workflow. This is the easy
+  // mistake the description redirects callers away from.
+  // ---------------------------------------------------------------------------
+
+  it("omitting workflow_id searches across all workflows, not just the active one", async () => {
+    const adlTool = createGoopAdlTool(ctx);
+    await adlTool.execute(
+      {
+        action: "append",
+        type: "decision",
+        description: "Decision in default workflow",
+        entry_action: "recorded",
+      },
+      toolCtx,
+    );
+
+    // Seed a decision in a second workflow directly via the DB (goop_adl has
+    // no workflow_id argument and always writes to the active workflow).
+    ctx.db.insertDecision("second-wf", {
+      type: "decision",
+      description: "Decision in second workflow",
+      action: "recorded",
+    });
+
+    const queryTool = createGoopQueryDecisionsTool(ctx);
+
+    // No workflow_id: both workflows' decisions appear (cross-workflow default).
+    const crossResult = (await queryTool.execute({}, toolCtx)) as string;
+    expect(crossResult).toContain("Decision in default workflow");
+    expect(crossResult).toContain("Decision in second workflow");
+
+    // Scoping to the active workflow hides the other workflow's decisions.
+    const scopedResult = (await queryTool.execute({ workflow_id: "default" }, toolCtx)) as string;
+    expect(scopedResult).toContain("Decision in default workflow");
+    expect(scopedResult).not.toContain("Decision in second workflow");
+  });
+
+  it("rules[] takes precedence over a singular rule, and types[] over a singular type", async () => {
+    const adlTool = createGoopAdlTool(ctx);
+    await adlTool.execute(
+      { action: "append", type: "decision", description: "rule 2", entry_action: "a", rule: 2 },
+      toolCtx,
+    );
+    await adlTool.execute(
+      { action: "append", type: "observation", description: "rule 3 obs", entry_action: "b", rule: 3 },
+      toolCtx,
+    );
+
+    const queryTool = createGoopQueryDecisionsTool(ctx);
+
+    // rule points at 2, but rules:[3] wins and only rule-3 rows return.
+    const rulesResult = (await queryTool.execute({ rule: 2, rules: [3] }, toolCtx)) as string;
+    expect(rulesResult).toContain("rule 3 obs");
+    expect(rulesResult).not.toContain("Rule: 2");
+
+    // type points at decision, but types:["observation"] wins.
+    const typesResult = (await queryTool.execute(
+      { type: "decision", types: ["observation"] },
+      toolCtx,
+    )) as string;
+    expect(typesResult).toContain("rule 3 obs");
+    expect(typesResult).not.toContain("Rule: 2");
+  });
 });
