@@ -108,14 +108,11 @@ const HIGH_FRICTION_TOOLS: readonly string[] = [
   // goop_setup: 8 actions, each reading a different subset of 9 args, plus
   // a cross-action gitignoreGoopspec side effect and a scope arg that is
   // silently ignored — caller cannot first-try know which fields apply.
-  // goop_spec: 3 actions (read/list/validate) where file is read only by
-  // read and phase is ignored by all — mode contract is mandatory content.
   // goop_infer_intent: autoApply vs autoRun are separate mechanisms with
   // different gates (hard floor 0.85, threshold default 0.9, autoRun floor
   // 0.75), and a below-threshold result is never an error — the precise
   // confidence contract is load-bearing for safe use.
   "goop_setup",
-  "goop_spec",
   "goop_infer_intent",
   // Wave 5 Task 1: utility tools that shell out to external binaries.
   // ast_grep: three mutually exclusive modes (search / rewrite dry-run /
@@ -140,6 +137,24 @@ const HIGH_FRICTION_TOOLS: readonly string[] = [
   // the dispatch; every other sentence is also load-bearing. Description
   // lands at 787 chars — no padding, each section earns its place.
   "difftastic",
+  // Wave 5 Task 2: generate_image has the largest argument surface in the
+  // registry (17 args) plus a non-trivial cross-field contract: transparent
+  // background is png-only (rendered on green screen, keyed locally via
+  // chromakey), non-.png out and jpeg/webp outputFormat with transparent are
+  // rejected at validation, default output path and count-suffix behavior,
+  // and two dead arguments (mask, outputCompression) that must be documented
+  // as ignored. This cannot fit under 700 without dropping contract a caller
+  // needs to avoid a wasted credit spend or a validation rejection.
+  // Description lands at 1136 chars.
+  "generate_image",
+  // Wave 5 Task 2: goop_create_pr has a terminology gate that scans title,
+  // body, AND branch with different masking rules (code spans masked in
+  // title/body, never in branch), two severity levels with different
+  // behavior (error blocks, warn proceeds), and the reword-not-retry
+  // contract. The mandatory gate contract cannot fit under 700 without
+  // dropping a rule a caller needs to avoid repeated rejections.
+  // Description lands at 904 chars.
+  "goop_create_pr",
 ];
 
 /**
@@ -160,11 +175,12 @@ const HIGH_FRICTION_TOOLS: readonly string[] = [
  * is a tracked TODO, never a permanent exemption. An over-broad list silently
  * disables the gate, which is the worst outcome here, so the safety-net test
  * below rejects typos and duplicates in this list.
+ *
+ * Wave 5 Task 2 brought the final two tools (generate_image, goop_create_pr)
+ * into conformance. This list is now EMPTY: every tool in the registry is
+ * subject to every predicate.
  */
-const PENDING_CONFORMANCE: readonly string[] = [
-  "generate_image",
-  "goop_create_pr",
-];
+const PENDING_CONFORMANCE: readonly string[] = [];
 
 // ---- Predicates (pure; shared with the bad-fixture proofs) ---------------
 

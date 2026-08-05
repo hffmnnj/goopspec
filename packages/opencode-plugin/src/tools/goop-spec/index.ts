@@ -179,11 +179,11 @@ export function createGoopSpecTool(ctx: PluginContext): ToolDefinition {
   return tool({
     description:
       "Read, list, or validate the active workflow's SPEC.md and BLUEPRINT.md. " +
-      "WHEN TO USE: Inspect or validate the spec and blueprint for the active workflow. " +
-      "WHEN NOT TO USE: goop_read_db for other doc types (chronicle, handoff, requirements, research) or other workflows; goop_read_section for keyed sections. " +
-      "MODES: read returns SPEC.md and/or BLUEPRINT.md content (file selects which, default both). list enumerates every workflow's doc presence (file is ignored). validate checks required SPEC.md sections, must-have items, BLUEPRINT.md sections, and wave-plan existence (file is ignored). " +
-      "RETURNS: Markdown content (read), a workflow-and-doc inventory (list), or a pass/fail validation report (validate). " +
-      "CAVEATS: phase is declared but currently ignored by every action. Operates on the active workflow only; switch workflows via goop_state.",
+      "WHEN TO USE: Inspect or validate spec/blueprint for the active workflow. " +
+      "WHEN NOT TO USE: goop_read_db for other docs or workflows; goop_read_section for keyed sections. " +
+      "MODES: read returns SPEC.md and/or BLUEPRINT.md (file picks which, default both); list enumerates each workflow's docs; validate checks SPEC.md sections and must-haves, BLUEPRINT.md sections, and wave plan. " +
+      "RETURNS: Markdown content (read), a doc inventory (list), or a pass/fail report (validate). " +
+      "CAVEATS: file is read only by read; phase is ignored by every action. Active workflow only.",
     args: {
       action: tool.schema
         .enum(["read", "list", "validate"])
