@@ -20,7 +20,7 @@ import type { DocType } from "../../features/db/types.js";
 export function createGoopReadSectionTool(ctx: PluginContext): ToolDefinition {
   return tool({
     description:
-      "Read keyed sections of a workflow document from GoopSpecDB. WHEN TO USE: Load one section_key, several section_keys[], or — with neither key — every section for a doc_type. WHEN NOT TO USE: goop_read_db for whole documents; goop_search_docs to find sections by content across workflows. RETURNS: Section content (single) or sections under \"## {key}\" headings joined by \"---\"; a \"not found\" message names goop_write_section as the creator. CAVEATS: Sections and whole documents are separate stores — content written via goop_write_db is not returned here until goop_write_section creates a keyed section. doc_type is required.",
+      "Read keyed sections from GoopSpecDB. WHEN TO USE: Load one section_key, several section_keys[], or — with neither key — every section for a doc_type. WHEN NOT TO USE: goop_read_db for whole documents; goop_search_docs to find sections by content across workflows. MODES: single = section_key; batch = section_keys[]; all = omit both. If both keys are sent, section_keys[] wins. RETURNS: Section content (single) or sections under \"## {key}\" headings; a \"not found\" message names goop_write_section. CAVEATS: Sections and whole documents are separate stores — content written via goop_write_db is not returned here until goop_write_section creates a keyed section. doc_type is required.",
     args: {
       doc_type: tool.schema.enum(DOC_TYPES).describe("Document type to read sections from."),
       section_key: tool.schema

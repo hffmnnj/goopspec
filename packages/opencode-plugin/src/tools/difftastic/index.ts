@@ -122,18 +122,37 @@ function safeParseFile(stdout: string): DifftasticFile | undefined {
 export function createDifftasticTool(ctx: PluginContext): ToolDefinition {
   return tool({
     description:
-      "Structural (AST-aware) diff between two files using difftastic. " +
-      "Reports a `meaningfully_changed` boolean derived from difftastic's exit code.",
+      "Structural (AST-aware) diff between two files via the external difftastic CLI. " +
+      "WHEN TO USE: Decide whether a change is substantive vs. whitespace or formatting. " +
+      "WHEN NOT TO USE: git diff for line diffs; ast_grep to find or rewrite patterns across files. " +
+      "MODES: full diff (default) returns meaningfully_changed plus a per-chunk summary; checkOnly:true returns just the boolean. " +
+      "RETURNS: A meaningfully_changed line (from difftastic's exit code) and, unless checkOnly, the structural summary. " +
+      "CAVEATS: old/new alias oldPath/newPath and two paths are runtime-required though all four args are schema-optional (see per-arg details). A missing difft binary returns an install-hint string, not a throw and not a 'no differences' result; set binaryPaths.difft in goopspec.json to override PATH.",
     args: {
-      old: tool.schema.string().optional().describe("Original file path (alias for oldPath)"),
-      oldPath: tool.schema.string().optional().describe("Original file path"),
-      new: tool.schema.string().optional().describe("Changed file path (alias for newPath)"),
-      newPath: tool.schema.string().optional().describe("Changed file path"),
+      old: tool.schema.string().optional().describe(
+        "Original file path; alias for oldPath. old wins over oldPath when both are supplied. " +
+          "At least one of old/oldPath is runtime-required.",
+      ),
+      oldPath: tool.schema.string().optional().describe(
+        "Original file path; canonical name for old. " +
+          "At least one of old/oldPath is runtime-required.",
+      ),
+      new: tool.schema.string().optional().describe(
+        "Changed file path; alias for newPath. new wins over newPath when both are supplied. " +
+          "At least one of new/newPath is runtime-required.",
+      ),
+      newPath: tool.schema.string().optional().describe(
+        "Changed file path; canonical name for new. " +
+          "At least one of new/newPath is runtime-required.",
+      ),
       checkOnly: tool.schema
         .boolean()
         .optional()
         .default(false)
-        .describe("Fast boolean-only check; skips full diff output"),
+        .describe(
+          "Fast boolean-only check; skips the full diff output and returns just " +
+            "meaningfully_changed. Defaults to false.",
+        ),
     },
     async execute(
       args: {

@@ -254,6 +254,44 @@ describe("memory_search tool", () => {
     expect(result).toContain("Memory Search Results");
   });
 
+  it("clamps a sub-1 limit up to 1 rather than rejecting it", async () => {
+    const tool = createMemorySearchTool(ctx);
+    const result = await tool.execute({ query: "auth", limit: 0 }, toolCtx);
+
+    expect(result).toContain("Memory Search Results");
+  });
+
+  it("returns no results for an empty or whitespace query", async () => {
+    const tool = createMemorySearchTool(ctx);
+    const result = await tool.execute({ query: "   " }, toolCtx);
+
+    expect(result).toContain('No memories found matching: "   "');
+  });
+
+  // -------------------------------------------------------------------------
+  // MH11/MH20: filters narrow by design.
+  // A record that matches the query text but lacks the filter is excluded.
+  // This is the intended AND-combination contract, not a ranking bug. Pinned
+  // here at the tool level against the mock, and at the real-manager level
+  // (with FTS5) in features/memory/index.test.ts so both semantics agree.
+  // -------------------------------------------------------------------------
+
+  it("a concept filter excludes a query match that lacks the concept (tool level)", async () => {
+    const tool = createMemorySearchTool(ctx);
+    // "Refactor auth middleware" matches the "auth" query but its concepts
+    // are ["auth","refactor"]; "Auth tests flaky on CI" also matches "auth"
+    // but its concepts are ["testing","ci"].
+    const unfiltered = await tool.execute({ query: "auth" }, toolCtx);
+    expect(unfiltered).toContain("Refactor auth middleware");
+    expect(unfiltered).toContain("Auth tests flaky");
+
+    // Restricting to the "refactor" concept drops the flaky-tests record even
+    // though it still matches the query text.
+    const filtered = await tool.execute({ query: "auth", concepts: ["refactor"] }, toolCtx);
+    expect(filtered).toContain("Refactor auth middleware");
+    expect(filtered).not.toContain("Auth tests flaky");
+  });
+
   // -------------------------------------------------------------------------
   // Output formatting
   // -------------------------------------------------------------------------

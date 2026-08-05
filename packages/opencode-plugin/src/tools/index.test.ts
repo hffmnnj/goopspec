@@ -94,6 +94,67 @@ const HIGH_FRICTION_TOOLS: readonly string[] = [
   // it) plus a mandatory atomicity-history caveat. Parity with the existing
   // allowlist, not a loosened bar; the description lands at 766 chars.
   "goop_save_note",
+  // Wave 4 Task 1: memory_forget is destructive and irreversible, with two
+  // mutually exclusive modes (id vs query) gated by different rules: id
+  // deletes immediately and ignores confirm; query needs confirm:true to
+  // commit. The mandatory content includes the confirm-gates-query-only
+  // rule, the preview-vs-commit workflow, AND the footgun that the preview
+  // caps at 20 rows while confirmed deletion searches up to 100 — a caller
+  // cannot use this safely first-try without all three, and together they
+  // cannot fit under 700. Description lands at 1074 chars.
+  "memory_forget",
+  // Wave 4 Task 2: action-dispatch tools whose action-to-argument legality
+  // matrix cannot fit under 700 without dropping a rule a caller needs.
+  // goop_setup: 8 actions, each reading a different subset of 9 args, plus
+  // a cross-action gitignoreGoopspec side effect and a scope arg that is
+  // silently ignored — caller cannot first-try know which fields apply.
+  // goop_infer_intent: autoApply vs autoRun are separate mechanisms with
+  // different gates (hard floor 0.85, threshold default 0.9, autoRun floor
+  // 0.75), and a below-threshold result is never an error — the precise
+  // confidence contract is load-bearing for safe use.
+  "goop_setup",
+  "goop_infer_intent",
+  // Wave 5 Task 1: utility tools that shell out to external binaries.
+  // ast_grep: three mutually exclusive modes (search / rewrite dry-run /
+  // rewrite apply) plus a conditional argument — apply:true without rewrite
+  // is a documented no-op (the -U flag is only appended inside the rewrite
+  // branch). The mode contract and the apply-without-rewrite rule together
+  // cannot fit under 700 without dropping a rule a caller needs to avoid an
+  // accidental mutation, or to achieve one on purpose.
+  // scip: action-dependent required fields — symbol is required for
+  // definitions/references/implementations and ignored by index, and each
+  // action resolves a different binary (scip vs scip-typescript). The
+  // action-to-argument and action-to-binary matrix is mandatory content.
+  "ast_grep",
+  "scip",
+  // Wave 5 Task 1: difftastic has two modes (full diff / checkOnly) plus an
+  // alias-pair cross-field contract (old/oldPath and new/newPath — all four
+  // schema-optional, two runtime-required). The load-bearing content that
+  // pushes it past 700 is the missing-binary distinction the workflow
+  // dispatch flags as mandatory: a missing difft binary returns an
+  // install-hint string that a caller MUST be able to distinguish from a real
+  // "no differences" result. Dropping that sentence to fit 700 would violate
+  // the dispatch; every other sentence is also load-bearing. Description
+  // lands at 787 chars — no padding, each section earns its place.
+  "difftastic",
+  // Wave 5 Task 2: generate_image has the largest argument surface in the
+  // registry (17 args) plus a non-trivial cross-field contract: transparent
+  // background is png-only (rendered on green screen, keyed locally via
+  // chromakey), non-.png out and jpeg/webp outputFormat with transparent are
+  // rejected at validation, default output path and count-suffix behavior,
+  // and two dead arguments (mask, outputCompression) that must be documented
+  // as ignored. This cannot fit under 700 without dropping contract a caller
+  // needs to avoid a wasted credit spend or a validation rejection.
+  // Description lands at 1136 chars.
+  "generate_image",
+  // Wave 5 Task 2: goop_create_pr has a terminology gate that scans title,
+  // body, AND branch with different masking rules (code spans masked in
+  // title/body, never in branch), two severity levels with different
+  // behavior (error blocks, warn proceeds), and the reword-not-retry
+  // contract. The mandatory gate contract cannot fit under 700 without
+  // dropping a rule a caller needs to avoid repeated rejections.
+  // Description lands at 904 chars.
+  "goop_create_pr",
 ];
 
 /**
@@ -114,26 +175,12 @@ const HIGH_FRICTION_TOOLS: readonly string[] = [
  * is a tracked TODO, never a permanent exemption. An over-broad list silently
  * disables the gate, which is the worst outcome here, so the safety-net test
  * below rejects typos and duplicates in this list.
+ *
+ * Wave 5 Task 2 brought the final two tools (generate_image, goop_create_pr)
+ * into conformance. This list is now EMPTY: every tool in the registry is
+ * subject to every predicate.
  */
-const PENDING_CONFORMANCE: readonly string[] = [
-  "ast_grep",
-  "background_cancel",
-  "background_command",
-  "background_status",
-  "difftastic",
-  "generate_image",
-  "goop_create_pr",
-  "goop_get_global_config",
-  "goop_infer_intent",
-  "goop_setup",
-  "goop_spec",
-  "goop_status",
-  "memory_forget",
-  "memory_save",
-  "memory_search",
-  "scip",
-  "slashcommand",
-];
+const PENDING_CONFORMANCE: readonly string[] = [];
 
 // ---- Predicates (pure; shared with the bad-fixture proofs) ---------------
 
@@ -141,10 +188,8 @@ const PENDING_CONFORMANCE: readonly string[] = [
  * Section labels that are unconditionally mandatory for every tool
  * description, per `tool-reference.md`.
  *
- * `MODES:` and `CAVEATS:` are intentionally NOT in this list: the standard
- * makes them conditional ("mandatory when the tool has more than one mode"
- * / "mandatory when applicable"), and the condition cannot be detected
- * mechanically without a per-tool mode inventory. The `Purpose` section has
+ * `MODES:` and `CAVEATS:` are intentionally NOT in this list because their
+ * applicability is enforced by the explicit per-tool inventory below. The `Purpose` section has
  * no label (it is the opening sentence), so it is proxied by the
  * 120-character length floor rather than a label match. These scope
  * decisions are deliberate and documented; do not "strengthen" the gate by
@@ -157,9 +202,77 @@ const MANDATORY_SECTION_LABELS = [
   "RETURNS:",
 ] as const;
 
+type ConditionalSectionRequirements = Readonly<{
+  modes: boolean;
+  caveats: boolean;
+}>;
+
+/**
+ * Implementation-based conditional-section inventory. Every registered tool
+ * must be classified here: new tools never inherit an exemption by default.
+ *
+ * `modes` is true for tools with action dispatch, distinct single/batch or
+ * selected/all read forms, mutually exclusive payloads, or an opt-in path
+ * that changes execution. `caveats` is true where the implementation has
+ * side effects, defaults, precedence, atomicity, or other non-obvious rules.
+ */
+const CONDITIONAL_SECTION_REQUIREMENTS: Readonly<
+  Record<(typeof EXPECTED_TOOL_KEYS)[number], ConditionalSectionRequirements>
+> = {
+  goop_status: { modes: false, caveats: true },
+  goop_state: { modes: true, caveats: true },
+  goop_spec: { modes: true, caveats: true },
+  goop_adl: { modes: true, caveats: true },
+  goop_checkpoint: { modes: true, caveats: true },
+  goop_compact: { modes: false, caveats: true },
+  goop_setup: { modes: true, caveats: true },
+  goop_get_global_config: { modes: false, caveats: true },
+  goop_reference: { modes: true, caveats: true },
+  goop_read_db: { modes: true, caveats: true },
+  goop_write_db: { modes: true, caveats: true },
+  goop_save_note: { modes: true, caveats: true },
+  goop_search_notes: { modes: true, caveats: true },
+  goop_acceptance_audit: { modes: false, caveats: true },
+  goop_append_chronicle: { modes: true, caveats: true },
+  goop_boot: { modes: false, caveats: true },
+  goop_create_pr: { modes: true, caveats: true },
+  goop_write_section: { modes: true, caveats: true },
+  goop_read_section: { modes: true, caveats: true },
+  goop_write_wave: { modes: true, caveats: true },
+  goop_read_wave: { modes: true, caveats: true },
+  goop_query_decisions: { modes: false, caveats: true },
+  goop_blocker: { modes: true, caveats: true },
+  goop_search_docs: { modes: false, caveats: true },
+  goop_timeline: { modes: false, caveats: true },
+  goop_dashboard: { modes: false, caveats: true },
+  goop_infer_intent: { modes: true, caveats: true },
+  memory_save: { modes: true, caveats: true },
+  memory_search: { modes: true, caveats: true },
+  memory_forget: { modes: true, caveats: true },
+  slashcommand: { modes: false, caveats: true },
+  ast_grep: { modes: true, caveats: true },
+  difftastic: { modes: true, caveats: true },
+  scip: { modes: true, caveats: true },
+  generate_image: { modes: true, caveats: true },
+  background_command: { modes: false, caveats: true },
+  background_status: { modes: true, caveats: true },
+  background_cancel: { modes: false, caveats: true },
+};
+
 /** Returns the mandatory section labels absent from a tool description. */
 function missingMandatorySections(description: string): string[] {
   return MANDATORY_SECTION_LABELS.filter((label) => !description.includes(label));
+}
+
+/** Returns applicable conditional section labels absent from a description. */
+function missingConditionalSections(
+  description: string,
+  requirements: ConditionalSectionRequirements,
+): string[] {
+  const missing: string[] = [];
+  if (requirements.modes && !description.includes("MODES:")) missing.push("MODES:");
+  if (requirements.caveats && !description.includes("CAVEATS:")) missing.push("CAVEATS:");
+  return missing;
 }
 
 interface DescriptionLengthViolation {
@@ -341,6 +454,11 @@ describe("tool-description standard conformance gate", () => {
     }
   });
 
+  it("classifies every registered tool for conditional sections", () => {
+    const tools = createTools(ctx);
+    expect(Object.keys(CONDITIONAL_SECTION_REQUIREMENTS).sort()).toEqual(Object.keys(tools).sort());
+  });
+
   // The live gate. Non-pending tools must satisfy every predicate; pending
   // tools must still exist in the registry. All violations are collected and
   // reported in one shot so a wave fixing a tool sees every problem at once.
@@ -360,6 +478,18 @@ describe("tool-description standard conformance gate", () => {
       const missing = missingMandatorySections(desc);
       if (missing.length > 0) {
         violations.push(`${name}: missing mandatory sections — ${missing.join(", ")}`);
+      }
+
+      if (!(name in CONDITIONAL_SECTION_REQUIREMENTS)) {
+        violations.push(`${name}: missing conditional-section classification`);
+        continue;
+      }
+      const conditionalMissing = missingConditionalSections(
+        desc,
+        CONDITIONAL_SECTION_REQUIREMENTS[name as keyof typeof CONDITIONAL_SECTION_REQUIREMENTS],
+      );
+      if (conditionalMissing.length > 0) {
+        violations.push(`${name}: missing applicable conditional sections — ${conditionalMissing.join(", ")}`);
       }
 
       const allowlisted = HIGH_FRICTION_TOOLS.includes(name);
@@ -439,6 +569,18 @@ describe("conformance predicates reject non-conformant fixtures", () => {
     expect(descriptionLengthViolation(CONFORMANT_DESCRIPTION, true)).toBeNull();
     expect(collectUndescribedArgs(CLEAN_SCHEMA)).toEqual([]);
     expect(collectEmptyStringEndorsements(CLEAN_SCHEMA)).toEqual([]);
+  });
+
+  it("a classified tool missing an applicable conditional section is flagged", () => {
+    expect(missingConditionalSections(CONFORMANT_DESCRIPTION, { modes: true, caveats: true })).toEqual([
+      "MODES:",
+    ]);
+    expect(
+      missingConditionalSections(CONFORMANT_DESCRIPTION.replace("CAVEATS:", "DETAILS:"), {
+        modes: false,
+        caveats: true,
+      }),
+    ).toEqual(["CAVEATS:"]);
   });
 
   it("a description missing a mandatory section is flagged", () => {
