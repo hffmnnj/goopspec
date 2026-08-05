@@ -103,7 +103,10 @@ describe("registerToolsV2()", () => {
 
     expect(schema.type).toBe("object");
     expect(schema.properties).toEqual({
-      verbose: { type: "boolean" },
+      verbose: {
+        type: "boolean",
+        description: expect.any(String),
+      },
     });
   });
 

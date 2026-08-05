@@ -77,9 +77,14 @@ function formatWarnings(warnings: ReportViolation[]): string {
 export function createGoopCreatePrTool(ctx: PluginContext): ToolDefinition {
   return tool({
     description:
-      "Create a GitHub PR with a mandatory GoopSpec terminology gate. " +
-      "Scans title, body, and branch for internal terms; blocks on violations. " +
-      "Merge method is applied at merge time and defaults to merge-commit.",
+      "Create a GitHub pull request via `gh pr create`, gated by a sanitizer that blocks public exposure of GoopSpec-internal terms. " +
+      "WHEN TO USE: Opening a PR from a GoopSpec feature branch once work is complete. " +
+      "WHEN NOT TO USE: For gh invocations that must bypass the gate, call gh directly — this tool is the only path that enforces it. " +
+      "MODES: draft omitted/false creates a ready-for-review PR; draft:true adds --draft and creates a draft PR. " +
+      "RETURNS: On success, a PR Created block with the GitHub URL. On violation, a PR Creation Blocked report listing each match with line/column and a replacement. On gh failure, the exit code and stderr. " +
+      "CAVEATS: The gate scans title, body, AND branch. Error-severity terms block; warn-severity terms proceed with a notice. " +
+      "Inline and fenced code spans in title/body are masked before scanning, but branch names are never masked. " +
+      "The fix is rewording, not retrying (e.g. wave to phase, ADL to decision log). No merge-method argument; merge method is a repo setting on GitHub.",
     args: {
       title: tool.schema.string().describe("PR title"),
       body: tool.schema.string().describe("PR body/description"),

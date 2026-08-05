@@ -153,9 +153,19 @@ export function formatStatus(
 
 export function createGoopStatusTool(ctx: PluginContext): ToolDefinition {
   return tool({
-    description: "Show current GoopSpec workflow state, phase, progress, and next steps.",
+    description:
+      "Show current GoopSpec workflow state, phase, progress, and next steps. " +
+      "WHEN TO USE: Orient at the start of any turn on the active workflow, current phase, flags, and the next conductor action. " +
+      "WHEN NOT TO USE: goop_read_wave for wave or task detail; goop_dashboard for cross-workflow views; goop_read_db to load SPEC or BLUEPRINT prose; goop_setup(action:\"status\") for setup and config status. " +
+      "RETURNS: A markdown status block with project, workflow id, phase, mode, flags, a wave progress bar, phase guidance, and the next slash command. " +
+      "CAVEATS: Read-only and side-effect free; safe to call any time. verbose is declared but currently ignored — output is identical whether it is set or omitted.",
     args: {
-      verbose: tool.schema.boolean().optional(),
+      verbose: tool.schema
+        .boolean()
+        .optional()
+        .describe(
+          "Declared but currently ignored; the output is identical whether this is set or omitted.",
+        ),
     },
     async execute(_args: { verbose?: boolean }, _context: ToolContext): Promise<string> {
       try {

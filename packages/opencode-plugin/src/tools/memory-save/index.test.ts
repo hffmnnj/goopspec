@@ -6,6 +6,7 @@ import {
   createMockToolContext,
   setupTestEnvironment,
 } from "../../test-utils.js";
+import { createTools } from "../index.js";
 import { createMemorySaveTool } from "./index.js";
 
 describe("memory_save tool", () => {
@@ -37,6 +38,21 @@ describe("memory_save tool", () => {
     expect(result).toContain("**ID:** 1");
     expect(result).toContain("**Type:** observation");
     expect(result).toContain("**Importance:** 5/10");
+  });
+
+  it("coalesces an injected empty title to absent at the shared tool boundary", async () => {
+    const tools = createTools(ctx);
+    const save = ctx.memory.save;
+    let saveCalled = false;
+    ctx.memory.save = async (input) => {
+      saveCalled = true;
+      return save(input);
+    };
+
+    const result = await tools.memory_save.execute({ title: "", content: "must not persist" }, toolCtx);
+
+    expect(result).toContain("Error saving memory");
+    expect(saveCalled).toBe(false);
   });
 
   it("saves with explicit type, concepts, facts, sourceFiles", async () => {
@@ -112,6 +128,12 @@ describe("memory_save tool", () => {
 
   it("saves a decision with reasoning and alternatives folded into content", async () => {
     const tool = createMemorySaveTool(ctx);
+    const save = ctx.memory.save;
+    let receivedContent: string | undefined;
+    ctx.memory.save = async (input) => {
+      receivedContent = input.content;
+      return save(input);
+    };
     const result = await tool.execute(
       {
         title: "Use PostgreSQL for storage",
@@ -130,6 +152,7 @@ describe("memory_save tool", () => {
     expect(result).toContain("**Importance:** 7/10");
     expect(result).toContain("**Reasoning:** included");
     expect(result).toContain("**Alternatives:** 3 considered");
+    expect(receivedContent).toBe("Chose PostgreSQL as the primary database.");
   });
 
   it("auto-generates facts for decisions when none supplied", async () => {
@@ -147,9 +170,9 @@ describe("memory_save tool", () => {
     // Verify the mock memory received auto-generated facts
     const searchResults = await ctx.memory.search({ query: "jose" });
     expect(searchResults.length).toBe(1);
-    // The stored content should include the alternatives section
-    expect(searchResults[0].memory.content).toContain("## Alternatives Considered");
-    expect(searchResults[0].memory.content).toContain("- jsonwebtoken");
+    // The lightweight test manager stores the raw tool payload; composition is
+    // covered by the concrete manager test.
+    expect(searchResults[0].memory.content).toBe("Selected jose library.");
   });
 
   it("preserves explicit facts for decisions", async () => {
@@ -256,6 +279,38 @@ describe("memory_save tool", () => {
     );
 
     expect(result).toContain("Error: Title must be 100 characters or less");
+  });
+
+  // -------------------------------------------------------------------------
+  // Graceful degradation: a failed write surfaces as id -1, not a throw.
+  // The memory manager degrades to a synthetic fallbackEntry (id: -1) when
+  // the DB write fails, so the tool still returns a success-shaped message.
+  // A caller must check the returned id to know whether the record persisted.
+  // -------------------------------------------------------------------------
+
+  it("surfaces a failed write as id -1 rather than throwing", async () => {
+    const degradedCtx = createMockPluginContext({ testDir: "/tmp/broken" });
+    // Mimic the real manager's graceful-degradation return (fallbackEntry).
+    degradedCtx.memory.save = async (input) => ({
+      id: -1,
+      type: input.type,
+      title: input.title,
+      content: input.content,
+      facts: input.facts,
+      concepts: input.concepts,
+      sourceFiles: input.sourceFiles,
+      importance: input.importance ?? 5,
+      createdAt: Date.now(),
+    });
+
+    const tool = createMemorySaveTool(degradedCtx);
+    const result = await tool.execute(
+      { title: "Fails to persist", content: "Should degrade gracefully." },
+      toolCtx,
+    );
+
+    // The tool still reports success-shaped output, but the id signals failure.
+    expect(result).toContain("**ID:** -1");
   });
 
   // -------------------------------------------------------------------------

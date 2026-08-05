@@ -65,6 +65,28 @@ Runtime errors for invalid argument combinations name the tool, the offending fi
 
 Executors and wave verifiers own reporting tool friction. Every executor and verifier return must include a `FRICTION` section reporting every instance where a GoopSpec tool call failed, behaved unexpectedly, required a retry, or where a tool's schema or description misled the caller — including the exact argument involved and what the schema should have said. If no friction occurred, write "none". Incidents are logged to ADL and Field Notes and mapped to traced amendments through the deviation protocol. **This is the single authoritative statement of friction-reporting ownership; other documents point here.**
 
+### Empty-string argument coalescing
+
+Tool-call serialization in some hosts injects empty strings (`""`) into argument payloads the caller never authored — most often into status and mode-selecting fields, including inside nested `task_updates[]` entries. An empty string is never a legitimate value for those fields, but it arrives as a *present* value and defeats the caller's intent: a mode conflict the caller never created, an "invalid status" rejection, or `""` stored as a real value. This was confirmed in the field: rewriting descriptions to say "omit, do not pass an empty string" did not stop the next agent from failing the same way, because the empty string is injected below the level any description can reach.
+
+At the single shared tool-input boundary (`createTools` in `src/tools/index.ts`, which both the V1 and V2 registration paths consume), an exact empty string is treated as absent (omitted) for every field where empty has no legitimate meaning, recursively through arrays and nested objects, before any tool logic runs. Only exact `""` is affected — `null`, `undefined`, `0`, `false`, `[]`, `{}`, and whitespace-only strings pass through untouched (a whitespace-only string may be intentional content). A non-empty value is never dropped.
+
+A small, explicit set of **tool-field pairs** is exempt, because for those pairs an empty string is a documented, intentional operation and coalescing it would convert that operation into a silent no-op — the same failure class the boundary exists to eliminate. The policy lives in `EMPTY_STRING_LOAD_BEARING_FIELDS_BY_TOOL` in `packages/opencode-plugin/src/shared/coalesce.ts`; it is keyed by canonical tool name first, then field name:
+
+| Field | Tools | Meaning of empty |
+|-------|-------|------------------|
+| `new_string` | `goop_write_db`, `goop_write_section`, `goop_save_note` | Delete the matched text. |
+| `old_string` | `goop_write_db`, `goop_write_section`, `goop_save_note` | Activate patch mode on presence alone (documented in `shared/write-mode.ts`). |
+| `pr_url` | `goop_write_wave` (top-level and `items[]`) | Clear the stored PR URL. |
+| `pr_branch` | `goop_write_wave` (top-level and `items[]`) | Clear the stored PR branch. |
+| `title` | `goop_write_wave` (top-level and `items[]`) | Clear the stored wave title (same overwrite-with-empty contract as `pr_url`/`pr_branch`). |
+
+Tool scoping is deliberate: a field name alone never grants an exemption. For example, `title:""` is protected for `goop_write_wave` but coalesces to absent for `memory_save`, `goop_save_note`, and `goop_create_pr`. A new tool receives no exemption by default; add a tool-field pair only after confirming that empty is a documented, load-bearing operation and testing that behavior.
+
+`content` is deliberately **not** exempt: an empty content has no legitimate meaning in a single-mode write, and exempting it would let an injected `content:""` silently destroy a document. Coalescing it to absent produces a loud `none`-mode error instead of a destructive wipe; in batch mode an empty `content` is already a neutral placeholder and is unaffected.
+
+Callers should still omit fields they do not intend rather than rely on coalescing — the boundary exists to neutralize injected artifacts a caller cannot prevent, not to license passing empty strings deliberately.
+
 ## Batching cheat sheet
 
 The fastest mental model is: if the tool has a plural/batch argument (`doc_types`, `wave_numbers`, `section_keys`, `items`, `entries`, `task_updates`), use it. Preferring batch/plural forms over repeated single calls is the single biggest tool-call efficiency win available.
@@ -107,7 +129,7 @@ The fastest mental model is: if the tool has a plural/batch argument (`doc_types
 | `goop_blocker` | `action: "open" \| "resolve" \| "list"`, `description?`, `severity?`, `wave_id?`, `id?`, `resolution?`, `status?`, `workflow_id?`, `items?: {action, description?, severity?, wave_id?, id?, resolution?, status?, workflow_id?}[]` | `goop_blocker({ action: "open", description: "CI token expired", severity: "high", wave_id: 2 })` |
 | `goop_acceptance_audit` | `workflow_id?`, `wave_ids?: number[]`, `include_all_blockers?: boolean` | `goop_acceptance_audit({ wave_ids: [1, 2], include_all_blockers: true })` |
 
-`goop_write_wave`'s `verifications`/`traceability` fields replace the retired standalone `goop_record_verification` and `goop_write_traceability` tools — their behavior is fully absorbed as inline args. Available alongside `task_updates` (processed atomically in one transaction; if any task update fails, verifications and traceability are rolled back too). Not available alongside `items` batch mode.
+`goop_write_wave`'s `verifications`/`traceability` fields replace the retired standalone `goop_record_verification` and `goop_write_traceability` tools — their behavior is fully absorbed as inline args. Available alongside `task_updates` (processed atomically in one transaction; if any task update fails, verifications and traceability are rolled back too). With `items[]` they are supplied **per-item** inside each item, not at the top level — supplying top-level `verifications`/`traceability` alongside `items[]` is rejected, because those payloads would otherwise be silently dropped.
 
 `goop_acceptance_audit` replaces the retired `goop_read_verifications` and `goop_read_waves` tools at the accept gate, plus blockers. Returns combined `{blockers, verifications, waves}` in a JSON comment.
 
@@ -200,7 +222,9 @@ When `false` or absent, only `memory.db` results are returned, identical to the 
 
 | Tool | Arguments | Example |
 |------|-----------|---------|
-| `generate_image` | `prompt` (required), `out`, `images[]`, `model`, `size`, `quality`, `outputFormat`, `background`, `count`, `inputFidelity`, `timeout`, `dryRun`, `authFile`, `action`, `moderation`, `outputCompression`, `detail`, `mask`, `allowRefresh` | `generate_image({ prompt: "A serene mountain landscape at sunset", out: "docs/hero.png", count: 2 })` |
+| `generate_image` | `prompt` (required), `out`, `images[]`, `size`, `quality`, `outputFormat`, `background`, `count`, `timeout`, `dryRun`, `authFile`, `action`, `moderation`, `outputCompression`, `detail`, `mask`, `allowRefresh` | `generate_image({ prompt: "A serene mountain landscape at sunset", out: "docs/hero.png", count: 2 })` |
+
+`mask` and `outputCompression` are declared but not read by the tool — supplying them has no effect (documented in the emitted schema, the authority on this tool's arguments).
 
 Generates images using the user's existing ChatGPT subscription OAuth credentials — no API key required. Images default to `.goopspec/generated-images/`; pass an explicit `out` path to place an asset elsewhere. For prompting technique, see `goop_reference({ name: "image-prompting" })`.
 
@@ -211,7 +235,7 @@ The following tools and extended arguments reduce multi-call sequences to single
 | Pattern | Replaces | How |
 |---------|----------|------|
 | `goop_boot` | 4-5-call agent boot (read docs + search notes + search memory + load references) | Single call returns all requested blocks. Documents require explicit `doc_types` — no default. Wave context is fetched separately via `goop_read_wave`. |
-| `goop_write_wave` + `verifications`/`traceability` | Retired `goop_record_verification`/`goop_write_traceability` | Side-payloads run sequentially inside the same `execute()`. Available alongside `task_updates` (atomic transaction); not available in `items` batch mode. |
+| `goop_write_wave` + `verifications`/`traceability` | Retired `goop_record_verification`/`goop_write_traceability` | Side-payloads run sequentially inside the same `execute()`. Available alongside `task_updates` (atomic transaction); with `items[]` they are supplied per-item inside each item, not at the top level (top-level side payloads alongside `items[]` are rejected, not dropped). |
 | `goop_infer_intent` + `autoApply` | Manual infer-then-act two-call flow for `create-workflow`/`transition` | Opt-in (`autoApply: true`), confidence-gated (threshold `0.9`, minimum `0.85`), non-destructive-only. Returns `mutation` in result. |
 | `goop_append_chronicle` + `alsoLogAdl`/`alsoSaveMemory` | Separate `goop_adl`/`memory_save` calls alongside a chronicle entry | Best-effort sequential writes with partial-failure reporting. Not available in `entries` batch mode. |
 | `goop_acceptance_audit` | Retired `goop_read_verifications`/`goop_read_waves` + blockers at the accept gate | Single read-only call returns combined `{blockers, verifications, waves}`. |

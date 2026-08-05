@@ -155,25 +155,33 @@ function shapeDryRunOutput(
 export function createGenerateImageTool(ctx: PluginContext): ToolDefinition {
   return tool({
     description:
-      "Generate images with ChatGPT image models from a text prompt. " +
-      "Use this when the user asks for a new image, an edit of an existing image, " +
-      "or a variation conditioned on reference images. Supports custom sizes, " +
-      "formats, quality, background, and moderation settings. Returns the absolute " +
-      "paths of files written to the project directory.",
+      "Generate images with the gpt-image-2 model from a text prompt, optionally conditioned on up to 5 reference images. " +
+      "WHEN TO USE: New image, image edit, or variation on reference images. " +
+      "WHEN NOT TO USE: To inspect an existing image (use the host Read tool); to preview without spending credits (use dryRun). " +
+      "MODES: dryRun returns the constructed request shape (bearer token redacted) and writes nothing; otherwise sends the request and writes files. " +
+      "RETURNS: On success, the model, absolute paths of written files, any revised prompt, and (for transparent requests) the green-screen note. On failure, a typed error. " +
+      "CAVEATS: Uses ChatGPT subscription OAuth (no API key); each non-dryRun call spends credits. " +
+      "Transparent output is png-only: gpt-image-2 has no native alpha, so it is rendered on green screen and keyed to png locally; non-.png out and jpeg/webp outputFormat with background:transparent are rejected at validation. " +
+      "Default path: <projectDir>/.goopspec/generated-images/<slug>-<ts>.<ext>; count > 1 adds -N before the extension. " +
+      "mask and outputCompression are declared but not read by the tool; supplying them has no effect.",
     args: {
       prompt: tool.schema.string().describe("Text prompt describing the desired image"),
       out: tool.schema
         .string()
         .optional()
         .describe(
-          "Output file path; relative paths are resolved against the project root. " +
-            "When count > 1, a '-1', '-2', ... suffix is inserted before the extension.",
+          "Output file path; relative paths resolve against the project root. " +
+            "When omitted, files land at <projectDir>/.goopspec/generated-images/<slug>-<ts>.<ext>. " +
+            "When count > 1, a '-1', '-2', ... suffix is inserted before the extension. " +
+            "Must end in .png when background is transparent (chromakey always encodes png).",
         ),
       images: tool.schema
         .array(tool.schema.string())
         .max(MAX_INPUT_IMAGES)
         .optional()
-        .describe("Up to 5 reference image paths to condition or edit generation on"),
+        .describe(
+          "Up to 5 reference image paths to condition or edit generation on (use with action:edit).",
+        ),
       size: tool.schema
         .string()
         .optional()
@@ -188,11 +196,17 @@ export function createGenerateImageTool(ctx: PluginContext): ToolDefinition {
       outputFormat: tool.schema
         .string()
         .optional()
-        .describe(`Output format. Allowed: ${OUTPUT_FORMATS.join(", ")}`),
+        .describe(
+          `Output format. Allowed: ${OUTPUT_FORMATS.join(", ")}. ` +
+            "jpeg and webp are rejected when background is transparent (png-only).",
+        ),
       background: tool.schema
         .string()
         .optional()
-        .describe(`Background treatment. Allowed: ${BACKGROUNDS.join(", ")}`),
+        .describe(
+          `Background treatment. Allowed: ${BACKGROUNDS.join(", ")}. ` +
+            "transparent is png-only and delivered via a local chromakey step.",
+        ),
       count: tool.schema
         .number()
         .int()
@@ -229,7 +243,9 @@ export function createGenerateImageTool(ctx: PluginContext): ToolDefinition {
         .min(0)
         .max(100)
         .optional()
-        .describe("Output compression level (0-100) — currently unused by the backend"),
+        .describe(
+          "Declared but not read by the tool; supplying it has no effect.",
+        ),
       detail: tool.schema
         .string()
         .optional()
@@ -237,7 +253,7 @@ export function createGenerateImageTool(ctx: PluginContext): ToolDefinition {
       mask: tool.schema
         .string()
         .optional()
-        .describe("Mask image path — currently unused by the backend"),
+        .describe("Declared but not read by the tool; supplying it has no effect."),
       allowRefresh: tool.schema
         .boolean()
         .optional()

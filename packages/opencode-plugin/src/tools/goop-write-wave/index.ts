@@ -198,13 +198,17 @@ function validateAndNormalizeStatuses(args: {
     }
   }
 
-  if (args.task_update !== undefined) {
+  if (args.task_update !== undefined && args.task_update.status !== undefined) {
     const r = normalizeStatus(args.task_update.status, TASK_STATUSES);
     if (!r.ok) return `Error in goop_write_wave: ${r.error}`;
     args.task_update.status = r.status;
   }
 
   for (const update of args.task_updates ?? []) {
+    // A status coalesced to absent at the tool-input boundary (an injected
+    // empty string on a field the caller never authored) expresses no intent.
+    // Skip normalization; the entry is filtered out of processing downstream.
+    if (update.status === undefined) continue;
     const r = normalizeStatus(update.status, TASK_STATUSES);
     if (!r.ok) return `Error in goop_write_wave: ${r.error}`;
     update.status = r.status;
@@ -705,7 +709,15 @@ export function createGoopWriteWaveTool(ctx: PluginContext): ToolDefinition {
           }
 
           const defaultWaveId = wave.id;
-          const taskUpdates = args.task_updates;
+          // Drop task_updates entries whose status was coalesced to absent at
+          // the tool-input boundary (an injected empty string the caller never
+          // authored). Such an entry expresses no status change and must not be
+          // applied — applying it would store an undefined status. If every
+          // entry is dropped, the loop below is a no-op and any verifications
+          // are still recorded, which is the caller's actual intent.
+          const taskUpdates = args.task_updates.filter(
+            (update): update is BulkTaskStatusUpdate => update.status !== undefined,
+          );
           const successes: BatchItemResult[] = [];
           let verificationResults: string[] = [];
           let traceabilityResults: string[] = [];
@@ -877,7 +889,10 @@ export function createGoopWriteWaveTool(ctx: PluginContext): ToolDefinition {
             });
           }
 
-          if (args.task_update !== undefined) {
+          // A task_update whose status was coalesced to absent (injected empty
+          // string) expresses no status change; skip the lookup and write so we
+          // never store an undefined status.
+          if (args.task_update !== undefined && args.task_update.status !== undefined) {
             const task = ctx.db
               .getWaveTasks(wave.id)
               .find((candidate) => candidate.task_index === args.task_update?.task_index);
@@ -928,7 +943,7 @@ export function createGoopWriteWaveTool(ctx: PluginContext): ToolDefinition {
             mainResult = `Written wave ${waveNumber} for workflow '${workflowId}'; existing tasks left unchanged.`;
           }
         }
-        if (args.task_update !== undefined) {
+        if (args.task_update !== undefined && args.task_update.status !== undefined) {
           const taskResult = `Updated task ${args.task_update.task_index} on wave ${waveNumber} to '${args.task_update.status}' for workflow '${workflowId}'.`;
           mainResult = mainResult.length > 0 ? `${mainResult}\n${taskResult}` : taskResult;
         }

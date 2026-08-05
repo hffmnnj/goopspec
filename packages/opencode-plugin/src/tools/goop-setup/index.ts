@@ -200,28 +200,66 @@ function formatStatus(result: ReturnType<typeof getStatus>): string {
 export function createGoopSetupTool(ctx: PluginContext): ToolDefinition {
   return tool({
     description:
-      "GoopSpec configuration and setup. " +
-      "Actions: detect, init, models, verify, status, reset. " +
-      "plan/apply are aliases for init.",
+      "Configure or inspect the GoopSpec project setup. " +
+      "WHEN TO USE: Initialise a project, view or update per-role model routing, run a health check, show config, or reset. " +
+      "WHEN NOT TO USE: goop_status for live workflow/phase state; goop_get_global_config for user-global config; goop_state for workflow phase transitions. " +
+      "MODES: detect inspects the project and reads no other args. init/plan/apply (plan and apply alias init) create .goopspec and config, reading projectName, defaultModel, agentModels, memoryEnabled, gitignoreGoopspec. models reads defaultModel and agentModels to update config, then formats the routing table. verify runs health checks and reads no other args. status shows config and reads no other args. reset requires confirmed:true; preserveData (default true) keeps goopspec.db and checkpoints, false deletes them. " +
+      "RETURNS: Action-specific markdown (detection report, init summary, model routing table, verify checklist, config status, or reset result). " +
+      "CAVEATS: scope is declared but ignored by every action. gitignoreGoopspec is additionally applied as a cross-action side effect regardless of action. Confined to the project's .goopspec/ directory.",
     args: {
-      action: tool.schema.enum([
-        "detect",
-        "init",
-        "plan",
-        "apply",
-        "verify",
-        "reset",
-        "models",
-        "status",
-      ]),
-      projectName: tool.schema.string().optional(),
-      defaultModel: tool.schema.string().optional(),
-      agentModels: tool.schema.record(tool.schema.string(), tool.schema.string()).optional(),
-      memoryEnabled: tool.schema.boolean().optional(),
-      gitignoreGoopspec: tool.schema.boolean().optional(),
-      preserveData: tool.schema.boolean().optional(),
-      confirmed: tool.schema.boolean().optional(),
-      scope: tool.schema.enum(["global", "project", "both"]).optional(),
+      action: tool.schema
+        .enum(["detect", "init", "plan", "apply", "verify", "reset", "models", "status"])
+        .describe(
+          "Setup action: detect inspects; init/plan/apply create .goopspec (plan and apply alias init); models views or updates routing; verify health-checks; status shows config; reset resets config.",
+        ),
+      projectName: tool.schema
+        .string()
+        .optional()
+        .describe(
+          "Project name written to config.json. Read only by init/plan/apply; ignored by every other action.",
+        ),
+      defaultModel: tool.schema
+        .string()
+        .optional()
+        .describe(
+          'Blanket default model id for all roles. Read by init/plan/apply (writes to config) and models (updates config when supplied); ignored by detect, verify, status, reset.',
+        ),
+      agentModels: tool.schema
+        .record(tool.schema.string(), tool.schema.string())
+        .optional()
+        .describe(
+          'Map of agent role to model id (e.g. {"executor-low":"anthropic/claude-sonnet-4-6"}). Read by init/plan/apply and models; ignored by detect, verify, status, reset.',
+        ),
+      memoryEnabled: tool.schema
+        .boolean()
+        .optional()
+        .describe(
+          "Whether the in-process memory system is active. Read only by init/plan/apply; ignored by every other action.",
+        ),
+      gitignoreGoopspec: tool.schema
+        .boolean()
+        .optional()
+        .describe(
+          "When true, adds .goopspec/ to .gitignore. Applied as a cross-action side effect regardless of action, and also written to config by init/plan/apply.",
+        ),
+      preserveData: tool.schema
+        .boolean()
+        .optional()
+        .describe(
+          "Controls reset scope only. Read by reset: true (default) preserves goopspec.db and checkpoints; false deletes them. Ignored by every other action.",
+        ),
+      confirmed: tool.schema
+        .boolean()
+        .optional()
+        .describe(
+          "Must be true to commit a reset; without it reset fails with an error. Read only by reset; ignored by every other action.",
+        ),
+      scope: tool.schema
+        .enum(["global", "project", "both"])
+        .optional()
+        .describe(
+          "Declared but currently ignored by every action; supplying it has no effect.",
+        ),
     },
     async execute(
       args: {

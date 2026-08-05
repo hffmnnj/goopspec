@@ -177,11 +177,31 @@ function validateDocs(ctx: PluginContext): string {
 
 export function createGoopSpecTool(ctx: PluginContext): ToolDefinition {
   return tool({
-    description: "Read, list, or validate SPEC.md and BLUEPRINT.md files.",
+    description:
+      "Read, list, or validate the active workflow's SPEC.md and BLUEPRINT.md. " +
+      "WHEN TO USE: Inspect or validate spec/blueprint for the active workflow. " +
+      "WHEN NOT TO USE: goop_read_db for other docs or workflows; goop_read_section for keyed sections. " +
+      "MODES: read returns SPEC.md and/or BLUEPRINT.md (file picks which, default both); list enumerates each workflow's docs; validate checks SPEC.md sections and must-haves, BLUEPRINT.md sections, and wave plan. " +
+      "RETURNS: Markdown content (read), a doc inventory (list), or a pass/fail report (validate). " +
+      "CAVEATS: file is read only by read; phase is ignored by every action. Active workflow only.",
     args: {
-      action: tool.schema.enum(["read", "list", "validate"]),
-      file: tool.schema.enum(["spec", "plan", "both"]).optional(),
-      phase: tool.schema.string().optional(),
+      action: tool.schema
+        .enum(["read", "list", "validate"])
+        .describe(
+          "Operation to perform: read returns doc content, list enumerates workflows and doc presence, validate checks required sections and wave-plan existence.",
+        ),
+      file: tool.schema
+        .enum(["spec", "plan", "both"])
+        .optional()
+        .describe(
+          "Which file to return; only read by action:\"read\" (defaults to both). Ignored by list and validate.",
+        ),
+      phase: tool.schema
+        .string()
+        .optional()
+        .describe(
+          "Declared but currently ignored by every action; supplying it has no effect.",
+        ),
     },
     async execute(
       args: {
