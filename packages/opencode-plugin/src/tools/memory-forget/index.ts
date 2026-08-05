@@ -59,7 +59,7 @@ export function createMemoryForgetTool(ctx: PluginContext): ToolDefinition {
       try {
         // Must provide either id or query
         if (args.id === undefined && !args.query) {
-          return "Error: Must provide either 'id' or 'query' to delete memories.";
+          return 'Error in memory_forget: neither `id` nor `query` was supplied. Retry with `{ id: 42 }` to delete one memory, or `{ query: "topic", confirm: true }` to delete query matches.';
         }
 
         // Delete by ID — immediate, no confirmation needed

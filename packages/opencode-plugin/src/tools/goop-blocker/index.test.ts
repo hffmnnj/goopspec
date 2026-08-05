@@ -563,7 +563,8 @@ describe("goop_blocker mode-selection contract", () => {
     const result = await tool.execute({ action: "open" }, toolCtx);
 
     expect(result).toContain("Error in goop_blocker");
-    expect(result).toContain("'description' is required");
+    expect(result).toContain('`description` is required for action "open"');
+    expect(result).toContain('{ action: "open", description: "what is blocked" }');
     expect(ctx.db.getBlockers("default")).toHaveLength(0);
   });
 
@@ -573,7 +574,8 @@ describe("goop_blocker mode-selection contract", () => {
     const result = await tool.execute({ action: "resolve", resolution: "no id" }, toolCtx);
 
     expect(result).toContain("Error in goop_blocker");
-    expect(result).toContain("'id' is required");
+    expect(result).toContain('`id` is required for action "resolve"');
+    expect(result).toContain('{ action: "resolve", id: 123 }');
     expect(ctx.db.getBlockers("default")).toHaveLength(0);
   });
 

@@ -71,7 +71,9 @@ function processBlockerItem(
   switch (item.action) {
     case "open": {
       if (!item.description) {
-        throw new Error("'description' is required for open action");
+          throw new Error(
+            '`description` is required for action "open". Retry with `{ action: "open", description: "what is blocked" }`.',
+          );
       }
 
       const blockerId = ctx.db.upsertBlocker(workflowId, {
@@ -107,7 +109,9 @@ function processBlockerItem(
 
     case "resolve": {
       if (item.id === undefined) {
-        throw new Error("'id' is required for resolve action");
+          throw new Error(
+            '`id` is required for action "resolve". Retry with `{ action: "resolve", id: 123 }` using the blocker row id.',
+          );
       }
 
       const existing = ctx.db.getBlockers(workflowId).find((blocker) => blocker.id === item.id);

@@ -122,7 +122,9 @@ describe("memory_forget tool", () => {
     const tool = createMemoryForgetTool(ctx);
     const result = await tool.execute({}, toolCtx);
 
-    expect(result).toContain("Error: Must provide either 'id' or 'query'");
+    expect(result).toBe(
+      'Error in memory_forget: neither `id` nor `query` was supplied. Retry with `{ id: 42 }` to delete one memory, or `{ query: "topic", confirm: true }` to delete query matches.',
+    );
   });
 
   // -------------------------------------------------------------------------
