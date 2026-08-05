@@ -180,13 +180,20 @@ function formatJobList(jobs: JobRecord[], now: number): string {
 export function createBackgroundStatusTool(ctx: PluginContext): ToolDefinition {
   return tool({
     description:
-      "Poll one background job by id, or list all background jobs. Read-only apart from the lazy expiry sweep.",
+      "Poll one background job by id, or list all registered jobs. " +
+      "WHEN TO USE: Check whether a job is running, read its recent output, or enumerate every job. " +
+      "WHEN NOT TO USE: background_command to start a job; background_cancel to stop one. " +
+      "RETURNS: With job_id, a detailed report (state, pid, exit code, started/deadline, command, truncated stdout/stderr tails). Without job_id, a table of all jobs. " +
+      "CAVEATS: Runs a lazy expiry sweep that marks any still-running job past its deadline as timed-out but does NOT kill it — the eager timer owns the kill, so timed-out does not mean the process is dead. tail_bytes (default 4096) bounds each output tail.",
     args: {
-      job_id: tool.schema.string().optional().describe("Job id to poll. Omit to list all jobs."),
-      tail_bytes: tool.schema
-        .number()
-        .optional()
-        .describe("Bytes of output tail to show (default 4096)."),
+      job_id: tool.schema.string().optional().describe(
+        "Job id to poll for a detailed report. Omit entirely to list all registered jobs; " +
+          "do not pass an empty string.",
+      ),
+      tail_bytes: tool.schema.number().optional().describe(
+        "Bytes of stdout/stderr tail to show in a single-job report. Defaults to 4096. " +
+          "Has no effect when listing all jobs.",
+      ),
     },
     async execute(
       args: { job_id?: string; tail_bytes?: number },

@@ -105,29 +105,44 @@ function isMissingBinaryError(stderr: string): boolean {
 export function createAstGrepTool(ctx: PluginContext): ToolDefinition {
   return tool({
     description:
-      "Structural code search and rewrite with ast-grep. " +
-      "Find matches for an AST pattern, optionally preview or apply rewrites.",
+      "Structural code search and rewrite via the external ast-grep CLI. " +
+      "WHEN TO USE: Find or refactor code by AST pattern where line-level regex is unreliable — renaming, restructuring, or bulk edits across files. " +
+      "WHEN NOT TO USE: difftastic for a structural diff between two files; scip for semantic symbol references and definitions; grep for literal text search. " +
+      "MODES: search — send pattern + language, omit rewrite; returns matches. rewrite dry-run — add rewrite, omit apply; previews replacements and modifies nothing. rewrite apply — add rewrite AND apply:true; rewrites files in place (-U). apply:true without rewrite is ignored: -U is only added when rewrite is present, so apply alone cannot turn a search into a mutation. " +
+      "RETURNS: Matches grouped by file, or a dry-run preview plus the exact apply call to issue next, or a count of files modified. " +
+      "CAVEATS: Resolves the ast-grep binary via PATH or binaryPaths.ast-grep in goopspec.json; a missing binary returns an install-hint string (not a throw), distinguishable from a real 'No matches found.' result. paths defaults to ['.']. language takes precedence over the lang alias when both are supplied.",
     args: {
-      pattern: tool.schema.string().describe("ast-grep pattern to search for"),
-      language: tool.schema
+      pattern: tool.schema
         .string()
-        .describe("Target language identifier (e.g. ts, js, python, rust)"),
+        .describe("ast-grep pattern to search for. Required in every mode."),
+      language: tool.schema.string().describe(
+        "Target language identifier for ast-grep (e.g. ts, js, python, rust). " +
+          "Takes precedence over the lang alias when both are supplied.",
+      ),
       lang: tool.schema
         .string()
         .optional()
-        .describe("Alias for language; language takes precedence"),
+        .describe(
+          "Optional alias for language; used only when language is absent. " +
+            "Prefer language for clarity.",
+        ),
       paths: tool.schema
-        .array(tool.schema.string())
+        .array(
+          tool.schema.string().describe("A single search path, relative to the project directory."),
+        )
         .optional()
-        .describe("Paths to search (default: current project directory)"),
-      rewrite: tool.schema
-        .string()
-        .optional()
-        .describe("Replacement string for rewrite mode (sets -r); omit for search mode"),
-      apply: tool.schema
-        .boolean()
-        .optional()
-        .describe("Apply rewrites in-place (adds -U); default false (dry-run)"),
+        .describe(
+          "Paths to search, relative to the project directory. Omit to default to ['.'] " +
+            "(the current project directory).",
+        ),
+      rewrite: tool.schema.string().optional().describe(
+        "Replacement string that activates rewrite mode (ast-grep -r). " +
+          "Omit for search mode; do not pass an empty string.",
+      ),
+      apply: tool.schema.boolean().optional().describe(
+        "Set to true alongside rewrite to apply the rewrite in place (ast-grep -U). " +
+          "Defaults to false (dry-run). Has no effect unless rewrite is also supplied.",
+      ),
     },
     async execute(
       args: {

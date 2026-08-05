@@ -48,13 +48,25 @@ function validateTimeoutSeconds(value: number | undefined): string | null {
 export function createBackgroundCommandTool(ctx: PluginContext): ToolDefinition {
   return tool({
     description:
-      "Start a detached background job and return immediately with its job id, pid, cwd, and deadline. " +
-      "The default timeout is 30 minutes (1800 seconds); the command is killed automatically when the timeout expires. " +
-      "Pass a larger timeout_seconds for long-running work such as test suites or dev servers.",
+      "Start a detached background job and return immediately with its id, pid, cwd, and deadline. " +
+      "WHEN TO USE: Long-running work that should not block the response — dev servers, slow test suites. " +
+      "WHEN NOT TO USE: bash to wait on a command; background_status to poll a job; background_cancel to stop one. " +
+      "RETURNS: A block with the job id, pid, cwd, and ISO-8601 deadline. " +
+      "CAVEATS: The job outlives this call (detached, via sh -c). timeout_seconds defaults to 1800 (30 minutes); when the timeout expires the command is killed. Must be an integer in [1, 86400]; other values are rejected, not clamped. cwd defaults to the plugin working directory; logs land in .goopspec/background-jobs/<jobId>/.",
     args: {
-      command: tool.schema.string(),
-      cwd: tool.schema.string().optional(),
-      timeout_seconds: tool.schema.number().optional(),
+      command: tool.schema
+        .string()
+        .describe(
+          "Shell command to run detached. Must be a non-empty string; an empty command is rejected.",
+        ),
+      cwd: tool.schema.string().optional().describe(
+        "Working directory for the command. Defaults to the plugin working directory " +
+          "(ctx.sdk.directory) when omitted.",
+      ),
+      timeout_seconds: tool.schema.number().optional().describe(
+        "Maximum runtime in seconds before the job is killed. Defaults to 1800 (30 min). " +
+          "Must be an integer in [1, 86400]; non-integer or out-of-range values are rejected, not clamped.",
+      ),
     },
     async execute(
       args: { command: string; cwd?: string; timeout_seconds?: number },

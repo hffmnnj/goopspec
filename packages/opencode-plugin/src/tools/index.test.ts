@@ -117,6 +117,29 @@ const HIGH_FRICTION_TOOLS: readonly string[] = [
   "goop_setup",
   "goop_spec",
   "goop_infer_intent",
+  // Wave 5 Task 1: utility tools that shell out to external binaries.
+  // ast_grep: three mutually exclusive modes (search / rewrite dry-run /
+  // rewrite apply) plus a conditional argument — apply:true without rewrite
+  // is a documented no-op (the -U flag is only appended inside the rewrite
+  // branch). The mode contract and the apply-without-rewrite rule together
+  // cannot fit under 700 without dropping a rule a caller needs to avoid an
+  // accidental mutation, or to achieve one on purpose.
+  // scip: action-dependent required fields — symbol is required for
+  // definitions/references/implementations and ignored by index, and each
+  // action resolves a different binary (scip vs scip-typescript). The
+  // action-to-argument and action-to-binary matrix is mandatory content.
+  "ast_grep",
+  "scip",
+  // Wave 5 Task 1: difftastic has two modes (full diff / checkOnly) plus an
+  // alias-pair cross-field contract (old/oldPath and new/newPath — all four
+  // schema-optional, two runtime-required). The load-bearing content that
+  // pushes it past 700 is the missing-binary distinction the workflow
+  // dispatch flags as mandatory: a missing difft binary returns an
+  // install-hint string that a caller MUST be able to distinguish from a real
+  // "no differences" result. Dropping that sentence to fit 700 would violate
+  // the dispatch; every other sentence is also load-bearing. Description
+  // lands at 787 chars — no padding, each section earns its place.
+  "difftastic",
 ];
 
 /**
@@ -139,14 +162,8 @@ const HIGH_FRICTION_TOOLS: readonly string[] = [
  * below rejects typos and duplicates in this list.
  */
 const PENDING_CONFORMANCE: readonly string[] = [
-  "ast_grep",
-  "background_cancel",
-  "background_command",
-  "background_status",
-  "difftastic",
   "generate_image",
   "goop_create_pr",
-  "scip",
 ];
 
 // ---- Predicates (pure; shared with the bad-fixture proofs) ---------------
