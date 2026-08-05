@@ -37,27 +37,6 @@ function normalizeImportance(raw: number | undefined, memoryType: MemoryType): n
 }
 
 /**
- * When type=decision, fold reasoning/alternatives into the stored content
- * so a single tool covers what `memory_decision` used to do.
- */
-function buildDecisionContent(
-  baseContent: string,
-  reasoning: string | undefined,
-  alternatives: string[] | undefined,
-): string {
-  const sections: string[] = [baseContent];
-
-  if (reasoning) {
-    sections.push("", "## Reasoning", reasoning);
-  }
-  if (alternatives?.length) {
-    sections.push("", "## Alternatives Considered", ...alternatives.map((a) => `- ${a}`));
-  }
-
-  return sections.join("\n");
-}
-
-/**
  * For decisions, auto-generate facts from the reasoning/alternatives if the
  * caller didn't supply explicit facts.
  */
@@ -171,12 +150,6 @@ export function createMemorySaveTool(ctx: PluginContext): ToolDefinition {
           return "Error: Importance must be between 1 and 10.";
         }
 
-        // Build content — decisions get reasoning/alternatives folded in
-        const content =
-          memoryType === "decision"
-            ? buildDecisionContent(args.content, args.reasoning, args.alternatives)
-            : args.content;
-
         // Build facts — decisions auto-generate if none supplied
         const facts =
           memoryType === "decision"
@@ -186,7 +159,7 @@ export function createMemorySaveTool(ctx: PluginContext): ToolDefinition {
         const entry = await ctx.memory.save({
           type: memoryType,
           title: args.title,
-          content,
+          content: args.content,
           facts,
           concepts: args.concepts,
           sourceFiles: args.sourceFiles,
