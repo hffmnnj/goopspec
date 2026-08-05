@@ -66,16 +66,12 @@ const USER_MEMORY_TYPES = MEMORY_TYPES.filter(
 export function createMemorySaveTool(ctx: PluginContext): ToolDefinition {
   return tool({
     description:
-      "Persist a structured memory record. " +
+      "Persist a memory record. " +
       "WHEN TO USE: Capture an observation, decision, note, or todo. " +
-      "WHEN NOT TO USE: goop_save_note for curated project knowledge with tags and agent attribution. " +
-      "RETURNS: A confirmation with id, type, title, importance; a failed write degrades to id -1 " +
-      "rather than throwing. " +
-      "CAVEATS: importance defaults by type (decision 7, note 4, else 5), must be 1-10 " +
-      "(0-1 scales x10). type=decision folds reasoning/alternatives into content and " +
-      "auto-generates facts from the title if omitted; both ignored otherwise. " +
-      "deduplicate:true reinforces a near-duplicate (importance=max(old,new), created_at " +
-      "refreshed, content unchanged) instead of inserting; absent/false inserts.",
+      "WHEN NOT TO USE: goop_save_note for curated, tagged knowledge. " +
+      "MODES: insert = omit deduplicate or send false; creates a row. deduplicate = true: a near-duplicate (token F1 >=0.85) keeps its id, sets importance=max(old,new), refreshes created_at, and leaves content unchanged; no match inserts. " +
+      "RETURNS: A confirmation with id, type, title, importance; failures return id -1. " +
+      "CAVEATS: importance defaults by type (decision 7, note 4, else 5), must be 1-10 (0-1 scales x10). type=decision folds reasoning/alternatives into content and auto-generates facts from the title if omitted; both are ignored otherwise.",
     args: {
       title: tool.schema
         .string()

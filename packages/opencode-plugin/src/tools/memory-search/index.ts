@@ -81,16 +81,13 @@ function formatCrossStoreResult(result: CrossStoreSearchResult, index: number): 
 export function createMemorySearchTool(ctx: PluginContext): ToolDefinition {
   return tool({
     description:
-      "Search persistent memory by query with optional filters. " +
+      "Search persistent memory. " +
       "WHEN TO USE: Recall saved memories by keyword. " +
       "WHEN NOT TO USE: goop_search_notes for Field Notes; memory_forget with a query to " +
       "preview a deletion without committing it. " +
+      "MODES: memory-only = omit includeFieldNotes or send false. cross-store = true; searches Field Notes in parallel and fuses both rankings via reciprocal-rank fusion, while filters apply only to memories. " +
       "RETURNS: Ranked results or a no-matches tip. " +
-      "CAVEATS: limit defaults to 5, clamped to 1-20. Filters AND together: types (membership), " +
-      "concepts (OR within, substring on stored tags), minImportance (>=). Empty query returns " +
-      "nothing. includeFieldNotes:true adds Field Notes and re-ranks all results via " +
-      "reciprocal-rank fusion (k=60), tagging each origin; filters apply to memories only. " +
-      "Any filter narrows results by design: a query match lacking the filter is excluded.",
+      "CAVEATS: limit defaults to 5, clamped to 1-20. Filters AND together: types (membership), concepts (OR within, substring on stored tags), minImportance (>=). Empty query returns nothing; a query match lacking a filter is excluded.",
     args: {
       query: tool.schema.string().describe(
         "Search query over title, content, facts, and concepts. Required; an empty or " +
