@@ -359,6 +359,14 @@ function clampImportance(raw: number | undefined): number {
   return Math.max(1, Math.min(10, Math.round(scaled)));
 }
 
+// Decision note: records written before this function became the sole owner of
+// composition (commit a8e85e6) contain reasoning/alternatives folded in twice.
+// They were deliberately left unmigrated: the duplicated text carries no marker
+// distinguishing content a caller genuinely wrote twice from content the two
+// composition layers each contributed, so a cleanup pass could destroy
+// legitimate content. Affected records stay correct and searchable but rank
+// somewhat higher than they should, because content is indexed for FTS at
+// weight 5.
 function buildContent(input: MemorySaveInput): string {
   let content = input.content;
   if (input.reasoning) {
