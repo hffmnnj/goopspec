@@ -578,10 +578,11 @@ async function classifyTranscript(
 export function createGoopInferIntentTool(ctx: PluginContext): ToolDefinition {
   return tool({
     description:
-      "Classify a raw voice transcript into one of eight GoopSpec command intents. " +
-      "WHEN TO USE: Interpret natural-language or voice input into a structured command (discuss, plan, execute, accept, quick, create-workflow, transition, chat). " +
-      "WHEN NOT TO USE: Call slashcommand directly when the exact command is already known; goop_state for explicit phase transitions without inference. " +
-      "RETURNS: Markdown with the classified command, confidence (0.0-1.0), extracted slots, an autoRun hint, and a JSON comment payload; when autoApply or confidenceThreshold is supplied, a mutation object reports applied/result/error. " +
+       "Classify a transcript into one of eight GoopSpec command intents. " +
+       "WHEN TO USE: Interpret natural-language or voice input into a structured command. " +
+       "WHEN NOT TO USE: Call slashcommand when the exact command is known; goop_state for explicit phase transitions without inference. " +
+       "MODES: classify-only is the default; autoApply:true additionally attempts only eligible non-destructive create-workflow/transition mutations when confidence clears both gates. " +
+       "RETURNS: Markdown with the command, confidence, extracted slots, autoRun hint, and JSON payload; a mutation object reports applied/result/error when autoApply or confidenceThreshold is supplied. " +
       "CAVEATS: Prefers an SDK completion method, falling back to keyword matching. autoApply (default false) gates non-destructive create-workflow/transition mutations only; it requires confidence strictly above 0.85 AND at or above confidenceThreshold (default 0.9, clamped to 0-1). A below-threshold result is never an error — the classification is always returned and mutation.applied is false with an error. autoRun (the markdown hint) is separate from autoApply: it requires confidence >= 0.75 plus no active workflow or an idle-phase workflow.",
     args: {
       transcript: tool.schema

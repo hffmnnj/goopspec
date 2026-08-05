@@ -28,11 +28,15 @@ const TERMINAL_STATES: ReadonlySet<JobState> = new Set(["exited", "cancelled", "
 export function createBackgroundCancelTool(ctx: PluginContext): ToolDefinition {
   return tool({
     description:
-      "Cancel a background job by terminating its entire process group " +
-      "(SIGTERM, escalating to SIGKILL after 2s). Returns a no-op message if " +
-      "the job is already terminal, and not-found for unknown ids. Never throws.",
+      "Terminate a background job and its entire process group. " +
+      "WHEN TO USE: Stop a job that is stuck, no longer needed, or consuming resources. " +
+      "WHEN NOT TO USE: background_status to inspect without stopping; background_command to start a job. " +
+      "RETURNS: A confirmation naming the job id and signalled process group, or a no-op message when the job is already terminal, or not-found for an unknown id. " +
+      "CAVEATS: Sends SIGTERM to the whole process group (signalled as the negated pgid) and escalates to SIGKILL after 2 seconds if the group does not exit. Marks the job cancelled before issuing the kill so a late exit code cannot overwrite the state. Never throws.",
     args: {
-      job_id: tool.schema.string(),
+      job_id: tool.schema
+        .string()
+        .describe("Id of the background job to cancel, as returned by background_command."),
     },
     async execute(args: { job_id: string }, _context: ToolContext): Promise<string> {
       try {

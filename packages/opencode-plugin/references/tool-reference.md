@@ -129,7 +129,7 @@ The fastest mental model is: if the tool has a plural/batch argument (`doc_types
 | `goop_blocker` | `action: "open" \| "resolve" \| "list"`, `description?`, `severity?`, `wave_id?`, `id?`, `resolution?`, `status?`, `workflow_id?`, `items?: {action, description?, severity?, wave_id?, id?, resolution?, status?, workflow_id?}[]` | `goop_blocker({ action: "open", description: "CI token expired", severity: "high", wave_id: 2 })` |
 | `goop_acceptance_audit` | `workflow_id?`, `wave_ids?: number[]`, `include_all_blockers?: boolean` | `goop_acceptance_audit({ wave_ids: [1, 2], include_all_blockers: true })` |
 
-`goop_write_wave`'s `verifications`/`traceability` fields replace the retired standalone `goop_record_verification` and `goop_write_traceability` tools — their behavior is fully absorbed as inline args. Available alongside `task_updates` (processed atomically in one transaction; if any task update fails, verifications and traceability are rolled back too). Not available alongside `items` batch mode.
+`goop_write_wave`'s `verifications`/`traceability` fields replace the retired standalone `goop_record_verification` and `goop_write_traceability` tools — their behavior is fully absorbed as inline args. Available alongside `task_updates` (processed atomically in one transaction; if any task update fails, verifications and traceability are rolled back too). With `items[]` they are supplied **per-item** inside each item, not at the top level — supplying top-level `verifications`/`traceability` alongside `items[]` is rejected, because those payloads would otherwise be silently dropped.
 
 `goop_acceptance_audit` replaces the retired `goop_read_verifications` and `goop_read_waves` tools at the accept gate, plus blockers. Returns combined `{blockers, verifications, waves}` in a JSON comment.
 
@@ -222,7 +222,9 @@ When `false` or absent, only `memory.db` results are returned, identical to the 
 
 | Tool | Arguments | Example |
 |------|-----------|---------|
-| `generate_image` | `prompt` (required), `out`, `images[]`, `model`, `size`, `quality`, `outputFormat`, `background`, `count`, `inputFidelity`, `timeout`, `dryRun`, `authFile`, `action`, `moderation`, `outputCompression`, `detail`, `mask`, `allowRefresh` | `generate_image({ prompt: "A serene mountain landscape at sunset", out: "docs/hero.png", count: 2 })` |
+| `generate_image` | `prompt` (required), `out`, `images[]`, `size`, `quality`, `outputFormat`, `background`, `count`, `timeout`, `dryRun`, `authFile`, `action`, `moderation`, `outputCompression`, `detail`, `mask`, `allowRefresh` | `generate_image({ prompt: "A serene mountain landscape at sunset", out: "docs/hero.png", count: 2 })` |
+
+`mask` and `outputCompression` are declared but not read by the tool — supplying them has no effect (documented in the emitted schema, the authority on this tool's arguments).
 
 Generates images using the user's existing ChatGPT subscription OAuth credentials — no API key required. Images default to `.goopspec/generated-images/`; pass an explicit `out` path to place an asset elsewhere. For prompting technique, see `goop_reference({ name: "image-prompting" })`.
 
@@ -233,7 +235,7 @@ The following tools and extended arguments reduce multi-call sequences to single
 | Pattern | Replaces | How |
 |---------|----------|------|
 | `goop_boot` | 4-5-call agent boot (read docs + search notes + search memory + load references) | Single call returns all requested blocks. Documents require explicit `doc_types` — no default. Wave context is fetched separately via `goop_read_wave`. |
-| `goop_write_wave` + `verifications`/`traceability` | Retired `goop_record_verification`/`goop_write_traceability` | Side-payloads run sequentially inside the same `execute()`. Available alongside `task_updates` (atomic transaction); not available in `items` batch mode. |
+| `goop_write_wave` + `verifications`/`traceability` | Retired `goop_record_verification`/`goop_write_traceability` | Side-payloads run sequentially inside the same `execute()`. Available alongside `task_updates` (atomic transaction); with `items[]` they are supplied per-item inside each item, not at the top level (top-level side payloads alongside `items[]` are rejected, not dropped). |
 | `goop_infer_intent` + `autoApply` | Manual infer-then-act two-call flow for `create-workflow`/`transition` | Opt-in (`autoApply: true`), confidence-gated (threshold `0.9`, minimum `0.85`), non-destructive-only. Returns `mutation` in result. |
 | `goop_append_chronicle` + `alsoLogAdl`/`alsoSaveMemory` | Separate `goop_adl`/`memory_save` calls alongside a chronicle entry | Best-effort sequential writes with partial-failure reporting. Not available in `entries` batch mode. |
 | `goop_acceptance_audit` | Retired `goop_read_verifications`/`goop_read_waves` + blockers at the accept gate | Single read-only call returns combined `{blockers, verifications, waves}`. |

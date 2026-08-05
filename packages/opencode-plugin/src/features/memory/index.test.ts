@@ -111,15 +111,15 @@ describe("SqliteMemoryManager", () => {
       expect(high.importance).toBe(10);
     });
 
-    it("appends reasoning and alternatives to content for decision type", async () => {
+    it("appends each decision rationale field to content exactly once", async () => {
       const entry = await mgr.save({
         ...baseSaveInput,
         type: "decision",
         reasoning: "Better performance",
         alternatives: ["Option A", "Option B"],
       });
-      expect(entry.content).toContain("Reasoning: Better performance");
-      expect(entry.content).toContain("Alternatives considered: Option A, Option B");
+      expect(entry.content.match(/Reasoning: Better performance/g)).toHaveLength(1);
+      expect(entry.content.match(/Alternatives considered: Option A, Option B/g)).toHaveLength(1);
     });
 
     it("handles missing optional fields gracefully", async () => {

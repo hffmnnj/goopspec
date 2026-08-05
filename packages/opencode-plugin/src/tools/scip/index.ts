@@ -54,18 +54,24 @@ interface ScipLocation {
 export function createScipTool(ctx: PluginContext): ToolDefinition {
   return tool({
     description:
-      "Query a SCIP index for symbol definitions, references, or implementations. " +
-      "Use the exact SCIP symbol string; index generation is available through the index action.",
+      "Query a SCIP code-intelligence index for symbol definitions, references, or implementations; or generate the index. " +
+      "WHEN TO USE: Navigate code semantically — who calls a function, where a type is defined or implemented. " +
+      "WHEN NOT TO USE: ast_grep for pattern-based structural search; grep for literal text. " +
+      "MODES: index — generates index.scip via the scip-typescript binary; symbol and index_path are ignored. definitions/references/implementations — require symbol and query an existing index via the scip binary. " +
+      "RETURNS: For index, the generated index path. For queries, a list of file:line:column locations (UTF-16 columns) or a no-results message. " +
+      "CAVEATS: index resolves the scip-typescript binary; queries resolve the scip binary — each via PATH or the matching binaryPaths key (scip-typescript / scip) in goopspec.json, and a missing binary returns an install-hint string, not a throw. Query actions also require an existing index file (run index first) or they return guidance instead of spawning. index_path defaults to index.scip in the project root and is ignored by index.",
     args: {
-      action: tool.schema.enum(SCIP_ACTIONS).describe("SCIP action to perform"),
-      symbol: tool.schema
-        .string()
-        .optional()
-        .describe("Exact SCIP symbol string; required for query actions"),
-      index_path: tool.schema
-        .string()
-        .optional()
-        .describe("Path to the SCIP index (default: index.scip in the project root)"),
+      action: tool.schema
+        .enum(SCIP_ACTIONS)
+        .describe("SCIP action to perform. index generates the index; the other three query it."),
+      symbol: tool.schema.string().optional().describe(
+        "Exact SCIP symbol string to look up. Required for definitions, references, and " +
+          "implementations; ignored by index. Omit entirely for index; do not pass an empty string.",
+      ),
+      index_path: tool.schema.string().optional().describe(
+        "Path to the SCIP index file. Defaults to index.scip in the project root. " +
+          "Used only by query actions; ignored by index.",
+      ),
     },
     async execute(
       args: { action: ScipAction; symbol?: string; index_path?: string },

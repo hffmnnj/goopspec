@@ -37,27 +37,6 @@ function normalizeImportance(raw: number | undefined, memoryType: MemoryType): n
 }
 
 /**
- * When type=decision, fold reasoning/alternatives into the stored content
- * so a single tool covers what `memory_decision` used to do.
- */
-function buildDecisionContent(
-  baseContent: string,
-  reasoning: string | undefined,
-  alternatives: string[] | undefined,
-): string {
-  const sections: string[] = [baseContent];
-
-  if (reasoning) {
-    sections.push("", "## Reasoning", reasoning);
-  }
-  if (alternatives?.length) {
-    sections.push("", "## Alternatives Considered", ...alternatives.map((a) => `- ${a}`));
-  }
-
-  return sections.join("\n");
-}
-
-/**
  * For decisions, auto-generate facts from the reasoning/alternatives if the
  * caller didn't supply explicit facts.
  */
@@ -87,16 +66,12 @@ const USER_MEMORY_TYPES = MEMORY_TYPES.filter(
 export function createMemorySaveTool(ctx: PluginContext): ToolDefinition {
   return tool({
     description:
-      "Persist a structured memory record. " +
+      "Persist a memory record. " +
       "WHEN TO USE: Capture an observation, decision, note, or todo. " +
-      "WHEN NOT TO USE: goop_save_note for curated project knowledge with tags and agent attribution. " +
-      "RETURNS: A confirmation with id, type, title, importance; a failed write degrades to id -1 " +
-      "rather than throwing. " +
-      "CAVEATS: importance defaults by type (decision 7, note 4, else 5), must be 1-10 " +
-      "(0-1 scales x10). type=decision folds reasoning/alternatives into content and " +
-      "auto-generates facts from the title if omitted; both ignored otherwise. " +
-      "deduplicate:true reinforces a near-duplicate (importance=max(old,new), created_at " +
-      "refreshed, content unchanged) instead of inserting; absent/false inserts.",
+      "WHEN NOT TO USE: goop_save_note for curated, tagged knowledge. " +
+      "MODES: insert = omit deduplicate or send false; creates a row. deduplicate = true: a near-duplicate (token F1 >=0.85) keeps its id, sets importance=max(old,new), refreshes created_at, and leaves content unchanged; no match inserts. " +
+      "RETURNS: A confirmation with id, type, title, importance; failures return id -1. " +
+      "CAVEATS: importance defaults by type (decision 7, note 4, else 5), must be 1-10 (0-1 scales x10). type=decision folds reasoning/alternatives into content and auto-generates facts from the title if omitted; both are ignored otherwise.",
     args: {
       title: tool.schema
         .string()
@@ -171,12 +146,6 @@ export function createMemorySaveTool(ctx: PluginContext): ToolDefinition {
           return "Error: Importance must be between 1 and 10.";
         }
 
-        // Build content — decisions get reasoning/alternatives folded in
-        const content =
-          memoryType === "decision"
-            ? buildDecisionContent(args.content, args.reasoning, args.alternatives)
-            : args.content;
-
         // Build facts — decisions auto-generate if none supplied
         const facts =
           memoryType === "decision"
@@ -186,7 +155,7 @@ export function createMemorySaveTool(ctx: PluginContext): ToolDefinition {
         const entry = await ctx.memory.save({
           type: memoryType,
           title: args.title,
-          content,
+          content: args.content,
           facts,
           concepts: args.concepts,
           sourceFiles: args.sourceFiles,
