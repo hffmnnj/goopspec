@@ -297,7 +297,9 @@ function executeAction(
 
     // -- Phase transition ---------------------------------------------------
     case "transition": {
-      if (!args.phase) return "**Error:** `phase` is required for transition.";
+      if (!args.phase) {
+        return '**Error (goop_state):** transition requires `phase`. Retry with `{ action: "transition", phase: "execute" }`, using one of idle, discuss, plan, execute, or accept.';
+      }
       if (!isValidPhase(args.phase)) {
         return `**Error:** Invalid phase "${args.phase}". Valid: ${WORKFLOW_PHASES.join(", ")}`;
       }
@@ -344,7 +346,9 @@ function executeAction(
 
     // -- Mode ---------------------------------------------------------------
     case "set-mode": {
-      if (!args.mode) return "**Error:** `mode` is required for set-mode.";
+      if (!args.mode) {
+        return '**Error (goop_state):** set-mode requires `mode`. Retry with `{ action: "set-mode", mode: "standard" }`, using one of quick, standard, comprehensive, or milestone.';
+      }
       if (!isValidMode(args.mode)) {
         return `**Error:** Invalid mode "${args.mode}". Valid: ${TASK_MODES.join(", ")}`;
       }
@@ -355,7 +359,9 @@ function executeAction(
 
     // -- Depth --------------------------------------------------------------
     case "set-depth": {
-      if (!args.depth) return "**Error:** `depth` is required for set-depth.";
+      if (!args.depth) {
+        return '**Error (goop_state):** set-depth requires `depth`. Retry with `{ action: "set-depth", depth: "standard" }`, using one of shallow, standard, or deep.';
+      }
       if (!isValidDepth(args.depth)) {
         return `**Error:** Invalid depth "${args.depth}". Valid: ${WORKFLOW_DEPTHS.join(", ")}`;
       }
@@ -367,7 +373,7 @@ function executeAction(
     // -- Autopilot ----------------------------------------------------------
     case "set-autopilot": {
       if (args.autopilot == null) {
-        return "**Error:** `autopilot` (boolean) is required for set-autopilot.";
+        return '**Error (goop_state):** set-autopilot requires boolean `autopilot`. Retry with `{ action: "set-autopilot", autopilot: true }` or `false`.';
       }
       sm.updateWorkflow({
         autopilot: args.autopilot,
@@ -381,7 +387,7 @@ function executeAction(
     // -- Wave progress ------------------------------------------------------
     case "update-wave": {
       if (args.currentWave == null || args.totalWaves == null) {
-        return "**Error:** `currentWave` and `totalWaves` are required for update-wave.";
+        return '**Error (goop_state):** update-wave requires both `currentWave` and `totalWaves`. Retry with `{ action: "update-wave", currentWave: 1, totalWaves: 3 }`.';
       }
       sm.updateWaveProgress(args.currentWave, args.totalWaves);
       renderStatusAfterMutation(ctx);
@@ -410,7 +416,7 @@ function executeAction(
 
     case "set-active-workflow": {
       if (!args.workflowId) {
-        return "**Error:** `workflowId` is required for set-active-workflow.";
+        return '**Error (goop_state):** set-active-workflow requires `workflowId`. Retry with `{ action: "set-active-workflow", workflowId: "my-workflow" }` using an existing workflow id.';
       }
       sm.setActiveWorkflow(args.workflowId);
       renderStatusAfterMutation(ctx);
@@ -419,7 +425,7 @@ function executeAction(
 
     case "create-workflow": {
       if (!args.workflowId) {
-        return "**Error:** `workflowId` is required for create-workflow.";
+        return '**Error (goop_state):** create-workflow requires `workflowId`. Retry with `{ action: "create-workflow", workflowId: "my-workflow" }`.';
       }
       sm.createWorkflow(args.workflowId);
       if (args.activate) {

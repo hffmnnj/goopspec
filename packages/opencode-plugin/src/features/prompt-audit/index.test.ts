@@ -361,9 +361,24 @@ describe("auditPromptSurfaces (real tree)", () => {
     // title does not inherit goop_write_wave's clear-title behavior. The
     // reference now states the protection-off default for new tools:
     // 26,702 -> 27,161 bytes (+459); references 174,047 -> 174,506.
+    //
+    // The tool-definition-clarity workflow's Wave 6 Task 2 made the emitted
+    // tool schemas the sole usage-contract authority and reconciled the
+    // secondary surfaces against them. tool-reference.md had two real
+    // contradictions with current behavior, both fixed here: (1) the
+    // goop_write_wave prose and Combinator table said verifications/
+    // traceability were "not available alongside items batch mode", which
+    // contradicts the per-item side-payload contract Wave 2 established
+    // (supply per-item inside items[]; top-level side payloads alongside
+    // items[] are rejected, not dropped); (2) the generate_image arg list
+    // carried phantom `model` and `inputFidelity` arguments the schema never
+    // declared, and did not note that `mask`/`outputCompression` are declared
+    // but ignored. Wording-only; no abs-language keywords added or removed.
+    // 27,161 -> 27,620 bytes (+459); references 174,506 -> 174,965.
+    // totalAbsoluteHits unchanged at 328.
     const references = report.directories.find((d) => d.directory === "references")!;
     expect(references.files).toBe(19);
-    expect(references.bytes).toBe(174_506);
+    expect(references.bytes).toBe(174_965);
   });
 
   it("total absolute-language hits are 299 (Wave 1 role plumbing plus the Wave 3 execution gate)", () => {

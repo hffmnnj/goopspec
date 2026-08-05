@@ -188,10 +188,8 @@ const PENDING_CONFORMANCE: readonly string[] = [];
  * Section labels that are unconditionally mandatory for every tool
  * description, per `tool-reference.md`.
  *
- * `MODES:` and `CAVEATS:` are intentionally NOT in this list: the standard
- * makes them conditional ("mandatory when the tool has more than one mode"
- * / "mandatory when applicable"), and the condition cannot be detected
- * mechanically without a per-tool mode inventory. The `Purpose` section has
+ * `MODES:` and `CAVEATS:` are intentionally NOT in this list because their
+ * applicability is enforced by the explicit per-tool inventory below. The `Purpose` section has
  * no label (it is the opening sentence), so it is proxied by the
  * 120-character length floor rather than a label match. These scope
  * decisions are deliberate and documented; do not "strengthen" the gate by
@@ -204,9 +202,77 @@ const MANDATORY_SECTION_LABELS = [
   "RETURNS:",
 ] as const;
 
+type ConditionalSectionRequirements = Readonly<{
+  modes: boolean;
+  caveats: boolean;
+}>;
+
+/**
+ * Implementation-based conditional-section inventory. Every registered tool
+ * must be classified here: new tools never inherit an exemption by default.
+ *
+ * `modes` is true for tools with action dispatch, distinct single/batch or
+ * selected/all read forms, mutually exclusive payloads, or an opt-in path
+ * that changes execution. `caveats` is true where the implementation has
+ * side effects, defaults, precedence, atomicity, or other non-obvious rules.
+ */
+const CONDITIONAL_SECTION_REQUIREMENTS: Readonly<
+  Record<(typeof EXPECTED_TOOL_KEYS)[number], ConditionalSectionRequirements>
+> = {
+  goop_status: { modes: false, caveats: true },
+  goop_state: { modes: true, caveats: true },
+  goop_spec: { modes: true, caveats: true },
+  goop_adl: { modes: true, caveats: true },
+  goop_checkpoint: { modes: true, caveats: true },
+  goop_compact: { modes: false, caveats: true },
+  goop_setup: { modes: true, caveats: true },
+  goop_get_global_config: { modes: false, caveats: true },
+  goop_reference: { modes: true, caveats: true },
+  goop_read_db: { modes: true, caveats: true },
+  goop_write_db: { modes: true, caveats: true },
+  goop_save_note: { modes: true, caveats: true },
+  goop_search_notes: { modes: true, caveats: true },
+  goop_acceptance_audit: { modes: false, caveats: true },
+  goop_append_chronicle: { modes: true, caveats: true },
+  goop_boot: { modes: false, caveats: true },
+  goop_create_pr: { modes: true, caveats: true },
+  goop_write_section: { modes: true, caveats: true },
+  goop_read_section: { modes: true, caveats: true },
+  goop_write_wave: { modes: true, caveats: true },
+  goop_read_wave: { modes: true, caveats: true },
+  goop_query_decisions: { modes: false, caveats: true },
+  goop_blocker: { modes: true, caveats: true },
+  goop_search_docs: { modes: false, caveats: true },
+  goop_timeline: { modes: false, caveats: true },
+  goop_dashboard: { modes: false, caveats: true },
+  goop_infer_intent: { modes: true, caveats: true },
+  memory_save: { modes: true, caveats: true },
+  memory_search: { modes: true, caveats: true },
+  memory_forget: { modes: true, caveats: true },
+  slashcommand: { modes: false, caveats: true },
+  ast_grep: { modes: true, caveats: true },
+  difftastic: { modes: true, caveats: true },
+  scip: { modes: true, caveats: true },
+  generate_image: { modes: true, caveats: true },
+  background_command: { modes: false, caveats: true },
+  background_status: { modes: true, caveats: true },
+  background_cancel: { modes: false, caveats: true },
+};
+
 /** Returns the mandatory section labels absent from a tool description. */
 function missingMandatorySections(description: string): string[] {
   return MANDATORY_SECTION_LABELS.filter((label) => !description.includes(label));
+}
+
+/** Returns applicable conditional section labels absent from a description. */
+function missingConditionalSections(
+  description: string,
+  requirements: ConditionalSectionRequirements,
+): string[] {
+  const missing: string[] = [];
+  if (requirements.modes && !description.includes("MODES:")) missing.push("MODES:");
+  if (requirements.caveats && !description.includes("CAVEATS:")) missing.push("CAVEATS:");
+  return missing;
 }
 
 interface DescriptionLengthViolation {
@@ -388,6 +454,11 @@ describe("tool-description standard conformance gate", () => {
     }
   });
 
+  it("classifies every registered tool for conditional sections", () => {
+    const tools = createTools(ctx);
+    expect(Object.keys(CONDITIONAL_SECTION_REQUIREMENTS).sort()).toEqual(Object.keys(tools).sort());
+  });
+
   // The live gate. Non-pending tools must satisfy every predicate; pending
   // tools must still exist in the registry. All violations are collected and
   // reported in one shot so a wave fixing a tool sees every problem at once.
@@ -407,6 +478,18 @@ describe("tool-description standard conformance gate", () => {
       const missing = missingMandatorySections(desc);
       if (missing.length > 0) {
         violations.push(`${name}: missing mandatory sections — ${missing.join(", ")}`);
+      }
+
+      if (!(name in CONDITIONAL_SECTION_REQUIREMENTS)) {
+        violations.push(`${name}: missing conditional-section classification`);
+        continue;
+      }
+      const conditionalMissing = missingConditionalSections(
+        desc,
+        CONDITIONAL_SECTION_REQUIREMENTS[name as keyof typeof CONDITIONAL_SECTION_REQUIREMENTS],
+      );
+      if (conditionalMissing.length > 0) {
+        violations.push(`${name}: missing applicable conditional sections — ${conditionalMissing.join(", ")}`);
       }
 
       const allowlisted = HIGH_FRICTION_TOOLS.includes(name);
@@ -486,6 +569,18 @@ describe("conformance predicates reject non-conformant fixtures", () => {
     expect(descriptionLengthViolation(CONFORMANT_DESCRIPTION, true)).toBeNull();
     expect(collectUndescribedArgs(CLEAN_SCHEMA)).toEqual([]);
     expect(collectEmptyStringEndorsements(CLEAN_SCHEMA)).toEqual([]);
+  });
+
+  it("a classified tool missing an applicable conditional section is flagged", () => {
+    expect(missingConditionalSections(CONFORMANT_DESCRIPTION, { modes: true, caveats: true })).toEqual([
+      "MODES:",
+    ]);
+    expect(
+      missingConditionalSections(CONFORMANT_DESCRIPTION.replace("CAVEATS:", "DETAILS:"), {
+        modes: false,
+        caveats: true,
+      }),
+    ).toEqual(["CAVEATS:"]);
   });
 
   it("a description missing a mandatory section is flagged", () => {

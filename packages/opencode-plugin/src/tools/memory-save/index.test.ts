@@ -128,6 +128,12 @@ describe("memory_save tool", () => {
 
   it("saves a decision with reasoning and alternatives folded into content", async () => {
     const tool = createMemorySaveTool(ctx);
+    const save = ctx.memory.save;
+    let receivedContent: string | undefined;
+    ctx.memory.save = async (input) => {
+      receivedContent = input.content;
+      return save(input);
+    };
     const result = await tool.execute(
       {
         title: "Use PostgreSQL for storage",
@@ -146,6 +152,7 @@ describe("memory_save tool", () => {
     expect(result).toContain("**Importance:** 7/10");
     expect(result).toContain("**Reasoning:** included");
     expect(result).toContain("**Alternatives:** 3 considered");
+    expect(receivedContent).toBe("Chose PostgreSQL as the primary database.");
   });
 
   it("auto-generates facts for decisions when none supplied", async () => {
@@ -163,9 +170,9 @@ describe("memory_save tool", () => {
     // Verify the mock memory received auto-generated facts
     const searchResults = await ctx.memory.search({ query: "jose" });
     expect(searchResults.length).toBe(1);
-    // The stored content should include the alternatives section
-    expect(searchResults[0].memory.content).toContain("## Alternatives Considered");
-    expect(searchResults[0].memory.content).toContain("- jsonwebtoken");
+    // The lightweight test manager stores the raw tool payload; composition is
+    // covered by the concrete manager test.
+    expect(searchResults[0].memory.content).toBe("Selected jose library.");
   });
 
   it("preserves explicit facts for decisions", async () => {

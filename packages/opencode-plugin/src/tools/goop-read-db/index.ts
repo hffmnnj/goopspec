@@ -25,7 +25,7 @@ export function createGoopReadDbTool(ctx: PluginContext): ToolDefinition {
 
   return tool({
     description:
-      "Read whole workflow documents from GoopSpecDB. WHEN TO USE: Load one doc_type or several doc_types[] in one call. WHEN NOT TO USE: goop_read_section for keyed sections; goop_adl({action:\"read\"}) for the ADL (it is an append-log of structured events, not a document row, so doc_type:\"adl\" returns \"No adl document found\"); goop_search_docs to find content across workflows. RETURNS: Raw markdown (single) or docs under \"## {doc_type}\" headings joined by \"---\"; a \"not found\" message names goop_write_db as the creator. CAVEATS: Valid doc_types: spec, blueprint, chronicle, adl, handoff, requirements, research; unknown types list the valid set.",
+      "Read whole workflow documents from GoopSpecDB. WHEN TO USE: Load one doc_type or several doc_types[] in one call. WHEN NOT TO USE: goop_read_section for keyed sections; goop_adl({action:\"read\"}) for the ADL (an event log, not a document); goop_search_docs to find content across workflows. MODES: single = doc_type; batch = doc_types[] (preferred for multiple documents). If both are sent, doc_types[] wins. RETURNS: Raw markdown (single) or docs under \"## {doc_type}\" headings; a \"not found\" message names goop_write_db as the creator. CAVEATS: Valid doc_types: spec, blueprint, chronicle, adl, handoff, requirements, research; unknown types list the valid set.",
     args: {
       doc_type: tool.schema
         .string()
