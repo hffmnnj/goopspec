@@ -183,7 +183,8 @@ export function createBackgroundStatusTool(ctx: PluginContext): ToolDefinition {
       "Poll one background job by id, or list all registered jobs. " +
       "WHEN TO USE: Check whether a job is running, read its recent output, or enumerate every job. " +
       "WHEN NOT TO USE: background_command to start a job; background_cancel to stop one. " +
-      "RETURNS: With job_id, a detailed report (state, pid, exit code, started/deadline, command, truncated stdout/stderr tails). Without job_id, a table of all jobs. " +
+       "MODES: detail = send job_id; list = omit it to enumerate all jobs. " +
+       "RETURNS: With job_id, a detailed report (state, pid, exit code, started/deadline, command, stdout/stderr tails). Without job_id, a table of jobs. " +
       "CAVEATS: Runs a lazy expiry sweep that marks any still-running job past its deadline as timed-out but does NOT kill it — the eager timer owns the kill, so timed-out does not mean the process is dead. tail_bytes (default 4096) bounds each output tail.",
     args: {
       job_id: tool.schema.string().optional().describe(
