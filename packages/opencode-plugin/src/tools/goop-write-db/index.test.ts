@@ -10,6 +10,7 @@ import {
 } from "../../test-utils.js";
 import { createGoopReadDbTool } from "../goop-read-db/index.js";
 import { createGoopWriteSectionTool } from "../goop-write-section/index.js";
+import { createTools } from "../index.js";
 import { createGoopWriteDbTool } from "./index.js";
 
 describe("goop_write_db tool", () => {
@@ -794,5 +795,73 @@ describe("goop_write_db tool", () => {
       expect(retried).toBe(result);
       expect(ctx.db.getDocument("default", "spec")?.content).toBe("Hello world");
     });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Empty-string boundary (via createTools) — Wave 3 Task 1 exclusions
+// ---------------------------------------------------------------------------
+
+describe("goop_write_db empty-string boundary (via createTools)", () => {
+  let ctx: PluginContext;
+  let toolCtx: ToolContext;
+  let cleanup: () => void;
+
+  beforeEach(() => {
+    const env = setupTestEnvironment("goop-write-db-coalesce");
+    cleanup = env.cleanup;
+    ctx = createMockPluginContext({ testDir: env.testDir, db: env.db });
+    toolCtx = createMockToolContext();
+  });
+
+  afterEach(() => cleanup());
+
+  it("exclusion: an empty new_string still deletes the matched text", async () => {
+    const tools = createTools(ctx);
+    const dbTool = tools.goop_write_db;
+    await dbTool.execute({ doc_type: "spec", content: "keep this\nremove me\nkeep this too" }, toolCtx);
+
+    // new_string:"" is protected from coalescing and must DELETE the matched
+    // text, not be treated as absent.
+    const result = (await dbTool.execute(
+      { doc_type: "spec", old_string: "remove me\n", new_string: "" },
+      toolCtx,
+    )) as string;
+    expect(result).toContain("Patched");
+    expect(ctx.db.getDocument("default", "spec")?.content).toBe("keep this\nkeep this too");
+  });
+
+  it("exclusion: an empty old_string still activates patch mode (does not fall through)", async () => {
+    const tools = createTools(ctx);
+    const dbTool = tools.goop_write_db;
+
+    // old_string:"" is protected. With new_string present it must resolve to
+    // patch mode (not coalesce to absent and trigger the "new_string without
+    // old_string" rule-2 error, nor fall through to a full write of "").
+    const result = await dbTool.execute(
+      { doc_type: "spec", old_string: "", new_string: "# via empty old_string" },
+      toolCtx,
+    );
+    // Empty old_string activates patch mode; patchContent then reports the
+    // match outcome. The call must NOT be the rule-2 "new_string supplied
+    // without old_string" error — that would mean old_string was coalesced.
+    expect(result).not.toMatch(/new_string .* without old_string/);
+  });
+
+  it("coalescing: an injected single-mode content:\"\" does not wipe the document", async () => {
+    // content is deliberately NOT in the exclusion list: an empty content has
+    // no legitimate meaning in a single-mode write, and protecting it would
+    // let an injected content:"" silently destroy a document. Coalescing it to
+    // absent yields a loud none-mode error instead of a destructive wipe.
+    const tools = createTools(ctx);
+    const dbTool = tools.goop_write_db;
+    await dbTool.execute({ doc_type: "spec", content: "# original" }, toolCtx);
+
+    const result = (await dbTool.execute({ doc_type: "spec", content: "" }, toolCtx)) as string;
+    // The coalesced payload has no operation fields → none-mode error, not a
+    // silent empty write.
+    expect(result).toMatch(/Error|Valid call shapes|cannot|did not/i);
+    // The document was NOT wiped.
+    expect(ctx.db.getDocument("default", "spec")?.content).toBe("# original");
   });
 });

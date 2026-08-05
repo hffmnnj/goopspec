@@ -78,7 +78,7 @@ The V1 loader calls the function directly; the V2 loader reads `.id` and `.setup
 
 - **`src/core/sdk-compat.ts`** — Single import seam for the `@opencode-ai/plugin` SDK (V1 types, values).
 - **`src/core/context.ts`** — Builds the shared `PluginContext` from V1 `PluginInput`.
-- **`src/tools/`** — All 30 tool factories in `src/tools/index.ts` (`createTools()`).
+- **`src/tools/`** — All 38 tool factories in `src/tools/index.ts` (`createTools()`). The count is pinned by `src/tools/index.test.ts` and `src/core/tools-v2.test.ts`; treat the emitted schema as the authority on each tool's arguments, not this file.
 - **`src/hooks/`** — All 10 hook factories in `DEFAULT_HOOK_FACTORIES`, assembled by `createHooks()`.
 - **`src/core/types.ts`** — `PluginContext`, `SdkEssentials`, `ToolContext`, etc.
 
@@ -368,45 +368,15 @@ The config watcher (`src/features/setup/config-watcher.ts`) watches the project-
 
 ## Structural Code Tools
 
-Three MCP tools wrapping external CLIs for AST-aware code analysis and transformation. Each resolves its binary via `PATH` or the optional `binaryPaths` config in `goopspec.json` (keys: `ast-grep`, `difft`, `scip`, `scip-typescript`). When a binary is missing, the tool degrades gracefully with an install hint.
-
-### `ast_grep` — structural code search and rewrite
-- **Args:** `pattern` (required), `language`/`lang` (required), `paths` (optional, default `["."]`), `rewrite` (optional replacement → rewrite mode), `apply` (optional bool, default false; dry-run unless true)
-- **When to use:** Finding or refactoring code by AST pattern rather than fragile regex. Use for renaming, restructuring, or bulk edits where line-level patterns are unreliable.
-
-### `difftastic` — AST-aware structural diff
-- **Args:** `old`/`oldPath` (required), `new`/`newPath` (required), `checkOnly` (optional bool)
-- **Returns:** Structural diff summary + `meaningfully_changed` boolean (from `--exit-code`)
-- **When to use:** Deciding whether a change is substantive vs. pure formatting/whitespace. Use in verification gates to skip re-review of cosmetic-only diffs.
-
-### `scip` — code intelligence over a SCIP index
-- **Args:** `action` (`index | definitions | references | implementations`), `symbol` (for queries), `index_path` (optional, default `index.scip`)
-- **Generates** an index via `scip-typescript` and answers defs/refs/impls for a symbol.
-- **When to use:** Navigating code semantically — who calls a function, where is a type defined/implemented. Use for cross-file impact analysis and refactoring discovery.
+Three MCP tools wrap external CLIs for AST-aware code analysis and transformation: `ast_grep` (structural search/rewrite), `difftastic` (AST-aware diff), and `scip` (SCIP-index code intelligence). Each resolves its binary via `PATH` or the optional `binaryPaths` config in `goopspec.json` (keys: `ast-grep`, `difft`, `scip`, `scip-typescript`) and degrades to an install hint when the binary is missing. The emitted tool schema is the authority on each tool's arguments, modes, defaults, and returns — read it at call time; `references/tool-reference.md` carries the maintained cheat sheet. Do not restate the args here: a copy silently goes stale (a prior version of this section fabricated arguments the tools never accepted).
 
 ## Image Generation Tool
 
-### `generate_image` — generate images via ChatGPT OAuth
-
-- **Args:** `prompt` (required), `out`, `images[]`, `size`, `quality`, `outputFormat`, `background`, `count`, `timeout`, `dryRun`, `authFile`, `action`, `moderation`, `outputCompression`, `detail`, `mask`, `allowRefresh`
-- **When to use:** Generating images using the user's existing ChatGPT subscription OAuth credentials — no API key required. Uses `gpt-image-2`. Images default to `.goopspec/generated-images/`; pass an explicit `out` path to place an asset elsewhere. For prompting technique, see `goop_reference({ name: "image-prompting" })`.
-- **Transparency:** `background: "transparent"` is delivered via green-screen prompt injection plus a local chromakey step that always encodes PNG — transparent output is therefore PNG only, and a non-`.png` `out` extension is rejected at validation. The chromakey codec is `pngjs`, a runtime dependency isolated behind `png-codec.ts`.
+`generate_image` generates images via the user's ChatGPT subscription OAuth credentials (no API key) using `gpt-image-2`. The emitted tool schema owns the full argument surface, the transparent-background png-only contract (rendered on green screen, keyed to alpha locally via the `pngjs` codec in `png-codec.ts`), and the two declared-but-ignored arguments (`mask`, `outputCompression`) — read it at call time rather than relying on a restatement here. For prompting technique, load the `image-prompting` reference via `goop_reference`.
 
 ## Background Command Tools
 
-Three tools for launching, monitoring, and cancelling detached background jobs. Jobs are scoped to the plugin process lifetime and expire after 30 minutes (1800 seconds) by default. Logs are written to `.goopspec/background-jobs/<jobId>/stdout.log` and `stderr.log`.
-
-### `background_command` — start a detached background job
-- **Args:** `command` (required, string), `cwd` (optional, string — defaults to the plugin working directory), `timeout_seconds` (optional, number — default 1800, range 1–86400)
-- **When to use:** Launching long-running processes (dev servers, test suites, watchers) that should not block the agent's response. Returns the job id, pid, cwd, and deadline immediately.
-
-### `background_status` — poll one job or list all
-- **Args:** `job_id` (optional, string — omit to list all jobs), `tail_bytes` (optional, number — default 4096, controls how many bytes of stdout/stderr to show)
-- **When to use:** Checking whether a background job is still running, reading its output tail, or listing all registered jobs. Runs a lazy expiry sweep that marks deadline-past jobs as `timed-out` without killing them.
-
-### `background_cancel` — terminate a job and its process group
-- **Args:** `job_id` (required, string)
-- **When to use:** Stopping a background job that is stuck, no longer needed, or consuming resources. Sends SIGTERM to the entire process group, escalating to SIGKILL after 2 seconds. Returns a no-op message if the job is already terminal.
+Three tools manage detached background jobs: `background_command` (start), `background_status` (poll one or list all), and `background_cancel` (terminate). Jobs are scoped to the plugin process lifetime, expire after 30 minutes (1800 seconds) by default, and write logs to `.goopspec/background-jobs/<jobId>/stdout.log` and `stderr.log`. The emitted tool schemas own the arguments, defaults, ranges, and return shapes.
 
 ## Gotchas (Auto)
 
@@ -441,3 +411,5 @@ Three tools for launching, monitoring, and cancelling detached background jobs. 
 - **Live V2 catalogs can publish `reasoning_options` instead of `variants`.** Real OpenCode host catalogs (e.g. `openai/gpt-5.6-sol`) publish `reasoning: true` plus `reasoning_options: [{type:"effort", values:[...]}]` with **no** `variants` array — only supported ids, no request encoding. `resolveCapabilities` (`src/features/thinking/capability.ts`) extracts these into an id-only supported set; `resolveThinkingValue` returns the honest string id (no fabricated headers/body); and the V2 adapter applies it through `agent.model.variant` alone (`src/core/hooks-v2.ts`). The same shape is classified as `raw.source === "v2"` on the V1 path, where `getVerifiedV1RequestOption` returns `undefined` and the provider default is preserved with a diagnostic — V1 never fabricates a request option.
 
 - **System prompt composition: one state block, separate phase enforcement.** `src/hooks/system-transform.ts` injects exactly one `<goopspec_state>` block per LLM call. Phase enforcement (`## PHASE ENFORCEMENT`) is a separate block built by `src/features/enforcement/phase-context.ts` — it returns rules only, not a second state block. The `<goopspec_db>` block carries only the workflow doc inventory and a pointer to tool schemas; DB tool descriptions are no longer restated in the system prompt. Shared prompt-authoring strategy (precedence, absolutes, outcome-first, one autonomy policy per role, batching) lives once in `packages/opencode-plugin/references/core-protocol.md` §Prompt Authoring Rules — every other prompt surface points to it, not restates it.
+
+- **The host loads a built bundle, once per session — source edits in a worktree do not affect the running session.** `package.json` points `main`/`exports` at the source entry (`src/index.ts`), but the `build` script compiles that entry to a `dist/index.js` bundle (`bun build ./src/index.ts --outdir ./dist --target bun`), and the host loads the plugin from the built bundle at its configured install path, once per session. That install path is outside this git worktree, so editing tool behavior here — even after a commit or a passing test run — changes nothing the current session actually executes. An agent that just changed a tool cannot observe the change in its own tool calls, and a clean call must not be treated as evidence the fix works. Validating a plugin behavior change requires rebuilding the bundle at the install path and restarting the host; the only evidence available inside a session is the unit test suite.

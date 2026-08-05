@@ -107,7 +107,7 @@ Every subagent returns the standard section contract — see `references/respons
 
 **An empty response is not proof of completion.** Subagents have returned a fully empty response — no commit, clean tree, no error — and resumed cleanly afterward. Independently verify every dispatch with `git log`/`git status`; if the response is empty or the tree is clean with no new commit, resume the task rather than re-dispatching from scratch (a fresh dispatch loses the context the first one already loaded).
 
-Ask every executor dispatch for a `FRICTION` section (content may be "none," but the ask is mandatory) to surface tool-level friction that would otherwise go unreported.
+Ask every executor dispatch for a `FRICTION` section (content may be "none," but the ask is mandatory); the authoritative ownership rule and format live in `references/tool-reference.md` §Friction Reporting.
 
 ## Memory-First Flow
 

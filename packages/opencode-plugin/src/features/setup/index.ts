@@ -882,7 +882,9 @@ export function reset(
 
   if (!opts.confirmed) {
     result.success = false;
-    result.errors.push("Reset requires confirmed: true");
+    result.errors.push(
+      'Reset requires `confirmed: true`. Retry with `{ action: "reset", confirmed: true }`.',
+    );
     return result;
   }
 

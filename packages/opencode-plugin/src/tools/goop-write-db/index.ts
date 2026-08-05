@@ -65,33 +65,71 @@ function patchExistingDocument(
 export function createGoopWriteDbTool(ctx: PluginContext): ToolDefinition {
   return tool({
     description:
-      "Write or update a workflow document in GoopSpecDB. Renders a markdown sidecar file.",
+      "Write or update a whole workflow document. WHEN TO USE: Create, replace, append, patch, or batch a document. WHEN NOT TO USE: goop_write_section for keyed sections; goop_append_chronicle for chronicle entries. MODES: full = doc_type+content (+mode: replace default, append concatenates); patch = doc_type+old_string (+new_string/replace_all, in-place, new_string:\"\" deletes); batch = items[] only. REJECTED: content+old_string; new_string/replace_all without old_string; mode:\"append\"+old_string; op fields alongside items[]. RETURNS: Char count, mode, sidecar path; batch per-item rollup. CAVEATS: Batch is atomic. old_string presence activates patch; omit content when not writing (empty content coalesces to absent, not a wipe).",
     args: {
-      doc_type: tool.schema.enum(DOC_TYPES),
-      content: tool.schema.string().optional(),
-      workflow_id: tool.schema.string().optional(),
-      mode: tool.schema.enum(["replace", "append"] as const).optional(),
-      old_string: tool.schema.string().optional().describe("Exact existing text to replace"),
-      new_string: tool.schema.string().optional().describe("Replacement text"),
+      doc_type: tool.schema
+        .enum(DOC_TYPES)
+        .describe("Document type to write (one of the DOC_TYPES enum values)."),
+      content: tool.schema
+        .string()
+        .optional()
+        .describe(
+          "Full document content (full-write mode); omit for patch or batch mode — an empty content is coalesced to absent and produces a loud none-mode error rather than a wipe.",
+        ),
+      workflow_id: tool.schema
+        .string()
+        .optional()
+        .describe("Target workflow id; omit to use the active workflow."),
+      mode: tool.schema
+        .enum(["replace", "append"] as const)
+        .optional()
+        .describe(
+          "Full-write mode only: replace (default) overwrites, append concatenates; invalid alongside old_string.",
+        ),
+      old_string: tool.schema
+        .string()
+        .optional()
+        .describe("Exact existing text to replace; presence activates patch mode."),
+      new_string: tool.schema
+        .string()
+        .optional()
+        .describe("Replacement text; an empty new_string deletes the matched text."),
       replace_all: tool.schema
         .boolean()
         .optional()
-        .describe("Replace all occurrences instead of requiring a single match"),
+        .describe("Replace all occurrences instead of requiring a single match."),
       items: tool.schema
         .array(
           tool.schema.object({
-            doc_type: tool.schema.enum(DOC_TYPES),
-            content: tool.schema.string().optional(),
-            mode: tool.schema.enum(["replace", "append"] as const).optional(),
-            old_string: tool.schema.string().optional().describe("Exact existing text to replace"),
-            new_string: tool.schema.string().optional().describe("Replacement text"),
+            doc_type: tool.schema
+              .enum(DOC_TYPES)
+              .describe("Document type for this batch item."),
+            content: tool.schema
+              .string()
+              .optional()
+              .describe("Full document content for this item."),
+            mode: tool.schema
+              .enum(["replace", "append"] as const)
+              .optional()
+              .describe("replace (default) or append for this item; invalid with old_string."),
+            old_string: tool.schema
+              .string()
+              .optional()
+              .describe("Exact existing text to replace; presence activates patch mode."),
+            new_string: tool.schema
+              .string()
+              .optional()
+              .describe("Replacement text; an empty new_string deletes the matched text."),
             replace_all: tool.schema
               .boolean()
               .optional()
-              .describe("Replace all occurrences instead of requiring a single match"),
+              .describe("Replace all occurrences instead of requiring a single match."),
           }),
         )
-        .optional(),
+        .optional()
+        .describe(
+          "Batch of document writes; cannot be supplied alongside top-level content, old_string, new_string, replace_all, or mode.",
+        ),
     },
     async execute(
       args: {

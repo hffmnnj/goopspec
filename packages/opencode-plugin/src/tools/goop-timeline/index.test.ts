@@ -81,4 +81,24 @@ describe("goop_timeline tool", () => {
     expect(lines.length).toBe(2);
     expect(result).toContain("fourth: passed");
   });
+
+  // workflow_id scopes the trail to one workflow and defaults to the active
+  // workflow when omitted. This tool is workflow-scoped, NOT cross-workflow.
+  it("scopes to the supplied workflow_id and defaults to the active workflow", async () => {
+    ctx.db.appendEvent("default", "default_wf_event", { note: "a" });
+
+    ctx.stateManager.createWorkflow("other-wf");
+    ctx.db.appendEvent("other-wf", "other_wf_event", { note: "b" });
+
+    const tool = createGoopTimelineTool(ctx);
+
+    const scoped = asString(await tool.execute({ workflow_id: "other-wf" }, toolCtx));
+    expect(scoped).toContain("other_wf_event");
+    expect(scoped).not.toContain("default_wf_event");
+
+    // Omitting workflow_id reads the active workflow's trail.
+    const active = asString(await tool.execute({}, toolCtx));
+    expect(active).toContain("default_wf_event");
+    expect(active).not.toContain("other_wf_event");
+  });
 });

@@ -190,9 +190,19 @@ describe("auditPromptSurfaces (real tree)", () => {
     // (+262), absolute hits unchanged at 70 (the added sentence uses
     // "persist forever" and "instead of", not a must/never/always/critical/
     // only judgment word), bold spans unchanged at 137.
+    //
+    // The tool-definition-clarity workflow's Wave 1 made
+    // references/tool-reference.md §House Tool-Description Standard the
+    // single normative home for tool-description rules. agents/goop-
+    // orchestrator.md's standalone friction-reporting instruction was
+    // trimmed to a pointer at tool-reference.md §Friction Reporting (the
+    // "mandatory" ask itself was retained): 10,374 -> 10,413 bytes (+39),
+    // absolute hits unchanged at 15, bold spans unchanged at 137. No other
+    // agent file changed. The immutable Wave 1 baseline (99,822 bytes, 14
+    // files) remains in RESEARCH.md.
     const agents = report.directories.find((d) => d.directory === "agents")!;
     expect(agents.files).toBe(15);
-    expect(agents.bytes).toBe(83_373);
+    expect(agents.bytes).toBe(83_412);
     expect(agents.boldSpans).toBe(137);
   });
 
@@ -311,9 +321,64 @@ describe("auditPromptSurfaces (real tree)", () => {
     // absolute hits 200 -> 202 (+2: the "never implements fixes" role
     // invariant and the "inspect/report-only" boundary, both true invariants
     // shared with dispatch-patterns.md), bold spans 532 -> 542 (+10).
+    //
+    // The tool-definition-clarity workflow's Wave 1 established
+    // references/tool-reference.md §House Tool-Description Standard as the
+    // single normative home for how every tool `description` and argument
+    // `.describe()` string is composed (named sections, length bounds,
+    // omission language, cross-field prose rules, friction-reporting
+    // ownership). tool-reference.md gained the standard itself: 17,699 ->
+    // 23,329 bytes (+5,630). dispatch-patterns.md and goop-orchestrator.md
+    // (the latter under agents/, above) now point at it rather than
+    // restating the rules; dispatch-patterns.md's pointer added 10,523 ->
+    // 10,895 bytes (+372). Net references: 164,672 -> 170,674 bytes
+    // (+6,002), all attributable to those two files. No other reference
+    // file changed. The standard's mandatory-wording rules lift the
+    // workflow-wide absolute-language total (see the assertion below). The
+    // immutable Wave 1 baseline (161,459) remains in RESEARCH.md.
+    //
+    // The tool-definition-clarity workflow's Wave 1 verification follow-up
+    // clarified the high-friction length bound in tool-reference.md §Length
+    // bounds as a ceiling rather than a floor: the allowlist row changed
+    // from "701-1200" (which read as obligating a description to exceed 700)
+    // to "120-1200", with an explicit statement that allowlisting raises
+    // the ceiling from 700 to 1200 and never requires a description to
+    // exceed 700. Wording-only; the gate logic in src/tools/index.test.ts
+    // and the allowlist membership are unchanged. tool-reference.md:
+    // 23,329 -> 23,825 bytes (+496); references rollup 170,674 -> 171,170.
+    //
+    // The tool-definition-clarity workflow's Wave 3 Task 1 added the
+    // empty-string argument coalescing boundary (a behavior change, not a
+    // wording change): shared/coalesce.ts treats an exact "" as absent at
+    // the single createTools input boundary both V1 and V2 consume, with an
+    // explicit exclusion list (new_string/old_string delete+patch activation,
+    // pr_url/pr_branch/title clear). tool-reference.md gained a new
+    // "Empty-string argument coalescing" subsection under the House Tool-
+    // Description Standard documenting the boundary and the exclusion table.
+    // 23,825 -> 26,702 bytes (+2,877); references rollup 171,170 -> 174,047.
+    // A verifier-found remediation narrowed the exclusions to explicit
+    // tool-field pairs (rather than field names globally), so a new tool with
+    // title does not inherit goop_write_wave's clear-title behavior. The
+    // reference now states the protection-off default for new tools:
+    // 26,702 -> 27,161 bytes (+459); references 174,047 -> 174,506.
+    //
+    // The tool-definition-clarity workflow's Wave 6 Task 2 made the emitted
+    // tool schemas the sole usage-contract authority and reconciled the
+    // secondary surfaces against them. tool-reference.md had two real
+    // contradictions with current behavior, both fixed here: (1) the
+    // goop_write_wave prose and Combinator table said verifications/
+    // traceability were "not available alongside items batch mode", which
+    // contradicts the per-item side-payload contract Wave 2 established
+    // (supply per-item inside items[]; top-level side payloads alongside
+    // items[] are rejected, not dropped); (2) the generate_image arg list
+    // carried phantom `model` and `inputFidelity` arguments the schema never
+    // declared, and did not note that `mask`/`outputCompression` are declared
+    // but ignored. Wording-only; no abs-language keywords added or removed.
+    // 27,161 -> 27,620 bytes (+459); references 174,506 -> 174,965.
+    // totalAbsoluteHits unchanged at 328.
     const references = report.directories.find((d) => d.directory === "references")!;
     expect(references.files).toBe(19);
-    expect(references.bytes).toBe(164_672);
+    expect(references.bytes).toBe(174_965);
   });
 
   it("total absolute-language hits are 299 (Wave 1 role plumbing plus the Wave 3 execution gate)", () => {
@@ -413,7 +478,42 @@ describe("auditPromptSurfaces (real tree)", () => {
     // implements fixes" role invariant and the "inspect/report-only"
     // boundary, both true invariants shared with dispatch-patterns.md) —
     // lifting the total from 309 to 311.
-    expect(report.totalAbsoluteHits).toBe(311);
+    //
+    // The tool-definition-clarity workflow's Wave 1 added the House
+    // Tool-Description Standard as the single normative home for tool-
+    // description rules. The +7 delta is the standard's mandatory-wording
+    // rules themselves, verified against the audit regex rather than
+    // assumed: +6 in references/tool-reference.md (six rule-bearing lines
+    // of the new section, each carrying one must/only — argument fields
+    // must end with .describe(), .describe() must be the last chain
+    // method, descriptions must give the caller enough to avoid the error
+    // on the first try, omit-only-for-Y conditional status, the registry
+    // is fixed at exactly 38 tools, and the friction-reporting ownership
+    // rule), and +1 in references/dispatch-patterns.md (the pointer line's
+    // "must be composed"). agents/goop-orchestrator.md's friction-pointer
+    // swap added zero — the retained "mandatory" keyword was already
+    // present and the new pointer carries no absolute keyword — so its
+    // absolute-hit count stays at 15. Total: 311 -> 318.
+    //
+    // The tool-definition-clarity workflow's Wave 1 verification follow-up
+    // clarified the high-friction length bound as a ceiling rather than a
+    // floor (see the references.bytes note above). The clarification adds
+    // one "never" to tool-reference.md §Length bounds ("allowlisting ...
+    // never requires a description to exceed 700"), verified against the
+    // audit regex (tool-reference.md 17 -> 18 hits) rather than assumed.
+    // Total: 318 -> 319.
+    //
+    // The tool-definition-clarity workflow's Wave 3 Task 1 added the
+    // "Empty-string argument coalescing" subsection to tool-reference.md.
+    // The +7 delta is the boundary's own contract language, verified against
+    // the audit regex (4x "never", 3x "only") rather than assumed. All are
+    // true invariants of the coalescing contract: an empty status is never a
+    // legitimate value, a non-empty value is never dropped, and only exact
+    // "" is affected. tool-reference.md 18 -> 25 hits; total 319 -> 326.
+    // The tool-scoping remediation adds two true boundary invariants (a field
+    // name never grants an exemption; a new tool receives no exemption by
+    // default), taking total absolute-language hits 326 -> 328.
+    expect(report.totalAbsoluteHits).toBe(328);
   });
 
   it("per-file tokens are consistent with chars via estimateTokens", () => {

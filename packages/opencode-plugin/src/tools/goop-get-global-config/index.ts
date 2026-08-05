@@ -59,7 +59,12 @@ export async function readGlobalConfig(): Promise<GlobalConfigResult> {
 
 export function createGoopGetGlobalConfigTool(_ctx: PluginContext): ToolDefinition {
   return tool({
-    description: "Read the global GoopSpec config. Returns {} if the file does not exist.",
+    description:
+      "Read the global GoopSpec config. " +
+      "WHEN TO USE: Inspect user-global defaults (defaultModel, agentModels, agentThinkingLevels) that apply across every project. " +
+      "WHEN NOT TO USE: goop_setup(action:\"status\") for the project-local config; memory_search for memory contents. " +
+      "RETURNS: A JSON object with success, config (the parsed object, or {} when the file is absent), and path. " +
+      "CAVEATS: Read-only; never writes or creates the file. A non-object or unparseable file returns success:false with an error message and the resolved path.",
     args: {},
     async execute(_args: Record<string, never>, _context: ToolContext): Promise<string> {
       const result = await readGlobalConfig();

@@ -185,63 +185,100 @@ function normalizeTags(tags: unknown): string[] {
 
 export function createGoopSaveNoteTool(ctx: PluginContext): ToolDefinition {
   return tool({
-    description: "Save a Field Note to the global knowledge base.",
+    description:
+      "Save or patch a Field Note in the global knowledge base. WHEN TO USE: To persist a reusable finding across projects, or patch an existing note by ID. WHEN NOT TO USE: memory_save for process memory; goop_search_notes to read notes back. MODES: create = title+body+tags+source_agent (importance defaults to 5); patch = note_id+old_string (+new_string/replace_all; an empty new_string deletes matched text); batch = items[] only. REJECTED: create fields with note_id; old_string/new_string/replace_all without note_id. RETURNS: The saved note id (fn_...) with char count, or a batch rollup. CAVEATS: items[] is atomic — a failure rolls back all items. Batch was historically non-atomic and could half-succeed, so retry logic built on partial failure no longer applies.",
     args: {
-      title: tool.schema.string().optional().describe("Note title (required for new notes)"),
-      body: tool.schema.string().optional().describe("Note body markdown (required for new notes)"),
+      title: tool.schema
+        .string()
+        .optional()
+        .describe("Note title; required for create, rejected alongside note_id."),
+      body: tool.schema
+        .string()
+        .optional()
+        .describe("Note body markdown; required for create, rejected alongside note_id."),
       tags: tool.schema
         .array(tool.schema.string())
         .optional()
-        .describe("Categorization tags (required for new notes)"),
+        .describe("Categorization tags; required for create, rejected alongside note_id."),
       source_agent: tool.schema
         .string()
         .optional()
-        .describe("Agent saving the note (required for new notes)"),
-      importance: tool.schema.number().optional().describe("Importance 1-10 (default 5)"),
-      workflow_id: tool.schema.string().optional().describe("Originating workflow"),
-      project_id: tool.schema.string().optional().describe("Originating project"),
+        .describe("Agent saving the note; required for create, rejected alongside note_id."),
+      importance: tool.schema
+        .number()
+        .optional()
+        .describe("Importance 1-10 (defaults to 5); rejected alongside note_id."),
+      workflow_id: tool.schema
+        .string()
+        .optional()
+        .describe("Originating workflow; rejected alongside note_id."),
+      project_id: tool.schema
+        .string()
+        .optional()
+        .describe("Originating project; rejected alongside note_id."),
       note_id: tool.schema
         .string()
         .optional()
-        .describe("Existing note fn_... id to patch instead of creating a new note"),
-      old_string: tool.schema.string().optional().describe("Exact existing text to replace"),
-      new_string: tool.schema.string().optional().describe("Replacement text"),
+        .describe("Existing note fn_... id; presence activates patch mode — omit to create a new note."),
+      old_string: tool.schema
+        .string()
+        .optional()
+        .describe("Exact existing text to replace; required when note_id is present (presence activates patch)."),
+      new_string: tool.schema
+        .string()
+        .optional()
+        .describe("Replacement text; an empty new_string deletes the matched text."),
       replace_all: tool.schema
         .boolean()
         .optional()
-        .describe("Replace all occurrences instead of requiring a single match"),
+        .describe("Replace all occurrences instead of requiring a single match."),
       items: tool.schema
         .array(
           tool.schema.object({
-            title: tool.schema.string().optional().describe("Note title (required for new notes)"),
+            title: tool.schema
+              .string()
+              .optional()
+              .describe("Note title for this item; required for create, rejected alongside note_id."),
             body: tool.schema
               .string()
               .optional()
-              .describe("Note body markdown (required for new notes)"),
+              .describe("Note body markdown for this item; required for create, rejected alongside note_id."),
             tags: tool.schema
               .array(tool.schema.string())
               .optional()
-              .describe("Categorization tags (required for new notes)"),
+              .describe("Categorization tags for this item; required for create, rejected alongside note_id."),
             source_agent: tool.schema
               .string()
               .optional()
-              .describe("Agent saving the note (required for new notes)"),
-            importance: tool.schema.number().optional().describe("Importance 1-10 (default 5)"),
-            workflow_id: tool.schema.string().optional().describe("Originating workflow"),
-            project_id: tool.schema.string().optional().describe("Originating project"),
+              .describe("Agent saving this item; required for create, rejected alongside note_id."),
+            importance: tool.schema
+              .number()
+              .optional()
+              .describe("Importance 1-10 (defaults to 5) for this item."),
+            workflow_id: tool.schema.string().optional().describe("Originating workflow for this item."),
+            project_id: tool.schema.string().optional().describe("Originating project for this item."),
             note_id: tool.schema
               .string()
               .optional()
-              .describe("Existing note fn_... id to patch instead of creating a new note"),
-            old_string: tool.schema.string().optional().describe("Exact existing text to replace"),
-            new_string: tool.schema.string().optional().describe("Replacement text"),
+              .describe("Existing note fn_... id for this item; presence activates patch mode."),
+            old_string: tool.schema
+              .string()
+              .optional()
+              .describe("Exact existing text to replace; required when this item's note_id is present."),
+            new_string: tool.schema
+              .string()
+              .optional()
+              .describe("Replacement text for this item; an empty new_string deletes the matched text."),
             replace_all: tool.schema
               .boolean()
               .optional()
-              .describe("Replace all occurrences instead of requiring a single match"),
+              .describe("Replace all occurrences instead of requiring a single match for this item."),
           }),
         )
-        .optional(),
+        .optional()
+        .describe(
+          "Atomic batch of note writes; each item is create or patch — cannot be supplied alongside top-level create or patch fields.",
+        ),
     },
     async execute(args: SaveNoteArgs, _context: ToolContext): Promise<string> {
       try {

@@ -228,35 +228,60 @@ function formatCombinedResult(result: CombinedResult): string {
 export function createGoopAppendChronicleTool(ctx: PluginContext): ToolDefinition {
   return tool({
     description:
-      "Append a timestamped entry to the chronicle. Optionally log an ADL entry " +
-      "and/or save a memory in the same call. Cross-store atomicity is unavailable.",
+      "Append a timestamped chronicle entry; optionally log an ADL entry and/or save a memory in the same call. WHEN TO USE: Record progress, piggybacking a decision or memory when both describe one event. WHEN NOT TO USE: goop_write_db({doc_type:\"chronicle\"}) for full-document control; goop_adl or memory_save standalone. MODES: entry (single) or entries[] (batch); alsoLogAdl/alsoSaveMemory apply once, after the batch commits and only on full success. RETURNS: Per-store [OK]/[FAIL] lines for chronicle, ADL, memory. CAVEATS: Cross-store atomicity is unavailable — three separate stores written sequentially. If chronicle fails, aux writes are skipped (no orphans); if an aux write fails after chronicle success, the chronicle stays and the failure is reported — retry that store separately.",
     args: {
-      entry: tool.schema.string().optional().describe("Chronicle entry text"),
-      workflow_id: tool.schema.string().optional().describe("Workflow ID (defaults to active)"),
+      entry: tool.schema.string().optional().describe("Chronicle entry text (single mode)."),
+      workflow_id: tool.schema
+        .string()
+        .optional()
+        .describe("Workflow ID; omit to use the active workflow."),
       entries: tool.schema
         .array(tool.schema.string())
         .optional()
-        .describe("Batch of chronicle entry strings"),
+        .describe("Batch of chronicle entry strings; preferred over repeated entry calls."),
       alsoLogAdl: tool.schema
         .object({
-          type: tool.schema.enum(["decision", "deviation", "observation"] as const),
-          rule: tool.schema.number().optional(),
-          description: tool.schema.string(),
-          entry_action: tool.schema.string(),
-          files: tool.schema.array(tool.schema.string()).optional(),
+          type: tool.schema
+            .enum(["decision", "deviation", "observation"] as const)
+            .describe("ADL entry category."),
+          rule: tool.schema
+            .number()
+            .optional()
+            .describe("Optional deviation-rule number this entry relates to."),
+          description: tool.schema.string().describe("What was decided or observed."),
+          entry_action: tool.schema.string().describe("Short label for the action taken."),
+          files: tool.schema
+            .array(tool.schema.string())
+            .optional()
+            .describe("Optional list of affected file paths."),
         })
         .optional()
-        .describe("ADL entry to log alongside chronicle"),
+        .describe(
+          "ADL entry to log alongside the chronicle; applied once after a successful write, with no cross-store atomicity.",
+        ),
       alsoSaveMemory: tool.schema
         .object({
-          title: tool.schema.string(),
-          content: tool.schema.string(),
-          type: tool.schema.enum(USER_MEMORY_TYPES).optional(),
-          importance: tool.schema.number().optional(),
-          concepts: tool.schema.array(tool.schema.string()).optional(),
+          title: tool.schema
+            .string()
+            .describe("Memory title (100 characters or fewer)."),
+          content: tool.schema.string().describe("Memory body content."),
+          type: tool.schema
+            .enum(USER_MEMORY_TYPES)
+            .optional()
+            .describe("Memory type; defaults to observation if omitted."),
+          importance: tool.schema
+            .number()
+            .optional()
+            .describe("Importance 1-10; defaults to 5 if omitted."),
+          concepts: tool.schema
+            .array(tool.schema.string())
+            .optional()
+            .describe("Tags for categorization and search."),
         })
         .optional()
-        .describe("Memory to save alongside chronicle"),
+        .describe(
+          "Memory to save alongside the chronicle; applied once after a successful write, with no cross-store atomicity.",
+        ),
     },
     async execute(
       args: {

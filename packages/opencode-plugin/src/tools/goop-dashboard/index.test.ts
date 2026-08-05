@@ -74,4 +74,29 @@ describe("goop_dashboard tool", () => {
     expect(existsSync(dashboardPath)).toBe(true);
     expect(readFileSync(dashboardPath, "utf-8")).toBe(result);
   });
+
+  // Scoping contract: workflow_id is declared but IGNORED. The execute body
+  // never reads it; buildDashboard() always enumerates every workflow. This
+  // pins the current behavior so a future fix is a deliberate, visible change.
+  // The tool description and workflow_id .describe() both state this.
+
+  it("ignores workflow_id and always renders every workflow (documented defect)", async () => {
+    ctx.db.upsertWave("active-wf", { wave_number: 1, status: "in_progress" });
+    ctx.db.upsertWave("stale-wf", { wave_number: 1, status: "pending" });
+
+    const tool = createGoopDashboardTool(ctx);
+
+    // Pass a workflow_id that, if honored, would scope the board to stale-wf
+    // alone. The board still contains BOTH workflows.
+    const result = asString(await tool.execute({ workflow_id: "stale-wf" }, toolCtx));
+
+    expect(result).toContain("active-wf");
+    expect(result).toContain("stale-wf");
+    expect(result).toContain("▶ active-wf");
+
+    // An empty-args call produces the identical board, confirming workflow_id
+    // contributed nothing.
+    const bareResult = asString(await tool.execute({}, toolCtx));
+    expect(bareResult).toBe(result);
+  });
 });

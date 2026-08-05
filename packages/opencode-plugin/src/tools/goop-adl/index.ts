@@ -18,14 +18,47 @@ import { logError } from "../../shared/logger.js";
 
 export function createGoopAdlTool(ctx: PluginContext): ToolDefinition {
   return tool({
-    description: "Read or append to the Automated Decision Log (ADL).",
+    description:
+      "Read or append to the Automated Decision Log (ADL). " +
+      "WHEN TO USE: Append decisions, deviations, or observations, or read the active workflow ADL. " +
+      "WHEN NOT TO USE: goop_query_decisions to filter structured decisions; goop_append_chronicle with alsoLogAdl to log alongside a chronicle entry. " +
+      "MODES: read — no other fields. append — type, description, and entry_action required; rule and files optional. " +
+      "RETURNS: ADL markdown on read; confirmation on append. " +
+      "CAVEATS: Entries always write to the ACTIVE workflow. No workflow selector — supplying workflow_id has no effect. To target another workflow, switch active first via goop_state set-active-workflow.",
     args: {
-      action: tool.schema.enum(["read", "append"]),
-      type: tool.schema.enum(["decision", "deviation", "observation"]).optional(),
-      description: tool.schema.string().optional(),
-      entry_action: tool.schema.string().optional(),
-      rule: tool.schema.number().optional(),
-      files: tool.schema.array(tool.schema.string()).optional(),
+      action: tool.schema
+        .enum(["read", "append"])
+        .describe("ADL operation: read the active workflow log, or append one entry to it."),
+      type: tool.schema
+        .enum(["decision", "deviation", "observation"])
+        .optional()
+        .describe(
+          "Required for append; the entry kind. Omit entirely for read; do not pass an empty string.",
+        ),
+      description: tool.schema
+        .string()
+        .optional()
+        .describe(
+          "Required for append; what was decided, observed, or deferred. Omit entirely for read; do not pass an empty string.",
+        ),
+      entry_action: tool.schema
+        .string()
+        .optional()
+        .describe(
+          "Required for append; the action taken in response. Omit entirely for read; do not pass an empty string.",
+        ),
+      rule: tool.schema
+        .number()
+        .optional()
+        .describe(
+          "Optional for append; the Four-Rule Deviation number when type is deviation. Omit entirely when unused; do not pass an empty string.",
+        ),
+      files: tool.schema
+        .array(tool.schema.string())
+        .optional()
+        .describe(
+          "Optional for append; related file paths. Omit entirely when unused; do not pass an empty string.",
+        ),
     },
     async execute(
       args: {

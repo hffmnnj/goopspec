@@ -8,7 +8,7 @@
 
 import { log, logError } from "../shared/logger.js";
 import { createTools } from "../tools/index.js";
-import { type ToolContext, type ToolDefinition, type ToolResult, z } from "./sdk-compat.js";
+import { type ToolContext, type ToolDefinition, type ToolResult, tool } from "./sdk-compat.js";
 import type { PluginContext } from "./types.js";
 import type {
   V2JsonSchema,
@@ -18,9 +18,16 @@ import type {
   V2ToolExecutionResult,
 } from "./v2-compat.js";
 
-/** Convert a canonical V1 Zod argument shape to the V2 JSON Schema contract. */
+/**
+ * Convert a canonical V1 Zod argument shape to the V2 JSON Schema contract.
+ *
+ * MUST build AND convert with `tool.schema` (the Zod instance bundled inside
+ * `@opencode-ai/plugin`). Tool args are authored with `tool.schema.*`; wrapping
+ * them with the workspace `zod` and calling its `toJSONSchema` is a
+ * cross-instance conversion that silently strips every `.describe()` string.
+ */
 export function convertToolArgsToJsonSchema(args: ToolDefinition["args"]): V2JsonSchema {
-  return z.toJSONSchema(z.object(args)) as V2JsonSchema;
+  return tool.schema.toJSONSchema(tool.schema.object(args)) as V2JsonSchema;
 }
 
 /**

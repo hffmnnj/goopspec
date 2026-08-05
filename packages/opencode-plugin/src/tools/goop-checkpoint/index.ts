@@ -17,11 +17,20 @@ import type { CheckpointData, GoopState, PluginContext } from "../../core/types.
 
 export function createGoopCheckpointTool(ctx: PluginContext): ToolDefinition {
   return tool({
-    description: "Save, load, or list execution checkpoints.",
+    description:
+      "Save, load, or list execution checkpoints of GoopSpec workflow state. WHEN TO USE: To snapshot in-memory state before a risky operation, or restore it afterward. WHEN NOT TO USE: goop_state for a live state read or transition; goop_compact for session compaction. MODES: save = id plus optional context, snapshots the full GoopState; load = id, restores it; list = no other arguments. RETURNS: A confirmation with the checkpoint id; on load, the saved timestamp, workflow, phase, mode, and context. CAVEATS: id is required for save and load and ignored for list. The snapshot is a deep copy taken at save time, immune to later mutations.",
     args: {
-      action: tool.schema.enum(["save", "load", "list"]),
-      id: tool.schema.string().optional(),
-      context: tool.schema.record(tool.schema.string(), tool.schema.unknown()).optional(),
+      action: tool.schema
+        .enum(["save", "load", "list"])
+        .describe("save snapshots state, load restores a snapshot, list enumerates saved ids."),
+      id: tool.schema
+        .string()
+        .optional()
+        .describe("Checkpoint id; required for save and load, ignored for list."),
+      context: tool.schema
+        .record(tool.schema.string(), tool.schema.unknown())
+        .optional()
+        .describe("Optional free-form metadata to store alongside a save (e.g. branch, reason)."),
     },
     async execute(
       args: {
