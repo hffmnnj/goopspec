@@ -351,6 +351,61 @@ describe("convertToolArgsToJsonSchema() — host-visible required-array contract
     // nothing leaked into required.
     expect(itemElementRequired(schema, "items")).toEqual([]);
   });
+
+  // -------------------------------------------------------------------------
+  // Six-tool batch inventory — schema side. Each write tool's batch array
+  // element carries exactly the required identifiers runtime actually needs
+  // per item (plus any sub-array element pins for goop_write_wave). A drifted
+  // schema that drops or adds an element-required field fails here.
+  // -------------------------------------------------------------------------
+
+  it("goop_write_wave items[] element requires wave_number", () => {
+    const ctx = createMockPluginContext();
+    contractContexts.push(ctx);
+    const schema = convertToolArgsToJsonSchema(createTools(ctx).goop_write_wave.args);
+
+    expect(itemElementRequired(schema, "items").sort()).toEqual(["wave_number"]);
+  });
+
+  it("goop_write_wave task_updates[] element requires task_index and status", () => {
+    const ctx = createMockPluginContext();
+    contractContexts.push(ctx);
+    const schema = convertToolArgsToJsonSchema(createTools(ctx).goop_write_wave.args);
+
+    expect(itemElementRequired(schema, "task_updates").sort()).toEqual(["status", "task_index"]);
+  });
+
+  it("goop_write_wave verifications[] element requires check_name and status", () => {
+    const ctx = createMockPluginContext();
+    contractContexts.push(ctx);
+    const schema = convertToolArgsToJsonSchema(createTools(ctx).goop_write_wave.args);
+
+    expect(itemElementRequired(schema, "verifications").sort()).toEqual(["check_name", "status"]);
+  });
+
+  it("goop_write_wave traceability[] element requires requirement_key", () => {
+    const ctx = createMockPluginContext();
+    contractContexts.push(ctx);
+    const schema = convertToolArgsToJsonSchema(createTools(ctx).goop_write_wave.args);
+
+    expect(itemElementRequired(schema, "traceability").sort()).toEqual(["requirement_key"]);
+  });
+
+  it("goop_blocker items[] element requires action", () => {
+    const ctx = createMockPluginContext();
+    contractContexts.push(ctx);
+    const schema = convertToolArgsToJsonSchema(createTools(ctx).goop_blocker.args);
+
+    expect(itemElementRequired(schema, "items").sort()).toEqual(["action"]);
+  });
+
+  it("goop_append_chronicle entries[] element is a plain string (no required fields)", () => {
+    const ctx = createMockPluginContext();
+    contractContexts.push(ctx);
+    const schema = convertToolArgsToJsonSchema(createTools(ctx).goop_append_chronicle.args);
+
+    expect(itemElementRequired(schema, "entries")).toEqual([]);
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -393,7 +448,7 @@ describe("convertToolArgsToJsonSchema() — argument descriptions survive V2 con
     const schema = convertToolArgsToJsonSchema(createTools(ctx).goop_write_wave.args);
 
     expect(prop(schema, "title").description).toBe(
-      "Omit to preserve it; supplied values, including empty strings, overwrite it.",
+      "Omit to preserve the stored title; cannot be an empty string — intentional metadata clearing is not supported, so supply a non-empty value to overwrite.",
     );
   });
 
@@ -404,7 +459,7 @@ describe("convertToolArgsToJsonSchema() — argument descriptions survive V2 con
 
     const itemElement = itemsOf(prop(schema, "items"));
     expect(prop(itemElement, "title").description).toBe(
-      "Omit to preserve it; supplied values, including empty strings, overwrite it.",
+      "Omit to preserve the stored title; cannot be an empty string — intentional metadata clearing is not supported, so supply a non-empty value to overwrite.",
     );
   });
 
@@ -463,7 +518,11 @@ describe("V2 reuse of the write-tool boundary (Wave 1 Task 1.1)", () => {
 
   // Fields the host fills with type defaults when the caller omits them. Each
   // one must remain optional in the schema V2 hands the host — an injected
-  // default can never be forced onto callers as required.
+  // default can never be forced onto callers as required. The list covers the
+  // full optional surface of the six write tools: mode-selecting, container,
+  // patch-modifier, and scalar fields alike. wave_number is optional in the
+  // schema ONLY because traceability-only calls omit it; runtime enforces the
+  // requirement for every other mode (see the tool description).
   const INJECTED_DEFAULT_FIELDS: Record<string, string[]> = {
     goop_write_db: ["items", "mode", "replace_all", "old_string", "new_string"],
     goop_write_section: ["items", "action", "position", "replace_all", "old_string", "new_string"],
@@ -476,7 +535,7 @@ describe("V2 reuse of the write-tool boundary (Wave 1 Task 1.1)", () => {
       "tags",
       "importance",
     ],
-    goop_append_chronicle: ["entries", "alsoLogAdl", "alsoSaveMemory"],
+    goop_append_chronicle: ["entries", "alsoLogAdl", "alsoSaveMemory", "entry", "workflow_id"],
     goop_blocker: [
       "items",
       "action",
@@ -486,6 +545,7 @@ describe("V2 reuse of the write-tool boundary (Wave 1 Task 1.1)", () => {
       "resolution",
       "id",
       "wave_id",
+      "workflow_id",
     ],
     goop_write_wave: [
       "items",
@@ -494,6 +554,11 @@ describe("V2 reuse of the write-tool boundary (Wave 1 Task 1.1)", () => {
       "verifications",
       "traceability",
       "title",
+      "pr_branch",
+      "pr_url",
+      "status",
+      "tasks",
+      "wave_number",
       "allow_status_regression",
     ],
   };

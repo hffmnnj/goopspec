@@ -263,9 +263,12 @@ function normalizeChronicleArgs(raw: ChronicleArgs): ChronicleArgs {
 export function createGoopAppendChronicleTool(ctx: PluginContext): ToolDefinition {
   return tool({
     description:
-      "Append a timestamped chronicle entry; optionally log an ADL entry and/or save a memory in the same call. WHEN TO USE: Record progress, piggybacking a decision or memory when both describe one event. WHEN NOT TO USE: goop_write_db({doc_type:\"chronicle\"}) for full-document control; goop_adl or memory_save standalone. MODES: entry (single) or entries[] (batch); alsoLogAdl/alsoSaveMemory apply once, after the batch commits and only on full success. RETURNS: Per-store [OK]/[FAIL] lines for chronicle, ADL, memory. CAVEATS: Cross-store atomicity is unavailable — three separate stores written sequentially. If chronicle fails, aux writes are skipped (no orphans); if an aux write fails after chronicle success, the chronicle stays and the failure is reported — retry that store separately.",
+      "Append a timestamped chronicle entry; optionally log an ADL entry and/or save a memory in the same call. WHEN TO USE: Record progress, piggybacking a decision or memory when both describe one event. WHEN NOT TO USE: goop_write_db({doc_type:\"chronicle\"}) for full-document control; goop_adl or memory_save standalone. MODES: entry (single) or entries[] (batch); alsoLogAdl/alsoSaveMemory apply once, after the batch commits and only on full success. RETURNS: Per-store [OK]/[FAIL] lines for chronicle, ADL, memory. CAVEATS: Cross-store atomicity is unavailable — three separate stores written sequentially. If chronicle fails, aux writes are skipped (no orphans); if an aux write fails after chronicle success, the chronicle stays and the failure is reported — retry that store separately. An empty-string entry/workflow_id and an empty alsoLogAdl:{} / alsoSaveMemory:{} payload are treated as absent; an explicitly empty entries[] reports an empty-batch error, distinct from a no-args call.",
     args: {
-      entry: tool.schema.string().optional().describe("Chronicle entry text (single mode)."),
+      entry: tool.schema
+        .string()
+        .optional()
+        .describe("Chronicle entry text (single mode); an empty string is treated as absent — no 0-char event is written."),
       workflow_id: tool.schema
         .string()
         .optional()
@@ -273,7 +276,9 @@ export function createGoopAppendChronicleTool(ctx: PluginContext): ToolDefinitio
       entries: tool.schema
         .array(tool.schema.string())
         .optional()
-        .describe("Batch of chronicle entry strings; preferred over repeated entry calls."),
+        .describe(
+          "Batch of chronicle entry strings; preferred over repeated entry calls. An explicitly empty entries[] is rejected as an empty batch, distinct from a no-args call.",
+        ),
       alsoLogAdl: tool.schema
         .object({
           type: tool.schema
@@ -292,7 +297,7 @@ export function createGoopAppendChronicleTool(ctx: PluginContext): ToolDefinitio
         })
         .optional()
         .describe(
-          "ADL entry to log alongside the chronicle; applied once after a successful write, with no cross-store atomicity.",
+          "ADL entry to log alongside the chronicle; applied once after a successful write, with no cross-store atomicity. An empty payload is treated as absent; a partial malformed payload is reported as a per-store failure.",
         ),
       alsoSaveMemory: tool.schema
         .object({
@@ -315,7 +320,7 @@ export function createGoopAppendChronicleTool(ctx: PluginContext): ToolDefinitio
         })
         .optional()
         .describe(
-          "Memory to save alongside the chronicle; applied once after a successful write, with no cross-store atomicity.",
+          "Memory to save alongside the chronicle; applied once after a successful write, with no cross-store atomicity. An empty payload is treated as absent.",
         ),
     },
     async execute(

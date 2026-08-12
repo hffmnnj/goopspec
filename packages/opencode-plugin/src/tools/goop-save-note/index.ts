@@ -252,7 +252,7 @@ function normalizeTags(tags: unknown): string[] {
 export function createGoopSaveNoteTool(ctx: PluginContext): ToolDefinition {
   return tool({
     description:
-      "Save or patch a Field Note in the global knowledge base. WHEN TO USE: To persist a reusable finding across projects, or patch an existing note by ID. WHEN NOT TO USE: memory_save for process memory; goop_search_notes to read notes back. MODES: create = title+body+tags+source_agent (importance defaults to 5); patch = note_id+old_string (+new_string/replace_all; an empty new_string deletes matched text); batch = items[] only. REJECTED: create fields with note_id; old_string/new_string/replace_all without note_id. RETURNS: The saved note id (fn_...) with char count, or a batch rollup. CAVEATS: items[] is atomic — a failure rolls back all items. Batch was historically non-atomic and could half-succeed, so retry logic built on partial failure no longer applies.",
+      "Save or patch a Field Note in the global knowledge base. WHEN TO USE: To persist a reusable finding across projects, or patch an existing note by ID. WHEN NOT TO USE: memory_save for process memory; goop_search_notes to read notes back. MODES: create = title+body+tags+source_agent (importance defaults to 5); patch = note_id+old_string (+new_string/replace_all; an empty new_string deletes matched text); batch = items[] only. REJECTED: create fields with note_id; old_string/new_string/replace_all without note_id; tags:[\"\"] and importance:0 with actionable guidance. RETURNS: The saved note id (fn_...) with char count, or a batch rollup. CAVEATS: items[] is atomic — a failure rolls back all items. Batch was historically non-atomic and could half-succeed, so retry logic built on partial failure no longer applies. tags:[] saves an untagged note; empty or whitespace-only tags are rejected, never silently dropped. An empty-string note_id/workflow_id/project_id is treated as absent; an empty new_string deletes matched text and old_string presence activates patch — both load-bearing.",
     args: {
       title: tool.schema
         .string()
@@ -265,7 +265,9 @@ export function createGoopSaveNoteTool(ctx: PluginContext): ToolDefinition {
       tags: tool.schema
         .array(tool.schema.string())
         .optional()
-        .describe("Categorization tags; required for create, rejected alongside note_id."),
+        .describe(
+          "Categorization tags; required for create, rejected alongside note_id. Pass [] for an untagged note; empty or whitespace-only tags are rejected with guidance.",
+        ),
       source_agent: tool.schema
         .string()
         .optional()
@@ -273,7 +275,9 @@ export function createGoopSaveNoteTool(ctx: PluginContext): ToolDefinition {
       importance: tool.schema
         .number()
         .optional()
-        .describe("Importance 1-10 (defaults to 5); rejected alongside note_id."),
+        .describe(
+          "Importance 1-10 (defaults to 5); rejected alongside note_id. 0 is rejected with an explicit range error, never silently defaulted to 5.",
+        ),
       workflow_id: tool.schema
         .string()
         .optional()
@@ -285,7 +289,9 @@ export function createGoopSaveNoteTool(ctx: PluginContext): ToolDefinition {
       note_id: tool.schema
         .string()
         .optional()
-        .describe("Existing note fn_... id; presence activates patch mode — omit to create a new note."),
+        .describe(
+          "Existing note fn_... id; presence activates patch mode — omit to create a new note. An empty string is treated as absent, never activating patch.",
+        ),
       old_string: tool.schema
         .string()
         .optional()
@@ -326,7 +332,9 @@ export function createGoopSaveNoteTool(ctx: PluginContext): ToolDefinition {
             note_id: tool.schema
               .string()
               .optional()
-              .describe("Existing note fn_... id for this item; presence activates patch mode."),
+              .describe(
+                "Existing note fn_... id for this item; presence activates patch mode. An empty string is treated as absent, never activating patch.",
+              ),
             old_string: tool.schema
               .string()
               .optional()

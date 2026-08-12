@@ -283,32 +283,35 @@ function assertWaveVerifiedForCompletion(
 export function createGoopWriteWaveTool(ctx: PluginContext): ToolDefinition {
   return tool({
     description:
-      "Create or update wave metadata, tasks, verification and traceability rows in GoopSpecDB. " +
+      "Create or update wave metadata, tasks, verifications, traceability rows. " +
       "WHEN TO USE: Upsert a wave, advance tasks, record verification, or write traceability. " +
-      "WHEN NOT TO USE: Use goop_read_wave to read, goop_acceptance_audit at accept, goop_append_chronicle for prose. " +
-      "MODES: One per call; mixing modes is rejected, not ignored. " +
-      "Single-wave: title/status/pr_branch/pr_url/tasks (+ task_update, verifications, traceability). " +
-      "task_updates[]: task_updates[] + optional verifications/traceability. " +
-      "items[]: items[], each item with its own wave_number and per-item verifications/traceability. " +
-      "Traceability-only: omit wave_number; only traceability[] with wave_number on every row. " +
-      "Omit mode-selecting fields entirely; status:\"\" is invalid. " +
+      "WHEN NOT TO USE: goop_read_wave to read, goop_acceptance_audit at accept, goop_append_chronicle for prose. " +
+      "MODES: One mode per call; mixing is rejected, not ignored. " +
+      "Single-wave: title/status/pr_branch/pr_url/tasks (+ task_update, verifications/traceability). " +
+      "task_updates[]: bulk updates (+ optional verifications/traceability). " +
+      "items[]: per-item wave_number + per-item verifications/traceability. " +
+      "Traceability-only: omit wave_number; every traceability row carries its own. " +
       "RETURNS: Counts, per-row lines, batch summary; goop_compact reminder on completion. " +
-      "CAVEATS: wave_number is required except in traceability-only mode, including items[] (each item targets its own). " +
-      "done/completed needs a passing or explicit-skip verification row (verifications[] this call or earlier). " +
+      "CAVEATS: wave_number is required except in traceability-only mode (items[] entries each target their own). " +
+      "done/completed needs a passing or explicit-skip verification row (this call or earlier). " +
       "Atomic: failures roll back every row and event. " +
-      "Omitted metadata is preserved; supplied values, including empty strings, overwrite.",
+      "Omitted metadata is preserved; empty-string title/pr_branch/pr_url is rejected — intentional metadata clearing is not supported. " +
+      "Injected empty statuses and task_update:{} are absent — they never clobber stored values.",
     args: {
       wave_number: tool.schema
         .number()
         .optional()
         .describe(
           "Required for every mode except traceability-only — including items[], where it gates the call though each item targets its own wave_number. " +
-            "Omit only for traceability-only calls where every row carries its own wave_number.",
+            "Omit only for traceability-only calls where every row carries its own wave_number. " +
+            "Must be a positive safe integer; 0 is rejected, never treated as a wave.",
         ),
       title: tool.schema
         .string()
         .optional()
-        .describe("Omit to preserve it; supplied values, including empty strings, overwrite it."),
+        .describe(
+          "Omit to preserve the stored title; cannot be an empty string — intentional metadata clearing is not supported, so supply a non-empty value to overwrite.",
+        ),
       status: tool.schema
         .string()
         .optional()
@@ -320,11 +323,15 @@ export function createGoopWriteWaveTool(ctx: PluginContext): ToolDefinition {
       pr_branch: tool.schema
         .string()
         .optional()
-        .describe("Omit to preserve it; supplied values, including empty strings, overwrite it."),
+        .describe(
+          "Omit to preserve the stored branch; cannot be an empty string — intentional metadata clearing is not supported, so supply a non-empty value to overwrite.",
+        ),
       pr_url: tool.schema
         .string()
         .optional()
-        .describe("Omit to preserve it; supplied values, including empty strings, overwrite it."),
+        .describe(
+          "Omit to preserve the stored URL; cannot be an empty string — intentional metadata clearing is not supported, so supply a non-empty value to overwrite.",
+        ),
       tasks: tool.schema
         .array(
           tool.schema.object({
@@ -356,7 +363,8 @@ export function createGoopWriteWaveTool(ctx: PluginContext): ToolDefinition {
         })
         .optional()
         .describe(
-          "Update one existing task's status alone (single-wave mode only); cannot be supplied alongside task_updates[] or items[].",
+          "Update one existing task's status alone (single-wave mode only); cannot be supplied alongside task_updates[] or items[]. " +
+            "An empty task_update:{} carries no intent and is treated as absent.",
         ),
       allow_status_regression: tool.schema
         .boolean()
@@ -374,7 +382,9 @@ export function createGoopWriteWaveTool(ctx: PluginContext): ToolDefinition {
             title: tool.schema
               .string()
               .optional()
-              .describe("Omit to preserve it; supplied values, including empty strings, overwrite it."),
+              .describe(
+                "Omit to preserve the stored title; cannot be an empty string — intentional metadata clearing is not supported, so supply a non-empty value to overwrite.",
+              ),
             status: tool.schema
               .string()
               .optional()
@@ -384,11 +394,15 @@ export function createGoopWriteWaveTool(ctx: PluginContext): ToolDefinition {
             pr_branch: tool.schema
               .string()
               .optional()
-              .describe("Omit to preserve it; supplied values, including empty strings, overwrite it."),
+              .describe(
+                "Omit to preserve the stored branch; cannot be an empty string — intentional metadata clearing is not supported, so supply a non-empty value to overwrite.",
+              ),
             pr_url: tool.schema
               .string()
               .optional()
-              .describe("Omit to preserve it; supplied values, including empty strings, overwrite it."),
+              .describe(
+                "Omit to preserve the stored URL; cannot be an empty string — intentional metadata clearing is not supported, so supply a non-empty value to overwrite.",
+              ),
             tasks: tool.schema
               .array(
                 tool.schema.object({
@@ -479,7 +493,8 @@ export function createGoopWriteWaveTool(ctx: PluginContext): ToolDefinition {
         .optional()
         .describe(
           "Bulk task status updates for one wave; cannot be supplied alongside wave metadata (title/status/pr_branch/pr_url/tasks) or task_update. " +
-            "May carry top-level verifications/traceability.",
+            "May carry top-level verifications/traceability. " +
+            "Entries whose status was injected as an empty string are skipped as no-ops.",
         ),
       verifications: tool.schema
         .array(
