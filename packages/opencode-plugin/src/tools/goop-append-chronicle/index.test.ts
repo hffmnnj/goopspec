@@ -585,4 +585,85 @@ describe("goop_append_chronicle tool", () => {
     expect(ctx.db.getChronicleEvents("default").length).toBe(1);
     expect(ctx.db.getDecisions({ workflowId: "default" }).length).toBe(0);
   });
+
+  // -----------------------------------------------------------------------
+  // 10. Semantic omission for entry/workflow_id (Wave 3 Task 3.2)
+  //
+  // Host injection fills optional fields the caller never authored with type
+  // defaults. An empty-string `entry` or `workflow_id` carries no authored
+  // intent, so the DIRECT factory must treat it as absent — matching the
+  // coalesced payload the registry boundary already produces for the same
+  // call. A no-args call and an explicitly empty batch are distinct rejections.
+  // -----------------------------------------------------------------------
+
+  it("treats an empty-string entry as omitted on the direct path (no 0-char event)", async () => {
+    const tool = createGoopAppendChronicleTool(ctx);
+    const result = await tool.execute({ entry: "" }, toolCtx);
+
+    // Rejected like a no-args call, never a 0-char append.
+    expect(result).toContain("Error in goop_append_chronicle");
+    expect(result).toContain("no entry or entries were provided");
+    expect(result).not.toContain("[OK]");
+    expect(ctx.db.getChronicleEvents("default").length).toBe(0);
+    expect(ctx.db.getDocument("default", "chronicle")).toBeNull();
+  });
+
+  it("treats an empty-string workflow_id as omitted (uses the active workflow)", async () => {
+    const tool = createGoopAppendChronicleTool(ctx);
+    const result = await tool.execute({ entry: "Scoped entry.", workflow_id: "" }, toolCtx);
+
+    expect(result).toBe("[OK] Chronicle entry appended (13 chars)");
+
+    // Wrote to the active workflow, not to a workflow named "".
+    const doc = ctx.db.getDocument("default", "chronicle");
+    expect(doc?.content).toContain("Scoped entry.");
+    const events = ctx.db.getChronicleEvents("default");
+    expect(events.length).toBe(1);
+    expect(events[0].workflow_id).toBe("default");
+    expect(ctx.db.getChronicleEvents("").length).toBe(0);
+    expect(ctx.db.getDocument("", "chronicle")).toBeNull();
+  });
+
+  it("returns a none-mode error when neither entry nor entries is provided", async () => {
+    const tool = createGoopAppendChronicleTool(ctx);
+    const result = await tool.execute({}, toolCtx);
+
+    // Distinct from the empty-batch message: no entries[] array was present.
+    expect(result).toContain("Error in goop_append_chronicle");
+    expect(result).toContain("no entry or entries were provided");
+    expect(result).not.toContain("entries[] array is empty");
+    expect(ctx.db.getChronicleEvents("default").length).toBe(0);
+  });
+
+  it("distinguishes an explicitly empty batch from a no-args call", async () => {
+    const tool = createGoopAppendChronicleTool(ctx);
+
+    const emptyBatch = await tool.execute({ entries: [] }, toolCtx);
+    expect(emptyBatch).toContain("Error in goop_append_chronicle");
+    expect(emptyBatch).toContain("entries[] array is empty");
+    expect(emptyBatch).not.toContain("no entry or entries were provided");
+
+    const noArgs = await tool.execute({}, toolCtx);
+    expect(noArgs).toContain("no entry or entries were provided");
+    expect(noArgs).not.toContain("entries[] array is empty");
+
+    expect(ctx.db.getChronicleEvents("default").length).toBe(0);
+  });
+
+  it("scopes batch entries to the provided workflow_id", async () => {
+    const tool = createGoopAppendChronicleTool(ctx);
+    const result = await tool.execute(
+      { entries: ["WF A.", "WF B."], workflow_id: "custom-wf" },
+      toolCtx,
+    );
+
+    expect(result).toContain("Batch append-chronicle: 2/2 succeeded");
+
+    const events = ctx.db.getChronicleEvents("custom-wf");
+    expect(events.map((e) => e.entry).sort()).toEqual(["WF A.", "WF B."]);
+    expect(ctx.db.getDocument("custom-wf", "chronicle")?.content).toContain("WF A.");
+
+    // Active workflow untouched.
+    expect(ctx.db.getChronicleEvents("default").length).toBe(0);
+  });
 });

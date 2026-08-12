@@ -376,9 +376,27 @@ describe("auditPromptSurfaces (real tree)", () => {
     // but ignored. Wording-only; no abs-language keywords added or removed.
     // 27,161 -> 27,620 bytes (+459); references 174,506 -> 174,965.
     // totalAbsoluteHits unchanged at 328.
+    //
+    // The fix-write-tool-defects workflow's Wave 4 reconciled tool-reference.md
+    // with the write-tool runtime contracts: (1) a new Six-tool batch
+    // inventory section pins each batch tool's array property, per-item
+    // requiredness, sub-array element pins, and the empty-batch rejection
+    // case — contract the schema states per-field but not as a cross-tool
+    // surface; (2) the coalescing section now documents all three omission
+    // categories (exact "", injected false, injected empty containers) with
+    // the load-bearing exclusions, correcting the previous claim that false/
+    // []/{} "pass through untouched"; (3) the pr_url/pr_branch/title rows
+    // claiming a clearing operation were removed — empty is treated as
+    // absent, preserving the stored value; (4) the goop_append_chronicle
+    // prose now states the batch-mode aux-payload and empty-batch semantics;
+    // (5) allow_status_regression added to the goop_write_wave arg list.
+    // 27,620 -> 30,526 bytes (+2,906); references 174,965 -> 177,871.
+    // tool-reference.md absolute hits 27 -> 26 (the capitalized "Only exact
+    // \"\" is affected" opener was rewritten into a bullet list); total
+    // absolute-language hits 328 -> 327.
     const references = report.directories.find((d) => d.directory === "references")!;
     expect(references.files).toBe(19);
-    expect(references.bytes).toBe(174_965);
+    expect(references.bytes).toBe(177_871);
   });
 
   it("total absolute-language hits are 299 (Wave 1 role plumbing plus the Wave 3 execution gate)", () => {
@@ -513,7 +531,15 @@ describe("auditPromptSurfaces (real tree)", () => {
     // The tool-scoping remediation adds two true boundary invariants (a field
     // name never grants an exemption; a new tool receives no exemption by
     // default), taking total absolute-language hits 326 -> 328.
-    expect(report.totalAbsoluteHits).toBe(328);
+    //
+    // The fix-write-tool-defects workflow's Wave 4 rewrote the coalescing
+    // section's lead sentence and dropped the stale clearing-operation rows
+    // (see the references.bytes note above). The rewrite removed one
+    // absolute-language hit from tool-reference.md (27 -> 26: the capitalized
+    // "Only exact \"\" is affected" opener became a descriptive bullet list),
+    // and the new Six-tool batch inventory prose introduces no new census
+    // keywords. Total: 328 -> 327.
+    expect(report.totalAbsoluteHits).toBe(327);
   });
 
   it("per-file tokens are consistent with chars via estimateTokens", () => {

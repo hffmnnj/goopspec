@@ -74,6 +74,69 @@ function validateCreateFields(item: NoteFields): { ok: true } | { ok: false; err
   return { ok: true };
 }
 
+/**
+ * Strip host-injected empty identifiers and scopes whose empty form carries no
+ * authored intent, so the DIRECT factory agrees with the coalesced payload the
+ * registry boundary (`createTools`) already produces for the same call.
+ *
+ * - `note_id: ""` can never address a note (ids are `fn_YYYYMMDD_random8`), so
+ *   it is treated as absent — patch mode must not activate on an empty id.
+ * - `workflow_id: ""` / `project_id: ""` are not real scopes; absent means the
+ *   note is stored global (null scope), matching the wrapped path.
+ *
+ * `old_string`/`new_string` are intentionally NOT touched: an empty value there
+ * is the documented blank-document patch / delete operation and is load-bearing
+ * on both paths (see EMPTY_STRING_LOAD_BEARING_FIELDS_BY_TOOL).
+ */
+function normalizeNoteArgs<T extends NoteFields & NotePatchArgs>(item: T): T {
+  const out: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(item as Record<string, unknown>)) {
+    if (value === "" && (key === "note_id" || key === "workflow_id" || key === "project_id")) {
+      continue;
+    }
+    out[key] = value;
+  }
+  return out as T;
+}
+
+/**
+ * Resolve a `tags` value to its normalized `string[]`, or an actionable error.
+ *
+ * An explicit empty array (`[]`) is the documented way to save an untagged
+ * note and stays valid. Any other value that normalizes to nothing — `[""]`,
+ * `["   "]`, an empty string, or non-string entries — is rejected rather than
+ * silently producing an untagged note the caller did not author.
+ */
+function resolveTags(tags: unknown): { ok: true; value: string[] } | { ok: false; error: string } {
+  if (tags === undefined) {
+    return { ok: false, error: "tags is required for new notes" };
+  }
+  const normalized = normalizeTags(tags);
+  if (normalized.length > 0) {
+    return { ok: true, value: normalized };
+  }
+  if (Array.isArray(tags) && tags.length === 0) {
+    return { ok: true, value: [] };
+  }
+  return {
+    ok: false,
+    error:
+      "tags cannot be empty: provide at least one non-empty tag, or pass [] to save an untagged note",
+  };
+}
+
+/**
+ * Validate an importance value. `0` is an authored value that must NEVER be
+ * reinterpreted as the default 5; it is rejected with the same explicit range
+ * message on the single and batch paths.
+ */
+function validateImportance(importance: number): { ok: true } | { ok: false; error: string } {
+  if (importance < 1 || importance > 10) {
+    return { ok: false, error: "Importance must be between 1 and 10." };
+  }
+  return { ok: true };
+}
+
 // ---------------------------------------------------------------------------
 // Note-specific write-mode resolution. A note is CREATE-or-PATCH keyed on
 // `note_id` presence (not a content/old_string pair), so resolveWriteMode()
@@ -186,7 +249,7 @@ function normalizeTags(tags: unknown): string[] {
 export function createGoopSaveNoteTool(ctx: PluginContext): ToolDefinition {
   return tool({
     description:
-      "Save or patch a Field Note in the global knowledge base. WHEN TO USE: To persist a reusable finding across projects, or patch an existing note by ID. WHEN NOT TO USE: memory_save for process memory; goop_search_notes to read notes back. MODES: create = title+body+tags+source_agent (importance defaults to 5); patch = note_id+old_string (+new_string/replace_all; an empty new_string deletes matched text); batch = items[] only. REJECTED: create fields with note_id; old_string/new_string/replace_all without note_id. RETURNS: The saved note id (fn_...) with char count, or a batch rollup. CAVEATS: items[] is atomic — a failure rolls back all items. Batch was historically non-atomic and could half-succeed, so retry logic built on partial failure no longer applies.",
+      'Save or patch a Field Note in the global knowledge base. WHEN TO USE: To persist a reusable finding across projects, or patch an existing note by ID. WHEN NOT TO USE: memory_save for process memory; goop_search_notes to read notes back. MODES: create = title+body+tags+source_agent (importance defaults to 5); patch = note_id+old_string (+new_string/replace_all; an empty new_string deletes matched text); batch = items[] only. REJECTED: create fields with note_id; old_string/new_string/replace_all without note_id; tags:[""] and importance:0 with actionable guidance. RETURNS: The saved note id (fn_...) with char count, or a batch rollup. CAVEATS: items[] is atomic — a failure rolls back all items. Batch was historically non-atomic and could half-succeed, so retry logic built on partial failure no longer applies. tags:[] saves an untagged note; empty or whitespace-only tags are rejected, never silently dropped. An empty-string note_id/workflow_id/project_id is treated as absent; an empty new_string deletes matched text and old_string presence activates patch — both load-bearing.',
     args: {
       title: tool.schema
         .string()
@@ -199,7 +262,9 @@ export function createGoopSaveNoteTool(ctx: PluginContext): ToolDefinition {
       tags: tool.schema
         .array(tool.schema.string())
         .optional()
-        .describe("Categorization tags; required for create, rejected alongside note_id."),
+        .describe(
+          "Categorization tags; required for create, rejected alongside note_id. Pass [] for an untagged note; empty or whitespace-only tags are rejected with guidance.",
+        ),
       source_agent: tool.schema
         .string()
         .optional()
@@ -207,7 +272,9 @@ export function createGoopSaveNoteTool(ctx: PluginContext): ToolDefinition {
       importance: tool.schema
         .number()
         .optional()
-        .describe("Importance 1-10 (defaults to 5); rejected alongside note_id."),
+        .describe(
+          "Importance 1-10 (defaults to 5); rejected alongside note_id. 0 is rejected with an explicit range error, never silently defaulted to 5.",
+        ),
       workflow_id: tool.schema
         .string()
         .optional()
@@ -219,11 +286,15 @@ export function createGoopSaveNoteTool(ctx: PluginContext): ToolDefinition {
       note_id: tool.schema
         .string()
         .optional()
-        .describe("Existing note fn_... id; presence activates patch mode — omit to create a new note."),
+        .describe(
+          "Existing note fn_... id; presence activates patch mode — omit to create a new note. An empty string is treated as absent, never activating patch.",
+        ),
       old_string: tool.schema
         .string()
         .optional()
-        .describe("Exact existing text to replace; required when note_id is present (presence activates patch)."),
+        .describe(
+          "Exact existing text to replace; required when note_id is present (presence activates patch).",
+        ),
       new_string: tool.schema
         .string()
         .optional()
@@ -238,15 +309,21 @@ export function createGoopSaveNoteTool(ctx: PluginContext): ToolDefinition {
             title: tool.schema
               .string()
               .optional()
-              .describe("Note title for this item; required for create, rejected alongside note_id."),
+              .describe(
+                "Note title for this item; required for create, rejected alongside note_id.",
+              ),
             body: tool.schema
               .string()
               .optional()
-              .describe("Note body markdown for this item; required for create, rejected alongside note_id."),
+              .describe(
+                "Note body markdown for this item; required for create, rejected alongside note_id.",
+              ),
             tags: tool.schema
               .array(tool.schema.string())
               .optional()
-              .describe("Categorization tags for this item; required for create, rejected alongside note_id."),
+              .describe(
+                "Categorization tags for this item; required for create, rejected alongside note_id.",
+              ),
             source_agent: tool.schema
               .string()
               .optional()
@@ -255,24 +332,38 @@ export function createGoopSaveNoteTool(ctx: PluginContext): ToolDefinition {
               .number()
               .optional()
               .describe("Importance 1-10 (defaults to 5) for this item."),
-            workflow_id: tool.schema.string().optional().describe("Originating workflow for this item."),
-            project_id: tool.schema.string().optional().describe("Originating project for this item."),
+            workflow_id: tool.schema
+              .string()
+              .optional()
+              .describe("Originating workflow for this item."),
+            project_id: tool.schema
+              .string()
+              .optional()
+              .describe("Originating project for this item."),
             note_id: tool.schema
               .string()
               .optional()
-              .describe("Existing note fn_... id for this item; presence activates patch mode."),
+              .describe(
+                "Existing note fn_... id for this item; presence activates patch mode. An empty string is treated as absent, never activating patch.",
+              ),
             old_string: tool.schema
               .string()
               .optional()
-              .describe("Exact existing text to replace; required when this item's note_id is present."),
+              .describe(
+                "Exact existing text to replace; required when this item's note_id is present.",
+              ),
             new_string: tool.schema
               .string()
               .optional()
-              .describe("Replacement text for this item; an empty new_string deletes the matched text."),
+              .describe(
+                "Replacement text for this item; an empty new_string deletes the matched text.",
+              ),
             replace_all: tool.schema
               .boolean()
               .optional()
-              .describe("Replace all occurrences instead of requiring a single match for this item."),
+              .describe(
+                "Replace all occurrences instead of requiring a single match for this item.",
+              ),
           }),
         )
         .optional()
@@ -280,10 +371,13 @@ export function createGoopSaveNoteTool(ctx: PluginContext): ToolDefinition {
           "Atomic batch of note writes; each item is create or patch — cannot be supplied alongside top-level create or patch fields.",
         ),
     },
-    async execute(args: SaveNoteArgs, _context: ToolContext): Promise<string> {
+    async execute(rawArgs: SaveNoteArgs, _context: ToolContext): Promise<string> {
       try {
+        const args = normalizeNoteArgs(rawArgs);
+
         if (Array.isArray(args.items) && args.items.length > 0) {
-          const result = runBatch(ctx.db, args.items, (item) => {
+          const result = runBatch(ctx.db, args.items, (rawItem) => {
+            const item = normalizeNoteArgs(rawItem);
             const itemResolution = resolveNoteMode(item);
             if (itemResolution.kind === "error") {
               throw new Error(itemResolution.message);
@@ -308,11 +402,15 @@ export function createGoopSaveNoteTool(ctx: PluginContext): ToolDefinition {
               throw new Error(validation.error);
             }
 
-            const tags = normalizeTags(item.tags);
+            const tagsResolution = resolveTags(item.tags);
+            if (!tagsResolution.ok) {
+              throw new Error(tagsResolution.error);
+            }
 
             const itemImportance = item.importance ?? 5;
-            if (itemImportance < 1 || itemImportance > 10) {
-              throw new Error(`importance out of range (${itemImportance})`);
+            const importanceResolution = validateImportance(itemImportance);
+            if (!importanceResolution.ok) {
+              throw new Error(importanceResolution.error);
             }
 
             const id = generateNoteId();
@@ -320,7 +418,7 @@ export function createGoopSaveNoteTool(ctx: PluginContext): ToolDefinition {
               id,
               title: item.title as string,
               body: item.body as string,
-              tags: JSON.stringify(tags),
+              tags: JSON.stringify(tagsResolution.value),
               source_agent: item.source_agent as string,
               importance: itemImportance,
               workflow_id: item.workflow_id ?? null,
@@ -367,11 +465,16 @@ export function createGoopSaveNoteTool(ctx: PluginContext): ToolDefinition {
 
         const importance = args.importance ?? 5;
 
-        if (importance < 1 || importance > 10) {
-          return "Error in goop_save_note: Importance must be between 1 and 10.";
+        const importanceResolution = validateImportance(importance);
+        if (!importanceResolution.ok) {
+          return `Error in goop_save_note: ${importanceResolution.error}`;
         }
 
-        const tags = normalizeTags(args.tags);
+        const tagsResolution = resolveTags(args.tags);
+        if (!tagsResolution.ok) {
+          return `Error in goop_save_note: ${tagsResolution.error}`;
+        }
+        const tags = tagsResolution.value;
 
         const id = generateNoteId();
 
