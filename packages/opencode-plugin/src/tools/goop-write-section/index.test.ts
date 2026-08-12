@@ -1,5 +1,5 @@
-import { afterEach, beforeEach, describe, expect, it } from "bun:test";
-import { existsSync } from "node:fs";
+import { afterEach, beforeEach, describe, expect, it, spyOn } from "bun:test";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import type { PluginContext, ToolContext } from "../../test-utils.js";
@@ -10,6 +10,7 @@ import {
 } from "../../test-utils.js";
 import { createGoopReadDbTool } from "../goop-read-db/index.js";
 import { createGoopWriteDbTool } from "../goop-write-db/index.js";
+import { createTools } from "../index.js";
 import { createGoopWriteSectionTool } from "./index.js";
 
 describe("goop_write_section tool", () => {
@@ -668,6 +669,241 @@ describe("goop_write_section tool", () => {
       );
       expect(result).toContain("Patched section 'fresh'");
       expect(ctx.db.getSection("default", "spec", "fresh")?.content).toBe("# Via empty patch");
+    });
+  });
+
+  // -----------------------------------------------------------------------
+  // Wave 2 Task 2.2 — contract alignment (red-first regression evidence)
+  //
+  // These assertions FAIL on the pre-task implementation; they are the
+  // regression evidence this task is built on. They pin the write/delete/
+  // patch/batch contracts that must hold across both the direct factory and
+  // the createTools boundary:
+  //   R1. direct empty content coalesces to absent (loud none-mode error)
+  //       instead of silently wiping the section — matching the wrapped path.
+  //   R2. batch items with empty content or empty section_key fail
+  //       atomically; an empty section key must never create a section.
+  //   R3. single write, patch, and delete are transactional: an event
+  //       failure rolls back the section/document mutation and leaves no
+  //       orphan event.
+  //   R4. direct replace_all:false is semantically identical to absent (the
+  //       default) and must not trip the patch-modifier rejection.
+  // -----------------------------------------------------------------------
+
+  describe("contract alignment (W2.T2.2)", () => {
+    it("REG: direct empty content coalesces to absent instead of wiping the section", async () => {
+      ctx.db.upsertSection("default", "spec", "overview", "# Original");
+      const tool = createGoopWriteSectionTool(ctx);
+
+      const result = await tool.execute(
+        { doc_type: "spec", section_key: "overview", content: "" },
+        toolCtx,
+      );
+
+      expect(result).toContain("Error in goop_write_section");
+      expect(result).toContain("content is required when old_string is not provided");
+      expect(ctx.db.getSection("default", "spec", "overview")?.content).toBe("# Original");
+    });
+
+    it("REG: wrapped empty content reports the same none-mode error and leaves the section untouched", async () => {
+      const tools = createTools(ctx);
+      ctx.db.upsertSection("default", "spec", "overview", "# Original");
+
+      const result = (await tools.goop_write_section.execute(
+        { doc_type: "spec", section_key: "overview", content: "" },
+        toolCtx,
+      )) as string;
+
+      expect(result).toContain("content is required when old_string is not provided");
+      expect(ctx.db.getSection("default", "spec", "overview")?.content).toBe("# Original");
+    });
+
+    it("REG: batch item with empty content fails atomically instead of creating an empty section", async () => {
+      const tool = createGoopWriteSectionTool(ctx);
+      const result = await tool.execute(
+        {
+          doc_type: "spec",
+          section_key: "",
+          content: "",
+          items: [
+            { doc_type: "spec", section_key: "intro", content: "# Intro" },
+            { doc_type: "spec", section_key: "blank", content: "" },
+          ],
+        },
+        toolCtx,
+      );
+
+      expect(result).toContain("0/2 succeeded");
+      expect(result).toContain("content is required when old_string is not provided");
+      expect(ctx.db.getSection("default", "spec", "intro")).toBeNull();
+      expect(ctx.db.getSection("default", "spec", "blank")).toBeNull();
+    });
+
+    it("REG: batch item with empty section_key never creates a section", async () => {
+      const tool = createGoopWriteSectionTool(ctx);
+      const result = await tool.execute(
+        {
+          doc_type: "spec",
+          section_key: "",
+          content: "",
+          items: [
+            { doc_type: "spec", section_key: "", content: "# Anonymous" },
+            { doc_type: "spec", section_key: "named", content: "# Named" },
+          ],
+        },
+        toolCtx,
+      );
+
+      expect(result).toContain("0/2 succeeded");
+      expect(ctx.db.getSection("default", "spec", "")).toBeNull();
+      expect(ctx.db.getSection("default", "spec", "named")).toBeNull();
+    });
+
+    it("REG: event failure on a single write rolls back the section mutation", async () => {
+      ctx.db.upsertSection("default", "spec", "overview", "# Original");
+      const appendEvent = spyOn(ctx.db, "appendEvent").mockImplementation(() => {
+        throw new Error("event storage unavailable");
+      });
+      const tool = createGoopWriteSectionTool(ctx);
+
+      const result = await tool.execute(
+        { doc_type: "spec", section_key: "overview", content: "# Replacement" },
+        toolCtx,
+      );
+      appendEvent.mockRestore();
+
+      expect(result).toContain("event storage unavailable");
+      expect(ctx.db.getSection("default", "spec", "overview")?.content).toBe("# Original");
+      expect(ctx.db.getEvents("default", "doc_section_write")).toHaveLength(0);
+    });
+
+    it("REG: event failure on a patch rolls back the section mutation", async () => {
+      ctx.db.upsertSection("default", "spec", "overview", "Hello world");
+      const appendEvent = spyOn(ctx.db, "appendEvent").mockImplementation(() => {
+        throw new Error("event storage unavailable");
+      });
+      const tool = createGoopWriteSectionTool(ctx);
+
+      const result = await tool.execute(
+        { doc_type: "spec", section_key: "overview", old_string: "world", new_string: "GoopSpec" },
+        toolCtx,
+      );
+      appendEvent.mockRestore();
+
+      expect(result).toContain("event storage unavailable");
+      expect(ctx.db.getSection("default", "spec", "overview")?.content).toBe("Hello world");
+      expect(ctx.db.getEvents("default", "doc_section_write")).toHaveLength(0);
+    });
+
+    it("REG: event failure on a delete rolls back the section deletion", async () => {
+      ctx.db.upsertSection("default", "spec", "overview", "# Keep me");
+      const appendEvent = spyOn(ctx.db, "appendEvent").mockImplementation(() => {
+        throw new Error("event storage unavailable");
+      });
+      const tool = createGoopWriteSectionTool(ctx);
+
+      const result = await tool.execute(
+        { action: "delete", doc_type: "spec", section_key: "overview" },
+        toolCtx,
+      );
+      appendEvent.mockRestore();
+
+      expect(result).toContain("event storage unavailable");
+      expect(ctx.db.getSection("default", "spec", "overview")?.content).toBe("# Keep me");
+      expect(ctx.db.getEvents("default", "doc_section_delete")).toHaveLength(0);
+    });
+
+    it("REG: direct replace_all:false is semantically absent and does not trip the patch-modifier rule", async () => {
+      const tool = createGoopWriteSectionTool(ctx);
+      const result = await tool.execute(
+        { doc_type: "spec", section_key: "overview", content: "# Written", replace_all: false },
+        toolCtx,
+      );
+
+      expect(result).toContain("Written section 'overview'");
+      expect(ctx.db.getSection("default", "spec", "overview")?.content).toBe("# Written");
+    });
+
+    it("KEEP: event failure on a batch write rolls back every section and event", async () => {
+      const appendEvent = spyOn(ctx.db, "appendEvent").mockImplementation(() => {
+        throw new Error("event storage unavailable");
+      });
+      const tool = createGoopWriteSectionTool(ctx);
+
+      const result = await tool.execute(
+        {
+          doc_type: "spec",
+          section_key: "",
+          content: "",
+          items: [
+            { doc_type: "spec", section_key: "intro", content: "# Intro" },
+            { doc_type: "spec", section_key: "plan", content: "# Plan" },
+          ],
+        },
+        toolCtx,
+      );
+      appendEvent.mockRestore();
+
+      expect(result).toContain("0/2 succeeded");
+      expect(ctx.db.getSection("default", "spec", "intro")).toBeNull();
+      expect(ctx.db.getSection("default", "spec", "plan")).toBeNull();
+      expect(ctx.db.getEvents("default", "doc_section_write")).toHaveLength(0);
+    });
+
+    it("KEEP: batch write targets the requested workflow and renders only that workflow's sidecar", async () => {
+      const tool = createGoopWriteSectionTool(ctx);
+      const result = await tool.execute(
+        {
+          doc_type: "spec",
+          section_key: "",
+          content: "",
+          workflow_id: "custom-wf",
+          items: [
+            { doc_type: "spec", section_key: "intro", content: "# Custom intro" },
+            { doc_type: "spec", section_key: "plan", content: "# Custom plan" },
+          ],
+        },
+        toolCtx,
+      );
+
+      expect(result).toContain("2/2 succeeded");
+      expect(ctx.db.getSection("custom-wf", "spec", "intro")?.content).toBe("# Custom intro");
+      expect(ctx.db.getSection("default", "spec", "intro")).toBeNull();
+      expect(readFileSync(join(testDir, ".goopspec", "custom-wf", "SPEC.md"), "utf-8")).toBe(
+        "# Custom intro\n\n# Custom plan",
+      );
+    });
+
+    it("KEEP: legacy migration renders the migrated content into the markdown sidecar", async () => {
+      ctx.db.upsertDocument("default", "spec", "# Legacy Document");
+      const tool = createGoopWriteSectionTool(ctx);
+
+      await tool.execute(
+        { doc_type: "spec", section_key: "new-section", content: "# New" },
+        toolCtx,
+      );
+
+      const sidecarPath = join(testDir, ".goopspec", "default", "SPEC.md");
+      expect(existsSync(sidecarPath)).toBe(true);
+      expect(await Bun.file(sidecarPath).text()).toBe("# Legacy Document\n\n# New");
+      expect(ctx.db.getSections("default", "spec").map((section) => section.section_key)).toEqual([
+        "_migrated-legacy-content",
+        "new-section",
+      ]);
+    });
+
+    it("KEEP: patch deletion via empty new_string remains supported and can empty a section", async () => {
+      ctx.db.upsertSection("default", "spec", "overview", "remove me");
+      const tool = createGoopWriteSectionTool(ctx);
+
+      const result = await tool.execute(
+        { doc_type: "spec", section_key: "overview", old_string: "remove me", new_string: "" },
+        toolCtx,
+      );
+
+      expect(result).toContain("Patched section 'overview'");
+      expect(ctx.db.getSection("default", "spec", "overview")?.content).toBe("");
+      expect(ctx.db.getEvents("default", "doc_section_write")).toHaveLength(1);
     });
   });
 });
