@@ -2618,7 +2618,7 @@ describe("goop_write_wave rejection messages teach the correction", () => {
     expect(ctx.db.getWave("default", 1)).toBeNull();
   });
 
-  it("status:\"\" is rejected as an invalid status (not silently applied) with the valid set listed", async () => {
+  it('status:"" is rejected as an invalid status (not silently applied) with the valid set listed', async () => {
     const tool = createGoopWriteWaveTool(ctx);
     // An empty-string status is injected by some tool-call serialization
     // layers. It must be rejected — never silently interpreted as "no change"
@@ -2761,7 +2761,7 @@ describe("goop_write_wave empty-string boundary (via createTools)", () => {
     expect(ctx.db.getWave("default", 1)?.title).toBe("Original");
   });
 
-  it("a spurious top-level status:\"\" does not clobber a real status in the same call", async () => {
+  it('a spurious top-level status:"" does not clobber a real status in the same call', async () => {
     // status:"" coalesces to absent, so the real intent (status: "in_progress"
     // written moments before) is preserved rather than reset to "".
     const tools = createTools(ctx);

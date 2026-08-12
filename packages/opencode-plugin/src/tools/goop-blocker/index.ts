@@ -114,9 +114,9 @@ function processBlockerItem(
   switch (item.action) {
     case "open": {
       if (item.description === undefined || item.description === "") {
-          throw new Error(
-            '`description` is required for action "open". Retry with `{ action: "open", description: "what is blocked" }`.',
-          );
+        throw new Error(
+          '`description` is required for action "open". Retry with `{ action: "open", description: "what is blocked" }`.',
+        );
       }
       if (item.description.trim().length === 0) {
         throw new Error(
@@ -157,9 +157,9 @@ function processBlockerItem(
 
     case "resolve": {
       if (item.id === undefined) {
-          throw new Error(
-            '`id` is required for action "resolve". Retry with `{ action: "resolve", id: 123 }` using the blocker row id.',
-          );
+        throw new Error(
+          '`id` is required for action "resolve". Retry with `{ action: "resolve", id: 123 }` using the blocker row id.',
+        );
       }
 
       if (item.description !== undefined && item.description.trim().length === 0) {
@@ -227,9 +227,12 @@ export function createGoopBlockerTool(ctx: PluginContext): ToolDefinition {
       "Open, resolve, or list workflow blockers in GoopSpecDB. " +
       "WHEN TO USE: Record a blocking issue, close one, or list blockers for a workflow. " +
       "WHEN NOT TO USE: goop_acceptance_audit reads blockers with verifications and waves at the accept gate; goop_timeline gives a chronological audit trail. " +
-      "MODES: action picks open/resolve/list; items[] batches mixed actions. open needs description (severity defaults medium, wave_id optional). resolve needs id (resolution optional; description/wave_id optional to amend). list takes only an optional status filter. In items[] each item carries its own action and required fields; top-level operation fields alongside items[] are rejected. status is forced to open on open and resolved on resolve, so it only filters list. " +
+      "MODES: action picks open/resolve/list; items[] batches mixed actions. open needs description (severity defaults medium, wave_id optional); resolve needs id (resolution/description/wave_id optional); list takes an optional status filter. In items[] each item carries its own action; top-level operation fields are rejected. status is forced by action; it only filters list. " +
       "RETURNS: Per-action confirmation, a markdown blocker table for list, or a batch summary for items[]. " +
-      "CAVEATS: Omit action entirely when using items[] — passing it alongside items[] is rejected. workflow_id is honored at top level and per item. Opening a blocker against a completed wave warns but still opens.",
+      "CAVEATS: Omit action when using items[] — passing it alongside is rejected. workflow_id is honored at top level and per item. " +
+      "id: 0 and wave_id: 0 are treated as omitted (1-based ids). " +
+      "Empty-string action/severity/status are absent — they never select a lifecycle operation; whitespace-only descriptions/resolutions are rejected with guidance. " +
+      "An explicitly empty items[] reports an empty-batch error, distinct from no-args.",
     args: {
       action: tool.schema
         .enum(BLOCKER_ACTIONS)
@@ -241,7 +244,9 @@ export function createGoopBlockerTool(ctx: PluginContext): ToolDefinition {
       description: tool.schema
         .string()
         .optional()
-        .describe("Required for open; optional for resolve (amends the stored text). Ignored by list."),
+        .describe(
+          "Required for open; optional for resolve (amends the stored text). Ignored by list. Whitespace-only is rejected with guidance — provide real text or omit.",
+        ),
       severity: tool.schema
         .enum(BLOCKER_TOOL_SEVERITIES)
         .optional()
@@ -252,12 +257,14 @@ export function createGoopBlockerTool(ctx: PluginContext): ToolDefinition {
         .number()
         .optional()
         .describe(
-          "Wave number to associate the blocker with. Used by open (attaches) and resolve (updates); ignored by list. Opening against a wave already marked done/completed warns but still opens.",
+          "Wave number to associate the blocker with. Used by open (attaches) and resolve (updates); ignored by list. Opening against a wave already marked done/completed warns but still opens. 0 is treated as omitted — wave numbers are 1-based.",
         ),
       id: tool.schema
         .number()
         .optional()
-        .describe("Blocker row id; required for resolve. Ignored by open and list."),
+        .describe(
+          "Blocker row id; required for resolve. Ignored by open and list. 0 is treated as omitted — ids are 1-based.",
+        ),
       resolution: tool.schema
         .string()
         .optional()
@@ -307,7 +314,9 @@ export function createGoopBlockerTool(ctx: PluginContext): ToolDefinition {
             workflow_id: tool.schema
               .string()
               .optional()
-              .describe("Per-item workflow override; omit to inherit the top-level workflow_id or the active workflow."),
+              .describe(
+                "Per-item workflow override; omit to inherit the top-level workflow_id or the active workflow.",
+              ),
           }),
         )
         .optional()

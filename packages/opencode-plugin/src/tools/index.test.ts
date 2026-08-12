@@ -983,7 +983,13 @@ describe("write-tool boundary matrix — injected type defaults (Wave 1 Task 1.1
 
     const tools = createTools(ctx);
     const result = (await tools.goop_save_note.execute(
-      { note_id: noteId, old_string: "", new_string: "Filled via registry", replace_all: false, items: [] },
+      {
+        note_id: noteId,
+        old_string: "",
+        new_string: "Filled via registry",
+        replace_all: false,
+        items: [],
+      },
       toolCtx,
     )) as string;
     expect(result).toContain("Field Note patched:");
@@ -1123,6 +1129,69 @@ describe("write-tool boundary matrix — injected type defaults (Wave 1 Task 1.1
     expect(result).toContain("Wrote traceability for MH-1 on wave 1");
   });
 
+  it("REG: injected empty containers never select batch mode for any write tool", async () => {
+    // Each payload carries the empty collection/object defaults that a host can
+    // add for omitted optional fields. Every call deliberately supplies a
+    // non-batch intent and must take that intent rather than a batch path.
+    const tools = createTools(ctx);
+
+    const documentResult = (await tools.goop_write_db.execute(
+      { doc_type: "requirements", content: "# Requirements", items: [] },
+      toolCtx,
+    )) as string;
+    expect(documentResult).toContain("Written requirements");
+    expect(documentResult).not.toContain("Batch write-db");
+
+    const sectionResult = (await tools.goop_write_section.execute(
+      { doc_type: "spec", section_key: "container-proof", content: "# Proof", items: [] },
+      toolCtx,
+    )) as string;
+    expect(sectionResult).toContain("Written section 'container-proof'");
+    expect(sectionResult).not.toContain("Batch write-section");
+
+    const noteResult = (await tools.goop_save_note.execute(
+      {
+        title: "Container proof",
+        body: "container-proof-note-body",
+        tags: ["proof"],
+        source_agent: "test-agent",
+        items: [],
+      },
+      toolCtx,
+    )) as string;
+    expect(noteResult).toContain("Field Note saved:");
+    expect(noteResult).not.toContain("Batch save-note");
+
+    const chronicleResult = (await tools.goop_append_chronicle.execute(
+      { entry: "Container proof chronicle.", entries: [] },
+      toolCtx,
+    )) as string;
+    expect(chronicleResult).toContain("[OK] Chronicle entry appended");
+    expect(chronicleResult).not.toContain("Batch chronicle");
+
+    const blockerResult = (await tools.goop_blocker.execute(
+      { action: "list", items: [] },
+      toolCtx,
+    )) as string;
+    expect(blockerResult).toContain("No blockers found");
+    expect(blockerResult).not.toContain("Batch blocker");
+
+    const waveResult = (await tools.goop_write_wave.execute(
+      {
+        wave_number: 6,
+        title: "Container proof",
+        items: [],
+        task_update: {},
+        task_updates: [],
+        verifications: [],
+        traceability: [],
+      },
+      toolCtx,
+    )) as string;
+    expect(waveResult).toContain("Written wave 6");
+    expect(waveResult).not.toContain("Batch write-wave");
+  });
+
   // --- Direct-factory parity and deliberate host-boundary distinctions ---
 
   it("keeps direct and wrapped document patch validation messages identical", async () => {
@@ -1177,6 +1246,17 @@ describe("write-tool boundary matrix — injected type defaults (Wave 1 Task 1.1
       toolCtx,
     )) as string;
     expect(wrappedResult).toContain("Field Note saved:");
+  });
+
+  it("preserves save-note's explicit empty-batch error on both paths", async () => {
+    // Unlike ordinary injected containers, `items: []` has a documented
+    // validation distinction for save-note when no single-note payload exists.
+    // It therefore remains visible to the factory rather than being coalesced.
+    const directResult = await createGoopSaveNoteTool(ctx).execute({ items: [] }, toolCtx);
+    const wrappedResult = await createTools(ctx).goop_save_note.execute({ items: [] }, toolCtx);
+
+    expect(wrappedResult).toBe(directResult);
+    expect(wrappedResult).toContain("items[] array is empty and no note fields were provided");
   });
 
   it("rejects empty section_key on both direct and wrapped paths with identical guidance", async () => {

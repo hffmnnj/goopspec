@@ -1099,7 +1099,7 @@ describe("goop_save_note tool", () => {
       expect(ctx.db.searchNotes("direct-injected-note-id-body-xyz").length).toBe(1);
     });
 
-    it('rejects tags containing only empty strings instead of saving an untagged note', async () => {
+    it("rejects tags containing only empty strings instead of saving an untagged note", async () => {
       const tool = createGoopSaveNoteTool(ctx);
       const result = String(
         await tool.execute(

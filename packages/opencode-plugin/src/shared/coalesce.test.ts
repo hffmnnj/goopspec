@@ -189,6 +189,10 @@ describe("coalesceEmptyStrings — injected non-string type defaults (Wave 1 bou
     expect(coalesce({ items: [] }, "goop_write_db")).toEqual({});
   });
 
+  it("keeps save-note's explicit empty batch visible for its distinct validation error", () => {
+    expect(coalesce({ items: [] }, "goop_save_note")).toEqual({ items: [] });
+  });
+
   it("drops an injected empty object on an optional object field (task_update)", () => {
     expect(coalesce({ task_update: {} }, "goop_write_wave")).toEqual({});
   });

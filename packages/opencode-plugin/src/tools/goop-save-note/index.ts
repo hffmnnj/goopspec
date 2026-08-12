@@ -91,10 +91,7 @@ function validateCreateFields(item: NoteFields): { ok: true } | { ok: false; err
 function normalizeNoteArgs<T extends NoteFields & NotePatchArgs>(item: T): T {
   const out: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(item as Record<string, unknown>)) {
-    if (
-      value === "" &&
-      (key === "note_id" || key === "workflow_id" || key === "project_id")
-    ) {
+    if (value === "" && (key === "note_id" || key === "workflow_id" || key === "project_id")) {
       continue;
     }
     out[key] = value;
@@ -252,7 +249,7 @@ function normalizeTags(tags: unknown): string[] {
 export function createGoopSaveNoteTool(ctx: PluginContext): ToolDefinition {
   return tool({
     description:
-      "Save or patch a Field Note in the global knowledge base. WHEN TO USE: To persist a reusable finding across projects, or patch an existing note by ID. WHEN NOT TO USE: memory_save for process memory; goop_search_notes to read notes back. MODES: create = title+body+tags+source_agent (importance defaults to 5); patch = note_id+old_string (+new_string/replace_all; an empty new_string deletes matched text); batch = items[] only. REJECTED: create fields with note_id; old_string/new_string/replace_all without note_id. RETURNS: The saved note id (fn_...) with char count, or a batch rollup. CAVEATS: items[] is atomic — a failure rolls back all items. Batch was historically non-atomic and could half-succeed, so retry logic built on partial failure no longer applies.",
+      'Save or patch a Field Note in the global knowledge base. WHEN TO USE: To persist a reusable finding across projects, or patch an existing note by ID. WHEN NOT TO USE: memory_save for process memory; goop_search_notes to read notes back. MODES: create = title+body+tags+source_agent (importance defaults to 5); patch = note_id+old_string (+new_string/replace_all; an empty new_string deletes matched text); batch = items[] only. REJECTED: create fields with note_id; old_string/new_string/replace_all without note_id; tags:[""] and importance:0 with actionable guidance. RETURNS: The saved note id (fn_...) with char count, or a batch rollup. CAVEATS: items[] is atomic — a failure rolls back all items. Batch was historically non-atomic and could half-succeed, so retry logic built on partial failure no longer applies. tags:[] saves an untagged note; empty or whitespace-only tags are rejected, never silently dropped. An empty-string note_id/workflow_id/project_id is treated as absent; an empty new_string deletes matched text and old_string presence activates patch — both load-bearing.',
     args: {
       title: tool.schema
         .string()
@@ -265,7 +262,9 @@ export function createGoopSaveNoteTool(ctx: PluginContext): ToolDefinition {
       tags: tool.schema
         .array(tool.schema.string())
         .optional()
-        .describe("Categorization tags; required for create, rejected alongside note_id."),
+        .describe(
+          "Categorization tags; required for create, rejected alongside note_id. Pass [] for an untagged note; empty or whitespace-only tags are rejected with guidance.",
+        ),
       source_agent: tool.schema
         .string()
         .optional()
@@ -273,7 +272,9 @@ export function createGoopSaveNoteTool(ctx: PluginContext): ToolDefinition {
       importance: tool.schema
         .number()
         .optional()
-        .describe("Importance 1-10 (defaults to 5); rejected alongside note_id."),
+        .describe(
+          "Importance 1-10 (defaults to 5); rejected alongside note_id. 0 is rejected with an explicit range error, never silently defaulted to 5.",
+        ),
       workflow_id: tool.schema
         .string()
         .optional()
@@ -285,11 +286,15 @@ export function createGoopSaveNoteTool(ctx: PluginContext): ToolDefinition {
       note_id: tool.schema
         .string()
         .optional()
-        .describe("Existing note fn_... id; presence activates patch mode — omit to create a new note."),
+        .describe(
+          "Existing note fn_... id; presence activates patch mode — omit to create a new note. An empty string is treated as absent, never activating patch.",
+        ),
       old_string: tool.schema
         .string()
         .optional()
-        .describe("Exact existing text to replace; required when note_id is present (presence activates patch)."),
+        .describe(
+          "Exact existing text to replace; required when note_id is present (presence activates patch).",
+        ),
       new_string: tool.schema
         .string()
         .optional()
@@ -304,15 +309,21 @@ export function createGoopSaveNoteTool(ctx: PluginContext): ToolDefinition {
             title: tool.schema
               .string()
               .optional()
-              .describe("Note title for this item; required for create, rejected alongside note_id."),
+              .describe(
+                "Note title for this item; required for create, rejected alongside note_id.",
+              ),
             body: tool.schema
               .string()
               .optional()
-              .describe("Note body markdown for this item; required for create, rejected alongside note_id."),
+              .describe(
+                "Note body markdown for this item; required for create, rejected alongside note_id.",
+              ),
             tags: tool.schema
               .array(tool.schema.string())
               .optional()
-              .describe("Categorization tags for this item; required for create, rejected alongside note_id."),
+              .describe(
+                "Categorization tags for this item; required for create, rejected alongside note_id.",
+              ),
             source_agent: tool.schema
               .string()
               .optional()
@@ -321,24 +332,38 @@ export function createGoopSaveNoteTool(ctx: PluginContext): ToolDefinition {
               .number()
               .optional()
               .describe("Importance 1-10 (defaults to 5) for this item."),
-            workflow_id: tool.schema.string().optional().describe("Originating workflow for this item."),
-            project_id: tool.schema.string().optional().describe("Originating project for this item."),
+            workflow_id: tool.schema
+              .string()
+              .optional()
+              .describe("Originating workflow for this item."),
+            project_id: tool.schema
+              .string()
+              .optional()
+              .describe("Originating project for this item."),
             note_id: tool.schema
               .string()
               .optional()
-              .describe("Existing note fn_... id for this item; presence activates patch mode."),
+              .describe(
+                "Existing note fn_... id for this item; presence activates patch mode. An empty string is treated as absent, never activating patch.",
+              ),
             old_string: tool.schema
               .string()
               .optional()
-              .describe("Exact existing text to replace; required when this item's note_id is present."),
+              .describe(
+                "Exact existing text to replace; required when this item's note_id is present.",
+              ),
             new_string: tool.schema
               .string()
               .optional()
-              .describe("Replacement text for this item; an empty new_string deletes the matched text."),
+              .describe(
+                "Replacement text for this item; an empty new_string deletes the matched text.",
+              ),
             replace_all: tool.schema
               .boolean()
               .optional()
-              .describe("Replace all occurrences instead of requiring a single match for this item."),
+              .describe(
+                "Replace all occurrences instead of requiring a single match for this item.",
+              ),
           }),
         )
         .optional()

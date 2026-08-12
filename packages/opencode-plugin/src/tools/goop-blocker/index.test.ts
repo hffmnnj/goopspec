@@ -528,10 +528,7 @@ describe("goop_blocker mode-selection contract", () => {
     await tool.execute({ action: "open", description: "To resolve" }, toolCtx);
     const id = ctx.db.getBlockers("default", "open")[0].id;
 
-    const result = await tool.execute(
-      { action: "resolve", id, status: "open" },
-      toolCtx,
-    );
+    const result = await tool.execute({ action: "resolve", id, status: "open" }, toolCtx);
 
     expect(result).toContain(`Resolved blocker #${id}`);
     expect(ctx.db.getBlockers("default", "resolved")).toHaveLength(1);
@@ -740,7 +737,10 @@ describe("goop_blocker semantic omission and invalid text (W3.T3)", () => {
   it("treats an empty-string severity as omitted (defaults to medium)", async () => {
     const tool = createGoopBlockerTool(ctx);
 
-    const result = await tool.execute({ action: "open", description: "Default severity", severity: "" }, toolCtx);
+    const result = await tool.execute(
+      { action: "open", description: "Default severity", severity: "" },
+      toolCtx,
+    );
 
     expect(result).toContain("Opened blocker #");
     const row = ctx.db.getBlockers("default", "open")[0];
@@ -775,7 +775,10 @@ describe("goop_blocker semantic omission and invalid text (W3.T3)", () => {
     ctx.db.upsertWave("default", { wave_number: 0, status: "completed" });
     const tool = createGoopBlockerTool(ctx);
 
-    const result = await tool.execute({ action: "open", description: "No wave", wave_id: 0 }, toolCtx);
+    const result = await tool.execute(
+      { action: "open", description: "No wave", wave_id: 0 },
+      toolCtx,
+    );
 
     expect(result).not.toContain("WARNING");
     expect(result).toContain("Opened blocker #");

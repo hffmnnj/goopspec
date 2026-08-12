@@ -152,7 +152,7 @@ export function createGoopWriteSectionTool(ctx: PluginContext): ToolDefinition {
 
   return tool({
     description:
-      'Write, update, or delete a keyed document section. WHEN TO USE: Create, replace, patch, delete a section, or batch writes. WHEN NOT TO USE: goop_write_db for whole documents; goop_read_section to read. MODES: write (default) = content, or patch via old_string/new_string, or items[] batch (top-level op fields rejected); delete = action:"delete"+section_key, single only (items[] rejected). REJECTED (write): content+old_string; new_string/replace_all without old_string; mode:"append"+old_string. RETURNS: Section + assembled char counts and sidecar path; delete confirms removal or reports not-found. CAVEATS: Batch is atomic. First section write migrates any full-document content into reserved "_migrated-legacy-content". new_string:"" deletes matched text; omit content when not writing.',
+      'Write, update, or delete a keyed document section. WHEN TO USE: Create, replace, patch, delete a section, or batch writes. WHEN NOT TO USE: goop_write_db for whole documents; goop_read_section to read. MODES: write (default) = content, or patch via old_string/new_string, or items[] batch (top-level op fields rejected); delete = action:"delete"+section_key, single only (items[] rejected). REJECTED (write): content+old_string; new_string/replace_all without old_string. RETURNS: Section + assembled char counts and sidecar path; delete confirms removal or reports not-found. CAVEATS: Batch is atomic. First section write migrates any full-document content into reserved "_migrated-legacy-content". new_string:"" deletes matched text and old_string presence activates patch — both are load-bearing and never coalesced. An empty content is coalesced to absent and errors rather than wiping the section; an empty section_key is rejected as missing. An explicitly empty items[] reports an empty-batch error, distinct from a no-args call.',
     args: {
       action: tool.schema
         .enum(["write", "delete"] as const)
@@ -165,13 +165,14 @@ export function createGoopWriteSectionTool(ctx: PluginContext): ToolDefinition {
         .string()
         .optional()
         .describe(
-          "Key identifying the section; required for delete and for single write, omit only in items[] batch mode.",
+          "Key identifying the section; required for delete and for single write, omit only in items[] batch mode. " +
+            "An empty string is rejected as missing — a section key can never be empty.",
         ),
       content: tool.schema
         .string()
         .optional()
         .describe(
-          "Full section content (write mode); omit for patch or batch — an empty content is coalesced to absent.",
+          "Full section content (write mode); omit for patch or batch — an empty content is coalesced to absent and errors rather than wiping the section.",
         ),
       position: tool.schema
         .number()

@@ -394,7 +394,7 @@ Three tools manage detached background jobs: `background_command` (start), `back
 
 - **Memory is in-process via `bun:sqlite`.** The memory feature runs inside the plugin process using SQLite with FTS5 + LIKE fallback. There is no separate worker process and no `port-37777` service.
 
-- **Prefer `items[]` batch mode for multi-write turns.** All four write tools (`goop_write_db`, `goop_write_section`, `goop_write_wave`, `goop_save_note`) now accept an optional `items[]` parameter. When writing more than one doc/section/wave/row/note in a turn, use the batch form to minimize tool calls and wrap writes in a single transaction. Single-item usage is unchanged and still supported.
+- **Prefer the batch form for multi-write turns.** Six tools support batch mode: `goop_write_db`, `goop_write_section`, `goop_write_wave`, `goop_save_note`, and `goop_blocker` via `items[]`; `goop_append_chronicle` via `entries[]`. Batches run in a single transaction; chronicle's `alsoLogAdl`/`alsoSaveMemory` aux writes are best-effort (not cross-store atomic). Per-item rules live in `references/tool-reference.md` §Six-tool batch inventory. Single-item usage is unchanged and still supported.
 
 - **`goop_save_note` batch mode is now atomic.** Previously, `goop_save_note` with `items[]` used a manual loop and could half-succeed — persisting one row of three and reporting the rest failed. All items are now wrapped in a single transaction. If you have working assumptions built on the old behaviour (e.g. retry logic for partial failures), update them.
 
