@@ -84,7 +84,12 @@ const INJECTED_EMPTY_CONTAINER_FIELDS_BY_TOOL: Readonly<Record<string, ReadonlyS
   // under host injection (an injected [] alongside a real entry falls through
   // to the single path).
   goop_append_chronicle: new Set(["alsoLogAdl", "alsoSaveMemory"]),
-  goop_blocker: new Set(["items"]),
+  // NOTE: `items` is deliberately NOT here for goop_blocker. An explicitly
+  // empty items array is the documented "empty batch" rejection case the tool
+  // must distinguish from a no-args call; coalescing it to absent would erase
+  // that distinction on the wrapped path and break direct/wrapped parity. An
+  // injected [] never selects batch mode — the tool only batches when items
+  // is non-empty — so leaving it visible is safe.
   // NOTE: `tags` is deliberately NOT here for goop_save_note. An empty tags
   // array is the documented explicit "no tags" value (a note may legitimately
   // be untagged), so coalescing it to absent would convert an authored

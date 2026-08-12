@@ -1044,6 +1044,45 @@ describe("write-tool boundary matrix — injected type defaults (Wave 1 Task 1.1
     expect(result).toContain("No blockers found for workflow 'default'");
   });
 
+  it("REG: blocker empty items[] keeps the empty-batch message on the wrapped path", async () => {
+    // Wave 3 Task 3.3: an explicitly empty items[] must stay visible through
+    // the registry boundary so the wrapped path can distinguish the empty
+    // batch from a no-args call, exactly like the direct path. Coalescing
+    // items:[] to absent here would erase that distinction.
+    const tools = createTools(ctx);
+    const result = (await tools.goop_blocker.execute({ items: [] }, toolCtx)) as string;
+    expect(result).toContain("items[] array is empty");
+    expect(result).not.toContain("no action or items were provided");
+  });
+
+  it("REG: blocker id 0 is treated as omitted on the wrapped path (required-id error)", async () => {
+    // 0 is the host-injected numeric default and can never address a real
+    // blocker row, so the wrapped path must not report "Blocker #0 not found".
+    const tools = createTools(ctx);
+    const result = (await tools.goop_blocker.execute(
+      { action: "resolve", id: 0 },
+      toolCtx,
+    )) as string;
+    expect(result).toContain('`id` is required for action "resolve"');
+    expect(result).not.toContain("Blocker #0 not found");
+  });
+
+  it("REG: blocker empty-string fields are omitted on the wrapped path (parity)", async () => {
+    // Empty severity defaults to medium and an empty workflow_id targets the
+    // active workflow on the wrapped path; the direct factory must agree.
+    const tools = createTools(ctx);
+    const result = (await tools.goop_blocker.execute(
+      { action: "open", description: "Wrapped default", severity: "", workflow_id: "" },
+      toolCtx,
+    )) as string;
+    expect(result).toContain("Opened blocker #");
+    expect(result).toContain("'default'");
+    const rows = ctx.db.getBlockers("default", "open");
+    expect(rows).toHaveLength(1);
+    expect(rows[0].severity).toBe("medium");
+    expect(ctx.db.getBlockers("", "open")).toHaveLength(0);
+  });
+
   // --- goop_write_wave ---
 
   it("REG: items[] batch is callable under injected type defaults", async () => {

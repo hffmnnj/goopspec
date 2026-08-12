@@ -589,3 +589,250 @@ describe("goop_blocker mode-selection contract", () => {
     expect(result).toContain("not found");
   });
 });
+
+// ---------------------------------------------------------------------------
+// Semantic omission and invalid authored text (Wave 3 Task 3.3)
+//
+// Host injection fills optional fields the caller never authored with type
+// defaults ("" for strings, 0 for numbers). None of those empty forms carries
+// authored intent on goop_blocker:
+//   - action "" must never select a lifecycle operation
+//   - description ""/severity ""/status ""/resolution ""/workflow_id "" are
+//     treated as absent so they cannot overwrite stored text, force a default,
+//     or address the wrong workflow
+//   - id 0 / wave_id 0 can never address a real blocker row or wave (both are
+//     1-based), so they are treated as absent too
+// Whitespace-only strings are the tool's own defect class: they survive the
+// shared boundary by design (they may be authored), so the tool rejects them
+// with actionable guidance rather than storing them.
+// ---------------------------------------------------------------------------
+
+describe("goop_blocker semantic omission and invalid text (W3.T3)", () => {
+  let ctx: PluginContext;
+  let toolCtx: ToolContext;
+  let cleanup: () => void;
+
+  beforeEach(() => {
+    const env = setupTestEnvironment("goop-blocker-w3t3");
+    cleanup = env.cleanup;
+    ctx = createMockPluginContext({ testDir: env.testDir, db: env.db });
+    toolCtx = createMockToolContext();
+  });
+
+  afterEach(() => cleanup());
+
+  it("treats an empty-string action as omitted (never selects an action)", async () => {
+    const tool = createGoopBlockerTool(ctx);
+
+    const result = await tool.execute({ action: "" }, toolCtx);
+
+    expect(result).toContain("Error in goop_blocker");
+    expect(result).toContain("no action or items were provided");
+    expect(result).not.toContain("Unknown action");
+    expect(ctx.db.getBlockers("default")).toHaveLength(0);
+  });
+
+  it("distinguishes an explicitly empty items array from a no-args call", async () => {
+    const tool = createGoopBlockerTool(ctx);
+
+    const emptyBatch = await tool.execute({ items: [] }, toolCtx);
+    expect(emptyBatch).toContain("Error in goop_blocker");
+    expect(emptyBatch).toContain("items[] array is empty");
+    expect(emptyBatch).not.toContain("no action or items were provided");
+
+    const noArgs = await tool.execute({}, toolCtx);
+    expect(noArgs).toContain("Error in goop_blocker");
+    expect(noArgs).toContain("no action or items were provided");
+    expect(noArgs).not.toContain("items[] array is empty");
+
+    expect(ctx.db.getBlockers("default")).toHaveLength(0);
+  });
+
+  it("rejects a whitespace-only description with actionable guidance", async () => {
+    const tool = createGoopBlockerTool(ctx);
+
+    const result = await tool.execute({ action: "open", description: "   " }, toolCtx);
+
+    expect(result).toContain("Error in goop_blocker");
+    expect(result).toContain("whitespace-only");
+    expect(result).toContain('{ action: "open", description: "what is blocked" }');
+    expect(ctx.db.getBlockers("default")).toHaveLength(0);
+  });
+
+  it("fails the whole batch when an item has a whitespace-only description, rolling back rows and events", async () => {
+    const tool = createGoopBlockerTool(ctx);
+
+    const result = await tool.execute(
+      {
+        items: [
+          { action: "open", description: "Valid first blocker" },
+          { action: "open", description: "   " },
+        ],
+      },
+      toolCtx,
+    );
+
+    expect(result).toContain("Batch blocker: 0/2 succeeded, 2 failed");
+    expect(ctx.db.getBlockers("default")).toHaveLength(0);
+    expect(ctx.db.getEvents("default")).toHaveLength(0);
+  });
+
+  it("keeps the existing description when resolve amends with an empty string", async () => {
+    const tool = createGoopBlockerTool(ctx);
+    await tool.execute({ action: "open", description: "Original text" }, toolCtx);
+    const id = ctx.db.getBlockers("default", "open")[0].id;
+
+    const result = await tool.execute(
+      { action: "resolve", id, description: "", resolution: "done" },
+      toolCtx,
+    );
+
+    expect(result).toContain(`Resolved blocker #${id}`);
+    const row = ctx.db.getBlockers("default", "resolved")[0];
+    expect(row.description).toBe("Original text");
+  });
+
+  it("rejects a whitespace-only description when amending on resolve", async () => {
+    const tool = createGoopBlockerTool(ctx);
+    await tool.execute({ action: "open", description: "Keep text" }, toolCtx);
+    const id = ctx.db.getBlockers("default", "open")[0].id;
+
+    const result = await tool.execute({ action: "resolve", id, description: "   " }, toolCtx);
+
+    expect(result).toContain("Error in goop_blocker");
+    expect(result).toContain("whitespace-only");
+    expect(ctx.db.getBlockers("default", "open")).toHaveLength(1);
+    expect(ctx.db.getBlockers("default", "resolved")).toHaveLength(0);
+  });
+
+  it("treats an empty-string workflow_id as omitted (uses the active workflow)", async () => {
+    const tool = createGoopBlockerTool(ctx);
+
+    const result = await tool.execute(
+      { action: "open", description: "Active workflow blocker", workflow_id: "" },
+      toolCtx,
+    );
+
+    expect(result).toContain("Opened blocker #");
+    expect(result).toContain("'default'");
+    const rows = ctx.db.getBlockers("default", "open");
+    expect(rows).toHaveLength(1);
+    expect(rows[0].description).toBe("Active workflow blocker");
+    expect(ctx.db.getBlockers("", "open")).toHaveLength(0);
+  });
+
+  it("per-item empty workflow_id inherits the enclosing workflow in batch mode", async () => {
+    const tool = createGoopBlockerTool(ctx);
+
+    const result = await tool.execute(
+      {
+        workflow_id: "custom-wf",
+        items: [{ action: "open", description: "Inherited scope", workflow_id: "" }],
+      },
+      toolCtx,
+    );
+
+    expect(result).toContain("Batch blocker: 1/1 succeeded");
+    expect(ctx.db.getBlockers("custom-wf", "open")).toHaveLength(1);
+    expect(ctx.db.getBlockers("", "open")).toHaveLength(0);
+  });
+
+  it("treats an empty-string severity as omitted (defaults to medium)", async () => {
+    const tool = createGoopBlockerTool(ctx);
+
+    const result = await tool.execute({ action: "open", description: "Default severity", severity: "" }, toolCtx);
+
+    expect(result).toContain("Opened blocker #");
+    const row = ctx.db.getBlockers("default", "open")[0];
+    expect(row.severity).toBe("medium");
+  });
+
+  it("treats an empty-string status filter as omitted (lists every blocker)", async () => {
+    const tool = createGoopBlockerTool(ctx);
+    await tool.execute({ action: "open", description: "Visible" }, toolCtx);
+
+    const result = await tool.execute({ action: "list", status: "" }, toolCtx);
+
+    expect(result).toContain("# Blockers");
+    expect(result).toContain("Visible");
+    expect(result).not.toContain("No blockers found");
+  });
+
+  it("treats id 0 as omitted on resolve (required-id error, no lookup)", async () => {
+    const tool = createGoopBlockerTool(ctx);
+
+    const result = await tool.execute({ action: "resolve", id: 0 }, toolCtx);
+
+    expect(result).toContain("Error in goop_blocker");
+    expect(result).toContain('`id` is required for action "resolve"');
+    expect(result).not.toContain("Blocker #0 not found");
+    expect(ctx.db.getBlockers("default")).toHaveLength(0);
+  });
+
+  it("treats wave_id 0 as omitted on open (no wave attached, no warning)", async () => {
+    // A completed wave 0 exists on purpose: if the tool consulted wave_id 0 it
+    // would warn. Treating 0 as the numeric empty must skip the lookup entirely.
+    ctx.db.upsertWave("default", { wave_number: 0, status: "completed" });
+    const tool = createGoopBlockerTool(ctx);
+
+    const result = await tool.execute({ action: "open", description: "No wave", wave_id: 0 }, toolCtx);
+
+    expect(result).not.toContain("WARNING");
+    expect(result).toContain("Opened blocker #");
+    const row = ctx.db.getBlockers("default", "open")[0];
+    expect(row.wave_id).toBeNull();
+  });
+
+  it("handles negative and unknown ids consistently (both error, neither mutates)", async () => {
+    const tool = createGoopBlockerTool(ctx);
+
+    const negative = await tool.execute({ action: "resolve", id: -1 }, toolCtx);
+    const unknown = await tool.execute({ action: "resolve", id: 9999 }, toolCtx);
+
+    expect(negative).toContain("Blocker #-1 not found for workflow 'default'");
+    expect(unknown).toContain("Blocker #9999 not found for workflow 'default'");
+    expect(ctx.db.getBlockers("default")).toHaveLength(0);
+    expect(ctx.db.getEvents("default")).toHaveLength(0);
+  });
+
+  it("treats an empty-string resolution as omitted (stores null)", async () => {
+    const tool = createGoopBlockerTool(ctx);
+    await tool.execute({ action: "open", description: "To resolve empty" }, toolCtx);
+    const id = ctx.db.getBlockers("default", "open")[0].id;
+
+    const result = await tool.execute({ action: "resolve", id, resolution: "" }, toolCtx);
+
+    expect(result).toContain(`Resolved blocker #${id}`);
+    const row = ctx.db.getBlockers("default", "resolved")[0];
+    expect(row.resolution).toBeNull();
+  });
+
+  it("rejects a whitespace-only resolution and leaves the blocker open", async () => {
+    const tool = createGoopBlockerTool(ctx);
+    await tool.execute({ action: "open", description: "Keep open" }, toolCtx);
+    const id = ctx.db.getBlockers("default", "open")[0].id;
+
+    const result = await tool.execute({ action: "resolve", id, resolution: "   " }, toolCtx);
+
+    expect(result).toContain("Error in goop_blocker");
+    expect(result).toContain("whitespace-only");
+    expect(ctx.db.getBlockers("default", "open")).toHaveLength(1);
+    expect(ctx.db.getBlockers("default", "resolved")).toHaveLength(0);
+    expect(ctx.db.getEvents("default", "blocker_resolve")).toHaveLength(0);
+  });
+
+  it("still opens a blocker against a completed wave when wave_id is a real number", async () => {
+    // Guard: the numeric-empty handling must not blunt the completed-wave
+    // warning for genuine wave numbers.
+    ctx.db.upsertWave("default", { wave_number: 2, status: "done" });
+    const tool = createGoopBlockerTool(ctx);
+
+    const result = await tool.execute(
+      { action: "open", description: "Regression in wave 2", wave_id: 2 },
+      toolCtx,
+    );
+
+    expect(result).toContain("WARNING: Wave 2 is already marked complete");
+    expect(result).toContain("Opened blocker #");
+  });
+});
