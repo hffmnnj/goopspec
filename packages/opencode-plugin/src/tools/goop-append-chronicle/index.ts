@@ -221,6 +221,41 @@ function formatCombinedResult(result: CombinedResult): string {
   return lines.join("\n");
 }
 
+interface ChronicleArgs {
+  entry?: string;
+  workflow_id?: string;
+  entries?: string[];
+  alsoLogAdl?: AlsoLogAdlPayload;
+  alsoSaveMemory?: AlsoSaveMemoryPayload;
+}
+
+/**
+ * Strip host-injected empty identifiers whose empty form carries no authored
+ * intent, so the DIRECT factory agrees with the coalesced payload the registry
+ * boundary (`createTools`) already produces for the same call.
+ *
+ * - `entry: ""` can never be a meaningful chronicle entry; treating it as
+ *   absent prevents a 0-char chronicle event and makes the rejection
+ *   identical on both paths.
+ * - `workflow_id: ""` is not a real workflow scope; absent means the active
+ *   workflow, matching the wrapped path.
+ *
+ * `entries` is intentionally NOT touched: an explicitly empty array is the
+ * documented "empty batch" rejection case the tool must distinguish from a
+ * no-args call, so it must survive on both paths — and the shared boundary
+ * deliberately does not coalesce it either.
+ */
+function normalizeChronicleArgs(raw: ChronicleArgs): ChronicleArgs {
+  const out: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(raw as Record<string, unknown>)) {
+    if (value === "" && (key === "entry" || key === "workflow_id")) {
+      continue;
+    }
+    out[key] = value;
+  }
+  return out as ChronicleArgs;
+}
+
 // ---------------------------------------------------------------------------
 // Tool factory
 // ---------------------------------------------------------------------------
@@ -284,16 +319,11 @@ export function createGoopAppendChronicleTool(ctx: PluginContext): ToolDefinitio
         ),
     },
     async execute(
-      args: {
-        entry?: string;
-        workflow_id?: string;
-        entries?: string[];
-        alsoLogAdl?: AlsoLogAdlPayload;
-        alsoSaveMemory?: AlsoSaveMemoryPayload;
-      },
+      rawArgs: ChronicleArgs,
       _context: ToolContext,
     ): Promise<string> {
       try {
+        const args = normalizeChronicleArgs(rawArgs);
         const workflowId = args.workflow_id ?? ctx.stateManager.getState().activeWorkflowId;
 
         if (Array.isArray(args.entries) && args.entries.length > 0) {
@@ -323,7 +353,10 @@ export function createGoopAppendChronicleTool(ctx: PluginContext): ToolDefinitio
         }
 
         if (args.entry === undefined) {
-          return "Error in goop_append_chronicle: entries[] array is empty and no entry was provided";
+          if (Array.isArray(args.entries) && args.entries.length === 0) {
+            return "Error in goop_append_chronicle: entries[] array is empty and no entry was provided";
+          }
+          return "Error in goop_append_chronicle: no entry or entries were provided";
         }
 
         const chronicleDetail = appendChronicleEntry(ctx, workflowId, args.entry);

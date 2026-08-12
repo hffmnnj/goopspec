@@ -1165,16 +1165,65 @@ describe("write-tool boundary matrix — injected type defaults (Wave 1 Task 1.1
     expect(ctx.db.getSection("default", "spec", "")).toBeNull();
   });
 
-  it('documents that direct entry:"" is authored while wrapped input is rejected', async () => {
+  it('rejects entry:"" identically on direct and wrapped paths (semantic omission)', async () => {
+    // Wave 1 pinned a deliberate direct/wrapped divergence here (direct =
+    // authored presence → 0-char append, wrapped = host residue → rejection).
+    // Wave 3 Task 3.2 supersedes that pin: an empty-string entry can never be
+    // a meaningful chronicle entry, so treating it as absent on BOTH paths is
+    // the parity contract — the direct factory must agree with the coalesced
+    // effective payload, and no 0-char event may be written.
     const direct = createGoopAppendChronicleTool(ctx);
     const directResult = await direct.execute({ entry: "" }, toolCtx);
-    expect(directResult).toBe("[OK] Chronicle entry appended (0 chars)");
 
     const wrappedResult = await createTools(ctx).goop_append_chronicle.execute(
       { entry: "" },
       toolCtx,
     );
-    expect(wrappedResult).toContain("no entry was provided");
-    expect(ctx.db.getChronicleEvents("default")).toHaveLength(1);
+
+    expect(directResult).toBe(wrappedResult);
+    expect(directResult).toContain("no entry or entries were provided");
+    expect(ctx.db.getChronicleEvents("default")).toHaveLength(0);
+  });
+
+  it("rejects a no-args call with the none-mode message on both paths", async () => {
+    const direct = createGoopAppendChronicleTool(ctx);
+    const directResult = await direct.execute({}, toolCtx);
+
+    const wrappedResult = await createTools(ctx).goop_append_chronicle.execute({}, toolCtx);
+
+    expect(directResult).toBe(wrappedResult);
+    expect(directResult).toContain("no entry or entries were provided");
+    expect(directResult).not.toContain("entries[] array is empty");
+  });
+
+  it("preserves the explicit empty-batch distinction on the wrapped path", async () => {
+    // An authored `entries: []` is a documented rejection case (empty batch),
+    // distinct from a no-args call. It must survive the registry boundary so
+    // the wrapped path reports it accurately, exactly like the direct path.
+    const wrappedEmptyBatch = await createTools(ctx).goop_append_chronicle.execute(
+      { entries: [] },
+      toolCtx,
+    );
+    expect(wrappedEmptyBatch).toContain("entries[] array is empty");
+    expect(wrappedEmptyBatch).not.toContain("no entry or entries were provided");
+
+    const wrappedNoArgs = await createTools(ctx).goop_append_chronicle.execute({}, toolCtx);
+    expect(wrappedNoArgs).toContain("no entry or entries were provided");
+    expect(wrappedNoArgs).not.toContain("entries[] array is empty");
+  });
+
+  it("writes an empty-string workflow_id to the active workflow on both paths", async () => {
+    const direct = createGoopAppendChronicleTool(ctx);
+    const directResult = await direct.execute({ entry: "Parity scope.", workflow_id: "" }, toolCtx);
+
+    const wrappedResult = await createTools(ctx).goop_append_chronicle.execute(
+      { entry: "Parity scope.", workflow_id: "" },
+      toolCtx,
+    );
+
+    expect(directResult).toBe(wrappedResult);
+    expect(directResult).toContain("[OK] Chronicle entry appended");
+    expect(ctx.db.getChronicleEvents("default")).toHaveLength(2);
+    expect(ctx.db.getChronicleEvents("")).toHaveLength(0);
   });
 });
