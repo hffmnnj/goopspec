@@ -41,7 +41,7 @@ describe("coalesceEmptyStrings", () => {
     });
   });
 
-  it("does not touch null, undefined, 0, false, [], or {}", () => {
+  it("preserves non-string defaults for unknown tools", () => {
     const out = coalesce({
       n: null,
       u: undefined,

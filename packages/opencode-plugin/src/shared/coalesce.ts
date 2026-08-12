@@ -1,5 +1,5 @@
 /**
- * Empty-string coalescing for tool arguments.
+ * Semantic-omission coalescing for tool arguments.
  *
  * Tool-call serialization in some hosts injects empty strings (`""`) into
  * argument payloads the caller never authored — most visibly into status and
@@ -9,15 +9,16 @@
  * value). Documentation cannot fix this: by the time the empty string is
  * injected the caller's intent is already gone.
  *
- * This module treats an exact empty string as absent (omitted) for fields
- * where empty carries no legitimate meaning, applied at the single shared
+ * This module treats injected defaults as absent (omitted) only for audited
+ * tool-field pairs where the value carries no legitimate meaning, applied at the single shared
  * tool-input boundary (`createTools` in `src/tools/index.ts`) so it runs on
  * both the V1 and V2 registration paths from one source of truth.
  *
  * Contract (see `coalesce.test.ts`):
- * - Only exact `""` is affected. `null`, `undefined`, `0`, `false`, `[]`, `{}`,
- *   and whitespace-only strings are preserved untouched — a whitespace-only
- *   string may be intentional content, and guessing is how this defect starts.
+ * - Exact `""`, `false`, `[]`, and `{}` are coalesced only when their
+ *   tool-field policy permits it. `null`, `undefined`, `0`, and whitespace-only
+ *   strings are always preserved — a whitespace-only string may be intentional
+ *   content, and guessing is how this defect starts.
  * - Recurses into arrays (preserving length and order) and nested objects, so
  *   empty strings inside `task_updates[]` entries are coalesced too.
  * - Never silently drops a non-empty value, and never drops an array element or
@@ -66,6 +67,30 @@ export const EMPTY_STRING_LOAD_BEARING_FIELDS_BY_TOOL: Readonly<
 
 const NO_LOAD_BEARING_FIELDS: ReadonlySet<string> = new Set<string>();
 
+/** Optional false values that this host injects rather than the caller authors. */
+const INJECTED_FALSE_FIELDS_BY_TOOL: Readonly<Record<string, ReadonlySet<string>>> = {
+  goop_save_note: new Set(["replace_all"]),
+  goop_write_db: new Set(["replace_all"]),
+  goop_write_section: new Set(["replace_all"]),
+  goop_write_wave: new Set(["allow_status_regression"]),
+};
+
+/** Optional collection/object fields whose empty form has no operation meaning. */
+const INJECTED_EMPTY_CONTAINER_FIELDS_BY_TOOL: Readonly<Record<string, ReadonlySet<string>>> = {
+  goop_append_chronicle: new Set(["alsoLogAdl", "alsoSaveMemory", "entries"]),
+  goop_blocker: new Set(["items"]),
+  goop_save_note: new Set(["items", "tags"]),
+  goop_write_db: new Set(["items"]),
+  goop_write_section: new Set(["items"]),
+  goop_write_wave: new Set([
+    "items",
+    "task_update",
+    "task_updates",
+    "traceability",
+    "verifications",
+  ]),
+};
+
 /**
  * Recursively treat exact empty strings as absent (omitted) for tool arguments
  * where an empty string carries no legitimate meaning.
@@ -77,15 +102,13 @@ const NO_LOAD_BEARING_FIELDS: ReadonlySet<string> = new Set<string>();
  * @returns A structurally equivalent value with exact empty strings omitted
  *   from non-protected keys, recursively.
  */
-export function coalesceEmptyStrings<T>(
-  value: T,
-  toolName?: string,
-): T {
+export function coalesceEmptyStrings<T>(value: T, toolName?: string): T {
   const protectedKeys =
     toolName === undefined
       ? NO_LOAD_BEARING_FIELDS
       : (EMPTY_STRING_LOAD_BEARING_FIELDS_BY_TOOL[toolName] ?? NO_LOAD_BEARING_FIELDS);
-  return walk(value, protectedKeys) as T;
+  const coalesced = walk(value, protectedKeys);
+  return coalesceInjectedDefaults(coalesced, toolName) as T;
 }
 
 function walk(value: unknown, skip: ReadonlySet<string>): unknown {
@@ -112,4 +135,99 @@ function walk(value: unknown, skip: ReadonlySet<string>): unknown {
   }
 
   return value;
+}
+
+function coalesceInjectedDefaults(value: unknown, toolName?: string): unknown {
+  if (
+    value === null ||
+    typeof value !== "object" ||
+    Array.isArray(value) ||
+    toolName === undefined
+  ) {
+    return value;
+  }
+
+  const falseFields = INJECTED_FALSE_FIELDS_BY_TOOL[toolName] ?? NO_LOAD_BEARING_FIELDS;
+  const containerFields =
+    INJECTED_EMPTY_CONTAINER_FIELDS_BY_TOOL[toolName] ?? NO_LOAD_BEARING_FIELDS;
+  const source = value as Record<string, unknown>;
+  const omittedKeys = new Set<string>([
+    ...[...falseFields].filter((key) => source[key] === false),
+    ...[...containerFields].filter((key) => {
+      const field = source[key];
+      return (Array.isArray(field) && field.length === 0) || isEmptyObject(field);
+    }),
+    ...emptyPatchGroupKeys(source, toolName),
+    ...waveMetadataGroupKeys(source, toolName),
+  ]);
+
+  return Object.fromEntries(Object.entries(source).filter(([key]) => !omittedKeys.has(key)));
+}
+
+function isEmptyObject(value: unknown): value is Record<string, never> {
+  return (
+    value !== null &&
+    typeof value === "object" &&
+    !Array.isArray(value) &&
+    Object.keys(value).length === 0
+  );
+}
+
+function hasNonEmptyArray(value: unknown): boolean {
+  return Array.isArray(value) && value.length > 0;
+}
+
+function emptyPatchGroupKeys(value: Record<string, unknown>, toolName: string): string[] {
+  if (
+    !["goop_save_note", "goop_write_db", "goop_write_section"].includes(toolName) ||
+    value.old_string !== "" ||
+    value.new_string !== "" ||
+    !hasIndependentWriteEvidence(value, toolName)
+  ) {
+    return [];
+  }
+
+  return ["old_string", "new_string"];
+}
+
+function hasIndependentWriteEvidence(value: Record<string, unknown>, toolName: string): boolean {
+  if (typeof value.content === "string" && value.content.length > 0) return true;
+  if (toolName === "goop_save_note") {
+    return (
+      typeof value.title === "string" &&
+      value.title.length > 0 &&
+      typeof value.body === "string" &&
+      value.body.length > 0 &&
+      Array.isArray(value.tags) &&
+      value.tags.length > 0 &&
+      typeof value.source_agent === "string" &&
+      value.source_agent.length > 0
+    );
+  }
+  return (
+    Array.isArray(value.items) &&
+    value.items.some(
+      (item) =>
+        item !== null &&
+        typeof item === "object" &&
+        typeof (item as Record<string, unknown>).doc_type === "string",
+    )
+  );
+}
+
+function waveMetadataGroupKeys(value: Record<string, unknown>, toolName: string): string[] {
+  if (
+    toolName !== "goop_write_wave" ||
+    !["title", "pr_url", "pr_branch"].some((key) => value[key] === "") ||
+    !(
+      (value.wave_number !== undefined && hasNonEmptyArray(value.items)) ||
+      hasNonEmptyArray(value.task_updates) ||
+      hasNonEmptyArray(value.traceability) ||
+      (!isEmptyObject(value.task_update) && value.task_update !== undefined)
+    )
+  ) {
+    return [];
+  }
+
+  return ["title", "pr_url", "pr_branch"];
 }

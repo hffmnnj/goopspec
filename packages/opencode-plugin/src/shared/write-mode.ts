@@ -89,11 +89,20 @@ function err(message: string): WriteModeError {
  */
 export function resolveWriteMode(fields: WriteModeFields): WriteModeResolution {
   const hasItems = fields.hasItems === true;
-  const hasOldString = fields.old_string !== undefined;
-  const hasNewString = fields.new_string !== undefined;
-  const hasReplaceAll = fields.replace_all !== undefined;
-  const hasMode = fields.mode !== undefined;
   const meaningfulContent = isMeaningful(fields.content);
+  // An all-empty protected patch pair is ambiguous on its own, so preserve the
+  // documented blank-document operation. Once content or items[] independently
+  // selects a mode, however, the pair is provably host residue, not a patch.
+  const hasInjectedEmptyPatchGroup =
+    fields.old_string === "" && fields.new_string === "" && (meaningfulContent || hasItems);
+  const oldString = hasInjectedEmptyPatchGroup ? undefined : fields.old_string;
+  const newString = hasInjectedEmptyPatchGroup ? undefined : fields.new_string;
+  const replaceAll =
+    hasInjectedEmptyPatchGroup && fields.replace_all === false ? undefined : fields.replace_all;
+  const hasOldString = oldString !== undefined;
+  const hasNewString = newString !== undefined;
+  const hasReplaceAll = replaceAll !== undefined;
+  const hasMode = fields.mode !== undefined;
 
   // Rule 4: items[] + top-level operation field. content is exempt when
   // present-but-empty (documented neutral placeholder).
@@ -142,9 +151,9 @@ export function resolveWriteMode(fields: WriteModeFields): WriteModeResolution {
   if (hasOldString) {
     return {
       kind: "patch",
-      old_string: fields.old_string as string,
-      new_string: fields.new_string ?? "",
-      replace_all: fields.replace_all ?? false,
+      old_string: oldString as string,
+      new_string: newString ?? "",
+      replace_all: replaceAll ?? false,
     };
   }
 
