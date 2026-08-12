@@ -154,7 +154,7 @@ describe("goop_write_wave batch mode", () => {
     const tool = createGoopWriteWaveTool(ctx);
     const result = await tool.execute({ wave_number: 1, items: [] }, toolCtx);
     expect(result).toContain("Error in goop_write_wave");
-    expect(result).toContain("items[] array is empty");
+    expect(result).toContain("no write intent was provided");
     expect(result).not.toContain("succeeded");
   });
 
@@ -1411,12 +1411,9 @@ describe("goop_write_wave write integrity", () => {
     expect(wave).toMatchObject(metadata);
     expect(ctx.db.getWaveTasks(wave?.id ?? -1)[0].status).toBe("completed");
 
-    await writeTool.execute({ wave_number: 1, title: "", pr_branch: "", pr_url: "" }, toolCtx);
-    expect(ctx.db.getWave("default", 1)).toMatchObject({
-      title: "",
-      pr_branch: "",
-      pr_url: "",
-    });
+    const clearAttempt = await writeTool.execute({ wave_number: 1, title: "" }, toolCtx);
+    expect(clearAttempt).toContain("title cannot be an empty string");
+    expect(ctx.db.getWave("default", 1)).toMatchObject(metadata);
   });
 
   it("rejects top-level fields incompatible with batch modes before writing", async () => {
@@ -2621,7 +2618,7 @@ describe("goop_write_wave rejection messages teach the correction", () => {
     expect(ctx.db.getWave("default", 1)).toBeNull();
   });
 
-  it("status:\"\" is rejected as an invalid status (not silently applied) with the valid set listed", async () => {
+  it('status:"" is rejected as an invalid status (not silently applied) with the valid set listed', async () => {
     const tool = createGoopWriteWaveTool(ctx);
     // An empty-string status is injected by some tool-call serialization
     // layers. It must be rejected — never silently interpreted as "no change"
@@ -2721,7 +2718,7 @@ describe("goop_write_wave empty-string boundary (via createTools)", () => {
     expect(tasks.find((t) => t.task_index === 0)?.status).toBe("pending");
   });
 
-  it("exclusion: an empty pr_url still clears the stored value", async () => {
+  it("coalesces an injected empty pr_url to omission", async () => {
     const tools = createTools(ctx);
     const waveTool = tools.goop_write_wave;
 
@@ -2731,14 +2728,13 @@ describe("goop_write_wave empty-string boundary (via createTools)", () => {
     );
     expect(ctx.db.getWave("default", 1)?.pr_url).toBe("https://example.com/pr/1");
 
-    // pr_url:"" is protected from coalescing and must overwrite (clear) the
-    // stored value, per the documented contract.
+    // Wrapped empty metadata is treated as an injected default and omitted.
     const result = await waveTool.execute({ wave_number: 1, pr_url: "" }, toolCtx);
-    expect(result).not.toContain("Error in goop_write_wave");
-    expect(ctx.db.getWave("default", 1)?.pr_url).toBe("");
+    expect(result).toContain("no write intent was provided");
+    expect(ctx.db.getWave("default", 1)?.pr_url).toBe("https://example.com/pr/1");
   });
 
-  it("exclusion: an empty pr_branch still clears the stored value", async () => {
+  it("coalesces an injected empty pr_branch to omission", async () => {
     const tools = createTools(ctx);
     const waveTool = tools.goop_write_wave;
 
@@ -2749,11 +2745,11 @@ describe("goop_write_wave empty-string boundary (via createTools)", () => {
     expect(ctx.db.getWave("default", 1)?.pr_branch).toBe("feat/orig");
 
     const result = await waveTool.execute({ wave_number: 1, pr_branch: "" }, toolCtx);
-    expect(result).not.toContain("Error in goop_write_wave");
-    expect(ctx.db.getWave("default", 1)?.pr_branch).toBe("");
+    expect(result).toContain("no write intent was provided");
+    expect(ctx.db.getWave("default", 1)?.pr_branch).toBe("feat/orig");
   });
 
-  it("exclusion: an empty title still clears the stored value", async () => {
+  it("coalesces an injected empty title to omission", async () => {
     const tools = createTools(ctx);
     const waveTool = tools.goop_write_wave;
 
@@ -2761,11 +2757,11 @@ describe("goop_write_wave empty-string boundary (via createTools)", () => {
     expect(ctx.db.getWave("default", 1)?.title).toBe("Original");
 
     const result = await waveTool.execute({ wave_number: 1, title: "" }, toolCtx);
-    expect(result).not.toContain("Error in goop_write_wave");
-    expect(ctx.db.getWave("default", 1)?.title).toBe("");
+    expect(result).toContain("no write intent was provided");
+    expect(ctx.db.getWave("default", 1)?.title).toBe("Original");
   });
 
-  it("a spurious top-level status:\"\" does not clobber a real status in the same call", async () => {
+  it('a spurious top-level status:"" does not clobber a real status in the same call', async () => {
     // status:"" coalesces to absent, so the real intent (status: "in_progress"
     // written moments before) is preserved rather than reset to "".
     const tools = createTools(ctx);
@@ -2773,7 +2769,76 @@ describe("goop_write_wave empty-string boundary (via createTools)", () => {
     await waveTool.execute({ wave_number: 2, status: "in_progress" }, toolCtx);
 
     const result = await waveTool.execute({ wave_number: 2, status: "" }, toolCtx);
-    expect(result).not.toContain("Error in goop_write_wave");
+    expect(result).toContain("no write intent was provided");
     expect(ctx.db.getWave("default", 2)?.status).toBe("in_progress");
+  });
+});
+
+describe("goop_write_wave semantic intent boundaries", () => {
+  let ctx: PluginContext;
+  let toolCtx: ToolContext;
+  let cleanup: () => void;
+
+  beforeEach(() => {
+    const env = setupTestEnvironment("goop-write-wave-semantic-intent");
+    cleanup = env.cleanup;
+    ctx = createMockPluginContext({ testDir: env.testDir, db: env.db });
+    toolCtx = createMockToolContext();
+  });
+
+  afterEach(() => cleanup());
+
+  it("preserves metadata against injected defaults during an items[] write", async () => {
+    const tool = createTools(ctx).goop_write_wave;
+    await tool.execute(
+      { wave_number: 1, title: "Keep", pr_branch: "fix/keep", pr_url: "https://example.test/1" },
+      toolCtx,
+    );
+    const result = await tool.execute(
+      {
+        wave_number: 1,
+        title: "",
+        pr_branch: "",
+        pr_url: "",
+        items: [{ wave_number: 1, tasks: [{ task_index: 0, status: "done" }] }],
+      },
+      toolCtx,
+    );
+
+    expect(result).toContain("1/1 succeeded");
+    expect(ctx.db.getWave("default", 1)).toMatchObject({
+      title: "Keep",
+      pr_branch: "fix/keep",
+      pr_url: "https://example.test/1",
+    });
+  });
+
+  it("rejects zero wave targets and bare payloads without events", async () => {
+    const tool = createGoopWriteWaveTool(ctx);
+    expect(await tool.execute({ wave_number: 0, title: "Zero" }, toolCtx)).toContain(
+      "wave_number must be a positive safe integer",
+    );
+    expect(
+      await tool.execute({ wave_number: 1, items: [{ wave_number: 0, title: "Zero" }] }, toolCtx),
+    ).toContain("items[0].wave_number must be a positive safe integer");
+
+    await tool.execute({ wave_number: 1, title: "Seed" }, toolCtx);
+    const eventsBefore = ctx.db.getEvents("default").length;
+    const result = await tool.execute({ wave_number: 1, task_update: {} }, toolCtx);
+    expect(result).toContain("no write intent was provided");
+    expect(ctx.db.getEvents("default")).toHaveLength(eventsBefore);
+  });
+
+  it("does not create wave_write events for verification-only writes", async () => {
+    const tool = createGoopWriteWaveTool(ctx);
+    await tool.execute({ wave_number: 1, title: "Seed" }, toolCtx);
+    const eventsBefore = ctx.db.getEvents("default", "wave_write").length;
+    const result = await tool.execute(
+      { wave_number: 1, verifications: [{ check_name: "test", status: "pass" }] },
+      toolCtx,
+    );
+
+    expect(result).toContain("Verifications:");
+    expect(ctx.db.getEvents("default", "wave_write")).toHaveLength(eventsBefore);
   });
 });

@@ -42,6 +42,29 @@ function describeWriteLength(len: number): string {
   return len === 0 ? "empty document" : `${len} chars`;
 }
 
+/**
+ * A blank full-document payload is never an unambiguous replacement request.
+ * The shared boundary removes injected blanks, and this local normalization
+ * keeps direct factory callers on the same safe contract without touching the
+ * patch fields whose empty strings are documented operations.
+ */
+function normalizeFullWriteContent(content: string | undefined): string | undefined {
+  return content === "" ? undefined : content;
+}
+
+/**
+ * replace_all:false is semantically identical to the omitted default (no
+ * replace-all), and the host injects false into optional booleans. The direct
+ * factory cannot tell an authored false from an injected one, and dropping it
+ * is lossless (false IS the default), so explicit false is treated as absent
+ * before mode resolution. True and omitted are unchanged — a genuinely
+ * modifier-only call with no content and no old_string still resolves to a
+ * loud none-mode rejection.
+ */
+function normalizeReplaceAll(replaceAll: boolean | undefined): boolean | undefined {
+  return replaceAll === false ? undefined : replaceAll;
+}
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -65,7 +88,7 @@ function patchExistingDocument(
 export function createGoopWriteDbTool(ctx: PluginContext): ToolDefinition {
   return tool({
     description:
-      "Write or update a whole workflow document. WHEN TO USE: Create, replace, append, patch, or batch a document. WHEN NOT TO USE: goop_write_section for keyed sections; goop_append_chronicle for chronicle entries. MODES: full = doc_type+content (+mode: replace default, append concatenates); patch = doc_type+old_string (+new_string/replace_all, in-place, new_string:\"\" deletes); batch = items[] only. REJECTED: content+old_string; new_string/replace_all without old_string; mode:\"append\"+old_string; op fields alongside items[]. RETURNS: Char count, mode, sidecar path; batch per-item rollup. CAVEATS: Batch is atomic. old_string presence activates patch; omit content when not writing (empty content coalesces to absent, not a wipe).",
+      'Write or update a whole workflow document. WHEN TO USE: Create, replace, append, patch, or batch a document. WHEN NOT TO USE: goop_write_section for keyed sections; goop_append_chronicle for chronicle entries. MODES: full = doc_type+content (+mode: replace default, append concatenates); patch = doc_type+old_string (+new_string/replace_all, in-place, new_string:"" deletes); batch = items[] only. REJECTED: content+old_string; new_string/replace_all without old_string; mode:"append"+old_string; op fields alongside items[]. RETURNS: Char count, mode, sidecar path; batch per-item rollup. CAVEATS: Batch is atomic. old_string presence activates patch even when empty (blank-document patch) and an empty new_string deletes matched text — both are load-bearing and never coalesced. Omit content when not writing (empty content coalesces to absent, not a wipe).',
     args: {
       doc_type: tool.schema
         .enum(DOC_TYPES)
@@ -101,9 +124,7 @@ export function createGoopWriteDbTool(ctx: PluginContext): ToolDefinition {
       items: tool.schema
         .array(
           tool.schema.object({
-            doc_type: tool.schema
-              .enum(DOC_TYPES)
-              .describe("Document type for this batch item."),
+            doc_type: tool.schema.enum(DOC_TYPES).describe("Document type for this batch item."),
             content: tool.schema
               .string()
               .optional()
@@ -152,13 +173,15 @@ export function createGoopWriteDbTool(ctx: PluginContext): ToolDefinition {
         // runBatch/formatBatchResult path and report per-item results
         // consistently with their single-item path, so no parity change was
         // required. Recorded to prevent re-auditing these two tools.
+        const content = normalizeFullWriteContent(args.content);
+        const replaceAll = normalizeReplaceAll(args.replace_all);
         const hasItems = Array.isArray(args.items) && args.items.length > 0;
         const resolution = resolveWriteMode({
-          content: args.content,
+          content,
           mode: args.mode,
           old_string: args.old_string,
           new_string: args.new_string,
-          replace_all: args.replace_all,
+          replace_all: replaceAll,
           hasItems,
         });
 
@@ -170,12 +193,13 @@ export function createGoopWriteDbTool(ctx: PluginContext): ToolDefinition {
 
         if (resolution.kind === "batch") {
           const result = runBatch(ctx.db, args.items as WriteDbItemWithPatch[], (item) => {
+            const itemContent = normalizeFullWriteContent(item.content);
             const itemResolution = resolveWriteMode({
-              content: item.content,
+              content: itemContent,
               mode: item.mode,
               old_string: item.old_string,
               new_string: item.new_string,
-              replace_all: item.replace_all,
+              replace_all: normalizeReplaceAll(item.replace_all),
             });
 
             if (itemResolution.kind === "error") {
@@ -238,24 +262,27 @@ export function createGoopWriteDbTool(ctx: PluginContext): ToolDefinition {
         }
 
         if (resolution.kind === "patch") {
-          const patchResult = patchExistingDocument(
-            ctx.db,
-            workflowId,
-            args.doc_type,
-            resolution.old_string,
-            resolution.new_string,
-            resolution.replace_all,
-          );
-          if (!patchResult.ok) {
-            return `Error in goop_write_db: ${patchResult.error}`;
-          }
+          const patchResult = ctx.db.runTransaction(() => {
+            const result = patchExistingDocument(
+              ctx.db,
+              workflowId,
+              args.doc_type,
+              resolution.old_string,
+              resolution.new_string,
+              resolution.replace_all,
+            );
+            if (!result.ok) return result;
 
-          ctx.db.upsertDocument(workflowId, args.doc_type, patchResult.content as string);
-          ctx.db.appendEvent(workflowId, "doc_write", {
-            doc_type: args.doc_type,
-            mode: "patch",
-            timestamp: Date.now(),
+            ctx.db.deleteSections(workflowId, args.doc_type);
+            ctx.db.upsertDocument(workflowId, args.doc_type, result.content as string);
+            ctx.db.appendEvent(workflowId, "doc_write", {
+              doc_type: args.doc_type,
+              mode: "patch",
+              timestamp: Date.now(),
+            });
+            return result;
           });
+          if (!patchResult.ok) return `Error in goop_write_db: ${patchResult.error}`;
 
           const updatedDoc = ctx.db.getDocument(workflowId, args.doc_type);
           const sidecarContent = updatedDoc?.content ?? patchResult.content ?? "";
@@ -266,23 +293,26 @@ export function createGoopWriteDbTool(ctx: PluginContext): ToolDefinition {
           return `Patched ${args.doc_type} for workflow '${workflowId}' (${describeWriteLength(sidecarContent.length)}, mode: patch). Sidecar: .goopspec/${workflowId}/${filename}`;
         }
 
-        // Persist to DB (full-document write/append)
-        ctx.db.deleteSections(workflowId, args.doc_type);
-        if (resolution.mode === "append") {
-          ctx.db.appendDocument(workflowId, args.doc_type, resolution.content);
-          // Also insert chronicle event row when appending chronicle
-          if (args.doc_type === "chronicle") {
-            ctx.db.appendChronicleEvent(workflowId, resolution.content);
+        // Persist document mutations and their event as one unit. A failed
+        // event write must not leave a changed document or deleted sections.
+        ctx.db.runTransaction(() => {
+          ctx.db.deleteSections(workflowId, args.doc_type);
+          if (resolution.mode === "append") {
+            ctx.db.appendDocument(workflowId, args.doc_type, resolution.content);
+            // Also insert chronicle event row when appending chronicle
+            if (args.doc_type === "chronicle") {
+              ctx.db.appendChronicleEvent(workflowId, resolution.content);
+            }
+          } else {
+            ctx.db.upsertDocument(workflowId, args.doc_type, resolution.content);
           }
-        } else {
-          ctx.db.upsertDocument(workflowId, args.doc_type, resolution.content);
-        }
 
-        // Log doc_write event
-        ctx.db.appendEvent(workflowId, "doc_write", {
-          doc_type: args.doc_type,
-          mode: resolution.mode,
-          timestamp: Date.now(),
+          // Log doc_write event
+          ctx.db.appendEvent(workflowId, "doc_write", {
+            doc_type: args.doc_type,
+            mode: resolution.mode,
+            timestamp: Date.now(),
+          });
         });
 
         // Read back the full document for sidecar (important for append mode)

@@ -61,8 +61,6 @@ export const EMPTY_STRING_LOAD_BEARING_FIELDS_BY_TOOL: Readonly<
   goop_write_db: new Set(["new_string", "old_string"]),
   goop_write_section: new Set(["new_string", "old_string"]),
   goop_save_note: new Set(["new_string", "old_string"]),
-  // Wave metadata: empty values explicitly clear these stored fields.
-  goop_write_wave: new Set(["pr_url", "pr_branch", "title"]),
 };
 
 const NO_LOAD_BEARING_FIELDS: ReadonlySet<string> = new Set<string>();
@@ -77,9 +75,34 @@ const INJECTED_FALSE_FIELDS_BY_TOOL: Readonly<Record<string, ReadonlySet<string>
 
 /** Optional collection/object fields whose empty form has no operation meaning. */
 const INJECTED_EMPTY_CONTAINER_FIELDS_BY_TOOL: Readonly<Record<string, ReadonlySet<string>>> = {
-  goop_append_chronicle: new Set(["alsoLogAdl", "alsoSaveMemory", "entries"]),
-  goop_blocker: new Set(["items"]),
-  goop_save_note: new Set(["items", "tags"]),
+  // NOTE: `entries` is deliberately NOT here for goop_append_chronicle. An
+  // explicitly empty entries array is the documented "empty batch" rejection
+  // case the tool must distinguish from a no-args call; coalescing it to
+  // absent would erase that distinction on the wrapped path and break
+  // direct/wrapped parity. An injected [] never selects batch mode — the tool
+  // only batches when entries is non-empty — so leaving it visible is safe
+  // under host injection (an injected [] alongside a real entry falls through
+  // to the single path).
+  goop_append_chronicle: new Set(["alsoLogAdl", "alsoSaveMemory"]),
+  // NOTE: `items` is deliberately NOT here for goop_blocker. An explicitly
+  // empty items array is the documented "empty batch" rejection case the tool
+  // must distinguish from a no-args call; coalescing it to absent would erase
+  // that distinction on the wrapped path and break direct/wrapped parity. An
+  // injected [] never selects batch mode — the tool only batches when items
+  // is non-empty — so leaving it visible is safe.
+  // NOTE: `tags` is deliberately NOT here for goop_save_note. An empty tags
+  // array is the documented explicit "no tags" value (a note may legitimately
+  // be untagged), so coalescing it to absent would convert an authored
+  // untagged intent into a false "tags is required" rejection and break
+  // direct/wrapped parity. The silent-untagged defect class is tags:[""] —
+  // an array of empty strings — which survives here and is rejected at the
+  // tool level instead.
+  // NOTE: `items` is deliberately NOT here for goop_save_note. An explicitly
+  // empty items array is the documented "empty batch" rejection case when no
+  // single-note fields are present; coalescing it to absent changes that
+  // actionable error into the less precise create-field error and breaks
+  // direct/wrapped parity. As with blocker and chronicle, an injected []
+  // cannot select batch mode because the factory requires a non-empty array.
   goop_write_db: new Set(["items"]),
   goop_write_section: new Set(["items"]),
   goop_write_wave: new Set([
@@ -158,7 +181,6 @@ function coalesceInjectedDefaults(value: unknown, toolName?: string): unknown {
       return (Array.isArray(field) && field.length === 0) || isEmptyObject(field);
     }),
     ...emptyPatchGroupKeys(source, toolName),
-    ...waveMetadataGroupKeys(source, toolName),
   ]);
 
   return Object.fromEntries(Object.entries(source).filter(([key]) => !omittedKeys.has(key)));
@@ -171,10 +193,6 @@ function isEmptyObject(value: unknown): value is Record<string, never> {
     !Array.isArray(value) &&
     Object.keys(value).length === 0
   );
-}
-
-function hasNonEmptyArray(value: unknown): boolean {
-  return Array.isArray(value) && value.length > 0;
 }
 
 function emptyPatchGroupKeys(value: Record<string, unknown>, toolName: string): string[] {
@@ -193,13 +211,16 @@ function emptyPatchGroupKeys(value: Record<string, unknown>, toolName: string): 
 function hasIndependentWriteEvidence(value: Record<string, unknown>, toolName: string): boolean {
   if (typeof value.content === "string" && value.content.length > 0) return true;
   if (toolName === "goop_save_note") {
+    // `tags` counts on presence alone (not length): an explicitly empty tags
+    // array is a legitimate authored create signal — the documented way to
+    // save an untagged note — so it must stand as independent write evidence
+    // against an injected empty patch pair.
     return (
       typeof value.title === "string" &&
       value.title.length > 0 &&
       typeof value.body === "string" &&
       value.body.length > 0 &&
       Array.isArray(value.tags) &&
-      value.tags.length > 0 &&
       typeof value.source_agent === "string" &&
       value.source_agent.length > 0
     );
@@ -213,21 +234,4 @@ function hasIndependentWriteEvidence(value: Record<string, unknown>, toolName: s
         typeof (item as Record<string, unknown>).doc_type === "string",
     )
   );
-}
-
-function waveMetadataGroupKeys(value: Record<string, unknown>, toolName: string): string[] {
-  if (
-    toolName !== "goop_write_wave" ||
-    !["title", "pr_url", "pr_branch"].some((key) => value[key] === "") ||
-    !(
-      (value.wave_number !== undefined && hasNonEmptyArray(value.items)) ||
-      hasNonEmptyArray(value.task_updates) ||
-      hasNonEmptyArray(value.traceability) ||
-      (!isEmptyObject(value.task_update) && value.task_update !== undefined)
-    )
-  ) {
-    return [];
-  }
-
-  return ["title", "pr_url", "pr_branch"];
 }

@@ -69,7 +69,13 @@ Executors and wave verifiers own reporting tool friction. Every executor and ver
 
 Tool-call serialization in some hosts injects empty strings (`""`) into argument payloads the caller never authored — most often into status and mode-selecting fields, including inside nested `task_updates[]` entries. An empty string is never a legitimate value for those fields, but it arrives as a *present* value and defeats the caller's intent: a mode conflict the caller never created, an "invalid status" rejection, or `""` stored as a real value. This was confirmed in the field: rewriting descriptions to say "omit, do not pass an empty string" did not stop the next agent from failing the same way, because the empty string is injected below the level any description can reach.
 
-At the single shared tool-input boundary (`createTools` in `src/tools/index.ts`, which both the V1 and V2 registration paths consume), an exact empty string is treated as absent (omitted) for every field where empty has no legitimate meaning, recursively through arrays and nested objects, before any tool logic runs. Only exact `""` is affected — `null`, `undefined`, `0`, `false`, `[]`, `{}`, and whitespace-only strings pass through untouched (a whitespace-only string may be intentional content). A non-empty value is never dropped.
+At the single shared tool-input boundary (`createTools` in `src/tools/index.ts`, which both the V1 and V2 registration paths consume), exact `""`, `false`, `[]`, and `{}` are treated as absent (omitted) where the per-tool policy permits it, before any tool logic runs:
+
+- An exact `""` is omitted for every field where empty has no legitimate meaning, recursively through arrays and nested objects — except the load-bearing patch pairs listed below.
+- `false` is omitted for the explicitly listed injected-false fields (`replace_all` on `goop_write_db`/`goop_write_section`/`goop_save_note`; `allow_status_regression` on `goop_write_wave`).
+- `[]`/`{}` are omitted for the explicitly listed empty-container fields (e.g. `items`/`task_update`/`task_updates`/`traceability`/`verifications` on `goop_write_wave`, `alsoLogAdl`/`alsoSaveMemory` on `goop_append_chronicle`). Deliberately **not** omitted: `entries` on `goop_append_chronicle`, `items` on `goop_blocker` and `goop_save_note`, and `tags` on `goop_save_note` — those empties carry documented distinctions the tool relies on.
+
+`null`, `undefined`, `0`, and whitespace-only strings are preserved (a whitespace-only string may be intentional content). A non-empty value is never dropped. The per-tool policy lives in `src/shared/coalesce.ts` (`EMPTY_STRING_LOAD_BEARING_FIELDS_BY_TOOL`, `INJECTED_FALSE_FIELDS_BY_TOOL`, `INJECTED_EMPTY_CONTAINER_FIELDS_BY_TOOL`).
 
 A small, explicit set of **tool-field pairs** is exempt, because for those pairs an empty string is a documented, intentional operation and coalescing it would convert that operation into a silent no-op — the same failure class the boundary exists to eliminate. The policy lives in `EMPTY_STRING_LOAD_BEARING_FIELDS_BY_TOOL` in `packages/opencode-plugin/src/shared/coalesce.ts`; it is keyed by canonical tool name first, then field name:
 
@@ -77,11 +83,10 @@ A small, explicit set of **tool-field pairs** is exempt, because for those pairs
 |-------|-------|------------------|
 | `new_string` | `goop_write_db`, `goop_write_section`, `goop_save_note` | Delete the matched text. |
 | `old_string` | `goop_write_db`, `goop_write_section`, `goop_save_note` | Activate patch mode on presence alone (documented in `shared/write-mode.ts`). |
-| `pr_url` | `goop_write_wave` (top-level and `items[]`) | Clear the stored PR URL. |
-| `pr_branch` | `goop_write_wave` (top-level and `items[]`) | Clear the stored PR branch. |
-| `title` | `goop_write_wave` (top-level and `items[]`) | Clear the stored wave title (same overwrite-with-empty contract as `pr_url`/`pr_branch`). |
 
-Tool scoping is deliberate: a field name alone never grants an exemption. For example, `title:""` is protected for `goop_write_wave` but coalesces to absent for `memory_save`, `goop_save_note`, and `goop_create_pr`. A new tool receives no exemption by default; add a tool-field pair only after confirming that empty is a documented, load-bearing operation and testing that behavior.
+Tool scoping is deliberate: a field name alone never grants an exemption. For example, `new_string:""` is protected for `goop_write_db`, `goop_write_section`, and `goop_save_note` (it deletes matched text) but coalesces to absent for every other tool. A new tool receives no exemption by default; add a tool-field pair only after confirming that empty is a documented, load-bearing operation and testing that behavior.
+
+Wave metadata (`title`, `pr_branch`, `pr_url`) on `goop_write_wave` is deliberately **not** exempt: empty is not a supported clearing operation. An empty string is treated as absent at the boundary, so the stored value is preserved, and the tool's own validation rejects any empty that still arrives — the documented contract is that intentional metadata clearing is not supported.
 
 `content` is deliberately **not** exempt: an empty content has no legitimate meaning in a single-mode write, and exempting it would let an injected `content:""` silently destroy a document. Coalescing it to absent produces a loud `none`-mode error instead of a destructive wipe; in batch mode an empty `content` is already a neutral placeholder and is unaffected.
 
@@ -101,6 +106,23 @@ The fastest mental model is: if the tool has a plural/batch argument (`doc_types
 | Update 3 task statuses | 3 separate `goop_write_wave` calls | `goop_write_wave({ wave_number: 1, task_updates: [...] })` |
 | Open 3 blockers | 3 separate `goop_blocker` calls | `goop_blocker({ items: [...] })` |
 
+### Six-tool batch inventory
+
+Six tools batch their writes; each has exactly one batch array property. Per-item requiredness is pinned in `src/core/tools-v2.test.ts`:
+
+| Tool | Batch array property | Per-item requiredness |
+|------|----------------------|------------------------|
+| `goop_append_chronicle` | `entries` | None — each entry is a plain string. |
+| `goop_blocker` | `items` | `action` on every item. |
+| `goop_save_note` | `items` | Item mirrors the top-level surface: create items need `title` + `body` + `tags` + `source_agent`; patch items need `note_id`. |
+| `goop_write_db` | `items` | `doc_type` on every item. |
+| `goop_write_section` | `items` | `doc_type` and `section_key` on every item. |
+| `goop_write_wave` | `items` | `wave_number` on every item; per-item `verifications[]`/`traceability[]` supported. |
+
+`goop_write_wave`'s sub-arrays carry their own element pins: `task_updates[]` items require `task_index` + `status`; `verifications[]` items require `check_name` + `status`; `traceability[]` items require `requirement_key`.
+
+An explicitly empty batch array is its own rejection case for `goop_append_chronicle` (`entries[]`), `goop_blocker` (`items[]`), `goop_save_note` (`items[]`), and `goop_write_section` (`items[]`) — an empty-batch error, distinct from a no-args call.
+
 ## Document tools
 
 | Tool | Arguments | Example |
@@ -117,13 +139,13 @@ The fastest mental model is: if the tool has a plural/batch argument (`doc_types
 
 `goop_boot` replaces the 4-5-call agent boot sequence (read docs + search notes + search memory + load references) with a single call. Documents are loaded only when `doc_types` is explicitly passed; there is no default document set. Wave/task context is not included; fetch it with `goop_read_wave` when needed. Granular tools remain available and unchanged.
 
-`goop_append_chronicle`'s `alsoLogAdl`/`alsoSaveMemory` replace separate `goop_adl`/`memory_save` calls when logging alongside a chronicle entry. Cross-store atomicity is unavailable — writes are best-effort sequential with partial-failure reporting. Not available in `entries` batch mode.
+`goop_append_chronicle`'s `alsoLogAdl`/`alsoSaveMemory` replace separate `goop_adl`/`memory_save` calls when logging alongside a chronicle entry. Cross-store atomicity is unavailable — the three stores are written sequentially, best-effort, with per-store `[OK]`/`[FAIL]` reporting; if the chronicle write fails, aux writes are skipped (no orphans), and if an aux write fails after the chronicle succeeded, the chronicle stays and the failure is reported. The aux payloads apply once, after the batch commits and on full success — including in `entries[]` batch mode. An empty-string `entry`/`workflow_id` and an empty `alsoLogAdl:{}`/`alsoSaveMemory:{}` payload are treated as absent; an explicitly empty `entries[]` reports an empty-batch error, distinct from a no-args call.
 
 ## Wave and tracking tools
 
 | Tool | Arguments | Example |
 |---|---|---|
-| `goop_write_wave` | `wave_number`, `title?`, `status?`, `pr_branch?`, `pr_url?`, `tasks?: {task_index, description?, agent?, status?}[]`, `task_update?: {task_index, status}`, `task_updates?: {task_index, status}[]`, `workflow_id?`, `items?: {wave_number, title?, status?, pr_branch?, pr_url?, tasks?}[]`, `verifications?: {check_name, status, detail?, wave_id?}[]`, `traceability?: {requirement_key, wave_number?, task_index?, status?}[]` | `goop_write_wave({ wave_number: 2, task_updates: [{ task_index: 1, status: "complete" }, { task_index: 2, status: "complete" }], verifications: [{ check_name: "typecheck", status: "pass" }] })` |
+| `goop_write_wave` | `wave_number`, `title?`, `status?`, `pr_branch?`, `pr_url?`, `tasks?: {task_index, description?, agent?, status?}[]`, `task_update?: {task_index, status}`, `task_updates?: {task_index, status}[]`, `allow_status_regression?`, `workflow_id?`, `items?: {wave_number, title?, status?, pr_branch?, pr_url?, tasks?, verifications?, traceability?}[]`, `verifications?: {check_name, status, detail?, wave_id?}[]`, `traceability?: {requirement_key, wave_number?, task_index?, status?}[]` | `goop_write_wave({ wave_number: 2, task_updates: [{ task_index: 1, status: "complete" }, { task_index: 2, status: "complete" }], verifications: [{ check_name: "typecheck", status: "pass" }] })` |
 | `goop_read_wave` | `workflow_id?`, `wave_numbers?: number[]` | `goop_read_wave({ wave_numbers: [1, 2] })` |
 | `goop_query_decisions` | `rule?`, `rules?: number[]`, `type?`, `types?: string[]`, `workflow_id?`, `limit?` | `goop_query_decisions({ rules: [2, 3], types: ["deviation", "observation"], limit: 20 })` |
 | `goop_blocker` | `action: "open" \| "resolve" \| "list"`, `description?`, `severity?`, `wave_id?`, `id?`, `resolution?`, `status?`, `workflow_id?`, `items?: {action, description?, severity?, wave_id?, id?, resolution?, status?, workflow_id?}[]` | `goop_blocker({ action: "open", description: "CI token expired", severity: "high", wave_id: 2 })` |
@@ -237,7 +259,7 @@ The following tools and extended arguments reduce multi-call sequences to single
 | `goop_boot` | 4-5-call agent boot (read docs + search notes + search memory + load references) | Single call returns all requested blocks. Documents require explicit `doc_types` — no default. Wave context is fetched separately via `goop_read_wave`. |
 | `goop_write_wave` + `verifications`/`traceability` | Retired `goop_record_verification`/`goop_write_traceability` | Side-payloads run sequentially inside the same `execute()`. Available alongside `task_updates` (atomic transaction); with `items[]` they are supplied per-item inside each item, not at the top level (top-level side payloads alongside `items[]` are rejected, not dropped). |
 | `goop_infer_intent` + `autoApply` | Manual infer-then-act two-call flow for `create-workflow`/`transition` | Opt-in (`autoApply: true`), confidence-gated (threshold `0.9`, minimum `0.85`), non-destructive-only. Returns `mutation` in result. |
-| `goop_append_chronicle` + `alsoLogAdl`/`alsoSaveMemory` | Separate `goop_adl`/`memory_save` calls alongside a chronicle entry | Best-effort sequential writes with partial-failure reporting. Not available in `entries` batch mode. |
+| `goop_append_chronicle` + `alsoLogAdl`/`alsoSaveMemory` | Separate `goop_adl`/`memory_save` calls alongside a chronicle entry | Best-effort sequential writes with per-store `[OK]`/`[FAIL]` reporting; applied once after the batch commits and on full success — including in `entries[]` batch mode. |
 | `goop_acceptance_audit` | Retired `goop_read_verifications`/`goop_read_waves` + blockers at the accept gate | Single read-only call returns combined `{blockers, verifications, waves}`. |
 
 ---
