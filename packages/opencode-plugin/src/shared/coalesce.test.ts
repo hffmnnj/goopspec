@@ -86,7 +86,7 @@ describe("coalesceEmptyStrings", () => {
     expect(coalesce({ old_string: "", new_string: "" }, "goop_create_pr")).toEqual({});
   });
 
-  it("protects wave metadata clears only for goop_write_wave", () => {
+  it("omits wave metadata empties for goop_write_wave (clears are rejected at tool level)", () => {
     const out = coalesce(
       {
         pr_url: "",
@@ -96,12 +96,10 @@ describe("coalesceEmptyStrings", () => {
       },
       "goop_write_wave",
     );
-    expect(out).toEqual({
-      pr_url: "",
-      pr_branch: "",
-      title: "",
-      items: [{ wave_number: 1, pr_url: "", pr_branch: "", title: "" }],
-    });
+    expect(out).toEqual({ items: [{ wave_number: 1 }] });
+    expect(out.pr_url).toBeUndefined();
+    expect(out.pr_branch).toBeUndefined();
+    expect(out.title).toBeUndefined();
   });
 
   it("uses protection-off as the safe default for tools sharing a field name", () => {
@@ -112,8 +110,8 @@ describe("coalesceEmptyStrings", () => {
   });
 
   it("coalesces a non-protected sibling alongside a protected field", () => {
-    const out = coalesce({ status: "", pr_url: "" }, "goop_write_wave");
-    expect(out).toEqual({ pr_url: "" });
+    const out = coalesce({ status: "", old_string: "" }, "goop_write_db");
+    expect(out).toEqual({ old_string: "" });
   });
 
   it("handles deeply nested structures", () => {
@@ -152,8 +150,11 @@ describe("EMPTY_STRING_LOAD_BEARING_FIELDS_BY_TOOL", () => {
       goop_save_note: ["new_string", "old_string"],
       goop_write_db: ["new_string", "old_string"],
       goop_write_section: ["new_string", "old_string"],
-      goop_write_wave: ["pr_branch", "pr_url", "title"],
     });
+    // Wave 2 contract: goop_write_wave metadata empties coalesce to omission at
+    // the host boundary; the tool itself rejects intentional clears. The map
+    // must not exempt them.
+    expect(EMPTY_STRING_LOAD_BEARING_FIELDS_BY_TOOL.goop_write_wave).toBeUndefined();
   });
 });
 
@@ -165,8 +166,10 @@ describe("EMPTY_STRING_LOAD_BEARING_FIELDS_BY_TOOL", () => {
 // contract the shared boundary must implement: an injected default on a tool's
 // optional surface is treated as absent — but NEVER as a global falsy rule,
 // and never for a field where the empty value is a documented authored
-// operation (the blank-document patch group and the wave metadata clears
-// pinned above stay protected when they are the call's only operation).
+// operation (the blank-document patch group pinned above stays protected when
+// it is the call's only operation). Wave metadata empties are NOT such an
+// operation: per the Wave 2 contract they coalesce to omission at this
+// boundary, and intentional clears are rejected at tool level.
 //
 // The assertions in the first block intentionally FAIL until Task 1.2
 // implements the normalization; they are the regression evidence this wave is
@@ -257,11 +260,10 @@ describe("coalesceEmptyStrings — injected non-string type defaults (Wave 1 bou
     });
   });
 
-  it("keeps wave metadata clears protected when they are the only operation (authored empty)", () => {
-    expect(coalesce({ title: "", pr_url: "", pr_branch: "" }, "goop_write_wave")).toEqual({
-      title: "",
-      pr_url: "",
-      pr_branch: "",
-    });
+  it("omits wave metadata empties even as the only operation (intentional clears rejected at tool level)", () => {
+    // Wave 2 contract: title/pr_url/pr_branch empties coalesce to omission at
+    // this boundary; the tool rejects intentional clears instead (pinned in
+    // goop-write-wave/index.test.ts).
+    expect(coalesce({ title: "", pr_url: "", pr_branch: "" }, "goop_write_wave")).toEqual({});
   });
 });
