@@ -74,6 +74,72 @@ function validateCreateFields(item: NoteFields): { ok: true } | { ok: false; err
   return { ok: true };
 }
 
+/**
+ * Strip host-injected empty identifiers and scopes whose empty form carries no
+ * authored intent, so the DIRECT factory agrees with the coalesced payload the
+ * registry boundary (`createTools`) already produces for the same call.
+ *
+ * - `note_id: ""` can never address a note (ids are `fn_YYYYMMDD_random8`), so
+ *   it is treated as absent — patch mode must not activate on an empty id.
+ * - `workflow_id: ""` / `project_id: ""` are not real scopes; absent means the
+ *   note is stored global (null scope), matching the wrapped path.
+ *
+ * `old_string`/`new_string` are intentionally NOT touched: an empty value there
+ * is the documented blank-document patch / delete operation and is load-bearing
+ * on both paths (see EMPTY_STRING_LOAD_BEARING_FIELDS_BY_TOOL).
+ */
+function normalizeNoteArgs<T extends NoteFields & NotePatchArgs>(item: T): T {
+  const out: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(item as Record<string, unknown>)) {
+    if (
+      value === "" &&
+      (key === "note_id" || key === "workflow_id" || key === "project_id")
+    ) {
+      continue;
+    }
+    out[key] = value;
+  }
+  return out as T;
+}
+
+/**
+ * Resolve a `tags` value to its normalized `string[]`, or an actionable error.
+ *
+ * An explicit empty array (`[]`) is the documented way to save an untagged
+ * note and stays valid. Any other value that normalizes to nothing — `[""]`,
+ * `["   "]`, an empty string, or non-string entries — is rejected rather than
+ * silently producing an untagged note the caller did not author.
+ */
+function resolveTags(tags: unknown): { ok: true; value: string[] } | { ok: false; error: string } {
+  if (tags === undefined) {
+    return { ok: false, error: "tags is required for new notes" };
+  }
+  const normalized = normalizeTags(tags);
+  if (normalized.length > 0) {
+    return { ok: true, value: normalized };
+  }
+  if (Array.isArray(tags) && tags.length === 0) {
+    return { ok: true, value: [] };
+  }
+  return {
+    ok: false,
+    error:
+      "tags cannot be empty: provide at least one non-empty tag, or pass [] to save an untagged note",
+  };
+}
+
+/**
+ * Validate an importance value. `0` is an authored value that must NEVER be
+ * reinterpreted as the default 5; it is rejected with the same explicit range
+ * message on the single and batch paths.
+ */
+function validateImportance(importance: number): { ok: true } | { ok: false; error: string } {
+  if (importance < 1 || importance > 10) {
+    return { ok: false, error: "Importance must be between 1 and 10." };
+  }
+  return { ok: true };
+}
+
 // ---------------------------------------------------------------------------
 // Note-specific write-mode resolution. A note is CREATE-or-PATCH keyed on
 // `note_id` presence (not a content/old_string pair), so resolveWriteMode()
@@ -280,10 +346,13 @@ export function createGoopSaveNoteTool(ctx: PluginContext): ToolDefinition {
           "Atomic batch of note writes; each item is create or patch — cannot be supplied alongside top-level create or patch fields.",
         ),
     },
-    async execute(args: SaveNoteArgs, _context: ToolContext): Promise<string> {
+    async execute(rawArgs: SaveNoteArgs, _context: ToolContext): Promise<string> {
       try {
+        const args = normalizeNoteArgs(rawArgs);
+
         if (Array.isArray(args.items) && args.items.length > 0) {
-          const result = runBatch(ctx.db, args.items, (item) => {
+          const result = runBatch(ctx.db, args.items, (rawItem) => {
+            const item = normalizeNoteArgs(rawItem);
             const itemResolution = resolveNoteMode(item);
             if (itemResolution.kind === "error") {
               throw new Error(itemResolution.message);
@@ -308,11 +377,15 @@ export function createGoopSaveNoteTool(ctx: PluginContext): ToolDefinition {
               throw new Error(validation.error);
             }
 
-            const tags = normalizeTags(item.tags);
+            const tagsResolution = resolveTags(item.tags);
+            if (!tagsResolution.ok) {
+              throw new Error(tagsResolution.error);
+            }
 
             const itemImportance = item.importance ?? 5;
-            if (itemImportance < 1 || itemImportance > 10) {
-              throw new Error(`importance out of range (${itemImportance})`);
+            const importanceResolution = validateImportance(itemImportance);
+            if (!importanceResolution.ok) {
+              throw new Error(importanceResolution.error);
             }
 
             const id = generateNoteId();
@@ -320,7 +393,7 @@ export function createGoopSaveNoteTool(ctx: PluginContext): ToolDefinition {
               id,
               title: item.title as string,
               body: item.body as string,
-              tags: JSON.stringify(tags),
+              tags: JSON.stringify(tagsResolution.value),
               source_agent: item.source_agent as string,
               importance: itemImportance,
               workflow_id: item.workflow_id ?? null,
@@ -367,11 +440,16 @@ export function createGoopSaveNoteTool(ctx: PluginContext): ToolDefinition {
 
         const importance = args.importance ?? 5;
 
-        if (importance < 1 || importance > 10) {
-          return "Error in goop_save_note: Importance must be between 1 and 10.";
+        const importanceResolution = validateImportance(importance);
+        if (!importanceResolution.ok) {
+          return `Error in goop_save_note: ${importanceResolution.error}`;
         }
 
-        const tags = normalizeTags(args.tags);
+        const tagsResolution = resolveTags(args.tags);
+        if (!tagsResolution.ok) {
+          return `Error in goop_save_note: ${tagsResolution.error}`;
+        }
+        const tags = tagsResolution.value;
 
         const id = generateNoteId();
 

@@ -77,7 +77,14 @@ const INJECTED_FALSE_FIELDS_BY_TOOL: Readonly<Record<string, ReadonlySet<string>
 const INJECTED_EMPTY_CONTAINER_FIELDS_BY_TOOL: Readonly<Record<string, ReadonlySet<string>>> = {
   goop_append_chronicle: new Set(["alsoLogAdl", "alsoSaveMemory", "entries"]),
   goop_blocker: new Set(["items"]),
-  goop_save_note: new Set(["items", "tags"]),
+  // NOTE: `tags` is deliberately NOT here for goop_save_note. An empty tags
+  // array is the documented explicit "no tags" value (a note may legitimately
+  // be untagged), so coalescing it to absent would convert an authored
+  // untagged intent into a false "tags is required" rejection and break
+  // direct/wrapped parity. The silent-untagged defect class is tags:[""] —
+  // an array of empty strings — which survives here and is rejected at the
+  // tool level instead.
+  goop_save_note: new Set(["items"]),
   goop_write_db: new Set(["items"]),
   goop_write_section: new Set(["items"]),
   goop_write_wave: new Set([
@@ -186,13 +193,16 @@ function emptyPatchGroupKeys(value: Record<string, unknown>, toolName: string): 
 function hasIndependentWriteEvidence(value: Record<string, unknown>, toolName: string): boolean {
   if (typeof value.content === "string" && value.content.length > 0) return true;
   if (toolName === "goop_save_note") {
+    // `tags` counts on presence alone (not length): an explicitly empty tags
+    // array is a legitimate authored create signal — the documented way to
+    // save an untagged note — so it must stand as independent write evidence
+    // against an injected empty patch pair.
     return (
       typeof value.title === "string" &&
       value.title.length > 0 &&
       typeof value.body === "string" &&
       value.body.length > 0 &&
       Array.isArray(value.tags) &&
-      value.tags.length > 0 &&
       typeof value.source_agent === "string" &&
       value.source_agent.length > 0
     );

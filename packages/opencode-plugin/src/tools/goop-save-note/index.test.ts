@@ -365,7 +365,10 @@ describe("goop_save_note tool", () => {
       );
       expect(result).toContain("0/3 succeeded");
       expect(result).toContain("FAIL");
-      expect(result).toContain("importance out of range");
+      // Wave 3 Task 1 unifies the importance message across single and batch
+      // paths; the previous batch-only wording ("importance out of range") is
+      // superseded.
+      expect(result).toContain("Importance must be between 1 and 10");
 
       // No valid items persist after a batch failure.
       const search = ctx.db.searchNotes("Body");
@@ -1055,6 +1058,277 @@ describe("goop_save_note tool", () => {
       );
       expect(result).toContain(noteId);
       expect(ctx.db.getNoteById(noteId)?.body).toBe("Filled in via empty patch");
+    });
+  });
+
+  // -----------------------------------------------------------------------
+  // Wave 3 Task 1 — host default injection parity on the DIRECT factory
+  //
+  // The registry boundary (createTools) coalesces injected defaults to absent
+  // before tool logic runs. The direct factory must agree with that effective
+  // payload on the fields where an empty value carries no authored intent:
+  // an empty note_id can never address a note, an empty scope is not a real
+  // workflow/project, and empty tags entries must never silently produce an
+  // untagged note. An explicit `tags: []` remains the documented way to save
+  // an untagged note, and an authored importance of 0 is rejected, never
+  // defaulted to 5.
+  // -----------------------------------------------------------------------
+
+  describe("Wave 3 Task 1 — injected-default parity on the direct factory", () => {
+    function extractId(result: string): string {
+      return result.match(/fn_\d{8}_[a-z0-9]+/)?.[0] ?? "";
+    }
+
+    it('treats note_id: "" as absent so a create call still creates', async () => {
+      const tool = createGoopSaveNoteTool(ctx);
+      const result = String(
+        await tool.execute(
+          {
+            title: "Injected id create",
+            body: "direct-injected-note-id-body-xyz",
+            tags: ["inj"],
+            source_agent: "agent",
+            note_id: "",
+          },
+          toolCtx,
+        ),
+      );
+
+      expect(result).toContain("Field Note saved:");
+      expect(result).not.toContain("cannot be supplied alongside note_id");
+      expect(ctx.db.searchNotes("direct-injected-note-id-body-xyz").length).toBe(1);
+    });
+
+    it('rejects tags containing only empty strings instead of saving an untagged note', async () => {
+      const tool = createGoopSaveNoteTool(ctx);
+      const result = String(
+        await tool.execute(
+          {
+            title: "Empty tag",
+            body: "direct-tags-empty-string-body-xyz",
+            tags: [""],
+            source_agent: "agent",
+          },
+          toolCtx,
+        ),
+      );
+
+      expect(result).toContain("Error in goop_save_note");
+      expect(result).toContain("provide at least one non-empty tag");
+      expect(ctx.db.searchNotes("direct-tags-empty-string-body-xyz")).toEqual([]);
+    });
+
+    it("rejects whitespace-only tags entries instead of saving an untagged note", async () => {
+      const tool = createGoopSaveNoteTool(ctx);
+      const result = String(
+        await tool.execute(
+          {
+            title: "Whitespace tag",
+            body: "direct-tags-whitespace-body-xyz",
+            tags: ["   "],
+            source_agent: "agent",
+          },
+          toolCtx,
+        ),
+      );
+
+      expect(result).toContain("provide at least one non-empty tag");
+      expect(ctx.db.searchNotes("direct-tags-whitespace-body-xyz")).toEqual([]);
+    });
+
+    it("rejects an empty-string tags value instead of saving an untagged note", async () => {
+      const tool = createGoopSaveNoteTool(ctx);
+      const result = String(
+        await tool.execute(
+          {
+            title: "Empty string tags",
+            body: "direct-tags-empty-string-val-body-xyz",
+            tags: "" as unknown as string[],
+            source_agent: "agent",
+          },
+          toolCtx,
+        ),
+      );
+
+      expect(result).toContain("provide at least one non-empty tag");
+      expect(ctx.db.searchNotes("direct-tags-empty-string-val-body-xyz")).toEqual([]);
+    });
+
+    it("normalizes mixed tags by dropping empty entries and keeping the rest", async () => {
+      const tool = createGoopSaveNoteTool(ctx);
+      const result = String(
+        await tool.execute(
+          {
+            title: "Mixed tags",
+            body: "direct-tags-mixed-body-xyz",
+            tags: ["alpha", "", "  ", "beta"],
+            source_agent: "agent",
+          },
+          toolCtx,
+        ),
+      );
+
+      expect(result).toContain("Field Note saved:");
+      const note = ctx.db.getNoteById(extractId(result));
+      expect(JSON.parse(note?.tags ?? "[]")).toEqual(["alpha", "beta"]);
+    });
+
+    it("keeps an explicit empty tags array valid (untagged note)", async () => {
+      const tool = createGoopSaveNoteTool(ctx);
+      const result = String(
+        await tool.execute(
+          {
+            title: "Untagged",
+            body: "direct-tags-explicit-empty-body-xyz",
+            tags: [],
+            source_agent: "agent",
+          },
+          toolCtx,
+        ),
+      );
+
+      expect(result).toContain("Field Note saved:");
+      const note = ctx.db.searchNotes("direct-tags-explicit-empty-body-xyz")[0];
+      expect(JSON.parse(note?.tags ?? "[]")).toEqual([]);
+    });
+
+    it("rejects authored importance: 0 as out of range (never defaulted to 5)", async () => {
+      const tool = createGoopSaveNoteTool(ctx);
+      const result = await tool.execute(
+        {
+          title: "Zero importance",
+          body: "direct-importance-zero-body-xyz",
+          tags: ["z"],
+          source_agent: "agent",
+          importance: 0,
+        },
+        toolCtx,
+      );
+
+      expect(result).toContain("Error in goop_save_note");
+      expect(result).toContain("Importance must be between 1 and 10");
+      expect(ctx.db.searchNotes("direct-importance-zero-body-xyz")).toEqual([]);
+    });
+
+    it("stores null scope for empty-string workflow_id and project_id", async () => {
+      const tool = createGoopSaveNoteTool(ctx);
+      const result = String(
+        await tool.execute(
+          {
+            title: "Injected scope",
+            body: "direct-scope-injected-body-xyz",
+            tags: ["scope"],
+            source_agent: "agent",
+            workflow_id: "",
+            project_id: "",
+          },
+          toolCtx,
+        ),
+      );
+
+      expect(result).toContain("Field Note saved:");
+      const note = ctx.db.searchNotes("direct-scope-injected-body-xyz")[0];
+      expect(note?.workflow_id).toBeNull();
+      expect(note?.project_id).toBeNull();
+    });
+
+    it('rolls back a batch when an item carries tags: [""]', async () => {
+      const tool = createGoopSaveNoteTool(ctx);
+      const result = String(
+        await tool.execute(
+          {
+            title: "",
+            body: "",
+            tags: [],
+            source_agent: "agent",
+            items: [
+              {
+                title: "Valid create",
+                body: "direct-batch-tags-valid-body-xyz",
+                tags: ["ok"],
+                source_agent: "agent",
+              },
+              {
+                title: "Bad tags",
+                body: "direct-batch-tags-bad-body-xyz",
+                tags: [""],
+                source_agent: "agent",
+              },
+            ],
+          },
+          toolCtx,
+        ),
+      );
+
+      expect(result).toContain("0/2 succeeded");
+      expect(result).toContain("provide at least one non-empty tag");
+      expect(ctx.db.searchNotes("direct-batch-tags-valid-body-xyz")).toEqual([]);
+      expect(ctx.db.searchNotes("direct-batch-tags-bad-body-xyz")).toEqual([]);
+    });
+
+    it("rolls back a batch when an item carries importance: 0 with the unified message", async () => {
+      const tool = createGoopSaveNoteTool(ctx);
+      const result = String(
+        await tool.execute(
+          {
+            title: "",
+            body: "",
+            tags: [],
+            source_agent: "agent",
+            items: [
+              {
+                title: "Valid create",
+                body: "direct-batch-imp-valid-body-xyz",
+                tags: ["ok"],
+                source_agent: "agent",
+              },
+              {
+                title: "Zero importance",
+                body: "direct-batch-imp-zero-body-xyz",
+                tags: ["z"],
+                source_agent: "agent",
+                importance: 0,
+              },
+            ],
+          },
+          toolCtx,
+        ),
+      );
+
+      expect(result).toContain("0/2 succeeded");
+      expect(result).toContain("Importance must be between 1 and 10");
+      expect(ctx.db.searchNotes("direct-batch-imp-valid-body-xyz")).toEqual([]);
+      expect(ctx.db.searchNotes("direct-batch-imp-zero-body-xyz")).toEqual([]);
+    });
+
+    it("stores null scope for empty-string workflow_id on a batch item", async () => {
+      const tool = createGoopSaveNoteTool(ctx);
+      const result = String(
+        await tool.execute(
+          {
+            title: "",
+            body: "",
+            tags: [],
+            source_agent: "agent",
+            items: [
+              {
+                title: "Scoped empty",
+                body: "direct-batch-scope-body-xyz",
+                tags: ["s"],
+                source_agent: "agent",
+                workflow_id: "",
+                project_id: "",
+              },
+            ],
+          },
+          toolCtx,
+        ),
+      );
+
+      expect(result).toContain("1/1 succeeded");
+      const note = ctx.db.searchNotes("direct-batch-scope-body-xyz")[0];
+      expect(note?.workflow_id).toBeNull();
+      expect(note?.project_id).toBeNull();
     });
   });
 });

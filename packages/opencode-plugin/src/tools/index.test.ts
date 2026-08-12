@@ -886,6 +886,110 @@ describe("write-tool boundary matrix — injected type defaults (Wave 1 Task 1.1
     expect(result).toContain("Field Note saved:");
   });
 
+  it("REG: untagged note create (tags: []) is callable under injected type defaults", async () => {
+    // Wave 3 Task 1: an explicit empty tags array is the documented "no tags"
+    // value and must NOT be coalesced to absent on the wrapped path — that
+    // would convert an authored untagged intent into a false "tags is
+    // required" rejection and break direct/wrapped parity.
+    const tools = createTools(ctx);
+    const result = (await tools.goop_save_note.execute(
+      {
+        title: "Untagged create",
+        body: "wrapped-untagged-create-body-xyz",
+        tags: [],
+        source_agent: "test-agent",
+        note_id: "",
+        old_string: "",
+        new_string: "",
+        replace_all: false,
+        items: [],
+        workflow_id: "",
+        project_id: "",
+      },
+      toolCtx,
+    )) as string;
+    expect(result).toContain("Field Note saved:");
+    const note = ctx.db.searchNotes("wrapped-untagged-create-body-xyz")[0];
+    expect(JSON.parse(note?.tags ?? "[]")).toEqual([]);
+  });
+
+  it('REG: tags: [""] is rejected on the wrapped path with guidance (no silent untagged note)', async () => {
+    const tools = createTools(ctx);
+    const result = (await tools.goop_save_note.execute(
+      {
+        title: "Bad tags",
+        body: "wrapped-tags-empty-string-body-xyz",
+        tags: [""],
+        source_agent: "test-agent",
+      },
+      toolCtx,
+    )) as string;
+    expect(result).toContain("Error in goop_save_note");
+    expect(result).toContain("provide at least one non-empty tag");
+    expect(ctx.db.searchNotes("wrapped-tags-empty-string-body-xyz")).toEqual([]);
+  });
+
+  it("REG: authored importance: 0 is rejected on the wrapped path (0 is preserved, never defaulted to 5)", async () => {
+    // 0 is never coalesced (the boundary preserves authored 0), so both paths
+    // must reject it with the same explicit range message.
+    const tools = createTools(ctx);
+    const result = (await tools.goop_save_note.execute(
+      {
+        title: "Zero",
+        body: "wrapped-importance-zero-body-xyz",
+        tags: ["z"],
+        source_agent: "test-agent",
+        importance: 0,
+      },
+      toolCtx,
+    )) as string;
+    expect(result).toContain("Importance must be between 1 and 10");
+    expect(ctx.db.searchNotes("wrapped-importance-zero-body-xyz")).toEqual([]);
+  });
+
+  it("REG: empty-string workflow_id/project_id store null on the wrapped path", async () => {
+    const tools = createTools(ctx);
+    const result = (await tools.goop_save_note.execute(
+      {
+        title: "Scope",
+        body: "wrapped-scope-empty-body-xyz",
+        tags: ["s"],
+        source_agent: "test-agent",
+        workflow_id: "",
+        project_id: "",
+      },
+      toolCtx,
+    )) as string;
+    expect(result).toContain("Field Note saved:");
+    const note = ctx.db.searchNotes("wrapped-scope-empty-body-xyz")[0];
+    expect(note?.workflow_id).toBeNull();
+    expect(note?.project_id).toBeNull();
+  });
+
+  it('KEEP: blank-document patch survives the registry boundary (old_string: "" is load-bearing)', async () => {
+    // Proves the EMPTY_STRING_LOAD_BEARING_FIELDS_BY_TOOL entry for
+    // goop_save_note through the actual registry: an authored empty
+    // old_string is a documented operation (patch an empty body), so it must
+    // reach the tool untouched even on the wrapped path.
+    const direct = createGoopSaveNoteTool(ctx);
+    const created = (await direct.execute(
+      { title: "Blank", body: "", tags: ["empty"], source_agent: "test-agent" },
+      toolCtx,
+    )) as string;
+    const noteId = created.match(/fn_[A-Za-z0-9_]+/)?.[0];
+    expect(noteId).toBeDefined();
+    if (!noteId) throw new Error("expected a saved note id");
+    expect(ctx.db.getNoteById(noteId)?.body).toBe("");
+
+    const tools = createTools(ctx);
+    const result = (await tools.goop_save_note.execute(
+      { note_id: noteId, old_string: "", new_string: "Filled via registry", replace_all: false, items: [] },
+      toolCtx,
+    )) as string;
+    expect(result).toContain("Field Note patched:");
+    expect(ctx.db.getNoteById(noteId)?.body).toBe("Filled via registry");
+  });
+
   it("KEEP: note patch is callable under injected type defaults (authored patch preserved)", async () => {
     const direct = createGoopSaveNoteTool(ctx);
     const created = (await direct.execute(
@@ -1014,25 +1118,25 @@ describe("write-tool boundary matrix — injected type defaults (Wave 1 Task 1.1
     expect(ctx.db.getSection("default", "spec", "wrapped")?.position).toBe(0);
   });
 
-  it('documents that direct note_id:"" is authored input while wrapped input is host residue', async () => {
+  it('keeps direct and wrapped note_id:"" handling identical (empty id is absent on both; create wins)', async () => {
+    // Wave 1 pinned a deliberate direct/wrapped divergence here (direct =
+    // authored presence → rejection, wrapped = host residue → create). Wave 3
+    // Task 1 supersedes that pin: an empty note_id can never address a note,
+    // so treating it as absent on BOTH paths is the parity contract, and the
+    // direct factory must agree with the coalesced effective payload.
     const direct = createGoopSaveNoteTool(ctx);
     const directResult = (await direct.execute(
       { title: "T", body: "B", tags: ["tag"], source_agent: "s", note_id: "" },
       toolCtx,
     )) as string;
-    // A direct factory is a programmatic API: this is authored presence and
-    // retains its existing actionable correction. The registry boundary alone
-    // can identify this shape as an injected host default.
-    expect(directResult).toContain("cannot be supplied alongside note_id");
+    expect(directResult).toContain("Field Note saved:");
+    expect(directResult).not.toContain("cannot be supplied alongside note_id");
 
     const tools = createTools(ctx);
     const wrappedResult = (await tools.goop_save_note.execute(
       { title: "T", body: "B", tags: ["tag"], source_agent: "s", note_id: "" },
       toolCtx,
     )) as string;
-    // Coalescing drops the injected empty identifier, so create wins. This
-    // distinction is intentional and cannot move into the V2 adapter without
-    // forking the canonical V1 execution path.
     expect(wrappedResult).toContain("Field Note saved:");
   });
 
