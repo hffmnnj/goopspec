@@ -52,6 +52,19 @@ function normalizeFullWriteContent(content: string | undefined): string | undefi
   return content === "" ? undefined : content;
 }
 
+/**
+ * replace_all:false is semantically identical to the omitted default (no
+ * replace-all), and the host injects false into optional booleans. The direct
+ * factory cannot tell an authored false from an injected one, and dropping it
+ * is lossless (false IS the default), so explicit false is treated as absent
+ * before mode resolution. True and omitted are unchanged — a genuinely
+ * modifier-only call with no content and no old_string still resolves to a
+ * loud none-mode rejection.
+ */
+function normalizeReplaceAll(replaceAll: boolean | undefined): boolean | undefined {
+  return replaceAll === false ? undefined : replaceAll;
+}
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -75,7 +88,7 @@ function patchExistingDocument(
 export function createGoopWriteDbTool(ctx: PluginContext): ToolDefinition {
   return tool({
     description:
-      "Write or update a whole workflow document. WHEN TO USE: Create, replace, append, patch, or batch a document. WHEN NOT TO USE: goop_write_section for keyed sections; goop_append_chronicle for chronicle entries. MODES: full = doc_type+content (+mode: replace default, append concatenates); patch = doc_type+old_string (+new_string/replace_all, in-place, new_string:\"\" deletes); batch = items[] only. REJECTED: content+old_string; new_string/replace_all without old_string; mode:\"append\"+old_string; op fields alongside items[]. RETURNS: Char count, mode, sidecar path; batch per-item rollup. CAVEATS: Batch is atomic. old_string presence activates patch; omit content when not writing (empty content coalesces to absent, not a wipe).",
+      'Write or update a whole workflow document. WHEN TO USE: Create, replace, append, patch, or batch a document. WHEN NOT TO USE: goop_write_section for keyed sections; goop_append_chronicle for chronicle entries. MODES: full = doc_type+content (+mode: replace default, append concatenates); patch = doc_type+old_string (+new_string/replace_all, in-place, new_string:"" deletes); batch = items[] only. REJECTED: content+old_string; new_string/replace_all without old_string; mode:"append"+old_string; op fields alongside items[]. RETURNS: Char count, mode, sidecar path; batch per-item rollup. CAVEATS: Batch is atomic. old_string presence activates patch; omit content when not writing (empty content coalesces to absent, not a wipe).',
     args: {
       doc_type: tool.schema
         .enum(DOC_TYPES)
@@ -111,9 +124,7 @@ export function createGoopWriteDbTool(ctx: PluginContext): ToolDefinition {
       items: tool.schema
         .array(
           tool.schema.object({
-            doc_type: tool.schema
-              .enum(DOC_TYPES)
-              .describe("Document type for this batch item."),
+            doc_type: tool.schema.enum(DOC_TYPES).describe("Document type for this batch item."),
             content: tool.schema
               .string()
               .optional()
@@ -163,13 +174,14 @@ export function createGoopWriteDbTool(ctx: PluginContext): ToolDefinition {
         // consistently with their single-item path, so no parity change was
         // required. Recorded to prevent re-auditing these two tools.
         const content = normalizeFullWriteContent(args.content);
+        const replaceAll = normalizeReplaceAll(args.replace_all);
         const hasItems = Array.isArray(args.items) && args.items.length > 0;
         const resolution = resolveWriteMode({
           content,
           mode: args.mode,
           old_string: args.old_string,
           new_string: args.new_string,
-          replace_all: args.replace_all,
+          replace_all: replaceAll,
           hasItems,
         });
 
@@ -187,7 +199,7 @@ export function createGoopWriteDbTool(ctx: PluginContext): ToolDefinition {
               mode: item.mode,
               old_string: item.old_string,
               new_string: item.new_string,
-              replace_all: item.replace_all,
+              replace_all: normalizeReplaceAll(item.replace_all),
             });
 
             if (itemResolution.kind === "error") {

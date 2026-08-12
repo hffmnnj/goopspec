@@ -681,8 +681,9 @@ describe("goop_write_section tool", () => {
   // the createTools boundary:
   //   R1. direct empty content coalesces to absent (loud none-mode error)
   //       instead of silently wiping the section — matching the wrapped path.
-  //   R2. batch items with empty content or empty section_key fail
-  //       atomically; an empty section key must never create a section.
+  //   R2. empty section keys are never created: batch items fail atomically
+  //       AND the single write path rejects an empty top-level section_key on
+  //       both direct and wrapped calls with identical actionable guidance.
   //   R3. single write, patch, and delete are transactional: an event
   //       failure rolls back the section/document mutation and leaves no
   //       orphan event.
@@ -716,6 +717,32 @@ describe("goop_write_section tool", () => {
 
       expect(result).toContain("content is required when old_string is not provided");
       expect(ctx.db.getSection("default", "spec", "overview")?.content).toBe("# Original");
+    });
+
+    it("REG: direct empty top-level section_key is rejected and creates no section", async () => {
+      const tool = createGoopWriteSectionTool(ctx);
+      const result = await tool.execute(
+        { doc_type: "spec", section_key: "", content: "# x" },
+        toolCtx,
+      );
+
+      expect(result).toContain("Error in goop_write_section");
+      expect(result).toContain("section_key is required for action 'write'");
+      expect(ctx.db.getSection("default", "spec", "")).toBeNull();
+      expect(ctx.db.getSections("default", "spec")).toEqual([]);
+    });
+
+    it("REG: wrapped empty top-level section_key reports the identical rejection", async () => {
+      const tools = createTools(ctx);
+      const result = (await tools.goop_write_section.execute(
+        { doc_type: "spec", section_key: "", content: "# x" },
+        toolCtx,
+      )) as string;
+
+      expect(result).toContain("Error in goop_write_section");
+      expect(result).toContain("section_key is required for action 'write'");
+      expect(ctx.db.getSection("default", "spec", "")).toBeNull();
+      expect(ctx.db.getSections("default", "spec")).toEqual([]);
     });
 
     it("REG: batch item with empty content fails atomically instead of creating an empty section", async () => {

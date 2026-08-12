@@ -324,7 +324,10 @@ export function createGoopWriteSectionTool(ctx: PluginContext): ToolDefinition {
           return "Error in goop_write_section: items[] array is empty and no section_key was provided";
         }
 
-        if (args.section_key === undefined) {
+        // An empty section key can never name a section: the wrapped boundary
+        // (coalesce) drops an injected section_key:"" before this guard, so
+        // treating "" as missing keeps both paths on the identical message.
+        if (!args.section_key) {
           return "Error in goop_write_section: section_key is required for action 'write'";
         }
         const sectionKey = args.section_key;

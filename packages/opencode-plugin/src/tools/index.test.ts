@@ -1036,24 +1036,29 @@ describe("write-tool boundary matrix — injected type defaults (Wave 1 Task 1.1
     expect(wrappedResult).toContain("Field Note saved:");
   });
 
-  it('documents that direct section_key:"" remains authored while wrapped input is rejected', async () => {
+  it("rejects empty section_key on both direct and wrapped paths with identical guidance", async () => {
+    // Wave 1 pinned the direct factory's historical authored-empty behavior
+    // for section_key:"" as an exploratory distinction. The locked Task 2.2
+    // contract ("empty section keys cannot be created") supersedes that pin:
+    // an empty section key can never name a section on EITHER path. Both
+    // direct and wrapped calls must reject with the same actionable message
+    // and create nothing.
     const direct = createGoopWriteSectionTool(ctx);
     const directResult = (await direct.execute(
       { doc_type: "spec", section_key: "", content: "# x" },
       toolCtx,
     )) as string;
-    // Direct invocation retains the factory's historical authored-value
-    // behavior. Registration coalescing is intentionally host-boundary-only.
-    expect(directResult).toContain("Written section");
-    expect(ctx.db.getSection("default", "spec", "")?.content).toBe("# x");
+    expect(directResult).toContain("Error in goop_write_section");
+    expect(directResult).toContain("section_key is required for action 'write'");
+    expect(ctx.db.getSection("default", "spec", "")).toBeNull();
 
     const tools = createTools(ctx);
     const wrappedResult = (await tools.goop_write_section.execute(
       { doc_type: "spec", section_key: "", content: "# x" },
       toolCtx,
     )) as string;
-    // Coalescing drops injected section_key:"" → the factory's key guard fires.
-    expect(wrappedResult).toContain("section_key is required for action 'write'");
+    expect(wrappedResult).toBe(directResult);
+    expect(ctx.db.getSection("default", "spec", "")).toBeNull();
   });
 
   it('documents that direct entry:"" is authored while wrapped input is rejected', async () => {

@@ -705,6 +705,65 @@ describe("goop_write_db tool", () => {
       expect(ctx.db.getDocument("default", "spec")?.content).toBe("Hello world");
     });
 
+    // -----------------------------------------------------------------------
+    // Remediation — replace_all:false parity (red-first)
+    //
+    // The wrapped boundary (coalesce) drops injected replace_all:false before
+    // mode resolution, so a wrapped full write succeeds. The direct factory
+    // passed replace_all:false straight through and tripped Rule 2
+    // ("replace_all supplied without old_string") even though false is the
+    // default and semantically identical to absent. These assertions FAIL on
+    // the pre-fix implementation and pin the aligned contract.
+    // -----------------------------------------------------------------------
+
+    it("REG: direct full write with replace_all:false succeeds (semantically absent)", async () => {
+      const tool = createGoopWriteDbTool(ctx);
+      const result = await tool.execute(
+        { doc_type: "spec", content: "# Written", replace_all: false },
+        toolCtx,
+      );
+
+      expect(result).toContain("Written spec");
+      expect(ctx.db.getDocument("default", "spec")?.content).toBe("# Written");
+    });
+
+    it("KEEP: wrapped full write with replace_all:false already succeeds", async () => {
+      const tools = createTools(ctx);
+      const result = (await tools.goop_write_db.execute(
+        { doc_type: "spec", content: "# Wrapped", replace_all: false },
+        toolCtx,
+      )) as string;
+
+      expect(result).toContain("Written spec");
+      expect(ctx.db.getDocument("default", "spec")?.content).toBe("# Wrapped");
+    });
+
+    it("REG: direct batch item with replace_all:false succeeds", async () => {
+      const tool = createGoopWriteDbTool(ctx);
+      const result = await tool.execute(
+        {
+          doc_type: "spec",
+          items: [
+            { doc_type: "spec", content: "# Item", replace_all: false },
+            { doc_type: "spec", content: "# Item 2" },
+          ],
+        },
+        toolCtx,
+      );
+
+      expect(result).toContain("2/2 succeeded");
+      expect(ctx.db.getDocument("default", "spec")?.content).toBe("# Item 2");
+    });
+
+    it("KEEP: genuinely modifier-only replace_all:false still rejects", async () => {
+      const tool = createGoopWriteDbTool(ctx);
+      const result = await tool.execute({ doc_type: "spec", replace_all: false }, toolCtx);
+
+      expect(result).toContain("Error in goop_write_db");
+      expect(result).toContain("content is required when old_string is not provided");
+      expect(ctx.db.getDocument("default", "spec")).toBeNull();
+    });
+
     it('rule 3: rejects mode: "append" combined with old_string, and does not mutate', async () => {
       ctx.db.upsertDocument("default", "spec", "Hello world");
 
@@ -922,7 +981,10 @@ describe("goop_write_db empty-string boundary (via createTools)", () => {
   it("exclusion: an empty new_string still deletes the matched text", async () => {
     const tools = createTools(ctx);
     const dbTool = tools.goop_write_db;
-    await dbTool.execute({ doc_type: "spec", content: "keep this\nremove me\nkeep this too" }, toolCtx);
+    await dbTool.execute(
+      { doc_type: "spec", content: "keep this\nremove me\nkeep this too" },
+      toolCtx,
+    );
 
     // new_string:"" is protected from coalescing and must DELETE the matched
     // text, not be treated as absent.
@@ -951,7 +1013,7 @@ describe("goop_write_db empty-string boundary (via createTools)", () => {
     expect(result).not.toMatch(/new_string .* without old_string/);
   });
 
-  it("coalescing: an injected single-mode content:\"\" does not wipe the document", async () => {
+  it('coalescing: an injected single-mode content:"" does not wipe the document', async () => {
     // content is deliberately NOT in the exclusion list: an empty content has
     // no legitimate meaning in a single-mode write, and protecting it would
     // let an injected content:"" silently destroy a document. Coalescing it to
