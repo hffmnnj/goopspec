@@ -8,7 +8,9 @@ import {
   createMockToolContext,
   setupTestEnvironment,
 } from "../test-utils.js";
+import { createGoopAppendChronicleTool } from "./goop-append-chronicle/index.js";
 import { createGoopSaveNoteTool } from "./goop-save-note/index.js";
+import { createGoopWriteDbTool } from "./goop-write-db/index.js";
 import { createGoopWriteSectionTool } from "./goop-write-section/index.js";
 import { createTools } from "./index.js";
 
@@ -978,15 +980,49 @@ describe("write-tool boundary matrix — injected type defaults (Wave 1 Task 1.1
     expect(result).toContain("Wrote traceability for MH-1 on wave 1");
   });
 
-  // --- direct-factory vs wrapped-path splits (drift evidence for Task 1.3) ---
+  // --- Direct-factory parity and deliberate host-boundary distinctions ---
 
-  it('KEEP: note_id:"" activates patch mode directly, coalesces to create via createTools', async () => {
+  it("keeps direct and wrapped document patch validation messages identical", async () => {
+    const direct = createGoopWriteDbTool(ctx);
+    const tools = createTools(ctx);
+    const payload = { doc_type: "spec" as const, content: "# New", old_string: "# Old" };
+
+    const directResult = await direct.execute(payload, toolCtx);
+    const wrappedResult = await tools.goop_write_db.execute(payload, toolCtx);
+
+    expect(directResult).toBe(wrappedResult);
+    expect(directResult).toContain("content and old_string cannot be supplied together");
+    expect(directResult).toContain("Valid call shapes");
+  });
+
+  it("keeps direct and wrapped section writes lossless for position: 0", async () => {
+    const direct = createGoopWriteSectionTool(ctx);
+    const tools = createTools(ctx);
+
+    const directResult = await direct.execute(
+      { doc_type: "spec", section_key: "direct", content: "# Direct", position: 0 },
+      toolCtx,
+    );
+    const wrappedResult = await tools.goop_write_section.execute(
+      { doc_type: "spec", section_key: "wrapped", content: "# Wrapped", position: 0 },
+      toolCtx,
+    );
+
+    expect(directResult).toContain("Written section 'direct'");
+    expect(wrappedResult).toContain("Written section 'wrapped'");
+    expect(ctx.db.getSection("default", "spec", "direct")?.position).toBe(0);
+    expect(ctx.db.getSection("default", "spec", "wrapped")?.position).toBe(0);
+  });
+
+  it('documents that direct note_id:"" is authored input while wrapped input is host residue', async () => {
     const direct = createGoopSaveNoteTool(ctx);
     const directResult = (await direct.execute(
       { title: "T", body: "B", tags: ["tag"], source_agent: "s", note_id: "" },
       toolCtx,
     )) as string;
-    // Presence-based factory sees note_id:"" as a patch and rejects the create.
+    // A direct factory is a programmatic API: this is authored presence and
+    // retains its existing actionable correction. The registry boundary alone
+    // can identify this shape as an injected host default.
     expect(directResult).toContain("cannot be supplied alongside note_id");
 
     const tools = createTools(ctx);
@@ -994,17 +1030,20 @@ describe("write-tool boundary matrix — injected type defaults (Wave 1 Task 1.1
       { title: "T", body: "B", tags: ["tag"], source_agent: "s", note_id: "" },
       toolCtx,
     )) as string;
-    // Coalescing drops note_id:"" (not a load-bearing empty), so create wins.
+    // Coalescing drops the injected empty identifier, so create wins. This
+    // distinction is intentional and cannot move into the V2 adapter without
+    // forking the canonical V1 execution path.
     expect(wrappedResult).toContain("Field Note saved:");
   });
 
-  it('KEEP: section_key:"" stores an empty-key section directly, errors via createTools', async () => {
+  it('documents that direct section_key:"" remains authored while wrapped input is rejected', async () => {
     const direct = createGoopWriteSectionTool(ctx);
     const directResult = (await direct.execute(
       { doc_type: "spec", section_key: "", content: "# x" },
       toolCtx,
     )) as string;
-    // Presence-based factory accepts "" as a key and stores it.
+    // Direct invocation retains the factory's historical authored-value
+    // behavior. Registration coalescing is intentionally host-boundary-only.
     expect(directResult).toContain("Written section");
     expect(ctx.db.getSection("default", "spec", "")?.content).toBe("# x");
 
@@ -1013,7 +1052,20 @@ describe("write-tool boundary matrix — injected type defaults (Wave 1 Task 1.1
       { doc_type: "spec", section_key: "", content: "# x" },
       toolCtx,
     )) as string;
-    // Coalescing drops section_key:"" → the factory's undefined-key guard fires.
+    // Coalescing drops injected section_key:"" → the factory's key guard fires.
     expect(wrappedResult).toContain("section_key is required for action 'write'");
+  });
+
+  it('documents that direct entry:"" is authored while wrapped input is rejected', async () => {
+    const direct = createGoopAppendChronicleTool(ctx);
+    const directResult = await direct.execute({ entry: "" }, toolCtx);
+    expect(directResult).toBe("[OK] Chronicle entry appended (0 chars)");
+
+    const wrappedResult = await createTools(ctx).goop_append_chronicle.execute(
+      { entry: "" },
+      toolCtx,
+    );
+    expect(wrappedResult).toContain("no entry was provided");
+    expect(ctx.db.getChronicleEvents("default")).toHaveLength(1);
   });
 });

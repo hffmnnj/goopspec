@@ -131,6 +131,33 @@ describe("registerToolsV2()", () => {
       content: [{ type: "text", text: v1Result }],
     });
   });
+
+  it("reuses the coalesced V1 write definition with optional injected fields", async () => {
+    const ctx = createMockPluginContext();
+    contexts.push(ctx);
+    const registrations: V2ToolDefinition[] = [];
+    const input = {
+      doc_type: "spec",
+      content: "# V2 write",
+      workflow_id: "",
+      mode: "",
+      old_string: "",
+      new_string: "",
+      replace_all: false,
+      items: [],
+    };
+
+    await registerToolsV2(createRuntimeContext(registrations), ctx);
+    const v1Result = await createTools(ctx).goop_write_db.execute(input, createMockToolContext());
+    const v2Result = await registrations
+      .find((definition) => definition.name === "goop_write_db")
+      ?.execute(input, { sessionID: "test-session" });
+
+    expect(v2Result).toEqual({
+      content: [{ type: "text", text: v1Result as string }],
+    });
+    expect(ctx.db.getDocument("default", "spec")?.content).toBe("# V2 write");
+  });
 });
 
 // ---------------------------------------------------------------------------
