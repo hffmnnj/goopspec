@@ -1,9 +1,10 @@
-import { afterEach, describe, expect, it } from "bun:test";
+import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 
 import {
   type PluginContext,
   createMockPluginContext,
   createMockToolContext,
+  setupTestEnvironment,
 } from "../test-utils.js";
 import { createTools } from "../tools/index.js";
 import { tool } from "./sdk-compat.js";
@@ -129,6 +130,33 @@ describe("registerToolsV2()", () => {
     expect(v2Result).toEqual({
       content: [{ type: "text", text: v1Result }],
     });
+  });
+
+  it("reuses the coalesced V1 write definition with optional injected fields", async () => {
+    const ctx = createMockPluginContext();
+    contexts.push(ctx);
+    const registrations: V2ToolDefinition[] = [];
+    const input = {
+      doc_type: "spec",
+      content: "# V2 write",
+      workflow_id: "",
+      mode: "",
+      old_string: "",
+      new_string: "",
+      replace_all: false,
+      items: [],
+    };
+
+    await registerToolsV2(createRuntimeContext(registrations), ctx);
+    const v1Result = await createTools(ctx).goop_write_db.execute(input, createMockToolContext());
+    const v2Result = await registrations
+      .find((definition) => definition.name === "goop_write_db")
+      ?.execute(input, { sessionID: "test-session" });
+
+    expect(v2Result).toEqual({
+      content: [{ type: "text", text: v1Result as string }],
+    });
+    expect(ctx.db.getDocument("default", "spec")?.content).toBe("# V2 write");
   });
 });
 
@@ -323,6 +351,61 @@ describe("convertToolArgsToJsonSchema() — host-visible required-array contract
     // nothing leaked into required.
     expect(itemElementRequired(schema, "items")).toEqual([]);
   });
+
+  // -------------------------------------------------------------------------
+  // Six-tool batch inventory — schema side. Each write tool's batch array
+  // element carries exactly the required identifiers runtime actually needs
+  // per item (plus any sub-array element pins for goop_write_wave). A drifted
+  // schema that drops or adds an element-required field fails here.
+  // -------------------------------------------------------------------------
+
+  it("goop_write_wave items[] element requires wave_number", () => {
+    const ctx = createMockPluginContext();
+    contractContexts.push(ctx);
+    const schema = convertToolArgsToJsonSchema(createTools(ctx).goop_write_wave.args);
+
+    expect(itemElementRequired(schema, "items").sort()).toEqual(["wave_number"]);
+  });
+
+  it("goop_write_wave task_updates[] element requires task_index and status", () => {
+    const ctx = createMockPluginContext();
+    contractContexts.push(ctx);
+    const schema = convertToolArgsToJsonSchema(createTools(ctx).goop_write_wave.args);
+
+    expect(itemElementRequired(schema, "task_updates").sort()).toEqual(["status", "task_index"]);
+  });
+
+  it("goop_write_wave verifications[] element requires check_name and status", () => {
+    const ctx = createMockPluginContext();
+    contractContexts.push(ctx);
+    const schema = convertToolArgsToJsonSchema(createTools(ctx).goop_write_wave.args);
+
+    expect(itemElementRequired(schema, "verifications").sort()).toEqual(["check_name", "status"]);
+  });
+
+  it("goop_write_wave traceability[] element requires requirement_key", () => {
+    const ctx = createMockPluginContext();
+    contractContexts.push(ctx);
+    const schema = convertToolArgsToJsonSchema(createTools(ctx).goop_write_wave.args);
+
+    expect(itemElementRequired(schema, "traceability").sort()).toEqual(["requirement_key"]);
+  });
+
+  it("goop_blocker items[] element requires action", () => {
+    const ctx = createMockPluginContext();
+    contractContexts.push(ctx);
+    const schema = convertToolArgsToJsonSchema(createTools(ctx).goop_blocker.args);
+
+    expect(itemElementRequired(schema, "items").sort()).toEqual(["action"]);
+  });
+
+  it("goop_append_chronicle entries[] element is a plain string (no required fields)", () => {
+    const ctx = createMockPluginContext();
+    contractContexts.push(ctx);
+    const schema = convertToolArgsToJsonSchema(createTools(ctx).goop_append_chronicle.args);
+
+    expect(itemElementRequired(schema, "entries")).toEqual([]);
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -365,7 +448,7 @@ describe("convertToolArgsToJsonSchema() — argument descriptions survive V2 con
     const schema = convertToolArgsToJsonSchema(createTools(ctx).goop_write_wave.args);
 
     expect(prop(schema, "title").description).toBe(
-      "Omit to preserve it; supplied values, including empty strings, overwrite it.",
+      "Omit to preserve the stored title; cannot be an empty string — intentional metadata clearing is not supported, so supply a non-empty value to overwrite.",
     );
   });
 
@@ -376,7 +459,7 @@ describe("convertToolArgsToJsonSchema() — argument descriptions survive V2 con
 
     const itemElement = itemsOf(prop(schema, "items"));
     expect(prop(itemElement, "title").description).toBe(
-      "Omit to preserve it; supplied values, including empty strings, overwrite it.",
+      "Omit to preserve the stored title; cannot be an empty string — intentional metadata clearing is not supported, so supply a non-empty value to overwrite.",
     );
   });
 
@@ -408,5 +491,199 @@ describe("convertToolArgsToJsonSchema() — argument descriptions survive V2 con
 
     expect(prop(schema, "labelled").description).toBe("REGRESSION_MARKER_TOP");
     expect(prop(prop(schema, "nested"), "inner").description).toBe("REGRESSION_MARKER_NESTED");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Wave 1 Task 1.1 — V2 reuse of the write-tool boundary (tests-first)
+//
+// MH-5 pins: V2 registers the SAME createTools() definitions the V1 path uses
+// (so the injected-default boundary and its pending fix apply on both hosts),
+// the write tools' injected-default surface stays optional in the emitted
+// schema, and a V2 execution of a write tool produces byte-identical results
+// to V1 for the same host-augmented payload.
+// ---------------------------------------------------------------------------
+
+describe("V2 reuse of the write-tool boundary (Wave 1 Task 1.1)", () => {
+  let ctx: PluginContext;
+  let cleanup: () => void;
+
+  beforeEach(() => {
+    const env = setupTestEnvironment("v2-write-boundary");
+    cleanup = env.cleanup;
+    ctx = createMockPluginContext({ testDir: env.testDir, db: env.db });
+  });
+
+  afterEach(() => cleanup());
+
+  // Fields the host fills with type defaults when the caller omits them. Each
+  // one must remain optional in the schema V2 hands the host — an injected
+  // default can never be forced onto callers as required. The list covers the
+  // full optional surface of the six write tools: mode-selecting, container,
+  // patch-modifier, and scalar fields alike. wave_number is optional in the
+  // schema ONLY because traceability-only calls omit it; runtime enforces the
+  // requirement for every other mode (see the tool description).
+  const INJECTED_DEFAULT_FIELDS: Record<string, string[]> = {
+    goop_write_db: ["items", "mode", "replace_all", "old_string", "new_string"],
+    goop_write_section: ["items", "action", "position", "replace_all", "old_string", "new_string"],
+    goop_save_note: [
+      "items",
+      "note_id",
+      "replace_all",
+      "old_string",
+      "new_string",
+      "tags",
+      "importance",
+    ],
+    goop_append_chronicle: ["entries", "alsoLogAdl", "alsoSaveMemory", "entry", "workflow_id"],
+    goop_blocker: [
+      "items",
+      "action",
+      "description",
+      "severity",
+      "status",
+      "resolution",
+      "id",
+      "wave_id",
+      "workflow_id",
+    ],
+    goop_write_wave: [
+      "items",
+      "task_updates",
+      "task_update",
+      "verifications",
+      "traceability",
+      "title",
+      "pr_branch",
+      "pr_url",
+      "status",
+      "tasks",
+      "wave_number",
+      "allow_status_regression",
+    ],
+  };
+
+  function requiredOf(schema: V2JsonSchema): string[] {
+    return (schema.required as string[] | undefined) ?? [];
+  }
+
+  it("keeps every injected-default field optional in the emitted V2 schema", () => {
+    const tools = createTools(ctx);
+    for (const [name, fields] of Object.entries(INJECTED_DEFAULT_FIELDS)) {
+      const schema = convertToolArgsToJsonSchema(tools[name].args);
+      const required = requiredOf(schema);
+      for (const field of fields) {
+        expect(
+          required,
+          `${name} must keep '${field}' optional (optional fields stay optional)`,
+        ).not.toContain(field);
+      }
+    }
+  });
+
+  it("V2 execution of goop_write_db full write succeeds through the shared definition", async () => {
+    const registrations: V2ToolDefinition[] = [];
+    await registerToolsV2(createRuntimeContext(registrations), ctx);
+
+    const v2Definition = registrations.find((definition) => definition.name === "goop_write_db");
+    expect(v2Definition).toBeDefined();
+    if (!v2Definition) throw new Error("goop_write_db must be registered on V2");
+
+    const result = await v2Definition.execute(
+      { doc_type: "spec", content: "# v2 hello" },
+      { sessionID: "test-session" },
+    );
+    const text = result.content[0].text as string;
+    expect(text).toContain("Written spec");
+  });
+
+  it("V2 execution applies the same injected-default boundary as V1 for goop_write_db", async () => {
+    const registrations: V2ToolDefinition[] = [];
+    await registerToolsV2(createRuntimeContext(registrations), ctx);
+
+    const v2Definition = registrations.find((definition) => definition.name === "goop_write_db");
+    expect(v2Definition).toBeDefined();
+    if (!v2Definition) throw new Error("goop_write_db must be registered on V2");
+
+    // Host-augmented full write: caller authored only doc_type + content.
+    const payload = {
+      doc_type: "spec",
+      content: "# hello",
+      workflow_id: "",
+      mode: "",
+      old_string: "",
+      new_string: "",
+      replace_all: false,
+      items: [],
+    };
+
+    const v1Result = await createTools(ctx).goop_write_db.execute(payload, createMockToolContext());
+    expect(typeof v1Result).toBe("string");
+    if (typeof v1Result !== "string") throw new Error("goop_write_db must return text");
+
+    const v2Result = await v2Definition.execute(payload, { sessionID: "test-session" });
+    // V2 wraps the SAME V1 execution result — identical boundary, no duplicated
+    // normalization logic in the adapter.
+    expect(v2Result).toEqual({ content: [{ type: "text", text: v1Result }] });
+  });
+
+  it("V2 executes each canonical write definition without a duplicate adapter body", async () => {
+    const registrations: V2ToolDefinition[] = [];
+    await registerToolsV2(createRuntimeContext(registrations), ctx);
+
+    const calls: ReadonlyArray<readonly [string, Record<string, unknown>]> = [
+      ["goop_write_db", { doc_type: "requirements", content: "# V2 requirements", items: [] }],
+      [
+        "goop_write_section",
+        { doc_type: "spec", section_key: "v2", content: "# V2 section", items: [] },
+      ],
+      [
+        "goop_save_note",
+        {
+          title: "V2 note",
+          body: "v2-note-body",
+          tags: ["v2"],
+          source_agent: "test-agent",
+          items: [],
+        },
+      ],
+      ["goop_append_chronicle", { entry: "V2 chronicle.", entries: [] }],
+      ["goop_blocker", { action: "list", items: [] }],
+      [
+        "goop_write_wave",
+        {
+          wave_number: 7,
+          title: "V2 wave",
+          items: [],
+          task_update: {},
+          task_updates: [],
+          verifications: [],
+          traceability: [],
+        },
+      ],
+    ];
+
+    const v1Tools = createTools(ctx);
+    for (const [name, input] of calls) {
+      const v1Result = await v1Tools[name].execute(input as never, createMockToolContext());
+      expect(typeof v1Result, `${name} must return text for this fixture`).toBe("string");
+      if (typeof v1Result !== "string") throw new Error(`${name} must return text`);
+
+      const v2Definition = registrations.find((definition) => definition.name === name);
+      expect(v2Definition, `${name} must be registered on V2`).toBeDefined();
+      if (!v2Definition) throw new Error(`${name} must be registered on V2`);
+
+      const v2Result = await v2Definition.execute(input, { sessionID: "test-session" });
+      if (name === "goop_save_note") {
+        // Save-note generates its ID at execution time, so two calls through
+        // the same definition intentionally have distinct text while retaining
+        // the same result envelope and persistence semantics.
+        expect(v2Result.content[0].text).toContain("Field Note saved:");
+        continue;
+      }
+      expect(v2Result, `${name} must forward the canonical V1 result`).toEqual({
+        content: [{ type: "text", text: v1Result }],
+      });
+    }
   });
 });

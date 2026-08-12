@@ -1,9 +1,17 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 
-import type { V2JsonSchema } from "../core/v2-compat.js";
 import { convertToolArgsToJsonSchema } from "../core/tools-v2.js";
-import type { PluginContext } from "../test-utils.js";
-import { createMockPluginContext, setupTestEnvironment } from "../test-utils.js";
+import type { V2JsonSchema } from "../core/v2-compat.js";
+import type { PluginContext, ToolContext } from "../test-utils.js";
+import {
+  createMockPluginContext,
+  createMockToolContext,
+  setupTestEnvironment,
+} from "../test-utils.js";
+import { createGoopAppendChronicleTool } from "./goop-append-chronicle/index.js";
+import { createGoopSaveNoteTool } from "./goop-save-note/index.js";
+import { createGoopWriteDbTool } from "./goop-write-db/index.js";
+import { createGoopWriteSectionTool } from "./goop-write-section/index.js";
 import { createTools } from "./index.js";
 
 const EXPECTED_TOOL_KEYS = [
@@ -196,11 +204,7 @@ const PENDING_CONFORMANCE: readonly string[] = [];
  * adding conditional sections unconditionally — that would force every
  * single-mode tool to carry a spurious MODES block, violating the standard.
  */
-const MANDATORY_SECTION_LABELS = [
-  "WHEN TO USE:",
-  "WHEN NOT TO USE:",
-  "RETURNS:",
-] as const;
+const MANDATORY_SECTION_LABELS = ["WHEN TO USE:", "WHEN NOT TO USE:", "RETURNS:"] as const;
 
 type ConditionalSectionRequirements = Readonly<{
   modes: boolean;
@@ -437,8 +441,13 @@ describe("tool-description standard conformance gate", () => {
     const registered = new Set(Object.keys(tools));
     const seen = new Set<string>();
     for (const name of PENDING_CONFORMANCE) {
-      expect(registered.has(name), `PENDING_CONFORMANCE entry '${name}' is not a registered tool`).toBe(true);
-      expect(seen.has(name), `PENDING_CONFORMANCE entry '${name}' appears more than once`).toBe(false);
+      expect(
+        registered.has(name),
+        `PENDING_CONFORMANCE entry '${name}' is not a registered tool`,
+      ).toBe(true);
+      expect(seen.has(name), `PENDING_CONFORMANCE entry '${name}' appears more than once`).toBe(
+        false,
+      );
       seen.add(name);
     }
   });
@@ -448,8 +457,13 @@ describe("tool-description standard conformance gate", () => {
     const registered = new Set(Object.keys(tools));
     const seen = new Set<string>();
     for (const name of HIGH_FRICTION_TOOLS) {
-      expect(registered.has(name), `HIGH_FRICTION_TOOLS entry '${name}' is not a registered tool`).toBe(true);
-      expect(seen.has(name), `HIGH_FRICTION_TOOLS entry '${name}' appears more than once`).toBe(false);
+      expect(
+        registered.has(name),
+        `HIGH_FRICTION_TOOLS entry '${name}' is not a registered tool`,
+      ).toBe(true);
+      expect(seen.has(name), `HIGH_FRICTION_TOOLS entry '${name}' appears more than once`).toBe(
+        false,
+      );
       seen.add(name);
     }
   });
@@ -489,7 +503,9 @@ describe("tool-description standard conformance gate", () => {
         CONDITIONAL_SECTION_REQUIREMENTS[name as keyof typeof CONDITIONAL_SECTION_REQUIREMENTS],
       );
       if (conditionalMissing.length > 0) {
-        violations.push(`${name}: missing applicable conditional sections — ${conditionalMissing.join(", ")}`);
+        violations.push(
+          `${name}: missing applicable conditional sections — ${conditionalMissing.join(", ")}`,
+        );
       }
 
       const allowlisted = HIGH_FRICTION_TOOLS.includes(name);
@@ -503,7 +519,9 @@ describe("tool-description standard conformance gate", () => {
       const schema = convertToolArgsToJsonSchema(def.args);
       const undescribed = collectUndescribedArgs(schema);
       if (undescribed.length > 0) {
-        violations.push(`${name}: ${undescribed.length} argument(s) lack a .describe() — ${undescribed.join(", ")}`);
+        violations.push(
+          `${name}: ${undescribed.length} argument(s) lack a .describe() — ${undescribed.join(", ")}`,
+        );
       }
 
       const endorsements = collectEmptyStringEndorsements(schema);
@@ -572,9 +590,9 @@ describe("conformance predicates reject non-conformant fixtures", () => {
   });
 
   it("a classified tool missing an applicable conditional section is flagged", () => {
-    expect(missingConditionalSections(CONFORMANT_DESCRIPTION, { modes: true, caveats: true })).toEqual([
-      "MODES:",
-    ]);
+    expect(
+      missingConditionalSections(CONFORMANT_DESCRIPTION, { modes: true, caveats: true }),
+    ).toEqual(["MODES:"]);
     expect(
       missingConditionalSections(CONFORMANT_DESCRIPTION.replace("CAVEATS:", "DETAILS:"), {
         modes: false,
@@ -671,11 +689,15 @@ describe("conformance predicates reject non-conformant fixtures", () => {
         // Bad: endorses passing an empty string to skip.
         bad_pass_empty: { type: "string", description: "Pass an empty string to skip this field." },
         // Bad: endorses empty string as a clear mechanism.
-        bad_empty_to_clear: { type: "string", description: "Use an empty string to clear the value." },
+        bad_empty_to_clear: {
+          type: "string",
+          description: "Use an empty string to clear the value.",
+        },
         // Good: the prescribed "omit" form, acknowledging empty strings as values.
         good_omit: {
           type: "string",
-          description: "Omit to preserve it; supplied values, including empty strings, overwrite it.",
+          description:
+            "Omit to preserve it; supplied values, including empty strings, overwrite it.",
         },
         // Good: explicit prohibition.
         good_do_not: {
@@ -691,5 +713,636 @@ describe("conformance predicates reject non-conformant fixtures", () => {
       "bad_empty_to_clear",
       "bad_pass_empty",
     ]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Wave 1 Task 1.1 — write-tool boundary matrix under host type-default
+// injection (tests-first regression evidence)
+//
+// The host fills every optional schema field the caller never authored with
+// its type default: strings `""`, booleans `false`, arrays `[]`, objects `{}`.
+// Each "REG:" test below simulates a real host-augmented payload for one of
+// the six mutation tools and asserts the caller's semantic intent survives —
+// these intentionally FAIL until Task 1.2 normalizes the shared boundary.
+// Each "KEEP:" test pins an intentional authored empty operation (or a tool
+// that is already callable under injection) and must stay green.
+// ---------------------------------------------------------------------------
+
+describe("write-tool boundary matrix — injected type defaults (Wave 1 Task 1.1)", () => {
+  let ctx: PluginContext;
+  let toolCtx: ToolContext;
+  let cleanup: () => void;
+
+  beforeEach(() => {
+    const env = setupTestEnvironment("write-boundary-matrix");
+    cleanup = env.cleanup;
+    ctx = createMockPluginContext({ testDir: env.testDir, db: env.db });
+    toolCtx = createMockToolContext();
+  });
+
+  afterEach(() => cleanup());
+
+  // --- goop_write_db ---
+
+  it("REG: full write is callable under injected type defaults", async () => {
+    const tools = createTools(ctx);
+    // Caller authored only doc_type + content. The host fills every other
+    // optional field with a type default, including the exempt patch pair
+    // (old_string:""/new_string:""), replace_all:false, and items:[].
+    const result = (await tools.goop_write_db.execute(
+      {
+        doc_type: "spec",
+        content: "# hello",
+        workflow_id: "",
+        mode: "",
+        old_string: "",
+        new_string: "",
+        replace_all: false,
+        items: [],
+      },
+      toolCtx,
+    )) as string;
+    expect(result).toContain("Written spec");
+    expect(result).toContain("mode: replace");
+  });
+
+  it("REG: append write is callable under injected type defaults", async () => {
+    const tools = createTools(ctx);
+    const result = (await tools.goop_write_db.execute(
+      {
+        doc_type: "spec",
+        content: "# hello",
+        mode: "append",
+        workflow_id: "",
+        old_string: "",
+        new_string: "",
+        replace_all: false,
+        items: [],
+      },
+      toolCtx,
+    )) as string;
+    expect(result).toContain("Written spec");
+    expect(result).toContain("mode: append");
+  });
+
+  it("REG: batch write is callable under injected patch defaults", async () => {
+    const tools = createTools(ctx);
+    const result = (await tools.goop_write_db.execute(
+      {
+        doc_type: "spec",
+        items: [{ doc_type: "spec", content: "# x" }],
+        old_string: "",
+        new_string: "",
+        replace_all: false,
+      },
+      toolCtx,
+    )) as string;
+    expect(result).toContain("Batch write-db: 1/1 succeeded");
+  });
+
+  // --- goop_write_section ---
+
+  it("REG: full section write is callable under injected type defaults", async () => {
+    const tools = createTools(ctx);
+    const result = (await tools.goop_write_section.execute(
+      {
+        doc_type: "spec",
+        section_key: "intro",
+        content: "# Intro",
+        workflow_id: "",
+        action: "",
+        old_string: "",
+        new_string: "",
+        replace_all: false,
+        items: [],
+      },
+      toolCtx,
+    )) as string;
+    expect(result).toContain("Written section 'intro' for spec");
+  });
+
+  it("KEEP: delete action is callable under injected type defaults", async () => {
+    const tools = createTools(ctx);
+    await tools.goop_write_section.execute(
+      { doc_type: "spec", section_key: "intro", content: "# Intro" },
+      toolCtx,
+    );
+    const result = (await tools.goop_write_section.execute(
+      {
+        action: "delete",
+        doc_type: "spec",
+        section_key: "intro",
+        old_string: "",
+        new_string: "",
+        replace_all: false,
+        items: [],
+      },
+      toolCtx,
+    )) as string;
+    expect(result).toContain("Deleted section 'intro'");
+    expect(ctx.db.getSection("default", "spec", "intro")).toBeNull();
+  });
+
+  it("KEEP: authored position: 0 is preserved and sorts first (confirmed relevant 0)", async () => {
+    // 0 is a meaningful authored value on goop_write_section, not an absent
+    // signal. This pins the documented "position 0 remains valid" contract at
+    // the direct-factory level (the wrapped full-write path is currently
+    // blocked by the injected patch defaults — see the REG: tests above).
+    const sectionTool = createGoopWriteSectionTool(ctx);
+    await sectionTool.execute(
+      { doc_type: "spec", section_key: "alpha", content: "# Alpha", position: 1 },
+      toolCtx,
+    );
+    const result = await sectionTool.execute(
+      { doc_type: "spec", section_key: "beta", content: "# Beta", position: 0 },
+      toolCtx,
+    );
+    expect(result).toContain("Written section 'beta'");
+    const sections = ctx.db.getSections("default", "spec");
+    expect(sections.map((section) => section.section_key)).toEqual(["beta", "alpha"]);
+  });
+
+  // --- goop_save_note ---
+
+  it("REG: note create is callable under injected type defaults", async () => {
+    const tools = createTools(ctx);
+    const result = (await tools.goop_save_note.execute(
+      {
+        title: "Note title",
+        body: "Note body",
+        tags: ["tag"],
+        source_agent: "test-agent",
+        note_id: "",
+        old_string: "",
+        new_string: "",
+        replace_all: false,
+        items: [],
+        workflow_id: "",
+        project_id: "",
+      },
+      toolCtx,
+    )) as string;
+    expect(result).toContain("Field Note saved:");
+  });
+
+  it("REG: untagged note create (tags: []) is callable under injected type defaults", async () => {
+    // Wave 3 Task 1: an explicit empty tags array is the documented "no tags"
+    // value and must NOT be coalesced to absent on the wrapped path — that
+    // would convert an authored untagged intent into a false "tags is
+    // required" rejection and break direct/wrapped parity.
+    const tools = createTools(ctx);
+    const result = (await tools.goop_save_note.execute(
+      {
+        title: "Untagged create",
+        body: "wrapped-untagged-create-body-xyz",
+        tags: [],
+        source_agent: "test-agent",
+        note_id: "",
+        old_string: "",
+        new_string: "",
+        replace_all: false,
+        items: [],
+        workflow_id: "",
+        project_id: "",
+      },
+      toolCtx,
+    )) as string;
+    expect(result).toContain("Field Note saved:");
+    const note = ctx.db.searchNotes("wrapped-untagged-create-body-xyz")[0];
+    expect(JSON.parse(note?.tags ?? "[]")).toEqual([]);
+  });
+
+  it('REG: tags: [""] is rejected on the wrapped path with guidance (no silent untagged note)', async () => {
+    const tools = createTools(ctx);
+    const result = (await tools.goop_save_note.execute(
+      {
+        title: "Bad tags",
+        body: "wrapped-tags-empty-string-body-xyz",
+        tags: [""],
+        source_agent: "test-agent",
+      },
+      toolCtx,
+    )) as string;
+    expect(result).toContain("Error in goop_save_note");
+    expect(result).toContain("provide at least one non-empty tag");
+    expect(ctx.db.searchNotes("wrapped-tags-empty-string-body-xyz")).toEqual([]);
+  });
+
+  it("REG: authored importance: 0 is rejected on the wrapped path (0 is preserved, never defaulted to 5)", async () => {
+    // 0 is never coalesced (the boundary preserves authored 0), so both paths
+    // must reject it with the same explicit range message.
+    const tools = createTools(ctx);
+    const result = (await tools.goop_save_note.execute(
+      {
+        title: "Zero",
+        body: "wrapped-importance-zero-body-xyz",
+        tags: ["z"],
+        source_agent: "test-agent",
+        importance: 0,
+      },
+      toolCtx,
+    )) as string;
+    expect(result).toContain("Importance must be between 1 and 10");
+    expect(ctx.db.searchNotes("wrapped-importance-zero-body-xyz")).toEqual([]);
+  });
+
+  it("REG: empty-string workflow_id/project_id store null on the wrapped path", async () => {
+    const tools = createTools(ctx);
+    const result = (await tools.goop_save_note.execute(
+      {
+        title: "Scope",
+        body: "wrapped-scope-empty-body-xyz",
+        tags: ["s"],
+        source_agent: "test-agent",
+        workflow_id: "",
+        project_id: "",
+      },
+      toolCtx,
+    )) as string;
+    expect(result).toContain("Field Note saved:");
+    const note = ctx.db.searchNotes("wrapped-scope-empty-body-xyz")[0];
+    expect(note?.workflow_id).toBeNull();
+    expect(note?.project_id).toBeNull();
+  });
+
+  it('KEEP: blank-document patch survives the registry boundary (old_string: "" is load-bearing)', async () => {
+    // Proves the EMPTY_STRING_LOAD_BEARING_FIELDS_BY_TOOL entry for
+    // goop_save_note through the actual registry: an authored empty
+    // old_string is a documented operation (patch an empty body), so it must
+    // reach the tool untouched even on the wrapped path.
+    const direct = createGoopSaveNoteTool(ctx);
+    const created = (await direct.execute(
+      { title: "Blank", body: "", tags: ["empty"], source_agent: "test-agent" },
+      toolCtx,
+    )) as string;
+    const noteId = created.match(/fn_[A-Za-z0-9_]+/)?.[0];
+    expect(noteId).toBeDefined();
+    if (!noteId) throw new Error("expected a saved note id");
+    expect(ctx.db.getNoteById(noteId)?.body).toBe("");
+
+    const tools = createTools(ctx);
+    const result = (await tools.goop_save_note.execute(
+      {
+        note_id: noteId,
+        old_string: "",
+        new_string: "Filled via registry",
+        replace_all: false,
+        items: [],
+      },
+      toolCtx,
+    )) as string;
+    expect(result).toContain("Field Note patched:");
+    expect(ctx.db.getNoteById(noteId)?.body).toBe("Filled via registry");
+  });
+
+  it("KEEP: note patch is callable under injected type defaults (authored patch preserved)", async () => {
+    const direct = createGoopSaveNoteTool(ctx);
+    const created = (await direct.execute(
+      { title: "T", body: "old body", tags: ["x"], source_agent: "test-agent" },
+      toolCtx,
+    )) as string;
+    const noteId = created.match(/fn_[A-Za-z0-9_]+/)?.[0];
+    expect(noteId).toBeDefined();
+    if (!noteId) throw new Error("expected a saved note id");
+
+    const tools = createTools(ctx);
+    const result = (await tools.goop_save_note.execute(
+      { note_id: noteId, old_string: "old", new_string: "new", replace_all: false, items: [] },
+      toolCtx,
+    )) as string;
+    expect(result).toContain("Field Note patched:");
+  });
+
+  // --- goop_append_chronicle ---
+
+  it("KEEP: chronicle append is callable under injected type defaults", async () => {
+    const tools = createTools(ctx);
+    const result = (await tools.goop_append_chronicle.execute(
+      {
+        entry: "hello chronicle",
+        entries: [],
+        alsoLogAdl: {},
+        alsoSaveMemory: {},
+        workflow_id: "",
+      },
+      toolCtx,
+    )) as string;
+    expect(result).toContain("[OK] Chronicle entry appended");
+  });
+
+  // --- goop_blocker ---
+
+  it("KEEP: blocker list is callable under injected type defaults", async () => {
+    const tools = createTools(ctx);
+    const result = (await tools.goop_blocker.execute(
+      {
+        action: "list",
+        description: "",
+        severity: "",
+        status: "",
+        resolution: "",
+        workflow_id: "",
+        items: [],
+      },
+      toolCtx,
+    )) as string;
+    expect(result).toContain("No blockers found for workflow 'default'");
+  });
+
+  it("REG: blocker empty items[] keeps the empty-batch message on the wrapped path", async () => {
+    // Wave 3 Task 3.3: an explicitly empty items[] must stay visible through
+    // the registry boundary so the wrapped path can distinguish the empty
+    // batch from a no-args call, exactly like the direct path. Coalescing
+    // items:[] to absent here would erase that distinction.
+    const tools = createTools(ctx);
+    const result = (await tools.goop_blocker.execute({ items: [] }, toolCtx)) as string;
+    expect(result).toContain("items[] array is empty");
+    expect(result).not.toContain("no action or items were provided");
+  });
+
+  it("REG: blocker id 0 is treated as omitted on the wrapped path (required-id error)", async () => {
+    // 0 is the host-injected numeric default and can never address a real
+    // blocker row, so the wrapped path must not report "Blocker #0 not found".
+    const tools = createTools(ctx);
+    const result = (await tools.goop_blocker.execute(
+      { action: "resolve", id: 0 },
+      toolCtx,
+    )) as string;
+    expect(result).toContain('`id` is required for action "resolve"');
+    expect(result).not.toContain("Blocker #0 not found");
+  });
+
+  it("REG: blocker empty-string fields are omitted on the wrapped path (parity)", async () => {
+    // Empty severity defaults to medium and an empty workflow_id targets the
+    // active workflow on the wrapped path; the direct factory must agree.
+    const tools = createTools(ctx);
+    const result = (await tools.goop_blocker.execute(
+      { action: "open", description: "Wrapped default", severity: "", workflow_id: "" },
+      toolCtx,
+    )) as string;
+    expect(result).toContain("Opened blocker #");
+    expect(result).toContain("'default'");
+    const rows = ctx.db.getBlockers("default", "open");
+    expect(rows).toHaveLength(1);
+    expect(rows[0].severity).toBe("medium");
+    expect(ctx.db.getBlockers("", "open")).toHaveLength(0);
+  });
+
+  // --- goop_write_wave ---
+
+  it("REG: items[] batch is callable under injected type defaults", async () => {
+    const tools = createTools(ctx);
+    const result = (await tools.goop_write_wave.execute(
+      {
+        wave_number: 1,
+        items: [{ wave_number: 1, title: "Wave 1" }],
+        title: "",
+        pr_url: "",
+        pr_branch: "",
+        task_update: {},
+        task_updates: [],
+        verifications: [],
+        traceability: [],
+      },
+      toolCtx,
+    )) as string;
+    expect(result).toContain("Batch write-wave: 1/1 succeeded");
+  });
+
+  it("REG: traceability-only mode is callable under injected type defaults", async () => {
+    const tools = createTools(ctx);
+    const result = (await tools.goop_write_wave.execute(
+      {
+        traceability: [{ requirement_key: "MH-1", wave_number: 1 }],
+        title: "",
+        pr_url: "",
+        pr_branch: "",
+        task_update: {},
+        task_updates: [],
+        verifications: [],
+        items: [],
+        status: "",
+      },
+      toolCtx,
+    )) as string;
+    expect(result).toContain("Wrote traceability for MH-1 on wave 1");
+  });
+
+  it("REG: injected empty containers never select batch mode for any write tool", async () => {
+    // Each payload carries the empty collection/object defaults that a host can
+    // add for omitted optional fields. Every call deliberately supplies a
+    // non-batch intent and must take that intent rather than a batch path.
+    const tools = createTools(ctx);
+
+    const documentResult = (await tools.goop_write_db.execute(
+      { doc_type: "requirements", content: "# Requirements", items: [] },
+      toolCtx,
+    )) as string;
+    expect(documentResult).toContain("Written requirements");
+    expect(documentResult).not.toContain("Batch write-db");
+
+    const sectionResult = (await tools.goop_write_section.execute(
+      { doc_type: "spec", section_key: "container-proof", content: "# Proof", items: [] },
+      toolCtx,
+    )) as string;
+    expect(sectionResult).toContain("Written section 'container-proof'");
+    expect(sectionResult).not.toContain("Batch write-section");
+
+    const noteResult = (await tools.goop_save_note.execute(
+      {
+        title: "Container proof",
+        body: "container-proof-note-body",
+        tags: ["proof"],
+        source_agent: "test-agent",
+        items: [],
+      },
+      toolCtx,
+    )) as string;
+    expect(noteResult).toContain("Field Note saved:");
+    expect(noteResult).not.toContain("Batch save-note");
+
+    const chronicleResult = (await tools.goop_append_chronicle.execute(
+      { entry: "Container proof chronicle.", entries: [] },
+      toolCtx,
+    )) as string;
+    expect(chronicleResult).toContain("[OK] Chronicle entry appended");
+    expect(chronicleResult).not.toContain("Batch chronicle");
+
+    const blockerResult = (await tools.goop_blocker.execute(
+      { action: "list", items: [] },
+      toolCtx,
+    )) as string;
+    expect(blockerResult).toContain("No blockers found");
+    expect(blockerResult).not.toContain("Batch blocker");
+
+    const waveResult = (await tools.goop_write_wave.execute(
+      {
+        wave_number: 6,
+        title: "Container proof",
+        items: [],
+        task_update: {},
+        task_updates: [],
+        verifications: [],
+        traceability: [],
+      },
+      toolCtx,
+    )) as string;
+    expect(waveResult).toContain("Written wave 6");
+    expect(waveResult).not.toContain("Batch write-wave");
+  });
+
+  // --- Direct-factory parity and deliberate host-boundary distinctions ---
+
+  it("keeps direct and wrapped document patch validation messages identical", async () => {
+    const direct = createGoopWriteDbTool(ctx);
+    const tools = createTools(ctx);
+    const payload = { doc_type: "spec" as const, content: "# New", old_string: "# Old" };
+
+    const directResult = await direct.execute(payload, toolCtx);
+    const wrappedResult = await tools.goop_write_db.execute(payload, toolCtx);
+
+    expect(directResult).toBe(wrappedResult);
+    expect(directResult).toContain("content and old_string cannot be supplied together");
+    expect(directResult).toContain("Valid call shapes");
+  });
+
+  it("keeps direct and wrapped section writes lossless for position: 0", async () => {
+    const direct = createGoopWriteSectionTool(ctx);
+    const tools = createTools(ctx);
+
+    const directResult = await direct.execute(
+      { doc_type: "spec", section_key: "direct", content: "# Direct", position: 0 },
+      toolCtx,
+    );
+    const wrappedResult = await tools.goop_write_section.execute(
+      { doc_type: "spec", section_key: "wrapped", content: "# Wrapped", position: 0 },
+      toolCtx,
+    );
+
+    expect(directResult).toContain("Written section 'direct'");
+    expect(wrappedResult).toContain("Written section 'wrapped'");
+    expect(ctx.db.getSection("default", "spec", "direct")?.position).toBe(0);
+    expect(ctx.db.getSection("default", "spec", "wrapped")?.position).toBe(0);
+  });
+
+  it('keeps direct and wrapped note_id:"" handling identical (empty id is absent on both; create wins)', async () => {
+    // Wave 1 pinned a deliberate direct/wrapped divergence here (direct =
+    // authored presence → rejection, wrapped = host residue → create). Wave 3
+    // Task 1 supersedes that pin: an empty note_id can never address a note,
+    // so treating it as absent on BOTH paths is the parity contract, and the
+    // direct factory must agree with the coalesced effective payload.
+    const direct = createGoopSaveNoteTool(ctx);
+    const directResult = (await direct.execute(
+      { title: "T", body: "B", tags: ["tag"], source_agent: "s", note_id: "" },
+      toolCtx,
+    )) as string;
+    expect(directResult).toContain("Field Note saved:");
+    expect(directResult).not.toContain("cannot be supplied alongside note_id");
+
+    const tools = createTools(ctx);
+    const wrappedResult = (await tools.goop_save_note.execute(
+      { title: "T", body: "B", tags: ["tag"], source_agent: "s", note_id: "" },
+      toolCtx,
+    )) as string;
+    expect(wrappedResult).toContain("Field Note saved:");
+  });
+
+  it("preserves save-note's explicit empty-batch error on both paths", async () => {
+    // Unlike ordinary injected containers, `items: []` has a documented
+    // validation distinction for save-note when no single-note payload exists.
+    // It therefore remains visible to the factory rather than being coalesced.
+    const directResult = await createGoopSaveNoteTool(ctx).execute({ items: [] }, toolCtx);
+    const wrappedResult = await createTools(ctx).goop_save_note.execute({ items: [] }, toolCtx);
+
+    expect(wrappedResult).toBe(directResult);
+    expect(wrappedResult).toContain("items[] array is empty and no note fields were provided");
+  });
+
+  it("rejects empty section_key on both direct and wrapped paths with identical guidance", async () => {
+    // Wave 1 pinned the direct factory's historical authored-empty behavior
+    // for section_key:"" as an exploratory distinction. The locked Task 2.2
+    // contract ("empty section keys cannot be created") supersedes that pin:
+    // an empty section key can never name a section on EITHER path. Both
+    // direct and wrapped calls must reject with the same actionable message
+    // and create nothing.
+    const direct = createGoopWriteSectionTool(ctx);
+    const directResult = (await direct.execute(
+      { doc_type: "spec", section_key: "", content: "# x" },
+      toolCtx,
+    )) as string;
+    expect(directResult).toContain("Error in goop_write_section");
+    expect(directResult).toContain("section_key is required for action 'write'");
+    expect(ctx.db.getSection("default", "spec", "")).toBeNull();
+
+    const tools = createTools(ctx);
+    const wrappedResult = (await tools.goop_write_section.execute(
+      { doc_type: "spec", section_key: "", content: "# x" },
+      toolCtx,
+    )) as string;
+    expect(wrappedResult).toBe(directResult);
+    expect(ctx.db.getSection("default", "spec", "")).toBeNull();
+  });
+
+  it('rejects entry:"" identically on direct and wrapped paths (semantic omission)', async () => {
+    // Wave 1 pinned a deliberate direct/wrapped divergence here (direct =
+    // authored presence → 0-char append, wrapped = host residue → rejection).
+    // Wave 3 Task 3.2 supersedes that pin: an empty-string entry can never be
+    // a meaningful chronicle entry, so treating it as absent on BOTH paths is
+    // the parity contract — the direct factory must agree with the coalesced
+    // effective payload, and no 0-char event may be written.
+    const direct = createGoopAppendChronicleTool(ctx);
+    const directResult = await direct.execute({ entry: "" }, toolCtx);
+
+    const wrappedResult = await createTools(ctx).goop_append_chronicle.execute(
+      { entry: "" },
+      toolCtx,
+    );
+
+    expect(directResult).toBe(wrappedResult);
+    expect(directResult).toContain("no entry or entries were provided");
+    expect(ctx.db.getChronicleEvents("default")).toHaveLength(0);
+  });
+
+  it("rejects a no-args call with the none-mode message on both paths", async () => {
+    const direct = createGoopAppendChronicleTool(ctx);
+    const directResult = await direct.execute({}, toolCtx);
+
+    const wrappedResult = await createTools(ctx).goop_append_chronicle.execute({}, toolCtx);
+
+    expect(directResult).toBe(wrappedResult);
+    expect(directResult).toContain("no entry or entries were provided");
+    expect(directResult).not.toContain("entries[] array is empty");
+  });
+
+  it("preserves the explicit empty-batch distinction on the wrapped path", async () => {
+    // An authored `entries: []` is a documented rejection case (empty batch),
+    // distinct from a no-args call. It must survive the registry boundary so
+    // the wrapped path reports it accurately, exactly like the direct path.
+    const wrappedEmptyBatch = await createTools(ctx).goop_append_chronicle.execute(
+      { entries: [] },
+      toolCtx,
+    );
+    expect(wrappedEmptyBatch).toContain("entries[] array is empty");
+    expect(wrappedEmptyBatch).not.toContain("no entry or entries were provided");
+
+    const wrappedNoArgs = await createTools(ctx).goop_append_chronicle.execute({}, toolCtx);
+    expect(wrappedNoArgs).toContain("no entry or entries were provided");
+    expect(wrappedNoArgs).not.toContain("entries[] array is empty");
+  });
+
+  it("writes an empty-string workflow_id to the active workflow on both paths", async () => {
+    const direct = createGoopAppendChronicleTool(ctx);
+    const directResult = await direct.execute({ entry: "Parity scope.", workflow_id: "" }, toolCtx);
+
+    const wrappedResult = await createTools(ctx).goop_append_chronicle.execute(
+      { entry: "Parity scope.", workflow_id: "" },
+      toolCtx,
+    );
+
+    expect(directResult).toBe(wrappedResult);
+    expect(directResult).toContain("[OK] Chronicle entry appended");
+    expect(ctx.db.getChronicleEvents("default")).toHaveLength(2);
+    expect(ctx.db.getChronicleEvents("")).toHaveLength(0);
   });
 });

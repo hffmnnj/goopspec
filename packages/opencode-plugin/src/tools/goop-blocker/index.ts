@@ -61,6 +61,49 @@ function formatBlocker(blocker: BlockerRow): string {
 // Per-item processing
 // ---------------------------------------------------------------------------
 
+const SEMANTIC_OMISSION_EMPTY_STRING_FIELDS = new Set<string>([
+  "action",
+  "description",
+  "severity",
+  "status",
+  "resolution",
+  "workflow_id",
+]);
+
+/**
+ * Strip host-injected defaults whose empty form carries no authored intent, so
+ * the DIRECT factory agrees with the coalesced payload the registry boundary
+ * (`createTools`) already produces for the same call.
+ *
+ * - Empty-string action/description/severity/status/resolution/workflow_id are
+ *   treated as absent — none of them can be a meaningful value. An empty
+ *   action must never select a lifecycle operation; an empty description on
+ *   resolve must not overwrite the stored text; an empty severity must not be
+ *   stored as "" instead of the "medium" default; an empty status must not
+ *   filter list results.
+ * - `id: 0` / `wave_id: 0` are the numeric empty: blocker row ids and wave
+ *   numbers are 1-based, so 0 can never address a real row and must not be
+ *   stored on the blocker or looked up (it is the host-injected numeric
+ *   default, the same empty form the string fields above carry).
+ *
+ * Whitespace-only strings are intentionally NOT touched here: they survive the
+ * shared boundary by design (they may be authored), so the tool rejects them
+ * with actionable guidance in {@link processBlockerItem}.
+ */
+function normalizeBlockerArgs<T extends object>(item: T): T {
+  const out: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(item as Record<string, unknown>)) {
+    if (value === "" && SEMANTIC_OMISSION_EMPTY_STRING_FIELDS.has(key)) {
+      continue;
+    }
+    if ((key === "id" || key === "wave_id") && value === 0) {
+      continue;
+    }
+    out[key] = value;
+  }
+  return out as T;
+}
+
 function processBlockerItem(
   ctx: PluginContext,
   defaultWorkflowId: string,
@@ -70,10 +113,15 @@ function processBlockerItem(
 
   switch (item.action) {
     case "open": {
-      if (!item.description) {
-          throw new Error(
-            '`description` is required for action "open". Retry with `{ action: "open", description: "what is blocked" }`.',
-          );
+      if (item.description === undefined || item.description === "") {
+        throw new Error(
+          '`description` is required for action "open". Retry with `{ action: "open", description: "what is blocked" }`.',
+        );
+      }
+      if (item.description.trim().length === 0) {
+        throw new Error(
+          'description cannot be whitespace-only for action "open": provide the blocker description. Retry with `{ action: "open", description: "what is blocked" }`.',
+        );
       }
 
       const blockerId = ctx.db.upsertBlocker(workflowId, {
@@ -109,9 +157,20 @@ function processBlockerItem(
 
     case "resolve": {
       if (item.id === undefined) {
-          throw new Error(
-            '`id` is required for action "resolve". Retry with `{ action: "resolve", id: 123 }` using the blocker row id.',
-          );
+        throw new Error(
+          '`id` is required for action "resolve". Retry with `{ action: "resolve", id: 123 }` using the blocker row id.',
+        );
+      }
+
+      if (item.description !== undefined && item.description.trim().length === 0) {
+        throw new Error(
+          'description cannot be whitespace-only for action "resolve": provide real text or omit description to keep the existing blocker description.',
+        );
+      }
+      if (item.resolution !== undefined && item.resolution.trim().length === 0) {
+        throw new Error(
+          'resolution cannot be whitespace-only for action "resolve": provide real text or omit resolution.',
+        );
       }
 
       const existing = ctx.db.getBlockers(workflowId).find((blocker) => blocker.id === item.id);
@@ -168,9 +227,12 @@ export function createGoopBlockerTool(ctx: PluginContext): ToolDefinition {
       "Open, resolve, or list workflow blockers in GoopSpecDB. " +
       "WHEN TO USE: Record a blocking issue, close one, or list blockers for a workflow. " +
       "WHEN NOT TO USE: goop_acceptance_audit reads blockers with verifications and waves at the accept gate; goop_timeline gives a chronological audit trail. " +
-      "MODES: action picks open/resolve/list; items[] batches mixed actions. open needs description (severity defaults medium, wave_id optional). resolve needs id (resolution optional; description/wave_id optional to amend). list takes only an optional status filter. In items[] each item carries its own action and required fields; top-level operation fields alongside items[] are rejected. status is forced to open on open and resolved on resolve, so it only filters list. " +
+      "MODES: action picks open/resolve/list; items[] batches mixed actions. open needs description (severity defaults medium, wave_id optional); resolve needs id (resolution/description/wave_id optional); list takes an optional status filter. In items[] each item carries its own action; top-level operation fields are rejected. status is forced by action; it only filters list. " +
       "RETURNS: Per-action confirmation, a markdown blocker table for list, or a batch summary for items[]. " +
-      "CAVEATS: Omit action entirely when using items[] — passing it alongside items[] is rejected. workflow_id is honored at top level and per item. Opening a blocker against a completed wave warns but still opens.",
+      "CAVEATS: Omit action when using items[] — passing it alongside is rejected. workflow_id is honored at top level and per item. " +
+      "id: 0 and wave_id: 0 are treated as omitted (1-based ids). " +
+      "Empty-string action/severity/status are absent — they never select a lifecycle operation; whitespace-only descriptions/resolutions are rejected with guidance. " +
+      "An explicitly empty items[] reports an empty-batch error, distinct from no-args.",
     args: {
       action: tool.schema
         .enum(BLOCKER_ACTIONS)
@@ -182,7 +244,9 @@ export function createGoopBlockerTool(ctx: PluginContext): ToolDefinition {
       description: tool.schema
         .string()
         .optional()
-        .describe("Required for open; optional for resolve (amends the stored text). Ignored by list."),
+        .describe(
+          "Required for open; optional for resolve (amends the stored text). Ignored by list. Whitespace-only is rejected with guidance — provide real text or omit.",
+        ),
       severity: tool.schema
         .enum(BLOCKER_TOOL_SEVERITIES)
         .optional()
@@ -193,12 +257,14 @@ export function createGoopBlockerTool(ctx: PluginContext): ToolDefinition {
         .number()
         .optional()
         .describe(
-          "Wave number to associate the blocker with. Used by open (attaches) and resolve (updates); ignored by list. Opening against a wave already marked done/completed warns but still opens.",
+          "Wave number to associate the blocker with. Used by open (attaches) and resolve (updates); ignored by list. Opening against a wave already marked done/completed warns but still opens. 0 is treated as omitted — wave numbers are 1-based.",
         ),
       id: tool.schema
         .number()
         .optional()
-        .describe("Blocker row id; required for resolve. Ignored by open and list."),
+        .describe(
+          "Blocker row id; required for resolve. Ignored by open and list. 0 is treated as omitted — ids are 1-based.",
+        ),
       resolution: tool.schema
         .string()
         .optional()
@@ -248,7 +314,9 @@ export function createGoopBlockerTool(ctx: PluginContext): ToolDefinition {
             workflow_id: tool.schema
               .string()
               .optional()
-              .describe("Per-item workflow override; omit to inherit the top-level workflow_id or the active workflow."),
+              .describe(
+                "Per-item workflow override; omit to inherit the top-level workflow_id or the active workflow.",
+              ),
           }),
         )
         .optional()
@@ -257,7 +325,7 @@ export function createGoopBlockerTool(ctx: PluginContext): ToolDefinition {
         ),
     },
     async execute(
-      args: {
+      rawArgs: {
         action?: BlockerAction;
         description?: string;
         severity?: BlockerToolSeverity;
@@ -271,6 +339,12 @@ export function createGoopBlockerTool(ctx: PluginContext): ToolDefinition {
       _context: ToolContext,
     ): Promise<string> {
       try {
+        // Normalize before every decision point so an injected empty can never
+        // select a lifecycle action, trip the items[] conflict rejection, or
+        // target the wrong workflow. Runs on both registration paths (after
+        // the shared boundary's coalescing on the wrapped path), so direct and
+        // wrapped calls agree.
+        const args = normalizeBlockerArgs(rawArgs);
         const workflowId = args.workflow_id ?? ctx.stateManager.getState().activeWorkflowId;
 
         if (Array.isArray(args.items) && args.items.length > 0) {
@@ -289,7 +363,8 @@ export function createGoopBlockerTool(ctx: PluginContext): ToolDefinition {
           }
 
           const touchedWorkflows = new Set<string>();
-          const result = runBatch(ctx.db, args.items, (item) => {
+          const result = runBatch(ctx.db, args.items, (rawItem) => {
+            const item = normalizeBlockerArgs(rawItem);
             const itemWorkflowId = item.workflow_id ?? workflowId;
             const detail = processBlockerItem(ctx, itemWorkflowId, item);
             touchedWorkflows.add(itemWorkflowId);
@@ -304,7 +379,12 @@ export function createGoopBlockerTool(ctx: PluginContext): ToolDefinition {
         }
 
         if (args.action === undefined) {
-          return "Error in goop_blocker: items[] array is empty and no action was provided";
+          // An explicitly empty items[] batch and a bare call read differently
+          // to a caller, even though neither can do any work.
+          if (Array.isArray(args.items) && args.items.length === 0) {
+            return "Error in goop_blocker: items[] array is empty and no action was provided";
+          }
+          return "Error in goop_blocker: no action or items were provided";
         }
 
         const detail = processBlockerItem(ctx, workflowId, {

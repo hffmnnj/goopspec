@@ -138,11 +138,10 @@ export function createTools(ctx: PluginContext): Record<string, ToolDefinition> 
     background_cancel: createBackgroundCancelTool(ctx),
   };
 
-  // Coalesce empty-string arguments to absent at this single shared boundary,
+  // Coalesce injected defaults to absent at this single shared boundary,
   // before any tool logic runs. Tool-call serialization in some hosts injects
-  // empty strings into payloads the caller never authored (status fields, mode
-  // selectors, nested task_updates[] entries); for fields where empty has no
-  // legitimate meaning, treating "" as absent restores the caller's intent.
+  // empty strings, false, arrays, and objects into payloads the caller never
+  // authored. Field-aware semantic omission restores the caller's intent.
   // Both registration paths consume this map — V1 (src/index.ts returns it as
   // `tool:`) and V2 (src/core/tools-v2.ts reads each definition's execute) —
   // so the coalescing applies on both hosts from one source of truth. Fields
@@ -154,7 +153,7 @@ export function createTools(ctx: PluginContext): Record<string, ToolDefinition> 
 }
 
 /**
- * Wrap a tool's `execute` so its arguments pass through empty-string coalescing
+ * Wrap a tool's `execute` so its arguments pass through semantic-omission coalescing
  * first. Preserves `description` and `args` (the schema) verbatim — only the
  * runtime argument payload is normalized.
  */

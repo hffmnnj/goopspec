@@ -240,3 +240,43 @@ describe("resolveWriteMode()", () => {
     });
   });
 });
+
+// ---------------------------------------------------------------------------
+// Wave 1 Task 1.1 — semantic omission for empty patch groups (tests-first)
+//
+// These shapes model a payload AFTER the boundary treats injected type
+// defaults as absent: an all-empty patch group (`old_string:""`,
+// `new_string:""`) alongside meaningful content or a batch is NOT a patch —
+// it is the residue of host injection on fields whose empty value carries no
+// authored meaning. The resolver must select the mode the non-empty evidence
+// names. An empty group is distinguishable from the documented blank-document
+// workaround (`old_string:""` + meaningful `new_string`, content absent) and
+// from an authored conflict (meaningful `old_string`), both pinned above.
+//
+// These assertions intentionally FAIL until Task 1.2 reconciles the resolver
+// (or guarantees the boundary drops the group before the resolver runs). The
+// existing presence pins above — including "presence, not truthiness" — remain
+// the authored-value contract and must stay green.
+// ---------------------------------------------------------------------------
+
+describe("resolveWriteMode() — empty patch group alongside other mode evidence (Wave 1 boundary contract)", () => {
+  it("resolves meaningful content + an all-empty patch group as a full write, not rule 1", () => {
+    const result = resolveWriteMode({ content: "# hello", old_string: "", new_string: "" });
+    expect(result).toEqual({ kind: "full-write", content: "# hello", mode: "replace" });
+  });
+
+  it("resolves mode: append + an all-empty patch group + content as an append write, not rule 3", () => {
+    const result = resolveWriteMode({
+      content: "# hello",
+      mode: "append",
+      old_string: "",
+      new_string: "",
+    });
+    expect(result).toEqual({ kind: "full-write", content: "# hello", mode: "append" });
+  });
+
+  it("resolves a non-empty items[] batch + an all-empty patch group as batch, not rule 4", () => {
+    const result = resolveWriteMode({ hasItems: true, old_string: "", new_string: "" });
+    expect(result).toEqual({ kind: "batch" });
+  });
+});
