@@ -1,9 +1,10 @@
-import { afterEach, describe, expect, it } from "bun:test";
+import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 
 import {
   type PluginContext,
   createMockPluginContext,
   createMockToolContext,
+  setupTestEnvironment,
 } from "../test-utils.js";
 import { createTools } from "../tools/index.js";
 import { tool } from "./sdk-compat.js";
@@ -408,5 +409,129 @@ describe("convertToolArgsToJsonSchema() — argument descriptions survive V2 con
 
     expect(prop(schema, "labelled").description).toBe("REGRESSION_MARKER_TOP");
     expect(prop(prop(schema, "nested"), "inner").description).toBe("REGRESSION_MARKER_NESTED");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Wave 1 Task 1.1 — V2 reuse of the write-tool boundary (tests-first)
+//
+// MH-5 pins: V2 registers the SAME createTools() definitions the V1 path uses
+// (so the injected-default boundary and its pending fix apply on both hosts),
+// the write tools' injected-default surface stays optional in the emitted
+// schema, and a V2 execution of a write tool produces byte-identical results
+// to V1 for the same host-augmented payload.
+// ---------------------------------------------------------------------------
+
+describe("V2 reuse of the write-tool boundary (Wave 1 Task 1.1)", () => {
+  let ctx: PluginContext;
+  let cleanup: () => void;
+
+  beforeEach(() => {
+    const env = setupTestEnvironment("v2-write-boundary");
+    cleanup = env.cleanup;
+    ctx = createMockPluginContext({ testDir: env.testDir, db: env.db });
+  });
+
+  afterEach(() => cleanup());
+
+  // Fields the host fills with type defaults when the caller omits them. Each
+  // one must remain optional in the schema V2 hands the host — an injected
+  // default can never be forced onto callers as required.
+  const INJECTED_DEFAULT_FIELDS: Record<string, string[]> = {
+    goop_write_db: ["items", "mode", "replace_all", "old_string", "new_string"],
+    goop_write_section: ["items", "action", "position", "replace_all", "old_string", "new_string"],
+    goop_save_note: [
+      "items",
+      "note_id",
+      "replace_all",
+      "old_string",
+      "new_string",
+      "tags",
+      "importance",
+    ],
+    goop_append_chronicle: ["entries", "alsoLogAdl", "alsoSaveMemory"],
+    goop_blocker: [
+      "items",
+      "action",
+      "description",
+      "severity",
+      "status",
+      "resolution",
+      "id",
+      "wave_id",
+    ],
+    goop_write_wave: [
+      "items",
+      "task_updates",
+      "task_update",
+      "verifications",
+      "traceability",
+      "title",
+      "allow_status_regression",
+    ],
+  };
+
+  function requiredOf(schema: V2JsonSchema): string[] {
+    return (schema.required as string[] | undefined) ?? [];
+  }
+
+  it("keeps every injected-default field optional in the emitted V2 schema", () => {
+    const tools = createTools(ctx);
+    for (const [name, fields] of Object.entries(INJECTED_DEFAULT_FIELDS)) {
+      const schema = convertToolArgsToJsonSchema(tools[name].args);
+      const required = requiredOf(schema);
+      for (const field of fields) {
+        expect(
+          required,
+          `${name} must keep '${field}' optional (optional fields stay optional)`,
+        ).not.toContain(field);
+      }
+    }
+  });
+
+  it("V2 execution of goop_write_db full write succeeds through the shared definition", async () => {
+    const registrations: V2ToolDefinition[] = [];
+    await registerToolsV2(createRuntimeContext(registrations), ctx);
+
+    const v2Definition = registrations.find((definition) => definition.name === "goop_write_db");
+    expect(v2Definition).toBeDefined();
+    if (!v2Definition) throw new Error("goop_write_db must be registered on V2");
+
+    const result = await v2Definition.execute(
+      { doc_type: "spec", content: "# v2 hello" },
+      { sessionID: "test-session" },
+    );
+    const text = result.content[0].text as string;
+    expect(text).toContain("Written spec");
+  });
+
+  it("V2 execution applies the same injected-default boundary as V1 for goop_write_db", async () => {
+    const registrations: V2ToolDefinition[] = [];
+    await registerToolsV2(createRuntimeContext(registrations), ctx);
+
+    const v2Definition = registrations.find((definition) => definition.name === "goop_write_db");
+    expect(v2Definition).toBeDefined();
+    if (!v2Definition) throw new Error("goop_write_db must be registered on V2");
+
+    // Host-augmented full write: caller authored only doc_type + content.
+    const payload = {
+      doc_type: "spec",
+      content: "# hello",
+      workflow_id: "",
+      mode: "",
+      old_string: "",
+      new_string: "",
+      replace_all: false,
+      items: [],
+    };
+
+    const v1Result = await createTools(ctx).goop_write_db.execute(payload, createMockToolContext());
+    expect(typeof v1Result).toBe("string");
+    if (typeof v1Result !== "string") throw new Error("goop_write_db must return text");
+
+    const v2Result = await v2Definition.execute(payload, { sessionID: "test-session" });
+    // V2 wraps the SAME V1 execution result — identical boundary, no duplicated
+    // normalization logic in the adapter.
+    expect(v2Result).toEqual({ content: [{ type: "text", text: v1Result }] });
   });
 });
