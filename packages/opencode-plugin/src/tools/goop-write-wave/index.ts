@@ -240,7 +240,9 @@ function validateWaveNumber(value: number | undefined, field: string): string | 
   return null;
 }
 
-function rejectEmptyMetadata(value: Pick<WavePayload, "title" | "pr_branch" | "pr_url">): string | null {
+function rejectEmptyMetadata(
+  value: Pick<WavePayload, "title" | "pr_branch" | "pr_url">,
+): string | null {
   for (const field of ["title", "pr_branch", "pr_url"] as const) {
     if (value[field] === "") {
       return `Error in goop_write_wave: ${field} cannot be an empty string; omit it to preserve the stored value. Intentional metadata clearing is not supported.`;
@@ -317,7 +319,7 @@ export function createGoopWriteWaveTool(ctx: PluginContext): ToolDefinition {
         .optional()
         .describe(
           "Wave status (pending, in_progress, done, completed). Cannot be supplied alongside task_updates[] or items[]. " +
-            "Omit entirely when unchanged; do not pass an empty string — status:\"\" is rejected as invalid. " +
+            'Omit entirely when unchanged; do not pass an empty string — status:"" is rejected as invalid. ' +
             "Reaching done/completed requires a passing or explicit-skip verification row.",
         ),
       pr_branch: tool.schema
@@ -346,7 +348,9 @@ export function createGoopWriteWaveTool(ctx: PluginContext): ToolDefinition {
             status: tool.schema
               .string()
               .optional()
-              .describe("Task status (pending, in_progress, done, completed); omit to leave unchanged."),
+              .describe(
+                "Task status (pending, in_progress, done, completed); omit to leave unchanged.",
+              ),
           }),
         )
         .optional()
@@ -372,7 +376,10 @@ export function createGoopWriteWaveTool(ctx: PluginContext): ToolDefinition {
         .describe(
           "Set true to deliberately regress a completed wave or task back to pending; defaults to false, which rejects the regression.",
         ),
-      workflow_id: tool.schema.string().optional().describe("Target workflow id; omit to use the active workflow."),
+      workflow_id: tool.schema
+        .string()
+        .optional()
+        .describe("Target workflow id; omit to use the active workflow."),
       items: tool.schema
         .array(
           tool.schema.object({
@@ -420,7 +427,9 @@ export function createGoopWriteWaveTool(ctx: PluginContext): ToolDefinition {
                   status: tool.schema
                     .string()
                     .optional()
-                    .describe("Task status (pending, in_progress, done, completed); omit to leave unchanged."),
+                    .describe(
+                      "Task status (pending, in_progress, done, completed); omit to leave unchanged.",
+                    ),
                 }),
               )
               .optional()
@@ -459,7 +468,9 @@ export function createGoopWriteWaveTool(ctx: PluginContext): ToolDefinition {
                   wave_number: tool.schema
                     .number()
                     .optional()
-                    .describe("Omit to inherit the enclosing item's wave_number; supply to override."),
+                    .describe(
+                      "Omit to inherit the enclosing item's wave_number; supply to override.",
+                    ),
                   task_index: tool.schema
                     .number()
                     .optional()
@@ -577,13 +588,19 @@ export function createGoopWriteWaveTool(ctx: PluginContext): ToolDefinition {
         const metadataError = rejectEmptyMetadata(args);
         if (metadataError !== null) return metadataError;
         for (const [index, item] of (args.items ?? []).entries()) {
-          const itemWaveNumberError = validateWaveNumber(item.wave_number, `items[${index}].wave_number`);
+          const itemWaveNumberError = validateWaveNumber(
+            item.wave_number,
+            `items[${index}].wave_number`,
+          );
           if (itemWaveNumberError !== null) return itemWaveNumberError;
           const itemMetadataError = rejectEmptyMetadata(item);
           if (itemMetadataError !== null) return itemMetadataError;
         }
         for (const [index, item] of (args.traceability ?? []).entries()) {
-          const traceabilityWaveNumberError = validateWaveNumber(item.wave_number, `traceability[${index}].wave_number`);
+          const traceabilityWaveNumberError = validateWaveNumber(
+            item.wave_number,
+            `traceability[${index}].wave_number`,
+          );
           if (traceabilityWaveNumberError !== null) return traceabilityWaveNumberError;
         }
 
@@ -866,7 +883,8 @@ export function createGoopWriteWaveTool(ctx: PluginContext): ToolDefinition {
         let defaultWaveId = -1;
 
         const hasTaskUpdate = args.task_update?.status !== undefined;
-        const hasSidePayload = (args.verifications?.length ?? 0) > 0 || (args.traceability?.length ?? 0) > 0;
+        const hasSidePayload =
+          (args.verifications?.length ?? 0) > 0 || (args.traceability?.length ?? 0) > 0;
 
         const hasWaveWrite =
           args.title !== undefined ||
@@ -954,8 +972,10 @@ export function createGoopWriteWaveTool(ctx: PluginContext): ToolDefinition {
             ctx.db.appendEvent(workflowId, "wave_write", {
               wave_number: waveNumber,
               task_count: args.tasks?.length ?? 0,
-              task_index: hasTaskUpdate ? args.task_update?.task_index ?? null : null,
-              status: hasTaskUpdate ? args.task_update?.status ?? args.status ?? null : args.status ?? null,
+              task_index: hasTaskUpdate ? (args.task_update?.task_index ?? null) : null,
+              status: hasTaskUpdate
+                ? (args.task_update?.status ?? args.status ?? null)
+                : (args.status ?? null),
               mode: hasTaskUpdate ? "wave_and_task_update" : "wave_upsert",
               timestamp: Date.now(),
             });

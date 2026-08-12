@@ -983,7 +983,13 @@ describe("write-tool boundary matrix — injected type defaults (Wave 1 Task 1.1
 
     const tools = createTools(ctx);
     const result = (await tools.goop_save_note.execute(
-      { note_id: noteId, old_string: "", new_string: "Filled via registry", replace_all: false, items: [] },
+      {
+        note_id: noteId,
+        old_string: "",
+        new_string: "Filled via registry",
+        replace_all: false,
+        items: [],
+      },
       toolCtx,
     )) as string;
     expect(result).toContain("Field Note patched:");

@@ -114,9 +114,9 @@ function processBlockerItem(
   switch (item.action) {
     case "open": {
       if (item.description === undefined || item.description === "") {
-          throw new Error(
-            '`description` is required for action "open". Retry with `{ action: "open", description: "what is blocked" }`.',
-          );
+        throw new Error(
+          '`description` is required for action "open". Retry with `{ action: "open", description: "what is blocked" }`.',
+        );
       }
       if (item.description.trim().length === 0) {
         throw new Error(
@@ -157,9 +157,9 @@ function processBlockerItem(
 
     case "resolve": {
       if (item.id === undefined) {
-          throw new Error(
-            '`id` is required for action "resolve". Retry with `{ action: "resolve", id: 123 }` using the blocker row id.',
-          );
+        throw new Error(
+          '`id` is required for action "resolve". Retry with `{ action: "resolve", id: 123 }` using the blocker row id.',
+        );
       }
 
       if (item.description !== undefined && item.description.trim().length === 0) {
@@ -314,7 +314,9 @@ export function createGoopBlockerTool(ctx: PluginContext): ToolDefinition {
             workflow_id: tool.schema
               .string()
               .optional()
-              .describe("Per-item workflow override; omit to inherit the top-level workflow_id or the active workflow."),
+              .describe(
+                "Per-item workflow override; omit to inherit the top-level workflow_id or the active workflow.",
+              ),
           }),
         )
         .optional()
