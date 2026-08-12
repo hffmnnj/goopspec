@@ -61,8 +61,6 @@ export const EMPTY_STRING_LOAD_BEARING_FIELDS_BY_TOOL: Readonly<
   goop_write_db: new Set(["new_string", "old_string"]),
   goop_write_section: new Set(["new_string", "old_string"]),
   goop_save_note: new Set(["new_string", "old_string"]),
-  // Wave metadata: empty values explicitly clear these stored fields.
-  goop_write_wave: new Set(["pr_url", "pr_branch", "title"]),
 };
 
 const NO_LOAD_BEARING_FIELDS: ReadonlySet<string> = new Set<string>();
@@ -158,7 +156,6 @@ function coalesceInjectedDefaults(value: unknown, toolName?: string): unknown {
       return (Array.isArray(field) && field.length === 0) || isEmptyObject(field);
     }),
     ...emptyPatchGroupKeys(source, toolName),
-    ...waveMetadataGroupKeys(source, toolName),
   ]);
 
   return Object.fromEntries(Object.entries(source).filter(([key]) => !omittedKeys.has(key)));
@@ -171,10 +168,6 @@ function isEmptyObject(value: unknown): value is Record<string, never> {
     !Array.isArray(value) &&
     Object.keys(value).length === 0
   );
-}
-
-function hasNonEmptyArray(value: unknown): boolean {
-  return Array.isArray(value) && value.length > 0;
 }
 
 function emptyPatchGroupKeys(value: Record<string, unknown>, toolName: string): string[] {
@@ -213,21 +206,4 @@ function hasIndependentWriteEvidence(value: Record<string, unknown>, toolName: s
         typeof (item as Record<string, unknown>).doc_type === "string",
     )
   );
-}
-
-function waveMetadataGroupKeys(value: Record<string, unknown>, toolName: string): string[] {
-  if (
-    toolName !== "goop_write_wave" ||
-    !["title", "pr_url", "pr_branch"].some((key) => value[key] === "") ||
-    !(
-      (value.wave_number !== undefined && hasNonEmptyArray(value.items)) ||
-      hasNonEmptyArray(value.task_updates) ||
-      hasNonEmptyArray(value.traceability) ||
-      (!isEmptyObject(value.task_update) && value.task_update !== undefined)
-    )
-  ) {
-    return [];
-  }
-
-  return ["title", "pr_url", "pr_branch"];
 }

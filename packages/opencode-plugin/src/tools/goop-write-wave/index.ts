@@ -233,6 +233,22 @@ function incompatiblePayloadError(mode: string, fields: string[]): string {
   return `Error in goop_write_wave: ${fields.join(", ")} cannot be supplied alongside ${mode}; use one write mode per call so no fields are ignored.`;
 }
 
+function validateWaveNumber(value: number | undefined, field: string): string | null {
+  if (value !== undefined && (!Number.isSafeInteger(value) || value < 1)) {
+    return `Error in goop_write_wave: ${field} must be a positive safe integer; 0, negative, fractional, and non-finite values are invalid.`;
+  }
+  return null;
+}
+
+function rejectEmptyMetadata(value: Pick<WavePayload, "title" | "pr_branch" | "pr_url">): string | null {
+  for (const field of ["title", "pr_branch", "pr_url"] as const) {
+    if (value[field] === "") {
+      return `Error in goop_write_wave: ${field} cannot be an empty string; omit it to preserve the stored value. Intentional metadata clearing is not supported.`;
+    }
+  }
+  return null;
+}
+
 // ---------------------------------------------------------------------------
 // Wave-completion verification gate
 // ---------------------------------------------------------------------------
@@ -541,6 +557,21 @@ export function createGoopWriteWaveTool(ctx: PluginContext): ToolDefinition {
       try {
         const workflowId = args.workflow_id ?? ctx.stateManager.getState().activeWorkflowId;
 
+        const waveNumberError = validateWaveNumber(args.wave_number, "wave_number");
+        if (waveNumberError !== null) return waveNumberError;
+        const metadataError = rejectEmptyMetadata(args);
+        if (metadataError !== null) return metadataError;
+        for (const [index, item] of (args.items ?? []).entries()) {
+          const itemWaveNumberError = validateWaveNumber(item.wave_number, `items[${index}].wave_number`);
+          if (itemWaveNumberError !== null) return itemWaveNumberError;
+          const itemMetadataError = rejectEmptyMetadata(item);
+          if (itemMetadataError !== null) return itemMetadataError;
+        }
+        for (const [index, item] of (args.traceability ?? []).entries()) {
+          const traceabilityWaveNumberError = validateWaveNumber(item.wave_number, `traceability[${index}].wave_number`);
+          if (traceabilityWaveNumberError !== null) return traceabilityWaveNumberError;
+        }
+
         const statusError = validateAndNormalizeStatuses(args);
         if (statusError !== null) {
           return statusError;
@@ -690,7 +721,7 @@ export function createGoopWriteWaveTool(ctx: PluginContext): ToolDefinition {
           return anyComplete ? `${response}${WAVE_COMPLETE_COMPACT_REMINDER}` : response;
         }
 
-        if (args.task_updates !== undefined && args.task_updates.length > 0) {
+        if (args.task_updates?.some((update) => update.status !== undefined) === true) {
           const ignoredFields = [
             args.title !== undefined ? "title" : null,
             args.status !== undefined ? "status" : null,
@@ -819,26 +850,19 @@ export function createGoopWriteWaveTool(ctx: PluginContext): ToolDefinition {
         let mainResult = "";
         let defaultWaveId = -1;
 
-        if (
-          args.items?.length === 0 &&
-          args.task_update === undefined &&
-          args.task_updates === undefined &&
-          args.title === undefined &&
-          args.status === undefined &&
-          args.pr_branch === undefined &&
-          args.pr_url === undefined &&
-          args.verifications === undefined &&
-          args.traceability === undefined
-        ) {
-          return "Error in goop_write_wave: items[] array is empty and no wave fields were provided";
-        }
+        const hasTaskUpdate = args.task_update?.status !== undefined;
+        const hasSidePayload = (args.verifications?.length ?? 0) > 0 || (args.traceability?.length ?? 0) > 0;
 
         const hasWaveWrite =
           args.title !== undefined ||
           args.status !== undefined ||
           args.pr_branch !== undefined ||
           args.pr_url !== undefined ||
-          args.tasks !== undefined;
+          (args.tasks?.length ?? 0) > 0;
+
+        if (!hasWaveWrite && !hasTaskUpdate && !hasSidePayload) {
+          return "Error in goop_write_wave: no write intent was provided. Supply wave metadata/tasks, a task update, verifications, traceability, or a non-empty items[]/task_updates[] batch.";
+        }
 
         ctx.db.runTransaction(() => {
           let wave = ctx.db.getWave(workflowId, waveNumber);
@@ -892,7 +916,7 @@ export function createGoopWriteWaveTool(ctx: PluginContext): ToolDefinition {
           // A task_update whose status was coalesced to absent (injected empty
           // string) expresses no status change; skip the lookup and write so we
           // never store an undefined status.
-          if (args.task_update !== undefined && args.task_update.status !== undefined) {
+          if (hasTaskUpdate && args.task_update !== undefined) {
             const task = ctx.db
               .getWaveTasks(wave.id)
               .find((candidate) => candidate.task_index === args.task_update?.task_index);
@@ -911,14 +935,16 @@ export function createGoopWriteWaveTool(ctx: PluginContext): ToolDefinition {
             ctx.db.setWaveTaskStatus(wave.id, args.task_update.task_index, args.task_update.status);
           }
 
-          ctx.db.appendEvent(workflowId, "wave_write", {
-            wave_number: waveNumber,
-            task_count: args.tasks?.length ?? 0,
-            task_index: args.task_update?.task_index ?? null,
-            status: args.task_update?.status ?? args.status ?? null,
-            mode: args.task_update === undefined ? "wave_upsert" : "wave_and_task_update",
-            timestamp: Date.now(),
-          });
+          if (hasWaveWrite || hasTaskUpdate) {
+            ctx.db.appendEvent(workflowId, "wave_write", {
+              wave_number: waveNumber,
+              task_count: args.tasks?.length ?? 0,
+              task_index: hasTaskUpdate ? args.task_update?.task_index ?? null : null,
+              status: hasTaskUpdate ? args.task_update?.status ?? args.status ?? null : args.status ?? null,
+              mode: hasTaskUpdate ? "wave_and_task_update" : "wave_upsert",
+              timestamp: Date.now(),
+            });
+          }
 
           for (const item of args.verifications ?? []) {
             verificationResults.push(
@@ -943,12 +969,12 @@ export function createGoopWriteWaveTool(ctx: PluginContext): ToolDefinition {
             mainResult = `Written wave ${waveNumber} for workflow '${workflowId}'; existing tasks left unchanged.`;
           }
         }
-        if (args.task_update !== undefined && args.task_update.status !== undefined) {
+        if (hasTaskUpdate && args.task_update !== undefined) {
           const taskResult = `Updated task ${args.task_update.task_index} on wave ${waveNumber} to '${args.task_update.status}' for workflow '${workflowId}'.`;
           mainResult = mainResult.length > 0 ? `${mainResult}\n${taskResult}` : taskResult;
         }
 
-        const waveComplete = args.task_update === undefined && isWaveComplete(args.status);
+        const waveComplete = !hasTaskUpdate && isWaveComplete(args.status);
 
         const sections: string[] = [];
         if (mainResult.length > 0) {
