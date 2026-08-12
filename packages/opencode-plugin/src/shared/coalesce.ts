@@ -97,7 +97,12 @@ const INJECTED_EMPTY_CONTAINER_FIELDS_BY_TOOL: Readonly<Record<string, ReadonlyS
   // direct/wrapped parity. The silent-untagged defect class is tags:[""] —
   // an array of empty strings — which survives here and is rejected at the
   // tool level instead.
-  goop_save_note: new Set(["items"]),
+  // NOTE: `items` is deliberately NOT here for goop_save_note. An explicitly
+  // empty items array is the documented "empty batch" rejection case when no
+  // single-note fields are present; coalescing it to absent changes that
+  // actionable error into the less precise create-field error and breaks
+  // direct/wrapped parity. As with blocker and chronicle, an injected []
+  // cannot select batch mode because the factory requires a non-empty array.
   goop_write_db: new Set(["items"]),
   goop_write_section: new Set(["items"]),
   goop_write_wave: new Set([

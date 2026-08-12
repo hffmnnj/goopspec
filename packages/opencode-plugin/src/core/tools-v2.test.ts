@@ -626,4 +626,64 @@ describe("V2 reuse of the write-tool boundary (Wave 1 Task 1.1)", () => {
     // normalization logic in the adapter.
     expect(v2Result).toEqual({ content: [{ type: "text", text: v1Result }] });
   });
+
+  it("V2 executes each canonical write definition without a duplicate adapter body", async () => {
+    const registrations: V2ToolDefinition[] = [];
+    await registerToolsV2(createRuntimeContext(registrations), ctx);
+
+    const calls: ReadonlyArray<readonly [string, Record<string, unknown>]> = [
+      ["goop_write_db", { doc_type: "requirements", content: "# V2 requirements", items: [] }],
+      [
+        "goop_write_section",
+        { doc_type: "spec", section_key: "v2", content: "# V2 section", items: [] },
+      ],
+      [
+        "goop_save_note",
+        {
+          title: "V2 note",
+          body: "v2-note-body",
+          tags: ["v2"],
+          source_agent: "test-agent",
+          items: [],
+        },
+      ],
+      ["goop_append_chronicle", { entry: "V2 chronicle.", entries: [] }],
+      ["goop_blocker", { action: "list", items: [] }],
+      [
+        "goop_write_wave",
+        {
+          wave_number: 7,
+          title: "V2 wave",
+          items: [],
+          task_update: {},
+          task_updates: [],
+          verifications: [],
+          traceability: [],
+        },
+      ],
+    ];
+
+    const v1Tools = createTools(ctx);
+    for (const [name, input] of calls) {
+      const v1Result = await v1Tools[name].execute(input as never, createMockToolContext());
+      expect(typeof v1Result, `${name} must return text for this fixture`).toBe("string");
+      if (typeof v1Result !== "string") throw new Error(`${name} must return text`);
+
+      const v2Definition = registrations.find((definition) => definition.name === name);
+      expect(v2Definition, `${name} must be registered on V2`).toBeDefined();
+      if (!v2Definition) throw new Error(`${name} must be registered on V2`);
+
+      const v2Result = await v2Definition.execute(input, { sessionID: "test-session" });
+      if (name === "goop_save_note") {
+        // Save-note generates its ID at execution time, so two calls through
+        // the same definition intentionally have distinct text while retaining
+        // the same result envelope and persistence semantics.
+        expect(v2Result.content[0].text).toContain("Field Note saved:");
+        continue;
+      }
+      expect(v2Result, `${name} must forward the canonical V1 result`).toEqual({
+        content: [{ type: "text", text: v1Result }],
+      });
+    }
+  });
 });
